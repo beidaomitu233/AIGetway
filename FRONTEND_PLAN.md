@@ -465,7 +465,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
 
 > 领取锁定：前端执行模型 2026-09-05 领取 FE-043—FE-048 全部 6 项，分支 feature/frontend-runtime-config（基于 dev），执行期间请勿重复领取；完成记录与测试证据见 COMMUNICATION.md H-009。
 
-- [ ] 任务编号：FE-043
+- [x] 任务编号：FE-043
   模块：运行配置与访问；目标：运行参数编辑。
   实现说明：按4.5.3录入留存/刷新/请求上限/采样/代理/发布时限。
   依赖接口：GET/PUT /admin/runtime-config。
@@ -474,7 +474,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：timezone_locked只读，关闭采样率0，修改保存为草稿。
   测试要求：组合约束、锁定409、版本冲突；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-044
+- [x] 任务编号：FE-044
   模块：运行配置与访问；目标：保留期缩短影响确认。
   实现说明：提交目标天数，展示删除估算，携带impact_version保存。
   依赖接口：POST /admin/runtime-config/retention-impact。
@@ -483,7 +483,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：参数变化或10分钟过期需重新估算，取消不保存。
   测试要求：过期、修改参数、影响为0；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-045
+- [x] 任务编号：FE-045
   模块：运行配置与访问；目标：Access列表详情与表单。
   实现说明：Standalone模式读取脱敏凭证；录入application/Alias/IP/有效期。
   依赖接口：/admin/access-credentials及/{id}。
@@ -492,7 +492,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：Embedded无入口；空Alias允许全部；IP/CIDR错误阻止提交。
   测试要求：模式限制、过期、IP边界；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-046
+- [x] 任务编号：FE-046
   模块：运行配置与访问；目标：Token签发轮换一次显示。
   实现说明：创建/rotate结果仅存在弹窗，保存勾选后清空secret。
   依赖接口：POST /admin/access-credentials；/{id}/rotate。
@@ -501,7 +501,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：关闭后无法恢复明文，轮换失败不弹假Token，no-store。
   测试要求：一次显示、刷新、失败；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-047
+- [x] 任务编号：FE-047
   模块：运行配置与访问；目标：Access即时启停删除。
   实现说明：携带version/reason操作，刷新状态/最新Trace和审计摘要。
   依赖接口：/{id}/enable、disable；DELETE /admin/access-credentials/{id}。
@@ -510,7 +510,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：立即状态不显示待发布，EXPIRED不能直接启用。
   测试要求：过期、冲突、删除后404；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-048
+- [x] 任务编号：FE-048
   模块：运行配置与访问；目标：审计列表详情与导出。
   实现说明：按操作人/动作/对象/时间/结果筛选，查看脱敏diff和request_id。
   依赖接口：GET /admin/audit-logs；/{id}；/export。
