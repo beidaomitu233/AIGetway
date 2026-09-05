@@ -95,6 +95,8 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P01 基础契约（6项）
 
+> 领取锁定：后端执行模型（beidao）2026-09-05 领取 BE-P01 全部 6 项（BE-001—BE-006），分支 feature/backend-foundation（基于 dev 0476609），执行期间请勿重复领取或并行修改同包任务；完成记录与测试证据见 COMMUNICATION.md。
+
 - [ ] 任务编号：BE-001
   模块：基础契约；目标：冻结公共DTO与错误。
   接口/服务：公共管理/业务/内部协议。
