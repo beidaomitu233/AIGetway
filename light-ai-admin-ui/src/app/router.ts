@@ -4,13 +4,24 @@ import { Permission } from './permissions'
 
 const placeholder = () => import('@/components/ModulePlaceholder.vue')
 
+/** 已实现模块的页面组件；未实现模块使用 ModulePlaceholder，随任务包替换。 */
+const pages = {
+  providerList: () => import('@/pages/providers/ProviderListPage.vue'),
+  providerForm: () => import('@/pages/providers/ProviderFormPage.vue'),
+  providerDetail: () => import('@/pages/providers/ProviderDetailPage.vue'),
+  poolList: () => import('@/pages/credentialPools/PoolListPage.vue'),
+  poolForm: () => import('@/pages/credentialPools/PoolFormPage.vue'),
+  poolDetail: () => import('@/pages/credentialPools/PoolDetailPage.vue'),
+}
+
 function moduleRoute(
   name: string,
   path: string,
   title: string,
   permission: string,
+  component?: RouteRecordRaw['component'],
 ): RouteRecordRaw {
-  return { path, name, component: placeholder, meta: { title, permission } }
+  return { path, name, component: component ?? placeholder, meta: { title, permission } }
 }
 
 /** 全部页面路由按 FRONTEND_PLAN 第 2 节注册；未实现模块由 ModulePlaceholder 承接，随任务包替换。 */
@@ -18,15 +29,15 @@ export const routes: RouteRecordRaw[] = [
   { path: '/', redirect: '/ui/overview' },
   moduleRoute('overview', '/ui/overview', '运行概览', Permission.overviewView),
 
-  moduleRoute('provider-list', '/ui/providers', 'Provider', Permission.providerView),
-  moduleRoute('provider-new', '/ui/providers/new', '新建 Provider', Permission.providerManage),
-  moduleRoute('provider-detail', '/ui/providers/:id', 'Provider 详情', Permission.providerView),
-  moduleRoute('provider-edit', '/ui/providers/:id/edit', '编辑 Provider', Permission.providerManage),
+  moduleRoute('provider-list', '/ui/providers', 'Provider', Permission.providerView, pages.providerList),
+  moduleRoute('provider-new', '/ui/providers/new', '新建 Provider', Permission.providerManage, pages.providerForm),
+  moduleRoute('provider-detail', '/ui/providers/:id', 'Provider 详情', Permission.providerView, pages.providerDetail),
+  moduleRoute('provider-edit', '/ui/providers/:id/edit', '编辑 Provider', Permission.providerManage, pages.providerForm),
 
-  moduleRoute('pool-list', '/ui/credential-pools', '凭证池', Permission.credentialView),
-  moduleRoute('pool-new', '/ui/credential-pools/new', '新建凭证池', Permission.credentialManage),
-  moduleRoute('pool-detail', '/ui/credential-pools/:id', '凭证池详情', Permission.credentialView),
-  moduleRoute('pool-edit', '/ui/credential-pools/:id/edit', '编辑凭证池', Permission.credentialManage),
+  moduleRoute('pool-list', '/ui/credential-pools', '凭证池', Permission.credentialView, pages.poolList),
+  moduleRoute('pool-new', '/ui/credential-pools/new', '新建凭证池', Permission.credentialManage, pages.poolForm),
+  moduleRoute('pool-detail', '/ui/credential-pools/:id', '凭证池详情', Permission.credentialView, pages.poolDetail),
+  moduleRoute('pool-edit', '/ui/credential-pools/:id/edit', '编辑凭证池', Permission.credentialManage, pages.poolForm),
 
   { path: '/ui/provider-models', name: 'model-list', component: () => import('@/pages/models/ModelListPage.vue'), meta: { title: '模型', permission: Permission.modelView } },
   { path: '/ui/provider-models/new', name: 'model-new', component: () => import('@/pages/models/ModelFormPage.vue'), meta: { title: '新建模型', permission: Permission.modelManage } },

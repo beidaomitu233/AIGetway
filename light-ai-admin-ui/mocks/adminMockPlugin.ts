@@ -4,6 +4,7 @@ import type { ServerResponse } from 'node:http'
 import type { Connect, Plugin } from 'vite'
 import { bootstrapFixtures } from './fixtures/bootstrap'
 import { handleModelAccessApi } from './modelAccessMock'
+import { handleProviderApi, handlePoolApi } from './entities'
 
 /**
  * 契约 Mock：仅用于本地开发与深链验收（后端 BE-002 未交付）。
@@ -42,7 +43,29 @@ async function handleAdminApi(req: Connect.IncomingMessage, res: ServerResponse)
     sendJson(res, 200, { data: fixture })
     return true
   }
-  return handleModelAccessApi(req as { method?: string | undefined; url?: string | undefined; on?: ((event: string, cb: (chunk?: Buffer) => void) => void) | undefined }, res)
+  if (handleProviderApi(req, url, res)) return true
+  if (handlePoolApi(req, url, res)) return true
+  if (
+    await handleModelAccessApi(
+      req as { method?: string | undefined; url?: string | undefined; on?: ((event: string, cb: (chunk?: Buffer) => void) => void) | undefined },
+      res,
+    )
+  ) {
+    return true
+  }
+  if (url.pathname.includes('/admin/')) {
+    sendJson(res, 404, {
+      error: {
+        code: 'OBJECT_NOT_FOUND',
+        type: 'api',
+        message: '契约 Mock 未提供该接口',
+        retryable: false,
+      },
+    })
+    return true
+  }
+  return false
+}
 }
 
 function serveIndex(root: string, res: ServerResponse): void {
