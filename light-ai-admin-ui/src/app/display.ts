@@ -57,6 +57,57 @@ const batchItemStatusLabels: Record<string, string> = {
   CANCELLED: '已取消',
 }
 
+const scopeTypeLabels: Record<string, string> = {
+  MODEL_ALIAS: '模型别名',
+  PROVIDER_MODEL: '模型',
+  CREDENTIAL: '凭证',
+}
+
+const overflowStrategyLabels: Record<string, string> = {
+  REJECT: '直接拒绝',
+  QUEUE: '进入排队',
+}
+
+const counterStoreLabels: Record<string, string> = {
+  OK: '正常',
+  DEGRADED: '降级',
+  UNAVAILABLE: '不可用',
+}
+
+const queueStatusLabels: Record<string, string> = {
+  WAITING: '等待中',
+  ACQUIRED: '已取得容量',
+  TIMEOUT: '等待超时',
+  REJECTED: '队列已满',
+  CANCELLED: '已取消',
+}
+
+const recoveryActionLabels: Record<string, string> = {
+  RETRY: '重试',
+  CREDENTIAL_FAILOVER: '凭证切换',
+  FALLBACK: '候选切换',
+  FAIL: '终止',
+}
+
+const circuitStateLabels: Record<string, string> = {
+  CLOSED: '闭合',
+  OPEN: '打开',
+  HALF_OPEN: '半开',
+}
+
+const openSourceLabels: Record<string, string> = {
+  AUTO: '自动',
+  MANUAL: '人工',
+}
+
+const triggerTypeLabels: Record<string, string> = {
+  AUTO_THRESHOLD: '阈值触发',
+  PROBE_SUCCESS: '探测成功',
+  PROBE_FAILURE: '探测失败',
+  MANUAL_OPEN: '人工打开',
+  MANUAL_RECOVER: '人工恢复',
+}
+
 const runtimeAvailabilityLabels: Record<string, string> = {
   AVAILABLE: '可调用',
   CAPACITY_EXHAUSTED: '容量不足',
@@ -112,4 +163,36 @@ export function batchItemStatusLabel(value: string | null | undefined): string {
 
 export function runtimeAvailabilityLabel(value: string | null | undefined): string {
   return displayLabel(runtimeAvailabilityLabels, value)
+}
+
+export function scopeTypeLabel(value: string | null | undefined): string {
+  return displayLabel(scopeTypeLabels, value)
+}
+
+export function overflowStrategyLabel(value: string | null | undefined): string {
+  return displayLabel(overflowStrategyLabels, value)
+}
+
+export function counterStoreStatusLabel(value: string | null | undefined): string {
+  return displayLabel(counterStoreLabels, value)
+}
+
+export function queueStatusLabel(value: string | null | undefined): string {
+  return displayLabel(queueStatusLabels, value)
+}
+
+export function recoveryActionLabel(value: string | null | undefined): string {
+  return displayLabel(recoveryActionLabels, value)
+}
+
+export function circuitStateLabel(value: string | null | undefined): string {
+  return displayLabel(circuitStateLabels, value)
+}
+
+export function openSourceLabel(value: string | null | undefined): string {
+  return displayLabel(openSourceLabels, value)
+}
+
+export function triggerTypeLabel(value: string | null | undefined): string {
+  return displayLabel(triggerTypeLabels, value)
 }

@@ -231,7 +231,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
 
 > 领取锁定：前端执行模型（beidao）2026-09-05 领取 FE-019—FE-024 全部 6 项，分支 feature/frontend-governance（worktree D:\AIBuilder\AIGetway-models，基于 dev 合并点 6ae1533），执行期间请勿重复领取；完成记录见 COMMUNICATION.md H-005。
 
-- [ ] 任务编号：FE-019
+- [x] 任务编号：FE-019
   模块：治理；目标：限流列表与可编辑策略。
   实现说明：按作用类型选择对象，输入RPM/TPM/并发和QUEUE参数。
   依赖接口：/admin/limit-policies及详情/enable/disable。
@@ -240,7 +240,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：null无上限，至少一项限额，REJECT不发队列字段。
   测试要求：全空、重复策略、队列边界；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-020
+- [x] 任务编号：FE-020
   模块：治理；目标：实时容量和FIFO队列。
   实现说明：显示当前窗口已用/预占/结算/并发与等待记录，仅只读。
   依赖接口：GET /admin/limit-policies/{id}/usage、queue。
@@ -249,7 +249,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：无取消他人按钮，状态存储503保留旧值及更新时间。
   测试要求：窗口变化、503、敏感字段权限；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-021
+- [x] 任务编号：FE-021
   模块：治理；目标：可靠性策略与默认值。
   实现说明：分区录入超时、三类预算、退避、熔断；转换失败率比例。
   依赖接口：/admin/reliability-policies；/default；详情/enable/disable。
@@ -258,7 +258,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：首token超时小于总超时，fallback关时预算0，默认只读。
   测试要求：组合边界、百分比往返；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-022
+- [x] 任务编号：FE-022
   模块：治理；目标：恢复决策列表与Trace跳转。
   实现说明：按Alias和动作展示来源Attempt、等待和预算，带trace_id跳转。
   依赖接口：GET /admin/reliability-policies/{id}/recovery-decisions。
@@ -267,7 +267,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：无正文，来源与目标路径一致，无数据为空状态。
   测试要求：动作筛选、权限、链接；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-023
+- [x] 任务编号：FE-023
   模块：治理；目标：熔断列表详情与事件。
   实现说明：输入状态/Provider过滤，展示窗口、探测数和近50事件。
   依赖接口：GET /admin/circuits；/{id}；/{id}/events。
@@ -276,7 +276,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：OPEN排序靠前，开发仅授权Alias，敏感凭证不下发。
   测试要求：状态排序、事件空集、越权；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-024
+- [x] 任务编号：FE-024
   模块：治理；目标：熔断人工操作与冲突。
   实现说明：输入原因/时限及state_version，提交open/recover/probe。
   依赖接口：POST /admin/circuits/{id}/open、recover、probe。

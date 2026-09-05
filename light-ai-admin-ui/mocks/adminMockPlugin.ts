@@ -4,6 +4,7 @@ import type { ServerResponse } from 'node:http'
 import type { Connect, Plugin } from 'vite'
 import { bootstrapFixtures } from './fixtures/bootstrap'
 import { handleModelAccessApi } from './modelAccessMock'
+import { handleGovernanceApi } from './governanceMock'
 
 /**
  * 契约 Mock：仅用于本地开发与深链验收（后端 BE-002 未交付）。
@@ -42,6 +43,8 @@ async function handleAdminApi(req: Connect.IncomingMessage, res: ServerResponse)
     sendJson(res, 200, { data: fixture })
     return true
   }
+  const governanceHandled = await handleGovernanceApi(req as { method?: string | undefined; url?: string | undefined; on?: ((event: string, cb: (chunk?: Buffer) => void) => void) | undefined }, res)
+  if (governanceHandled) return true
   return handleModelAccessApi(req as { method?: string | undefined; url?: string | undefined; on?: ((event: string, cb: (chunk?: Buffer) => void) => void) | undefined }, res)
 }
 
