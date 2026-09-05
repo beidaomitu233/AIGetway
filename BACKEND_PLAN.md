@@ -224,6 +224,8 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P03 接入对象（6项）
 
+> 领取锁定：后端执行模型（beidao，会话B）2026-09-05 领取 BE-P03 全部 6 项（BE-013—BE-018），分支 feature/backend-models（基于 dev f6fc471，独立 worktree C:\AIgetway\AIGetway-models），执行期间请勿重复领取或并行修改同包任务；BE-P02（feature/backend-provider）已由 H-007 并行领取，本包不与其重叠；完成记录与测试证据见 COMMUNICATION.md。
+
 - [ ] 任务编号：BE-013
   模块：接入对象；目标：Credential查询写入轮换和检测。
   接口/服务：池下credentials；/admin/credentials/{id}及rotate/check/enable/disable。
