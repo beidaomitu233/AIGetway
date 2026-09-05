@@ -424,6 +424,8 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P06 调用观测（6项）
 
+> 领取锁定：后端执行模型（beidao）2026-09-06 领取 BE-P06 全部 6 项（BE-031—BE-036），分支 feature/backend-observability（基于 dev d943afd，独立 worktree D:\AIBuilder\AIGetway-observability），执行期间请勿重复领取或并行修改同包任务；BE-P05（feature/backend-protocol）并行执行中，本包不修改 /v1 管道与 Adapter 文件，TraceFinalizer 以服务+事务边界交付，/v1 管道终端化接线在 BE-P05 合入后协调；完成记录与测试证据见 COMMUNICATION.md H-019。
+
 - [ ] 任务编号：BE-031
   模块：调用观测；目标：Trace列表筛选导出查询底座。
   接口/服务：GET /admin/traces。
