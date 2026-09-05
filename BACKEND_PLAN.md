@@ -293,6 +293,8 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P04 路由与治理（6项）
 
+> 领取锁定：后端执行模型（beidao）2026-09-05 领取 BE-P04 全部 6 项（BE-019—BE-024），分支 feature/backend-routing-governance（基于 dev a41fb8b，BE-P03 已合入），执行期间请勿重复领取或并行修改同包任务；完成记录与测试证据见 COMMUNICATION.md H-009。
+
 - [ ] 任务编号：BE-019
   模块：路由与治理；目标：候选能力过滤与加权顺序。
   接口/服务：RuntimeCore路由服务。
