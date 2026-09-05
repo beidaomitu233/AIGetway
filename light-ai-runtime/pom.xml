@@ -10,9 +10,9 @@
     <version>0.1.0-SNAPSHOT</version>
   </parent>
 
-  <artifactId>light-ai-admin</artifactId>
-  <name>Light AI Admin</name>
-  <description>管理服务：身份与权限、Bootstrap、审计与草稿写事务；由 Starter/Server 按模式装配</description>
+  <artifactId>light-ai-runtime</artifactId>
+  <name>Light AI Runtime</name>
+  <description>运行内核：路由、凭证选择、容量、恢复与熔断；不依赖 Spring 与管理数据库</description>
 
   <dependencies>
     <dependency>
@@ -23,27 +23,15 @@
       <groupId>com.lightai</groupId>
       <artifactId>light-ai-spi</artifactId>
     </dependency>
-    <dependency>
-      <groupId>com.lightai</groupId>
-      <artifactId>light-ai-storage-jdbc</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.lightai</groupId>
-      <artifactId>light-ai-runtime</artifactId>
-    </dependency>
 
     <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-web</artifactId>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-jdbc</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-test</artifactId>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

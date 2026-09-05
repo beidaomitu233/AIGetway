@@ -494,6 +494,79 @@ public class LightAiAdminAutoConfiguration {
             return new com.lightai.admin.alias.ModelAliasController(aliasService, candidateService);
         }
 
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.governance.JdbcLimitPolicyRepository lightAiLimitPolicyRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.governance.JdbcLimitPolicyRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.governance.JdbcReliabilityPolicyRepository lightAiReliabilityPolicyRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.governance.JdbcReliabilityPolicyRepository(
+                    properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.governance.JdbcCircuitRepository lightAiCircuitRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.governance.JdbcCircuitRepository(properties.getSchemaName());
+        }
+
+        /** Embedded 单实例进程内容量存储；集群由 BE-P05 storage-redis 替换。 */
+        @Bean
+        @ConditionalOnMissingBean(com.lightai.runtime.capacity.CapacityStore.class)
+        public com.lightai.runtime.capacity.CapacityStore lightAiCapacityStore() {
+            return new com.lightai.runtime.capacity.InMemoryCapacityStore();
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(com.lightai.runtime.circuit.CircuitStateStore.class)
+        public com.lightai.runtime.circuit.CircuitStateStore lightAiCircuitStateStore() {
+            return new com.lightai.runtime.circuit.InMemoryCircuitStore();
+        }
+
+        @Bean
+        public com.lightai.admin.governance.GovernanceAdminService lightAiGovernanceAdminService(
+                DataSource dataSource,
+                com.lightai.storage.governance.JdbcLimitPolicyRepository limitPolicyRepository,
+                com.lightai.storage.governance.JdbcReliabilityPolicyRepository reliabilityPolicyRepository,
+                com.lightai.storage.governance.JdbcCircuitRepository circuitRepository,
+                com.lightai.admin.draft.DraftWriteService draftWriteService,
+                Clock clock, com.lightai.runtime.capacity.CapacityStore capacityStore,
+                AdminProperties properties) {
+            return new com.lightai.admin.governance.GovernanceAdminService(dataSource,
+                    limitPolicyRepository, reliabilityPolicyRepository, circuitRepository,
+                    draftWriteService, new com.lightai.admin.query.PageResultFactory(clock),
+                    capacityStore, properties.getRuntimeMode());
+        }
+
+        @Bean
+        public com.lightai.admin.governance.CircuitManagementService lightAiCircuitManagementService(
+                DataSource dataSource,
+                com.lightai.storage.governance.JdbcCircuitRepository circuitRepository,
+                com.lightai.admin.draft.DraftWriteService draftWriteService,
+                com.lightai.admin.audit.AuditService auditService,
+                com.lightai.runtime.circuit.CircuitStateStore circuitStateStore,
+                Clock clock, AdminProperties properties) {
+            com.lightai.runtime.circuit.CircuitPolicy defaultPolicy = new com.lightai.runtime.circuit.CircuitPolicy(null, 0, 60, 20, 0.5, 30, 3, 2);
+            return new com.lightai.admin.governance.CircuitManagementService(dataSource,
+                    circuitRepository, draftWriteService, auditService, circuitStateStore,
+                    defaultPolicy, new com.lightai.admin.query.PageResultFactory(clock),
+                    properties.getRuntimeMode());
+        }
+
+        @Bean
+        public com.lightai.admin.governance.GovernanceController lightAiGovernanceController(
+                com.lightai.admin.governance.GovernanceAdminService governanceService,
+                com.lightai.admin.governance.CircuitManagementService circuitService) {
+            return new com.lightai.admin.governance.GovernanceController(governanceService,
+                    circuitService);
+        }
+
         /** 启动结构检查（BE-003）：VALIDATE 校验、MIGRATE 先迁移后校验；失败阻止就绪。 */
         @Bean
         public SmartInitializingSingleton lightAiSchemaGuardInitializer(
