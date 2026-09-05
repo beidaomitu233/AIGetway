@@ -345,6 +345,8 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
 
 ## FE-P06 概览与Usage（6项）
 
+> 领取锁定：前端执行模型 2026-09-05 领取 FE-031—FE-036 全部 6 项，分支 feature/frontend-overview（基于 dev），执行期间请勿重复领取；完成记录与测试证据见 COMMUNICATION.md H-007。
+
 - [ ] 任务编号：FE-031
   模块：概览与Usage；目标：概览筛选与摘要。
   实现说明：读取授权筛选和摘要，统一时间/application/Alias/Provider。
