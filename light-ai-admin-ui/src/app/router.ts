@@ -16,6 +16,9 @@ const pages = {
   traceDetail: () => import('@/pages/traces/TraceDetailPage.vue'),
   overview: () => import('@/pages/overview/OverviewPage.vue'),
   usage: () => import('@/pages/usage/UsagePage.vue'),
+  drafts: () => import('@/pages/config/DraftsPage.vue'),
+  publish: () => import('@/pages/config/PublishPage.vue'),
+  publishRecord: () => import('@/pages/config/PublishRecordDetailPage.vue'),
 }
 
 function moduleRoute(
@@ -92,14 +95,9 @@ export const routes: RouteRecordRaw[] = [
 
   moduleRoute('usage', '/ui/usage', 'Usage 与 Cost', Permission.usageView, pages.usage),
 
-  moduleRoute('drafts', '/ui/config/drafts', '待发布变更', Permission.draftView),
-  moduleRoute('publish', '/ui/config/publish', '配置发布', Permission.publishView),
-  moduleRoute(
-    'publish-record',
-    '/ui/config/publish/records/:id',
-    '发布详情',
-    Permission.publishView,
-  ),
+  moduleRoute('drafts', '/ui/config/drafts', '待发布变更', Permission.draftView, pages.drafts),
+  moduleRoute('publish', '/ui/config/publish', '配置发布', Permission.publishView, pages.publish),
+  moduleRoute('publish-record', '/ui/config/publish/records/:id', '发布详情', Permission.publishView, pages.publishRecord),
 
   moduleRoute('runtime-config', '/ui/runtime-config', '运行参数', Permission.runtimeConfigView),
 
