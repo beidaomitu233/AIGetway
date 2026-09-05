@@ -6,6 +6,7 @@ import com.lightai.client.json.ProtocolJson;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.UUID;
 
 /**
  * draft_change JDBC 实现（DATABASE_PLAN §29）。
@@ -58,6 +59,51 @@ public final class JdbcDraftChangeRepository implements DraftChangeRepository {
             }
         } catch (SQLException e) {
             throw new IllegalStateException("草稿差异写入失败：" + e.getClass().getSimpleName(), e);
+        }
+    }
+
+    @Override
+    public boolean existsByEntity(Connection connection, String entityType, UUID entityId) {
+        String sql = "SELECT 1 FROM %s.draft_change WHERE entity_type = ? AND entity_id = ? LIMIT 1"
+                .formatted(schemaName);
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, entityType);
+            statement.setObject(2, entityId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("草稿差异检查失败：" + e.getClass().getSimpleName(), e);
+        }
+    }
+
+    @Override
+    public java.util.Set<UUID> findExistingEntityIds(Connection connection, String entityType,
+                                                     java.util.Collection<UUID> entityIds) {
+        if (entityIds.isEmpty()) {
+            return java.util.Set.of();
+        }
+        StringBuilder placeholders = new StringBuilder();
+        for (int i = 0; i < entityIds.size(); i++) {
+            placeholders.append(i == 0 ? "?" : ",?");
+        }
+        String sql = "SELECT entity_id FROM %s.draft_change WHERE entity_type = ? AND entity_id IN (%s)"
+                .formatted(schemaName, placeholders);
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, entityType);
+            int i = 2;
+            for (UUID id : entityIds) {
+                statement.setObject(i++, id);
+            }
+            try (var rs = statement.executeQuery()) {
+                java.util.Set<UUID> ids = new java.util.HashSet<>();
+                while (rs.next()) {
+                    ids.add(rs.getObject(1, UUID.class));
+                }
+                return ids;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("草稿差异批量检查失败：" + e.getClass().getSimpleName(), e);
         }
     }
 

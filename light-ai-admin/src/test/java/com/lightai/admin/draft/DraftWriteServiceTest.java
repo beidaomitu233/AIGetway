@@ -351,6 +351,17 @@ class DraftWriteServiceTest {
             lastRecord = record;
             return !existing;
         }
+
+        @Override
+        public boolean existsByEntity(Connection connection, String entityType, UUID entityId) {
+            return existing;
+        }
+
+        @Override
+        public java.util.Set<UUID> findExistingEntityIds(Connection connection, String entityType,
+                                                         java.util.Collection<UUID> entityIds) {
+            return existing ? new java.util.HashSet<>(entityIds) : java.util.Set.of();
+        }
     }
 
     static final class RecordingAuditRepository implements AuditRepository {
