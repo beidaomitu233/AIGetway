@@ -229,6 +229,8 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
 
 ## FE-P04 治理（6项）
 
+> 领取锁定：前端执行模型（beidao）2026-09-05 领取 FE-019—FE-024 全部 6 项，分支 feature/frontend-governance（worktree D:\AIBuilder\AIGetway-models，基于 dev 合并点 6ae1533），执行期间请勿重复领取；完成记录见 COMMUNICATION.md H-005。
+
 - [ ] 任务编号：FE-019
   模块：治理；目标：限流列表与可编辑策略。
   实现说明：按作用类型选择对象，输入RPM/TPM/并发和QUEUE参数。
