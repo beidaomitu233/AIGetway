@@ -554,6 +554,8 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P08 运行与安全管理（6项）
 
+> 领取锁定：后端执行模型（beidao，会话B）2026-09-06 领取 BE-P08 全部 6 项（BE-043—BE-048），分支 feature/backend-security（基于 dev 0c46813，独立 worktree C:\AIGetway\AIGetway-models），执行期间请勿重复领取或并行修改同包任务；H-012 的 BE-P06 领取已释放改领本包；完成记录与测试证据见 COMMUNICATION.md。
+
 - [ ] 任务编号：BE-043
   模块：运行与安全管理；目标：Runtime参数及保留影响。
   接口/服务：GET/PUT runtime-config；POST retention-impact。
