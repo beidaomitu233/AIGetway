@@ -99,7 +99,7 @@ PUT 提交完整可编辑对象与 version；不可变字段不出现在可编�
 
 ## 7. Git 与执行交付规则
 
-main 保存稳定发布，dev 保存集成代码。本次明确要求以 dev 作为唯一开发集成分支；AGENTS.md 中 develop 的角色由 dev 承担，不并行维护两个集成分支。功能从 dev 创建 feature/frontend-模块名、feature/backend-模块名、feature/database-模块名；文档使用 docs/architecture-plan。release/<version> 从 dev 创建，验证后合并 main 与 dev 并在 main 打 Tag；hotfix/<name> 从 main 创建，验证后回合 main 与 dev。
+main 保存稳定发布，dev 保存集成代码。AGENTS.md 与本文件统一使用 dev 作为开发集成分支。功能从 dev 创建 feature/frontend-模块名、feature/backend-模块名、feature/database-模块名；文档使用 docs/architecture-plan。release/<version> 从 dev 创建，验证后合并 main 与 dev 并在 main 打 Tag；hotfix/<name> 从 main 创建，验证后回合 main 与 dev。
 
 每个任务包一次独立提交；若修复审查意见追加单一目的提交，禁止混入无关文件。格式：docs: update architecture plan；feat(frontend): complete login page（仅格式示例，本项目不建设登录页）；feat(backend): complete auth api；test: add auth tests；fix: resolve review issue。
 

@@ -31,7 +31,7 @@
 | C-017 | 架构规划 | 聚合口径/性能 | 任意时间范围的精确Usage与仅HOUR/DAY聚合、跨桶P95需要明确方案 | Usage解析为桶对齐边界并回传；P95合并稀疏毫秒直方图，压测行膨胀 | FE-034/035 | BE-034/035/060 | usage_aggregate | 待确认 | 产品确认边界口径及精度；若要求任意区间精确结果需另定保留后的查询策略 |
 | C-018 | 架构规划 | 数据留存 | 检测、批量任务、命令、校验票据的留存未量化 | 检测随Trace天数；已终态命令/票据30天；未完成不删；当前引用优先保护 | 检测历史/发布页 | BE-048 | provider_check_record、batch_check_job、config_validation、circuit_command | 待确认 | 数据库计划已给批删顺序，部署确认具体天数 |
 | C-019 | 架构规划 | Git规范 | 当前请求指定dev，原通用规则使用develop | 本次明确请求优先，以dev承担开发集成职责 | 全部文档 | 全部执行分支 | 无 | 已确认 | main/dev及docs/architecture-plan已建立；不维护第二条develop集成线；按用户当前明确要求 |
-| C-020 | 架构规划 | 工作区规则 | AGENTS.md出现本次未修改的CareChina及医疗页面规则内容，产品名称与本PRD不一致 | 保留该外部修改，轻享AI需求范围仍按当前PRD；通用简洁规范继续遵循 | 文案规则 | 文档工作区 | 无 | 待确认 | 本轮不回退或提交该外部修改；请项目维护者另行核对规则归属 |
+| C-020 | 用户/架构规划 | 工作区规则 | AGENTS.md需统一为轻享AI项目协作规范 | 明确产品范围、任务边界、文档协作、运行时安全、前端文案、验收及main/dev分支规则 | AGENTS.md | 项目协作规则 | 无 | 已完成 | 用户已确认规则文件来源并要求适配；AGENTS.md已按当前PRD与计划更新，通用简洁及局部修改原则保留 |
 | C-021 | 架构规划 | 检测实体关系 | Provider/模型/凭证可在Alias建立前检测，普通Trace/Attempt必填Alias/候选会阻止首次接入 | PROVIDER_CHECK允许null Alias/Candidate，固定模型池凭证并正常结算；CONNECTION_ONLY不建业务Trace | FE-009/014/016、Trace详情 | BE-009/013/014/015/023 | trace、attempt、provider_check_record | 待确认 | 已给条件约束，不能为检测创建虚假Alias或绕过容量 |
 
 ## 3. 任务包交接格式
