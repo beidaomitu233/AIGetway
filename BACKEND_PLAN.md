@@ -293,7 +293,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P04 路由与治理（6项）
 
-> 领取锁定：后端执行模型（beidao）2026-09-05 领取 BE-P04 全部 6 项（BE-019—BE-024），分支 feature/backend-routing-governance（基于 dev a41fb8b，BE-P03 已合入），执行期间请勿重复领取或并行修改同包任务；完成记录与测试证据见 COMMUNICATION.md H-009。
+> 领取锁定：后端执行模型（beidao）2026-09-05 领取 BE-P04 全部 6 项（BE-019—BE-024），分支 feature/backend-routing-governance（基于 dev a41fb8b，BE-P03 已合入），执行期间请勿重复领取或并行修改同包任务；完成记录与测试证据见 COMMUNICATION.md H-010。
 > 交付说明（2026-09-05）：BE-019—BE-024 已实现并通过 mvn test（全仓 161 例：client 43 / spi 4 / storage-jdbc 13 / runtime 30 / admin 71，0 失败）与 mvn package。新建 light-ai-runtime 模块（无 Spring/无管理库依赖）：路由能力/上下文/熔断过滤与同级权重无放回（可控随机源可复算，过滤不消耗恢复预算）；凭证三策略选择（HEALTHY 优先、限流复位边界、禁用/无效排除）；恢复引擎固定矩阵（认证/参数终态不重试、429 先换凭证再 Fallback 后 Retry-After 截断、指数退避+抖动）与 Trace 级线性预算（1+retries+failovers+fallbacks 不乘法膨胀）；进程内原子容量存储（60 秒固定窗口、三层同次预占部分失败全回退、原窗口结算、终态互斥单次释放、未发送退还 RPM）+按 Alias FIFO 队列（满 QUEUE_FULL/取消/超时）+Watchdog 租约清扫端口；熔断引擎（429 不计失败、阈值自动 OPEN、到期惰性 HALF_OPEN、探测名额不超额、state_version CAS 人工命令）。管理面：限流/可靠性策略 CRUD（保存与启用两阶段唯一冲突，CONFLICT 携带 conflicting_policy_id）、启用需至少一限额、系统默认策略端点、熔断列表/详情/事件/人工 open-recover（C-013：PENDING 命令+受理审计→CAS→事件+终态同事务，未应用不报成功）。共享状态存储为端口+进程内实现（Embedded 合法），集群 Redis 实现按计划归属 BE-P05 storage-redis；容量/队列/恢复决策的 SQL 持久化在 P05/P09 服务装配时接入（capacity_reservation/queue_entry/recovery_decision 表结构已按 DATABASE_PLAN 预留）。真实 PostgreSQL 下 SQL 证据待 DB-P03 迁移。
 
 - [x] 任务编号：BE-019
