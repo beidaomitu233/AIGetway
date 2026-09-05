@@ -33,7 +33,7 @@
 | C-019 | 架构规划 | Git规范 | 当前请求指定dev，原通用规则使用develop | 本次明确请求优先，以dev承担开发集成职责 | 全部文档 | 全部执行分支 | 无 | 已确认 | main/dev及docs/architecture-plan已建立；不维护第二条develop集成线；按用户当前明确要求 |
 | C-020 | 用户/架构规划 | 工作区规则 | AGENTS.md需统一为轻享AI项目协作规范 | 明确产品范围、任务边界、文档协作、运行时安全、前端文案、验收及main/dev分支规则 | AGENTS.md | 项目协作规则 | 无 | 已完成 | 用户已确认规则文件来源并要求适配；AGENTS.md已按当前PRD与计划更新，通用简洁及局部修改原则保留 |
 | C-021 | 架构规划 | 检测实体关系 | Provider/模型/凭证可在Alias建立前检测，普通Trace/Attempt必填Alias/候选会阻止首次接入 | PROVIDER_CHECK允许null Alias/Candidate，固定模型池凭证并正常结算；CONNECTION_ONLY不建业务Trace | FE-009/014/016、Trace详情 | BE-009/013/014/015/023 | trace、attempt、provider_check_record | 待确认 | 已给条件约束，不能为检测创建虚假Alias或绕过容量 |
-| C-022 | 前端执行模型 | 契约缺失 | FE-002路由与按钮守卫需要bootstrap中roles[]/permissions[]的稳定字符串码表，当前Plan未定义具体码值；写请求CSRF请求头名称未指定 | 按PRD 2.4.2功能权限矩阵整理22个权限码（overview:view、config:manage、model:import、config:detect、credential:write、credential:masked-read、policy:manage、circuit:view、circuit:operate、observation:view、observation:diagnose、observation:export、draft:view、draft:revert、publish:manage、runtime_config:manage、access_credential:manage、access_credential:masked-read、audit:view、audit:export、developer:docs、developer:test），守卫只依赖permissions[]，角色仅展示；CSRF头暂用X-CSRF-Token | light-ai-admin-ui/src/auth/permissions.ts、FE-002 | BE-002 bootstrap契约 | 无 | 待确认 | 请后端/架构冻结角色码、权限码字典与CSRF头名；冻结前前端按上述码表以契约夹具开发，冻结后仅需调整常量与夹具 |
+| C-022 | 前端执行模型 | 契约缺失 | FE-002路由与按钮守卫需要bootstrap中roles[]/permissions[]的稳定字符串码表，当前Plan未定义具体码值；写请求CSRF请求头名称未指定 | 权限码采用`资源.动作`点分格式（详见light-ai-admin-ui/src/app/permissions.ts，覆盖PRD 2.4.2矩阵：overview/provider/credential/model/alias/limit/reliability/circuit/trace/usage/draft/publish/runtimeconfig/access/audit/developer的view与manage等），守卫只依赖permissions[]；角色码SYSTEM_ADMIN/OPERATOR/DEVELOPER/VIEWER仅用于展示与scope判断；CSRF头采用X-CSRF-Token | light-ai-admin-ui/src/app/permissions.ts、FE-002 | BE-002 bootstrap契约 | 无 | 待确认 | 请后端/架构冻结角色码、权限码字典与CSRF头名；冻结前前端按上述码表以契约夹具开发，冻结后仅需调整常量与夹具。2026-09-05更新：原登记码表与并行实现不一致，统一为点分格式并以此为准 |
 
 ## 3. 任务包交接格式
 
@@ -41,6 +41,7 @@
 |---|---|---|---|---|---|---|---|---|---|
 | 模板：新增编号 | 前端/后端/数据库/审查 | 需求/接口/字段/状态/安全/性能/测试/Git | 填PRD章节、任务ID、复现输入、预期与实际 | 填具体接口/字段及兼容影响 | 填实际文件与FE任务 | 填实际文件与BE任务 | 填表与DB任务 | 待确认 | 填责任人、采用口径、分支、commit、测试命令/结果、审查人及日期；没有证据不得标已完成 |
 | H-001 | 前端执行模型 | Git/任务领取 | 领取前端基础包FE-P01全部6项（FE-001工程入口与路径、FE-002身份权限缓存、FE-003请求与错误处理、FE-004列表状态与URL筛选、FE-005表单与危险操作组件、FE-006敏感信息与嵌入样式），领取即锁定，他人请勿重复领取 | 分支feature/frontend-foundation（基于dev ae533d7）；交付后在此登记commit、测试命令与结果 | light-ai-admin-ui全部基础模块、FRONTEND_PLAN FE-P01 | BE-001/BE-002（bootstrap与公共DTO契约） | 无 | 执行中 | 2026-09-05领取并锁定；完成后在本行补登commit与测试证据，真实接口联调待BE-P01完成后执行，不以Mock宣称联调验收 |
+| H-002 | 前端执行模型 | Git/并发冲突 | H-001锁定后检测到另一协作者于15:57起在同一分支工作区并行编写FE-P01实现（src/api、src/app、src/stores等），其权限码方案与本方C-022首版登记不一致，且本方两个孤儿文件（src/api/types.ts、src/config/runtime.ts）与其实现重复 | 冲突解决：以工作区中已成体系、被router/http/store实际引用的实现为唯一基础；本方删除自建孤儿文件避免重复维护；C-022统一为实际落地的点分权限码；等待写入稳定后审计契约符合度、补齐缺口（mocks插件、tests）、统一运行四项门禁后单次交付 | light-ai-admin-ui/src（api、app、stores、composables、components、layout、pages、styles、main.ts、App.vue） | BE-001/BE-002 | 无 | 执行中 | 2026-09-05：已删除本方孤儿文件并修正C-022；后续协作者领取任务前应先核对COMMUNICATION.md领取记录，避免同包重复开发 |
 
 推荐包分支：FE-P02→feature/frontend-provider，BE-P02→feature/backend-provider，DB-P02→feature/database-model-config，其余依包主题命名。每完成一个包提交一次；测试与Plan勾选同次提交。合并顺序为契约与迁移→后端→前端联调；前端Mock任务不得提前宣称真实调用验收完成。
 
