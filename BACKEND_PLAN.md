@@ -95,7 +95,10 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P01 基础契约（6项）
 
-- [ ] 任务编号：BE-001
+> 领取锁定：后端执行模型（beidao）2026-09-05 领取 BE-P01 全部 6 项（BE-001—BE-006），分支 feature/backend-foundation（基于 dev 0476609），执行期间请勿重复领取或并行修改同包任务；完成记录与测试证据见 COMMUNICATION.md。
+> 交付说明（2026-09-05）：BE-001—BE-006 已实现并通过 mvn test（95 例：client 32 / spi 4 / storage-jdbc 6 / admin 53，0 失败）与 mvn package；docs/contracts 提供协议 README 与 OpenAPI 3.1 夹具；light-ai-admin 含 AutoConfiguration.imports 装配（BE-055 做全量 Starter 条件装配时扩展）。其中 BE-003/005/006 的真实 PostgreSQL 行锁、迁移锁与同事务原子性证据依赖 DB-P01 迁移落地后补充联调复核，当前以契约实现与事务语义单元验证为完成基线。运行中发现协作并行（H-006），实现为双方互补合并结果。
+
+- [x] 任务编号：BE-001
   模块：基础契约；目标：冻结公共DTO与错误。
   接口/服务：公共管理/业务/内部协议。
   请求参数与响应字段：本文2节及附录请求→data或error、统一HTTP与字段类型；类型、必填及错误HTTP见协议字典和附录。
@@ -105,7 +108,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：每API有唯一method/path/schema，序列化不丢精度。
   测试要求：字段缺失、未知键、bigint与金额往返；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-002
+- [x] 任务编号：BE-002
   模块：基础契约；目标：管理身份与Bootstrap。
   接口/服务：GET /admin/bootstrap及所有管理入口。
   请求参数与响应字段：宿主/部署身份→roles/permissions/application_scope/模式；类型、必填及错误HTTP见协议字典和附录。
@@ -115,7 +118,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：四角色无越权；无用户注册密码接口。
   测试要求：四角色矩阵、伪造scope、Embedded匿名；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-003
+- [x] 任务编号：BE-003
   模块：基础契约；目标：仓储与迁移装配契约。
   接口/服务：启动schema-mode。
   请求参数与响应字段：DataSource/schema version→仓储就绪或结构错误；类型、必填及错误HTTP见协议字典和附录。
@@ -125,7 +128,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：本地SDK与远程client无数据库连接。
   测试要求：缺表、已有schema、迁移锁；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-004
+- [x] 任务编号：BE-004
   模块：基础契约；目标：列表查询与字段映射。
   接口/服务：各GET列表和详情。
   请求参数与响应字段：Query→PageResult/Detail；类型、必填及错误HTTP见协议字典和附录。
@@ -135,7 +138,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：分页不漏重，敏感列永不序列化。
   测试要求：排序注入、空集、权限范围；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-005
+- [x] 任务编号：BE-005
   模块：基础契约；目标：成功和失败审计。
   接口/服务：全部管理写操作。
   请求参数与响应字段：request_id/操作者/命令→AuditLog；类型、必填及错误HTTP见协议字典和附录。
@@ -145,7 +148,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：同request_id能定位成功或失败，无密钥值。
   测试要求：故意审计失败、version冲突；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-006
+- [x] 任务编号：BE-006
   模块：基础契约；目标：草稿锁与乐观版本。
   接口/服务：配置写服务。
   请求参数与响应字段：version/draft_revision→最新版本与变更数；类型、必填及错误HTTP见协议字典和附录。
