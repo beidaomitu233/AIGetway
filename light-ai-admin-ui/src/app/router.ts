@@ -104,12 +104,12 @@ export const routes: RouteRecordRaw[] = [
   moduleRoute('audit-list', '/ui/audit-logs', '审计日志', Permission.auditView, pages.auditList),
   moduleRoute('audit-detail', '/ui/audit-logs/:id', '审计详情', Permission.auditView),
 
-  moduleRoute(
-    'developer-access',
-    '/ui/developer-access',
-    '接入说明与测试',
-    Permission.developerView,
-  ),
+  {
+    path: '/ui/developer-access',
+    name: 'developer-access',
+    component: () => import('@/pages/developer/DeveloperAccessPage.vue'),
+    meta: { title: '接入说明与测试', permission: Permission.developerView },
+  },
 
   {
     path: '/ui/forbidden',

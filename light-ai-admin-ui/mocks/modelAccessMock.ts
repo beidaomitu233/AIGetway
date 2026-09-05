@@ -1,6 +1,7 @@
 // 模型接入契约 Mock（FE-013—FE-018）：仅用于本地开发（后端 BE-013—BE-018 未交付）。
 // 内存态数据支持增改启停删除轮换与批量检测推进；不进入构建产物，后端完成后整文件删除。
 import type { ServerResponse } from 'node:http'
+import { readMockBody } from './readBody'
 
 interface Row {
   id: string
@@ -153,7 +154,7 @@ async function handle(
   const method = req.method ?? 'GET'
   const path = url.pathname.replace(/^\/(?:[^/]+\/)?admin/, '')
   const requestId = rid('req')
-  const body = await readBody(req)
+  const body = await readMockBody(req as import('vite').Connect.IncomingMessage)
 
   // —— Provider / 凭证池选项 ——
   if (method === 'GET' && path === '/providers') {
@@ -687,25 +688,6 @@ async function handle(
   return false
 }
 
-function readBody(req: { method?: string | undefined; on?: ((event: string, cb: (chunk?: Buffer) => void) => void) | undefined }): Promise<Record<string, unknown>> {
-  return new Promise((resolve) => {
-    if (!req.on || req.method === 'GET') {
-      resolve({})
-      return
-    }
-    let raw = ''
-    req.on('data', (chunk) => {
-      raw += String(chunk)
-    })
-    req.on('end', () => {
-      try {
-        resolve(raw === '' ? {} : (JSON.parse(raw) as Record<string, unknown>))
-      } catch {
-        resolve({})
-      }
-    })
-  })
-}
 
 export function handleModelAccessApi(
   req: { method?: string | undefined; url?: string | undefined; on?: ((event: string, cb: (chunk?: Buffer) => void) => void) | undefined },
