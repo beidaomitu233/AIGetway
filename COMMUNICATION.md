@@ -497,4 +497,3 @@
 已完成文档结构与交叉引用审查：前端54任务/9包、后端60任务/10包、数据库30任务/5包，每包6项；39张表均有逐字段必填/类型/默认/约束/索引及页面接口映射；PRD6.6全部52场景均有验收追踪。任务ID唯一、任务引用有效，开发接入路径和管理/业务流类型已核对。
 
 文档分支：docs/architecture-plan。提交说明：docs: update architecture plan。提交范围仅PROJECT_DOCUMENT.md、FRONTEND_PLAN.md、BACKEND_PLAN.md、DATABASE_PLAN.md、COMMUNICATION.md。当前交付为规划文档；功能任务与产品验收场景保持未勾选，未执行业务代码、数据库迁移或运行性能测试。
-

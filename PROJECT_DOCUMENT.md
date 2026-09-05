@@ -202,4 +202,3 @@ Trace 创建后处于 RUNNING；只有因容量 QUEUE 等待时使用 QUEUED，�
 Runtime Instance 正常心跳且 accepting_requests=true 时为 ONLINE，关闭接入时为 DRAINING，超过失联阈值为 STALE 或 OFFLINE。Standalone Access Credential 到达 expires_at 后由读取逻辑计算为 EXPIRED；轮换不改变 ACTIVE 或 DISABLED 状态，只递增 rotation_generation 并立即使旧 Token 失效；DELETED 为不可恢复终态。
 
 ## 2.6 信息结构
-

@@ -1479,4 +1479,3 @@ Trace ID唯一只覆盖仍保留的Trace；PRD要求“已存在”重复拒绝�
 Provider/模型/凭证可以在Alias与候选建立前检测。CONNECTION_ONLY不执行模型推理时仅生成ProviderCheckRecord；MINIMAL_CHAT产生Trace与Attempt，Trace.invocation_source=PROVIDER_CHECK、application=ADMIN_CONSOLE、alias_id/alias可空，Attempt.route_candidate_id可空，其余Provider/Model/Pool/Credential路径必填。currency和价格来自检测选定模型，可靠性采用固定单次检测预算，超时采用命令；不进行Alias Fallback。触发半开探测时attempt_type=HALF_OPEN_PROBE。
 
 数据库对APPLICATION/ADMIN_TEST的Trace施加alias_id/alias非空条件，对普通路由Attempt施加route_candidate_id非空服务约束。检测Trace仍结算并生成Usage事件，使用null Alias维度，页面显示“模型检测”；该文字由invocation_source派生，不伪造可调用Alias。此补充为C-021，防止执行方为满足外键而创建虚假Alias/候选。
-
