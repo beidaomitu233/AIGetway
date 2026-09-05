@@ -955,3 +955,37 @@ button.lai-metric-card:hover {
   gap: 8px;
   cursor: pointer;
 }
+
+/* Token 一次性展示 */
+
+.lai-token-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f7f8fa;
+  border: 1px solid #e5e6eb;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  word-break: break-all;
+}
+
+.lai-token-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  flex: 1;
+}
+
+.lai-token-saved {
+  margin-top: 8px;
+}
+
+.lai-retention-impact {
+  border-top: 1px solid #f0f1f3;
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+.lai-retention-grid {
+  margin-top: 8px;
+}

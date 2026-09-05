@@ -8,6 +8,7 @@ import { handleProviderApi, handlePoolApi } from './entities'
 import { handleTraceApi } from './traceMock'
 import { handleOverviewApi, handleUsageApi } from './overviewUsageMock'
 import { handleConfigApi } from './configMock'
+import { handleRuntimeConfigApi, handleAccessApi, handleAuditApi } from './runtimeAccessMock'
 
 /**
  * 契约 Mock：仅用于本地开发与深链验收（后端 BE-002 未交付）。
@@ -52,6 +53,9 @@ async function handleAdminApi(req: Connect.IncomingMessage, res: ServerResponse)
   if (handleOverviewApi(req, url, res)) return true
   if (handleUsageApi(req, url, res)) return true
   if (handleConfigApi(req, url, res)) return true
+  if (handleRuntimeConfigApi(req, url, res)) return true
+  if (handleAccessApi(req, url, res)) return true
+  if (handleAuditApi(req, url, res)) return true
   if (
     await handleModelAccessApi(
       req as { method?: string | undefined; url?: string | undefined; on?: ((event: string, cb: (chunk?: Buffer) => void) => void) | undefined },

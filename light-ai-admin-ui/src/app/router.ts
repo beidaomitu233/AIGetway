@@ -19,6 +19,10 @@ const pages = {
   drafts: () => import('@/pages/config/DraftsPage.vue'),
   publish: () => import('@/pages/config/PublishPage.vue'),
   publishRecord: () => import('@/pages/config/PublishRecordDetailPage.vue'),
+  runtimeConfig: () => import('@/pages/runtimeConfig/RuntimeConfigPage.vue'),
+  accessList: () => import('@/pages/access/AccessListPage.vue'),
+  accessDetail: () => import('@/pages/access/AccessDetailPage.vue'),
+  auditList: () => import('@/pages/audit/AuditListPage.vue'),
 }
 
 function moduleRoute(
@@ -99,12 +103,12 @@ export const routes: RouteRecordRaw[] = [
   moduleRoute('publish', '/ui/config/publish', '配置发布', Permission.publishView, pages.publish),
   moduleRoute('publish-record', '/ui/config/publish/records/:id', '发布详情', Permission.publishView, pages.publishRecord),
 
-  moduleRoute('runtime-config', '/ui/runtime-config', '运行参数', Permission.runtimeConfigView),
+  moduleRoute('runtime-config', '/ui/runtime-config', '运行参数', Permission.runtimeConfigView, pages.runtimeConfig),
 
-  moduleRoute('access-list', '/ui/access-credentials', '访问凭证', Permission.accessView),
-  moduleRoute('access-detail', '/ui/access-credentials/:id', '访问凭证详情', Permission.accessView),
+  moduleRoute('access-list', '/ui/access-credentials', '访问凭证', Permission.accessView, pages.accessList),
+  moduleRoute('access-detail', '/ui/access-credentials/:id', '访问凭证详情', Permission.accessView, pages.accessDetail),
 
-  moduleRoute('audit-list', '/ui/audit-logs', '审计日志', Permission.auditView),
+  moduleRoute('audit-list', '/ui/audit-logs', '审计日志', Permission.auditView, pages.auditList),
   moduleRoute('audit-detail', '/ui/audit-logs/:id', '审计详情', Permission.auditView),
 
   moduleRoute(
