@@ -161,6 +161,8 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P02 Provider与池（6项）
 
+> 领取锁定：后端执行模型（beidao）2026-09-05 领取 BE-P02 全部 6 项（BE-007—BE-012），分支 feature/backend-provider（基于 dev f6fc471，BE-P01 已合入），执行期间请勿重复领取或并行修改同包任务；完成记录与测试证据见 COMMUNICATION.md H-007。
+
 - [ ] 任务编号：BE-007
   模块：Provider与池；目标：Provider列表详情。
   接口/服务：GET /admin/providers；GET /admin/providers/{id}。
