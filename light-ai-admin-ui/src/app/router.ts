@@ -14,6 +14,8 @@ const pages = {
   poolDetail: () => import('@/pages/credentialPools/PoolDetailPage.vue'),
   traceList: () => import('@/pages/traces/TraceListPage.vue'),
   traceDetail: () => import('@/pages/traces/TraceDetailPage.vue'),
+  overview: () => import('@/pages/overview/OverviewPage.vue'),
+  usage: () => import('@/pages/usage/UsagePage.vue'),
 }
 
 function moduleRoute(
@@ -29,7 +31,7 @@ function moduleRoute(
 /** 全部页面路由按 FRONTEND_PLAN 第 2 节注册；未实现模块由 ModulePlaceholder 承接，随任务包替换。 */
 export const routes: RouteRecordRaw[] = [
   { path: '/', redirect: '/ui/overview' },
-  moduleRoute('overview', '/ui/overview', '运行概览', Permission.overviewView),
+  moduleRoute('overview', '/ui/overview', '运行概览', Permission.overviewView, pages.overview),
 
   moduleRoute('provider-list', '/ui/providers', 'Provider', Permission.providerView, pages.providerList),
   moduleRoute('provider-new', '/ui/providers/new', '新建 Provider', Permission.providerManage, pages.providerForm),
@@ -88,7 +90,7 @@ export const routes: RouteRecordRaw[] = [
   moduleRoute('trace-list', '/ui/traces', 'Trace', Permission.traceView, pages.traceList),
   moduleRoute('trace-detail', '/ui/traces/:traceId', 'Trace 详情', Permission.traceView, pages.traceDetail),
 
-  moduleRoute('usage', '/ui/usage', 'Usage 与 Cost', Permission.usageView),
+  moduleRoute('usage', '/ui/usage', 'Usage 与 Cost', Permission.usageView, pages.usage),
 
   moduleRoute('drafts', '/ui/config/drafts', '待发布变更', Permission.draftView),
   moduleRoute('publish', '/ui/config/publish', '配置发布', Permission.publishView),
