@@ -66,7 +66,6 @@ async function handleAdminApi(req: Connect.IncomingMessage, res: ServerResponse)
   }
   return false
 }
-}
 
 function serveIndex(root: string, res: ServerResponse): void {
   const html = fs.readFileSync(path.join(root, 'index.html'))

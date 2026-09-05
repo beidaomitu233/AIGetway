@@ -3,29 +3,25 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import StatusText from '@/components/StatusText.vue'
-import DataTable, { type TableColumn } from '@/components/DataTable.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import CredentialPanel from '@/components/credentials/CredentialPanel.vue'
 import { useBootstrapStore } from '@/stores/bootstrap'
 import { useLifecycleActions } from '@/composables/useLifecycleActions'
 import {
-  credentialHealthLabels,
   formatDateTime,
   poolStatusLabels,
   selectionStrategyLabels,
-  secretSourceLabels,
 } from '@/app/display'
 import { Permission } from '@/app/permissions'
 import {
-  type CredentialListItem,
   type CredentialPoolDetail,
   deletePool,
   disablePool,
   enablePool,
   getPool,
   getPoolImpact,
-  listCredentials,
 } from '@/api/credentialPools'
-import { ApiError, isAbortError } from '@/api/errors'
+import { isAbortError } from '@/api/errors'
 
 const CAPACITY_REFRESH_MS = 10000
 
@@ -35,6 +31,7 @@ const store = useBootstrapStore()
 
 const poolId = computed(() => route.params.id as string)
 const canManage = computed(() => store.can(Permission.credentialManage))
+const canCheck = computed(() => store.can(Permission.credentialCheck))
 // 开发与只读角色不加载 Credential 列表（4.2.4）。
 const canViewCredentials = computed(() => store.can(Permission.credentialView))
 
@@ -42,13 +39,8 @@ const state = ref<'loading' | 'ready' | 'error'>('loading')
 const loadError = ref<unknown>(null)
 const detail = ref<CredentialPoolDetail | null>(null)
 
-const credentials = ref<CredentialListItem[]>([])
-const credentialState = ref<'loading' | 'ready' | 'error'>('loading')
-const credentialError = ref<unknown>(null)
-
 let capacityTimer: number | null = null
 let loadController: AbortController | null = null
-let credentialController: AbortController | null = null
 
 async function load(): Promise<void> {
   loadController?.abort()
@@ -58,38 +50,10 @@ async function load(): Promise<void> {
   try {
     detail.value = await getPool(poolId.value, loadController.signal)
     state.value = 'ready'
-    if (canViewCredentials.value) {
-      void loadCredentials()
-    } else {
-      credentialState.value = 'ready'
-    }
   } catch (e) {
     if (isAbortError(e)) return
     loadError.value = e
     state.value = 'error'
-  }
-}
-
-async function loadCredentials(): Promise<void> {
-  credentialController?.abort()
-  credentialController = new AbortController()
-  credentialState.value = credentialState.value === 'ready' ? 'ready' : 'loading'
-  try {
-    const result = await listCredentials(
-      poolId.value,
-      { page: 1, page_size: 50 },
-      credentialController.signal,
-    )
-    credentials.value = result.items
-    credentialState.value = 'ready'
-  } catch (e) {
-    if (isAbortError(e)) return
-    if (e instanceof ApiError && e.status === 403) {
-      credentialError.value = e
-    } else {
-      credentialError.value = e
-    }
-    credentialState.value = 'error'
   }
 }
 
@@ -99,9 +63,6 @@ function startCapacityTimer(): void {
     if (document.hidden) return
     if (detail.value) {
       void load()
-    }
-    if (canViewCredentials.value && credentialState.value === 'ready') {
-      void loadCredentials()
     }
   }, CAPACITY_REFRESH_MS)
 }
@@ -120,7 +81,6 @@ onMounted(() => {
 onUnmounted(() => {
   stopCapacityTimer()
   loadController?.abort()
-  credentialController?.abort()
 })
 watch(poolId, () => void load())
 
@@ -135,24 +95,6 @@ const lifecycle = useLifecycleActions({
   },
 })
 
-const credentialColumns: TableColumn[] = [
-  { key: 'name', label: '名称' },
-  { key: 'masked_value', label: '密钥（脱敏）' },
-  { key: 'secret_source', label: '密钥来源' },
-  { key: 'weight', label: '权重' },
-  { key: 'rpm_limit', label: 'RPM' },
-  { key: 'tpm_limit', label: 'TPM' },
-  { key: 'concurrent_limit', label: '并发上限' },
-  { key: 'current_concurrency', label: '当前并发' },
-  { key: 'health_status', label: '健康状态' },
-  { key: 'last_check_at', label: '最近检测' },
-  { key: 'enabled', label: '启用' },
-  { key: 'draft_changed', label: '变更' },
-]
-
-function limitText(value: number | null): string {
-  return value === null ? '不限制' : String(value)
-}
 </script>
 
 <template>
@@ -310,70 +252,12 @@ function limitText(value: number | null): string {
         v-if="canViewCredentials"
         class="lai-card"
       >
-        <h2 class="lai-card-title">
-          Credential
-        </h2>
-        <PageState
-          v-if="credentialState === 'loading'"
-          status="loading"
+        <CredentialPanel
+          :pool-id="detail.id"
+          :provider-id="detail.provider_id"
+          :can-manage="canManage"
+          :can-check="canCheck"
         />
-        <PageState
-          v-else-if="credentialState === 'error'"
-          status="error"
-          :error="credentialError"
-          @retry="loadCredentials"
-        />
-        <template v-else>
-          <DataTable
-            :columns="credentialColumns"
-            :rows="credentials"
-            :row-key="(row: CredentialListItem) => row.id"
-            :loading="false"
-          >
-            <template #secret_source="{ row }">
-              {{ secretSourceLabels[row.secret_source] ?? row.secret_source }}
-              <span
-                v-if="row.secret_ref_display"
-                class="lai-related-meta"
-              >
-                （{{ row.secret_ref_display }}）
-              </span>
-            </template>
-            <template #rpm_limit="{ row }">
-              {{ limitText(row.rpm_limit) }}
-            </template>
-            <template #tpm_limit="{ row }">
-              {{ limitText(row.tpm_limit) }}
-            </template>
-            <template #concurrent_limit="{ row }">
-              {{ limitText(row.concurrent_limit) }}
-            </template>
-            <template #health_status="{ row }">
-              <StatusText
-                :value="row.health_status"
-                :labels="credentialHealthLabels"
-              />
-            </template>
-            <template #last_check_at="{ row }">
-              {{ formatDateTime(row.last_check_at, store.timezone, '未检测') }}
-            </template>
-            <template #enabled="{ row }">
-              {{ row.enabled ? '启用' : '停用' }}
-            </template>
-            <template #draft_changed="{ row }">
-              <RouterLink
-                v-if="row.draft_changed"
-                to="/ui/config/drafts"
-                class="lai-link"
-              >
-                待发布
-              </RouterLink>
-              <template v-else>
-                —
-              </template>
-            </template>
-          </DataTable>
-        </template>
       </div>
 
       <div class="lai-card">
