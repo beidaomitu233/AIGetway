@@ -153,3 +153,33 @@ export function formatDuration(ms: number | null | undefined, placeholder = '—
   if (ms < 1000) return `${ms} ms`
   return `${(ms / 1000).toFixed(2)} s`
 }
+
+export const traceStatusLabels: Record<string, string> = {
+  QUEUED: '排队中',
+  RUNNING: '运行中',
+  SUCCEEDED: '成功',
+  FAILED: '失败',
+  CANCELLED: '已取消',
+  STREAM_INTERRUPTED: '流中断',
+}
+
+export const recoveryActionLabels: Record<string, string> = {
+  RETRY: '重试',
+  CREDENTIAL_FAILOVER: '凭证切换',
+  FALLBACK: '候选切换',
+  FAIL: '最终失败',
+}
+
+export const attemptTypeLabels: Record<string, string> = {
+  INITIAL: '首次尝试',
+  RETRY: '重试',
+  CREDENTIAL_FAILOVER: '凭证切换',
+  FALLBACK: '候选切换',
+  HALF_OPEN_PROBE: '半开探测',
+}
+
+export const sourceModeLabels: Record<string, string> = {
+  LOCAL_RUNTIME: '本地运行',
+  EMBEDDED: '嵌入模式',
+  STANDALONE_SERVER: '独立部署',
+}

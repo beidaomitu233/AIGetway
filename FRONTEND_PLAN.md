@@ -286,7 +286,9 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
 
 ## FE-P05 Trace（6项）
 
-- [ ] 任务编号：FE-025
+> 领取锁定：前端执行模型 2026-09-05 领取 FE-025—FE-030 全部 6 项，分支 feature/frontend-trace（基于 dev），执行期间请勿重复领取；完成记录与测试证据见 COMMUNICATION.md H-006。
+
+- [x] 任务编号：FE-025
   模块：Trace；目标：Trace组合和精确查询。
   实现说明：按4.4.1筛选，trace_id精确模式停用其他业务条件，保留范围控制。
   依赖接口：GET /admin/traces。
@@ -295,7 +297,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：精确查询最多1条，无权ID空列表，普通时间≤31天。
   测试要求：ID越权、31天边界、筛选恢复；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-026
+- [x] 任务编号：FE-026
   模块：Trace；目标：Trace列表列与导出。
   实现说明：展示最终状态、路径、用量/成本；按当前条件导出CSV。
   依赖接口：GET /admin/traces/export。
@@ -304,7 +306,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：未获权无导出，超10万行错误可读，下载取消释放请求。
   测试要求：导出422、文件名、断开；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-027
+- [x] 任务编号：FE-027
   模块：Trace；目标：Trace摘要与受控诊断。
   实现说明：按需请求详情和include_diagnostics，展示数量摘要与可用样本。
   依赖接口：GET /admin/traces/{traceId}。
@@ -313,7 +315,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：诊断只有有权且AVAILABLE显示，403无子明细，过期不可取。
   测试要求：四角色、EXPIRED、404/403；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-028
+- [x] 任务编号：FE-028
   模块：Trace；目标：统一时间线与Attempt抽屉。
   实现说明：按服务端timeline顺序渲染，展开耗时、错误、预占和价格快照。
   依赖接口：GET /admin/traces/{traceId}。
@@ -322,7 +324,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：节点对应源ID，不前端重排，同时间顺序稳定。
   测试要求：相同时间、无Attempt失败、长列表；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-029
+- [x] 任务编号：FE-029
   模块：Trace；目标：恢复关联与终态表现。
   实现说明：点击Recovery高亮来源和目标；运行Trace轮询至终态。
   依赖接口：GET /admin/traces/{traceId}。
@@ -331,7 +333,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：FAIL无目标，终态停轮询，已结束不显示运行计时。
   测试要求：FAIL、取消、流中断；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-030
+- [x] 任务编号：FE-030
   模块：Trace；目标：响应Usage与总消耗对账。
   实现说明：分开展示response_*和全部Attempt Token/成本、ACTUAL/ESTIMATED/MIXED。
   依赖接口：GET /admin/traces/{traceId}。

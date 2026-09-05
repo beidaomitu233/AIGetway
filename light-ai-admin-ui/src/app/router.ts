@@ -12,6 +12,8 @@ const pages = {
   poolList: () => import('@/pages/credentialPools/PoolListPage.vue'),
   poolForm: () => import('@/pages/credentialPools/PoolFormPage.vue'),
   poolDetail: () => import('@/pages/credentialPools/PoolDetailPage.vue'),
+  traceList: () => import('@/pages/traces/TraceListPage.vue'),
+  traceDetail: () => import('@/pages/traces/TraceDetailPage.vue'),
 }
 
 function moduleRoute(
@@ -83,8 +85,8 @@ export const routes: RouteRecordRaw[] = [
   moduleRoute('circuit-list', '/ui/circuits', '熔断状态', Permission.circuitView),
   moduleRoute('circuit-detail', '/ui/circuits/:id', '熔断详情', Permission.circuitView),
 
-  moduleRoute('trace-list', '/ui/traces', 'Trace', Permission.traceView),
-  moduleRoute('trace-detail', '/ui/traces/:traceId', 'Trace 详情', Permission.traceView),
+  moduleRoute('trace-list', '/ui/traces', 'Trace', Permission.traceView, pages.traceList),
+  moduleRoute('trace-detail', '/ui/traces/:traceId', 'Trace 详情', Permission.traceView, pages.traceDetail),
 
   moduleRoute('usage', '/ui/usage', 'Usage 与 Cost', Permission.usageView),
 
