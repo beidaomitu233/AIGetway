@@ -172,7 +172,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
 
 > 领取锁定：前端执行模型（beidao）2026-09-05 领取 FE-013—FE-018 全部 6 项，分支 feature/frontend-models（worktree D:\AIBuilder\AIGetway-models，基于 b43ea0f），执行期间请勿重复领取；FE-P02（feature/frontend-provider）由另一协作者并行执行，池详情页挂载点由其提供，完成记录见 COMMUNICATION.md H-004。
 
-- [ ] 任务编号：FE-013
+- [x] 任务编号：FE-013
   模块：模型接入；目标：Credential查询和新增编辑。
   实现说明：在池详情提交名称、密钥来源、限额；两次密钥一致，引用编辑不回传掩码。
   依赖接口：GET/POST /admin/credential-pools/{poolId}/credentials；GET/PUT /admin/credentials/{id}。
@@ -181,7 +181,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：来源不可切换，空限额保留null，关闭后清理秘密。
   测试要求：互斥来源、超限、掩码保留；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-014
+- [x] 任务编号：FE-014
   模块：模型接入；目标：Credential轮换检测启停删除。
   实现说明：独立轮换弹窗与检测命令，显式展示轮换即时生效结果。
   依赖接口：/admin/credentials/{id}/rotate、check、enable、disable；DELETE详情。
@@ -190,7 +190,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：新密钥只写入，旧值不回显；CAPACITY_IN_USE时保留对象。
   测试要求：轮换失败、运行占用、取消；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-015
+- [x] 任务编号：FE-015
   模块：模型接入；目标：Model列表详情与能力表单。
   实现说明：按4.2.6录入能力/范围/默认值/价格，读取引用和检测状态。
   依赖接口：GET/POST /admin/provider-models；GET/PUT /admin/provider-models/{id}。
@@ -199,7 +199,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：正上下文、价格精度、支持开关联动准确，缺能力禁启用。
   测试要求：上下文边界、价格精度、409；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-016
+- [x] 任务编号：FE-016
   模块：模型接入；目标：模型导入与批量检测。
   实现说明：输入Provider/来源/模型选择；显示created/skipped/failed和逐项检测进度。
   依赖接口：/admin/providers/{id}/available-models；/admin/provider-models/import、batch-check；/admin/batch-check-jobs/{id}。
@@ -208,7 +208,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：未知能力待补充且disabled；取消停止未开始项；离页停轮询。
   测试要求：不支持目录、部分失败、任务取消；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-017
+- [x] 任务编号：FE-017
   模块：模型接入；目标：Alias列表新增编辑和影响。
   实现说明：输入alias/display_name/description；展示发布能力摘要并执行引用确认。
   依赖接口：/admin/model-aliases；/admin/model-aliases/{id}及impact/enable/disable。
@@ -217,7 +217,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：alias创建后只读，开发仅授权已发布Alias，删除引用保护。
   测试要求：非法Alias、越权、影响过期；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-018
+- [x] 任务编号：FE-018
   模块：模型接入；目标：候选创建编辑重排探测。
   实现说明：在Alias详情选择同Provider模型/池，输入priority/weight；重排带每项version。
   依赖接口：/admin/model-aliases/{id}/candidates、candidates/reorder；/admin/route-candidates/{id}、check。

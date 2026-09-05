@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from 'vue'
 
+defineOptions({ inheritAttrs: false })
+
 const props = withDefaults(
   defineProps<{
     modelValue: string
@@ -32,6 +34,7 @@ onUnmounted(() => {
 <template>
   <div class="lai-secret">
     <input
+      v-bind="$attrs"
       class="lai-input lai-secret-input"
       :type="inputType"
       :value="modelValue"
