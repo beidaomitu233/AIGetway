@@ -406,7 +406,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
 
 > 领取锁定：前端执行模型 2026-09-05 领取 FE-037—FE-042 全部 6 项，分支 feature/frontend-publish（基于 dev），执行期间请勿重复领取；完成记录与测试证据见 COMMUNICATION.md H-008。
 
-- [ ] 任务编号：FE-037
+- [x] 任务编号：FE-037
   模块：草稿发布；目标：草稿摘要和分组差异。
   实现说明：读取draft-state/summary/changes，按实体分组展示脱敏字段差异。
   依赖接口：GET /admin/config/draft-state、draft-changes/summary、draft-changes。
@@ -415,7 +415,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：摘要数量一致，同对象一行，密钥无前后值。
   测试要求：多次编辑、删除新建抵消；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-038
+- [x] 任务编号：FE-038
   模块：草稿发布；目标：单项撤销与全部撤销。
   实现说明：输入原因/确认文本/revision/version，显示revert_blockers。
   依赖接口：POST /admin/config/draft-changes/{entityType}/{entityId}/revert、revert-all。
@@ -424,7 +424,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：有依赖禁单撤销，冲突不清页面，全部撤销确认文字有效。
   测试要求：阻塞、旧revision、取消；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-039
+- [x] 任务编号：FE-039
   模块：草稿发布；目标：固定修订配置校验。
   实现说明：提交revision，展示ERROR/WARNING定位对象字段。
   依赖接口：POST /admin/config/validate。
@@ -433,7 +433,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：ERROR阻止下一步，revision变化与过期使结果失效。
   测试要求：校验失败、过期、并发编辑；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-040
+- [x] 任务编号：FE-040
   模块：草稿发布；目标：警告确认与发布提交。
   实现说明：逐项确认warning IDs与publish_note，提交validation_id及revision。
   依赖接口：POST /admin/config/publish。
@@ -442,7 +442,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：缺警告禁提交，重复点击仅一次，网络超时读取记录核对。
   测试要求：遗漏警告、锁冲突、超时；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-041
+- [x] 任务编号：FE-041
   模块：草稿发布；目标：实例准备激活与收敛进度。
   实现说明：轮询发布详情展示READY/LOADED和失败摘要、首轮/收敛时间。
   依赖接口：GET /admin/config/publish-records/{id}。
@@ -451,7 +451,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：准备失败旧快照仍活动，PARTIAL_FAILED保持可收敛展示。
   测试要求：失败/超时/恢复三实例夹具；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-042
+- [x] 任务编号：FE-042
   模块：草稿发布；目标：发布历史和快照摘要。
   实现说明：输入时间/状态/发布人查询历史，详情展示前后版本与实例能力。
   依赖接口：GET /admin/config/publish-records；/admin/config/snapshots/{snapshotNo}/summary；/admin/runtime-instances。
