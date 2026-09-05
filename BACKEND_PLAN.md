@@ -96,7 +96,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 ## BE-P01 基础契约（6项）
 
 > 领取锁定：后端执行模型（beidao）2026-09-05 领取 BE-P01 全部 6 项（BE-001—BE-006），分支 feature/backend-foundation（基于 dev 0476609），执行期间请勿重复领取或并行修改同包任务；完成记录与测试证据见 COMMUNICATION.md。
-> 交付说明（2026-09-05）：BE-001—BE-006 已实现并通过 mvn test（59 例）；其中 BE-003/005/006 的真实 PostgreSQL 行锁、迁移锁与同事务原子性证据依赖 DB-P01 迁移落地后补充联调复核，当前以契约实现与事务语义单元验证为完成基线。运行中发现协作并行（H-006），实现为双方互补合并结果。
+> 交付说明（2026-09-05）：BE-001—BE-006 已实现并通过 mvn test（95 例：client 32 / spi 4 / storage-jdbc 6 / admin 53，0 失败）与 mvn package；docs/contracts 提供协议 README 与 OpenAPI 3.1 夹具；light-ai-admin 含 AutoConfiguration.imports 装配（BE-055 做全量 Starter 条件装配时扩展）。其中 BE-003/005/006 的真实 PostgreSQL 行锁、迁移锁与同事务原子性证据依赖 DB-P01 迁移落地后补充联调复核，当前以契约实现与事务语义单元验证为完成基线。运行中发现协作并行（H-006），实现为双方互补合并结果。
 
 - [x] 任务编号：BE-001
   模块：基础契约；目标：冻结公共DTO与错误。

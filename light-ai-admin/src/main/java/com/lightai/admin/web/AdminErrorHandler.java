@@ -28,6 +28,7 @@ public class AdminErrorHandler {
         if (error.requestId() == null) {
             error = UnifiedError.builder(e.code(), e.getMessage())
                     .param(e.param())
+                    .errors(e.issues())
                     .requestId(RequestIdFilter.requestIdOf(request))
                     .retryAfterMs(e.retryAfterMs())
                     .currentVersion(e.currentVersion())
