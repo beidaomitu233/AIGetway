@@ -228,8 +228,9 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 ## BE-P03 接入对象（6项）
 
 > 领取锁定：后端执行模型（beidao）2026-09-05 领取 BE-P03 全部 6 项（BE-013—BE-018），分支 feature/backend-model-access（基于 dev 163f869，BE-P02 已合入），执行期间请勿重复领取或并行修改同包任务；完成记录与测试证据见 COMMUNICATION.md H-008。
+> 交付说明（2026-09-05）：BE-013—BE-018 已实现并通过 mvn test（全仓 131 例：client 43 / spi 4 / storage-jdbc 13 / admin 71，0 失败）与 mvn package。秘密与配置分离：secret_value 经 AES-256-GCM 加密落 credential_secret（主密钥来自部署配置，缺失时拒绝启动），掩码/引用展示不含明文；轮换走独立即时事务（executeStandalone）递增 secret_version，两次输入不一致 SECRET_CONFIRM_MISMATCH；来源不可切换；删除被容量占用时 CAPACITY_IN_USE（占用判定待 BE-P04 容量存储）。模型启用强制能力完整且 context>max_output（C-014）；导入逐对象事务、重复 skipped、强制停用导入；批量检测不写草稿、取消仅阻止未开始项。候选同 Provider 约束保存与发布两阶段拦截；重排要求完整集合+逐项 version 原子写入。available-models 与检测执行依赖 Adapter SPI（BE-P05），未加载时返回 MODEL_LIST_NOT_SUPPORTED / PROVIDER_ADAPTER_NOT_FOUND，不伪造结果。真实 PostgreSQL 下 SQL/事务证据待 DB-P02 迁移落地后联调复核。
 
-- [ ] 任务编号：BE-013
+- [x] 任务编号：BE-013
   模块：接入对象；目标：Credential查询写入轮换和检测。
   接口/服务：池下credentials；/admin/credentials/{id}及rotate/check/enable/disable。
   请求参数与响应字段：4.2.4字段及version→脱敏详情/CheckRecord；类型、必填及错误HTTP见协议字典和附录。
@@ -239,7 +240,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：来源不可切换；旧Token不回读；运行已取Secret不被破坏。
   测试要求：密钥泄漏扫描、轮换竞态、占用删除；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-014
+- [x] 任务编号：BE-014
   模块：接入对象；目标：Model字段与能力管理。
   接口/服务：/admin/provider-models及/{id}/impact、enable、disable、check。
   请求参数与响应字段：4.2.6完整字段→详情/操作/检测；类型、必填及错误HTTP见协议字典和附录。
@@ -249,7 +250,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：停用导入可缺能力，启用必完整，历史价格不变。
   测试要求：能力边界、默认值、价格精度；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-015
+- [x] 任务编号：BE-015
   模块：接入对象；目标：模型导入与批量检测。
   接口/服务：available-models；import；batch-check；jobs/{id}/cancel。
   请求参数与响应字段：ImportCommand或模型IDs→逐项结果/任务；类型、必填及错误HTTP见协议字典和附录。
@@ -259,7 +260,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：重复导入skipped，部分失败保留成功，检测不写草稿。
   测试要求：重复、部分失败、取消；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-016
+- [x] 任务编号：BE-016
   模块：接入对象；目标：Alias列表详情写入与删除。
   接口/服务：/admin/model-aliases及/{id}/impact、enable、disable。
   请求参数与响应字段：alias/display_name/description/version→详情/结果；类型、必填及错误HTTP见协议字典和附录。
@@ -269,7 +270,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：无候选草稿可保存，发布时严格拦截。
   测试要求：空候选、权限、唯一冲突；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-017
+- [x] 任务编号：BE-017
   模块：接入对象；目标：候选增改删除和探测。
   接口/服务：/admin/model-aliases/{id}/candidates；/admin/route-candidates/{id}/check。
   请求参数与响应字段：model/pool/priority/weight/enabled/version→详情/结果；类型、必填及错误HTTP见协议字典和附录。
@@ -279,7 +280,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：跨Provider在保存和发布两阶段拒绝。
   测试要求：重复组合、错误引用、探测限流；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-018
+- [x] 任务编号：BE-018
   模块：接入对象；目标：候选原子重排与状态摘要。
   接口/服务：PUT /admin/model-aliases/{id}/candidates/reorder。
   请求参数与响应字段：items[id,priority,version]→候选数组；类型、必填及错误HTTP见协议字典和附录。

@@ -50,31 +50,10 @@ public class DraftWriteService {
         try {
             return transaction.execute(status -> doInTransaction(command));
         } catch (LightAiException e) {
-            // 业务失败已随事务回滚；失败审计以独立事务保留同一 request_id
-            auditService.recordFailure(AuditRecord.failed(
-                    UUID.randomUUID(),
-                    command.requestId(),
-                    command.operatorId(),
-                    command.action(),
-                    command.entityType(),
-                    command.entityId(),
-                    e.code().name(),
-                    safeSummary(e.getMessage()),
-                    command.sourceMode(),
-                    command.sourceIpMasked()));
+            recordFailureAudit(command, e.code().name(), e.getMessage());
             throw e;
         } catch (RuntimeException e) {
-            auditService.recordFailure(AuditRecord.failed(
-                    UUID.randomUUID(),
-                    command.requestId(),
-                    command.operatorId(),
-                    command.action(),
-                    command.entityType(),
-                    command.entityId(),
-                    ErrorCode.INTERNAL_ERROR.name(),
-                    safeSummary(e.getClass().getSimpleName()),
-                    command.sourceMode(),
-                    command.sourceIpMasked()));
+            recordFailureAudit(command, ErrorCode.INTERNAL_ERROR.name(), e.getClass().getSimpleName());
             throw e;
         }
     }
@@ -127,6 +106,62 @@ public class DraftWriteService {
                 command.sourceIpMasked()));
 
         return new DraftWriteResult(bumped.draftRevision(), change.entityVersion());
+    }
+
+    /**
+     * 独立即时事务（Credential 纯轮换等，BACKEND_PLAN 第 3 节）：
+     * 不取全局草稿锁、不产生草稿差异、不递增 draft_revision；
+     * 实体 version 校验与成功审计同事务，失败审计独立。
+     */
+    public DraftWriteResult executeStandalone(DraftWriteCommand command) {
+        try {
+            return transaction.execute(status -> {
+                Connection connection = DataSourceUtils.getConnection(dataSource);
+                if (command.versionReader() != null) {
+                    Long currentVersion = command.versionReader().currentVersion(connection);
+                    if (currentVersion == null) {
+                        throw new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "配置对象不存在或已删除");
+                    }
+                    if (currentVersion != command.expectedVersion()) {
+                        throw new LightAiException(ErrorCode.CONFIG_VERSION_CONFLICT,
+                                "配置对象版本已变化，请刷新后重试",
+                                null, command.requestId(), null, currentVersion, null, null);
+                    }
+                }
+                DraftEntityChange change = command.writer().write(connection);
+                auditService.recordSuccess(connection, AuditRecord.succeeded(
+                        UUID.randomUUID(),
+                        command.requestId(),
+                        command.operatorId(),
+                        command.action(),
+                        change.entityType(),
+                        change.entityId().toString(),
+                        AuditRedactor.redact(change.changes()),
+                        command.sourceMode(),
+                        command.sourceIpMasked()));
+                return new DraftWriteResult(-1, change.entityVersion());
+            });
+        } catch (LightAiException e) {
+            recordFailureAudit(command, e.code().name(), e.getMessage());
+            throw e;
+        } catch (RuntimeException e) {
+            recordFailureAudit(command, ErrorCode.INTERNAL_ERROR.name(), e.getClass().getSimpleName());
+            throw e;
+        }
+    }
+
+    private void recordFailureAudit(DraftWriteCommand command, String errorCode, String safeSummary) {
+        auditService.recordFailure(AuditRecord.failed(
+                UUID.randomUUID(),
+                command.requestId(),
+                command.operatorId(),
+                command.action(),
+                command.entityType(),
+                command.entityId(),
+                errorCode,
+                safeSummary(safeSummary),
+                command.sourceMode(),
+                command.sourceIpMasked()));
     }
 
     private static String safeSummary(String message) {

@@ -56,6 +56,35 @@ public class JdbcRuntimeStateWriter {
         }
     }
 
+    /** 检测/调用结束后的 Credential 健康收敛（幂等 upsert）。 */
+    public void upsertCredentialHealth(Connection connection, UUID credentialId, String healthStatus,
+                                       OffsetDateTime checkedAt, String errorCode, String errorSummary) {
+        String sql = """
+                INSERT INTO %s.object_runtime_state
+                  (id, entity_type, entity_id, health_status, last_checked_at,
+                   last_error_code, last_error_summary, state_version)
+                VALUES (?, 'CREDENTIAL', ?, ?, ?, ?, ?, 1)
+                ON CONFLICT (entity_type, entity_id) DO UPDATE SET
+                  health_status = EXCLUDED.health_status,
+                  last_checked_at = EXCLUDED.last_checked_at,
+                  last_error_code = EXCLUDED.last_error_code,
+                  last_error_summary = EXCLUDED.last_error_summary,
+                  state_version = object_runtime_state.state_version + 1,
+                  updated_at = now()
+                """.strip().formatted(qualified());
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, UUID.randomUUID());
+            statement.setObject(2, credentialId);
+            statement.setString(3, healthStatus);
+            statement.setObject(4, checkedAt == null ? Timestamp.from(java.time.Instant.now()) : checkedAt);
+            statement.setString(5, errorCode);
+            statement.setString(6, errorSummary);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("凭证健康状态写入失败：" + e.getClass().getSimpleName(), e);
+        }
+    }
+
     /** 批量读取（列表组合状态，避免 N+1）。 */
     public Map<UUID, JdbcObjectRuntimeStateRepository.RuntimeStateSnapshot> findByEntities(
             Connection connection, String entityType, Collection<UUID> entityIds) {

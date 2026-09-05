@@ -90,7 +90,7 @@ public class ImpactService {
     }
 
     /** 引用关系摘要：内容寻址，稳定且随引用集合变化。 */
-    static String computeVersion(String entityType, UUID entityId,
+    public static String computeVersion(String entityType, UUID entityId,
                                  List<ImpactReference> references, List<UUID> aliasIds) {
         StringBuilder canonical = new StringBuilder(entityType).append('|').append(entityId);
         for (ImpactReference reference : references) {

@@ -15,6 +15,24 @@ public class AdminProperties {
     private String timezone = "Asia/Shanghai";
     private boolean csrfEnabled = false;
     private boolean allowedProviderInternalNetworks = false;
+    private String secretMasterKeyBase64;
+    private String secretMasterKeyId = "primary";
+
+    public String getSecretMasterKeyBase64() {
+        return secretMasterKeyBase64;
+    }
+
+    public void setSecretMasterKeyBase64(String secretMasterKeyBase64) {
+        this.secretMasterKeyBase64 = secretMasterKeyBase64;
+    }
+
+    public String getSecretMasterKeyId() {
+        return secretMasterKeyId;
+    }
+
+    public void setSecretMasterKeyId(String secretMasterKeyId) {
+        this.secretMasterKeyId = secretMasterKeyId;
+    }
 
     public boolean isAllowedProviderInternalNetworks() {
         return allowedProviderInternalNetworks;
