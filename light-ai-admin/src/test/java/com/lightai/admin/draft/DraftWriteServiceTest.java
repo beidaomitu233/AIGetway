@@ -351,6 +351,18 @@ class DraftWriteServiceTest {
             lastRecord = record;
             return !existing;
         }
+
+        @Override
+        public java.util.Set<UUID> findChangedEntityIds(Connection connection, String entityType,
+                                                        java.util.Collection<UUID> entityIds) {
+            return java.util.Set.of();
+        }
+
+        @Override
+        public java.util.Optional<String> findLatestModifier(Connection connection, String entityType,
+                                                             UUID entityId) {
+            return java.util.Optional.empty();
+        }
     }
 
     static final class RecordingAuditRepository implements AuditRepository {

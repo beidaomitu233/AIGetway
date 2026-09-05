@@ -1,8 +1,10 @@
-# 轻享 AI 管理协议契约（BE-P01 冻结基线）
+# 轻享 AI 管理协议契约（BE-P01 冻结基线 + BE-P02 交付）
 
-本目录为 BE-001 冻结的公共协议契约夹具。每个 API 有唯一 method+path（`ApiCatalog` 为代码内唯一来源）；
-本文件当前覆盖 BE-P01 交付面：共享错误信封、分页结构与 GET /admin/bootstrap。
-后续任务包在各自交付时按同一风格追加 path 条目，不独立变更字段语义。
+本目录为执行阶段冻结的公共协议契约夹具。每个 API 有唯一 method+path（`ApiCatalog` 为代码内唯一来源）；
+BE-P01 交付共享错误信封、分页结构与 GET /admin/bootstrap；BE-P02 交付 Provider 与凭证池管理接口
+（BACKEND_PLAN 4.2.9.1/4.2.9.2 中的 GET/POST/PUT/DELETE /admin/providers*、/admin/credential-pools*），
+DTO 与前端 FE-007~FE-012 对齐（light-ai-client 的 provider/pool/impact 包为代码内来源）。
+后续任务包在各自交付时按同一风格追加，不独立变更字段语义。
 
 ## 已冻结口径
 

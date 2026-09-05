@@ -162,8 +162,9 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 ## BE-P02 Provider与池（6项）
 
 > 领取锁定：后端执行模型（beidao）2026-09-05 领取 BE-P02 全部 6 项（BE-007—BE-012），分支 feature/backend-provider（基于 dev f6fc471，BE-P01 已合入），执行期间请勿重复领取或并行修改同包任务；完成记录与测试证据见 COMMUNICATION.md H-007。
+> 交付说明（2026-09-05）：BE-007—BE-012 已实现并通过 mvn test（全仓 113 例：client 32 / spi 4 / storage-jdbc 6 / admin 71，0 失败）与 mvn package。检测编排通过 ProviderCheckExecutor SPI 对接 Adapter（BE-P05 交付前无执行器时返回 PROVIDER_ADAPTER_NOT_FOUND，不伪造记录）；Pool 运行指标 current_concurrency/rpm_used/tpm_used 由容量运行时（BE-P04）提供，当前为 0；provider/credential_pool 详情 created_by/updated_by 暂取 draft_change 操作者，专用列登记 C-025 待 DB-P02 确认。真实 PostgreSQL 下的 SQL 与事务证据待 DB-P02 迁移落地后联调复核。
 
-- [ ] 任务编号：BE-007
+- [x] 任务编号：BE-007
   模块：Provider与池；目标：Provider列表详情。
   接口/服务：GET /admin/providers；GET /admin/providers/{id}。
   请求参数与响应字段：筛选/id→ProviderListItem/Detail；类型、必填及错误HTTP见协议字典和附录。
@@ -173,7 +174,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：筛选命中且运行状态不进入草稿。
   测试要求：过滤分页与角色字段；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-008
+- [x] 任务编号：BE-008
   模块：Provider与池；目标：Provider创建编辑。
   接口/服务：POST /admin/providers；PUT /admin/providers/{id}。
   请求参数与响应字段：4.2.2字段/version→ManagementOperationResult；类型、必填及错误HTTP见协议字典和附录。
@@ -183,7 +184,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：禁止认证头和不允许目标地址，保存不改变ACTIVE。
   测试要求：超时边界、SSRF目的、409；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-009
+- [x] 任务编号：BE-009
   模块：Provider与池；目标：Provider检测与记录。
   接口/服务：POST /admin/providers/{id}/check。
   请求参数与响应字段：ProviderCheckCommand→ProviderCheckRecord；类型、必填及错误HTTP见协议字典和附录。
@@ -193,7 +194,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：检测不改version，真实调用留Attempt与费用。
   测试要求：失败/成功/取消与密钥扫描；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-010
+- [x] 任务编号：BE-010
   模块：Provider与池；目标：Provider影响启停删除。
   接口/服务：GET impact；POST enable/disable；DELETE /admin/providers/{id}。
   请求参数与响应字段：version/confirmed_impact_version→操作结果；类型、必填及错误HTTP见协议字典和附录。
@@ -203,7 +204,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：影响变更必须重确认，启停仅发布生效。
   测试要求：确认后新增引用竞态；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-011
+- [x] 任务编号：BE-011
   模块：Provider与池；目标：Pool查询创建编辑。
   接口/服务：GET/POST /admin/credential-pools；GET/PUT /{id}。
   请求参数与响应字段：name/provider_id/strategy/enabled/version→详情/操作结果；类型、必填及错误HTTP见协议字典和附录。
@@ -213,7 +214,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：三策略保存正确，读不会暴露Secret。
   测试要求：跨Provider写、重复名称；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-012
+- [x] 任务编号：BE-012
   模块：Provider与池；目标：Pool影响与移除。
   接口/服务：GET /{id}/impact；POST enable/disable；DELETE池。
   请求参数与响应字段：version/影响→操作结果；类型、必填及错误HTTP见协议字典和附录。
