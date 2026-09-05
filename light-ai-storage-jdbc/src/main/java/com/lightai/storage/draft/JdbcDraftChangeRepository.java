@@ -6,6 +6,8 @@ import com.lightai.client.json.ProtocolJson;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * draft_change JDBC 实现（DATABASE_PLAN §29）。
@@ -66,6 +68,44 @@ public final class JdbcDraftChangeRepository implements DraftChangeRepository {
             return ProtocolJson.protocol().writeValueAsString(changes);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("草稿差异序列化失败", e);
+        }
+    }
+
+    /** 批量查询存在差异的对象 id（列表 draft_changed 标记，避免 N+1）。 */
+    public java.util.Set<UUID> findChangedEntityIds(Connection connection, String entityType,
+                                                    java.util.Collection<UUID> entityIds) {
+        if (entityIds.isEmpty()) {
+            return java.util.Set.of();
+        }
+        String sql = "SELECT entity_id FROM " + schemaName
+                + ".draft_change WHERE entity_type = ? AND entity_id = ANY(?)";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, entityType);
+            statement.setArray(2, connection.createArrayOf("uuid", entityIds.toArray(UUID[]::new)));
+            try (var rs = statement.executeQuery()) {
+                java.util.Set<UUID> ids = new java.util.HashSet<>();
+                while (rs.next()) {
+                    ids.add(rs.getObject(1, UUID.class));
+                }
+                return java.util.Set.copyOf(ids);
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("草稿差异查询失败：" + e.getClass().getSimpleName(), e);
+        }
+    }
+
+    /** 最近差异摘要（详情页操作者展示来源）。 */
+    public Optional<String> findLatestModifier(Connection connection, String entityType, UUID entityId) {
+        String sql = "SELECT modified_by FROM " + schemaName
+                + ".draft_change WHERE entity_type = ? AND entity_id = ? ORDER BY updated_at DESC LIMIT 1";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, entityType);
+            statement.setObject(2, entityId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? Optional.of(rs.getString(1)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("差异操作者查询失败：" + e.getClass().getSimpleName(), e);
         }
     }
 }

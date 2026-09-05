@@ -206,6 +206,130 @@ public class LightAiAdminAutoConfiguration {
                     draftStateRepository, draftChangeRepository, auditService);
         }
 
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.provider.JdbcProviderRepository lightAiProviderRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.provider.JdbcProviderRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.pool.JdbcPoolRepository lightAiPoolRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.pool.JdbcPoolRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.reference.JdbcConfigReferenceRepository lightAiConfigReferenceRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.reference.JdbcConfigReferenceRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.runtime.JdbcObjectRuntimeStateRepository lightAiObjectRuntimeStateRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.runtime.JdbcObjectRuntimeStateRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.runtime.JdbcRuntimeStateWriter lightAiRuntimeStateWriter(
+                StorageProperties properties) {
+            return new com.lightai.storage.runtime.JdbcRuntimeStateWriter(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.check.JdbcProviderCheckRecordRepository lightAiProviderCheckRecordRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.check.JdbcProviderCheckRecordRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        public com.lightai.admin.provider.ProviderTypeRegistry lightAiProviderTypeRegistry(
+                ObjectProvider<AdapterMetadataSource> adapterMetadataSource) {
+            return new com.lightai.admin.provider.ProviderTypeRegistry(adapterMetadataSource.getIfAvailable());
+        }
+
+        @Bean
+        public com.lightai.admin.provider.TargetUrlPolicy lightAiTargetUrlPolicy(
+                AdminProperties properties) {
+            return new com.lightai.admin.provider.TargetUrlPolicy(properties.isAllowedProviderInternalNetworks());
+        }
+
+        @Bean
+        public com.lightai.admin.impact.ImpactService lightAiImpactService(
+                com.lightai.storage.reference.JdbcConfigReferenceRepository referenceRepository,
+                StorageProperties properties) {
+            return new com.lightai.admin.impact.ImpactService(referenceRepository, properties.getSchemaName());
+        }
+
+        @Bean
+        public com.lightai.admin.provider.ProviderService lightAiProviderService(
+                DataSource dataSource,
+                com.lightai.storage.provider.JdbcProviderRepository providerRepository,
+                com.lightai.storage.reference.JdbcConfigReferenceRepository referenceRepository,
+                com.lightai.storage.runtime.JdbcObjectRuntimeStateRepository runtimeStateRepository,
+                com.lightai.storage.runtime.JdbcRuntimeStateWriter runtimeStateWriter,
+                com.lightai.storage.check.JdbcProviderCheckRecordRepository checkRecordRepository,
+                DraftChangeRepository draftChangeRepository,
+                com.lightai.admin.draft.DraftWriteService draftWriteService,
+                com.lightai.admin.impact.ImpactService impactService,
+                com.lightai.admin.provider.ProviderTypeRegistry typeRegistry,
+                com.lightai.admin.provider.TargetUrlPolicy targetUrlPolicy,
+                Clock clock, AdminProperties properties) {
+            return new com.lightai.admin.provider.ProviderService(dataSource, providerRepository,
+                    referenceRepository, runtimeStateRepository, runtimeStateWriter,
+                    checkRecordRepository, draftChangeRepository,
+                    draftWriteService, impactService, typeRegistry, targetUrlPolicy,
+                    new com.lightai.admin.query.PageResultFactory(clock), properties.getRuntimeMode());
+        }
+
+        @Bean
+        public com.lightai.admin.pool.PoolService lightAiPoolService(
+                DataSource dataSource,
+                com.lightai.storage.pool.JdbcPoolRepository poolRepository,
+                com.lightai.storage.reference.JdbcConfigReferenceRepository referenceRepository,
+                DraftChangeRepository draftChangeRepository,
+                com.lightai.admin.draft.DraftWriteService draftWriteService,
+                com.lightai.admin.impact.ImpactService impactService,
+                Clock clock, AdminProperties properties, StorageProperties storageProperties) {
+            return new com.lightai.admin.pool.PoolService(dataSource, poolRepository,
+                    referenceRepository, draftChangeRepository, draftWriteService, impactService,
+                    new com.lightai.admin.query.PageResultFactory(clock), properties.getRuntimeMode(),
+                    storageProperties.getSchemaName());
+        }
+
+        @Bean
+        public com.lightai.admin.check.ProviderCheckService lightAiProviderCheckService(
+                DataSource dataSource,
+                com.lightai.storage.provider.JdbcProviderRepository providerRepository,
+                com.lightai.storage.reference.JdbcConfigReferenceRepository referenceRepository,
+                com.lightai.storage.check.JdbcProviderCheckRecordRepository checkRecordRepository,
+                com.lightai.storage.runtime.JdbcRuntimeStateWriter runtimeStateWriter,
+                org.springframework.beans.factory.ObjectProvider<com.lightai.spi.check.ProviderCheckExecutor> executors,
+                AdminProperties properties) {
+            return new com.lightai.admin.check.ProviderCheckService(dataSource, providerRepository,
+                    referenceRepository, checkRecordRepository, runtimeStateWriter,
+                    executors.orderedStream().toList(), properties.getRuntimeMode());
+        }
+
+        @Bean
+        public com.lightai.admin.provider.ProviderController lightAiProviderController(
+                com.lightai.admin.provider.ProviderService providerService,
+                com.lightai.admin.check.ProviderCheckService providerCheckService) {
+            return new com.lightai.admin.provider.ProviderController(providerService, providerCheckService);
+        }
+
+        @Bean
+        public com.lightai.admin.pool.PoolController lightAiPoolController(
+                com.lightai.admin.pool.PoolService poolService) {
+            return new com.lightai.admin.pool.PoolController(poolService);
+        }
+
         /** 启动结构检查（BE-003）：VALIDATE 校验、MIGRATE 先迁移后校验；失败阻止就绪。 */
         @Bean
         public SmartInitializingSingleton lightAiSchemaGuardInitializer(

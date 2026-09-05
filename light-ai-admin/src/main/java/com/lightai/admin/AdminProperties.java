@@ -14,6 +14,15 @@ public class AdminProperties {
     private String adminApiBasePath = "";
     private String timezone = "Asia/Shanghai";
     private boolean csrfEnabled = false;
+    private boolean allowedProviderInternalNetworks = false;
+
+    public boolean isAllowedProviderInternalNetworks() {
+        return allowedProviderInternalNetworks;
+    }
+
+    public void setAllowedProviderInternalNetworks(boolean allowedProviderInternalNetworks) {
+        this.allowedProviderInternalNetworks = allowedProviderInternalNetworks;
+    }
 
     public String getRuntimeMode() {
         return runtimeMode;
