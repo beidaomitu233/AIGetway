@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.lightai</groupId>
+    <artifactId>light-ai-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>light-ai-runtime</artifactId>
+  <name>Light AI Runtime</name>
+  <description>统一调用管线、Usage 结算与取消协调；无 Spring 依赖。路由/容量/熔断内核由 BE-P04 提供（route/capacity 子包），本模块经端口接线</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.lightai</groupId>
+      <artifactId>light-ai-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.lightai</groupId>
+      <artifactId>light-ai-spi</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>
