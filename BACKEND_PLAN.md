@@ -356,6 +356,8 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P05 协议与Provider（6项）
 
+> 领取锁定：后端执行模型（beidao，会话B）2026-09-06 领取 BE-P05 全部 6 项（BE-025—BE-030），分支 feature/backend-protocol（基于 dev 2c3fdf9，独立 worktree C:\AIgetway\AIGetway-models），执行期间请勿重复领取或并行修改同包任务；BE-P04（feature/backend-routing-governance）已由 H-007 会话并行领取，本包通过 RoutingPort/CapacityPort/TraceStore 端口解耦，其实现由 BE-P04 交付后接线；完成记录与测试证据见 COMMUNICATION.md。
+
 - [ ] 任务编号：BE-025
   模块：协议与Provider；目标：Provider SPI及受控参数。
   接口/服务：ProviderAdapter各方法。
