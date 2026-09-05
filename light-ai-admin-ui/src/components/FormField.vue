@@ -10,13 +10,34 @@ defineProps<{
 </script>
 
 <template>
-  <div class="lai-form-field" :class="{ 'lai-form-field-error': !!error }">
-    <label :for="forId" class="lai-form-label">
+  <div
+    class="lai-form-field"
+    :class="{ 'lai-form-field-error': !!error }"
+  >
+    <label
+      :for="forId"
+      class="lai-form-label"
+    >
       {{ label }}
-      <span v-if="required" class="lai-required" aria-hidden="true">*</span>
+      <span
+        v-if="required"
+        class="lai-required"
+        aria-hidden="true"
+      >*</span>
     </label>
     <slot />
-    <p v-if="error" class="lai-form-message-error" role="alert">{{ error }}</p>
-    <p v-else-if="hint" class="lai-form-hint">{{ hint }}</p>
+    <p
+      v-if="error"
+      class="lai-form-message-error"
+      role="alert"
+    >
+      {{ error }}
+    </p>
+    <p
+      v-else-if="hint"
+      class="lai-form-hint"
+    >
+      {{ hint }}
+    </p>
   </div>
 </template>

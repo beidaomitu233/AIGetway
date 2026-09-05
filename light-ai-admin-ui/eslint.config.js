@@ -24,6 +24,15 @@ export default tseslint.config(
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
       'vue/multi-word-component-names': 'off',
+      // 可选属性语义由 exactOptionalPropertyTypes 表达，不提供运行时默认值。
+      'vue/require-default-prop': 'off',
+    },
+  },
+  {
+    files: ['tests/**/*.ts'],
+    rules: {
+      // 测试宿主组件按用例内联定义。
+      'vue/one-component-per-file': 'off',
     },
   },
 )

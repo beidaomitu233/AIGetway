@@ -41,8 +41,12 @@ onUnmounted(() => {
       autocomplete="new-password"
       spellcheck="false"
       @input="onInput"
-    />
-    <button type="button" class="lai-btn lai-btn-text" @click="visible = !visible">
+    >
+    <button
+      type="button"
+      class="lai-btn lai-btn-text"
+      @click="visible = !visible"
+    >
       {{ visible ? '隐藏' : '显示' }}
     </button>
   </div>

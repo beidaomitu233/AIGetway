@@ -65,17 +65,42 @@ function confirm(): void {
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="lai-dialog-overlay" @keydown.esc="cancel">
-      <div class="lai-dialog" role="dialog" aria-modal="true" :aria-label="title">
-        <h2 class="lai-dialog-title">{{ title }}</h2>
-        <p class="lai-dialog-message">{{ message }}</p>
-        <ul v-if="impact && impact.length > 0" class="lai-dialog-impact">
-          <li v-for="item in impact" :key="`${item.entity_type}-${item.id}`">
+    <div
+      v-if="open"
+      class="lai-dialog-overlay"
+      @keydown.esc="cancel"
+    >
+      <div
+        class="lai-dialog"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="title"
+      >
+        <h2 class="lai-dialog-title">
+          {{ title }}
+        </h2>
+        <p class="lai-dialog-message">
+          {{ message }}
+        </p>
+        <ul
+          v-if="impact && impact.length > 0"
+          class="lai-dialog-impact"
+        >
+          <li
+            v-for="item in impact"
+            :key="`${item.entity_type}-${item.id}`"
+          >
             {{ item.entity_type }} · {{ item.name }}（{{ item.relation }}）
           </li>
         </ul>
-        <div v-if="requireReason" class="lai-dialog-field">
-          <label class="lai-form-label" for="lai-dialog-reason">原因</label>
+        <div
+          v-if="requireReason"
+          class="lai-dialog-field"
+        >
+          <label
+            class="lai-form-label"
+            for="lai-dialog-reason"
+          >原因</label>
           <input
             id="lai-dialog-reason"
             ref="reasonInput"
@@ -83,10 +108,16 @@ function confirm(): void {
             class="lai-input"
             type="text"
             maxlength="500"
-          />
+          >
         </div>
-        <div v-if="requireConfirmText" class="lai-dialog-field">
-          <label class="lai-form-label" for="lai-dialog-confirm-text">
+        <div
+          v-if="requireConfirmText"
+          class="lai-dialog-field"
+        >
+          <label
+            class="lai-form-label"
+            for="lai-dialog-confirm-text"
+          >
             输入 {{ requireConfirmText }} 以确认
           </label>
           <input
@@ -95,10 +126,17 @@ function confirm(): void {
             class="lai-input"
             type="text"
             autocomplete="off"
-          />
+          >
         </div>
         <div class="lai-dialog-actions">
-          <button type="button" class="lai-btn" :disabled="loading" @click="cancel">取消</button>
+          <button
+            type="button"
+            class="lai-btn"
+            :disabled="loading"
+            @click="cancel"
+          >
+            取消
+          </button>
           <button
             type="button"
             class="lai-btn"

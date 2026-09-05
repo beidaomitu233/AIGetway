@@ -7,7 +7,9 @@ const route = useRoute()
 
 <template>
   <section class="lai-page">
-    <h1 class="lai-page-title">{{ route.meta.title }}</h1>
+    <h1 class="lai-page-title">
+      {{ route.meta.title }}
+    </h1>
     <PageState status="empty" />
   </section>
 </template>
