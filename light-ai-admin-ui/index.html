@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="same-origin" />
+    <title>轻享 AI 管理端</title>
+    <script>
+      (function () {
+        var injected = window.__LIGHT_AI_CONFIG__ && window.__LIGHT_AI_CONFIG__.ui_base_path;
+        var root = '';
+        if (typeof injected === 'string') {
+          root = injected.replace(/\/+$/, '');
+        } else {
+          var m = location.pathname.match(/^(.*\/)ui(\/|$)/);
+          if (m) root = m[1].replace(/\/+$/, '');
+        }
+        var base = document.createElement('base');
+        base.href = (root || '') + '/';
+        document.head.appendChild(base);
+        window.__LIGHT_AI_UI_ROOT__ = root;
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

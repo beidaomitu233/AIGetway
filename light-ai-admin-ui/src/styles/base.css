@@ -1,0 +1,346 @@
+/* 布局与共用组件样式。 */
+
+.lai-app {
+  display: flex;
+  min-height: 100vh;
+  background: #f5f6f7;
+}
+
+.lai-side {
+  width: 220px;
+  flex-shrink: 0;
+  background: #ffffff;
+  border-right: 1px solid #e5e6eb;
+  padding: 16px 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.lai-side-brand {
+  font-size: 18px;
+  font-weight: 600;
+  padding: 0 20px 16px;
+  border-bottom: 1px solid #f0f1f3;
+  margin-bottom: 8px;
+}
+
+.lai-nav-section {
+  margin-bottom: 4px;
+}
+
+.lai-nav-section-title {
+  font-size: 12px;
+  color: #86909c;
+  padding: 10px 20px 4px;
+}
+
+.lai-nav-item {
+  display: block;
+  padding: 8px 20px;
+  color: #4e5969;
+}
+
+.lai-nav-item:hover {
+  background: #f7f8fa;
+}
+
+.lai-nav-item.router-link-active {
+  color: #165dff;
+  background: #f2f7ff;
+  font-weight: 500;
+}
+
+.lai-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.lai-topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 48px;
+  padding: 0 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e6eb;
+  color: #4e5969;
+  font-size: 13px;
+}
+
+.lai-topbar-mode {
+  color: #1f2329;
+  font-weight: 500;
+}
+
+.lai-topbar-link {
+  color: #165dff;
+}
+
+.lai-topbar-link:hover {
+  text-decoration: underline;
+}
+
+.lai-topbar-user {
+  margin-left: auto;
+  color: #1f2329;
+}
+
+.lai-content {
+  padding: 24px;
+  flex: 1;
+}
+
+.lai-page-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.lai-page-text {
+  color: #4e5969;
+  margin-bottom: 16px;
+}
+
+.lai-boot {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f6f7;
+  padding: 32px;
+  width: 100%;
+}
+
+.lai-boot-page {
+  max-width: 560px;
+}
+
+/* 状态区 */
+
+.lai-skeleton {
+  width: 100%;
+}
+
+.lai-skeleton-row {
+  height: 16px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #eceef1 25%, #f5f6f7 50%, #eceef1 75%);
+  background-size: 200% 100%;
+  animation: lai-skeleton-load 1.2s ease infinite;
+  margin-bottom: 14px;
+}
+
+.lai-skeleton-row:nth-child(2n) {
+  width: 80%;
+}
+
+@keyframes lai-skeleton-load {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.lai-empty {
+  padding: 48px 0;
+  text-align: center;
+  color: #86909c;
+  background: #ffffff;
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+}
+
+.lai-error {
+  padding: 24px;
+  text-align: center;
+  background: #ffffff;
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+}
+
+.lai-error-text {
+  color: #1f2329;
+  margin-bottom: 4px;
+}
+
+.lai-error-meta {
+  color: #86909c;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+/* 表单 */
+
+.lai-form-field {
+  margin-bottom: 16px;
+}
+
+.lai-form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #4e5969;
+}
+
+.lai-required {
+  color: #f53f3f;
+  margin-left: 2px;
+}
+
+.lai-form-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #86909c;
+}
+
+.lai-form-message-error {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #f53f3f;
+}
+
+.lai-input {
+  width: 100%;
+  max-width: 360px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #c9cdd4;
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+.lai-input:focus {
+  outline: none;
+  border-color: #165dff;
+}
+
+.lai-form-field-error .lai-input {
+  border-color: #f53f3f;
+}
+
+/* 按钮 */
+
+.lai-btn {
+  display: inline-block;
+  height: 32px;
+  padding: 0 16px;
+  border: 1px solid #c9cdd4;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1f2329;
+  cursor: pointer;
+}
+
+.lai-btn:hover:not(:disabled) {
+  border-color: #165dff;
+  color: #165dff;
+}
+
+.lai-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.lai-btn-primary {
+  background: #165dff;
+  border-color: #165dff;
+  color: #ffffff;
+}
+
+.lai-btn-primary:hover:not(:disabled) {
+  background: #4080ff;
+  border-color: #4080ff;
+  color: #ffffff;
+}
+
+.lai-btn-danger {
+  background: #f53f3f;
+  border-color: #f53f3f;
+  color: #ffffff;
+}
+
+.lai-btn-danger:hover:not(:disabled) {
+  background: #f76560;
+  border-color: #f76560;
+  color: #ffffff;
+}
+
+.lai-btn-text {
+  border: none;
+  background: transparent;
+  color: #165dff;
+  height: auto;
+  padding: 0 4px;
+}
+
+/* 弹窗 */
+
+.lai-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(29, 33, 41, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.lai-dialog {
+  width: 420px;
+  max-width: calc(100vw - 48px);
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 20px 24px;
+}
+
+.lai-dialog-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.lai-dialog-message {
+  color: #4e5969;
+  margin-bottom: 12px;
+}
+
+.lai-dialog-impact {
+  background: #f7f8fa;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  color: #4e5969;
+  font-size: 13px;
+}
+
+.lai-dialog-impact li {
+  padding: 2px 0;
+}
+
+.lai-dialog-field {
+  margin-bottom: 12px;
+}
+
+.lai-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* 密钥输入 */
+
+.lai-secret {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lai-secret-input {
+  flex: 1;
+}
