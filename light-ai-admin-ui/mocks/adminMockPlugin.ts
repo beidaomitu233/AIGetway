@@ -3,6 +3,7 @@ import path from 'node:path'
 import type { ServerResponse } from 'node:http'
 import type { Connect, Plugin } from 'vite'
 import { bootstrapFixtures } from './fixtures/bootstrap'
+import { handleModelAccessApi } from './modelAccessMock'
 
 /**
  * 契约 Mock：仅用于本地开发与深链验收（后端 BE-002 未交付）。
@@ -21,7 +22,7 @@ function matchBootstrap(pathname: string): string | null {
   return match ? match[0] : null
 }
 
-function handleAdminApi(req: Connect.IncomingMessage, res: ServerResponse): boolean {
+async function handleAdminApi(req: Connect.IncomingMessage, res: ServerResponse): Promise<boolean> {
   const url = new URL(req.url ?? '/', 'http://localhost')
   const bootstrapPath = matchBootstrap(url.pathname)
   if (bootstrapPath) {
@@ -41,18 +42,7 @@ function handleAdminApi(req: Connect.IncomingMessage, res: ServerResponse): bool
     sendJson(res, 200, { data: fixture })
     return true
   }
-  if (url.pathname.includes('/admin/')) {
-    sendJson(res, 404, {
-      error: {
-        code: 'OBJECT_NOT_FOUND',
-        type: 'api',
-        message: '契约 Mock 未提供该接口',
-        retryable: false,
-      },
-    })
-    return true
-  }
-  return false
+  return handleModelAccessApi(req as { method?: string | undefined; url?: string | undefined; on?: ((event: string, cb: (chunk?: Buffer) => void) => void) | undefined }, res)
 }
 
 function serveIndex(root: string, res: ServerResponse): void {
@@ -62,36 +52,51 @@ function serveIndex(root: string, res: ServerResponse): void {
   res.end(html)
 }
 
+function handlePreviewAsset(req: Connect.IncomingMessage, res: ServerResponse, distDir: string, next: () => void): void {
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  const pathname = url.pathname
+  // 嵌入根 /light-ai 下的静态资源改写到 dist 实际路径。
+  if (pathname.startsWith('/light-ai/assets/')) {
+    req.url = req.url?.replace('/light-ai/assets/', '/assets/')
+    next()
+    return
+  }
+  const isDeepUiPath =
+    pathname === '/ui' ||
+    pathname.startsWith('/ui/') ||
+    pathname.startsWith('/light-ai/ui/')
+  if (isDeepUiPath) {
+    serveIndex(distDir, res)
+    return
+  }
+  next()
+}
+
 export function adminMockPlugin(): Plugin {
   return {
     name: 'light-ai-admin-mock',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        if (handleAdminApi(req, res)) return
-        next()
+        void handleAdminApi(req, res)
+          .then((handled) => {
+            if (!handled) next()
+          })
+          .catch(() => {
+            if (!res.headersSent) next()
+          })
       })
     },
     configurePreviewServer(server) {
       const distDir = path.join(server.config.root, 'dist')
       server.middlewares.use((req, res, next) => {
-        const url = new URL(req.url ?? '/', 'http://localhost')
-        const pathname = url.pathname
-        if (handleAdminApi(req, res)) return
-        // 嵌入根 /light-ai 下的静态资源改写到 dist 实际路径。
-        if (pathname.startsWith('/light-ai/assets/')) {
-          req.url = req.url?.replace('/light-ai/assets/', '/assets/')
-          next()
-          return
-        }
-        const isDeepUiPath =
-          pathname === '/ui' ||
-          pathname.startsWith('/ui/') ||
-          pathname.startsWith('/light-ai/ui/')
-        if (isDeepUiPath) {
-          serveIndex(distDir, res)
-          return
-        }
-        next()
+        void handleAdminApi(req, res)
+          .then((handled) => {
+            if (handled) return
+            handlePreviewAsset(req, res, distDir, next)
+          })
+          .catch(() => {
+            if (!res.headersSent) next()
+          })
       })
     },
   }

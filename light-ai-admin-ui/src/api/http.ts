@@ -8,7 +8,7 @@ export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   query?: Record<string, QueryValue>
   body?: unknown
-  signal?: AbortSignal
+  signal?: AbortSignal | undefined
   /** 默认 30000；超时产生 TimeoutError，不自动重发。 */
   timeoutMs?: number
 }
