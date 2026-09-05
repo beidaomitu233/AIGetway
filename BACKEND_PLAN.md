@@ -294,8 +294,9 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 ## BE-P04 路由与治理（6项）
 
 > 领取锁定：后端执行模型（beidao）2026-09-05 领取 BE-P04 全部 6 项（BE-019—BE-024），分支 feature/backend-routing-governance（基于 dev a41fb8b，BE-P03 已合入），执行期间请勿重复领取或并行修改同包任务；完成记录与测试证据见 COMMUNICATION.md H-009。
+> 交付说明（2026-09-05）：BE-019—BE-024 已实现并通过 mvn test（全仓 161 例：client 43 / spi 4 / storage-jdbc 13 / runtime 30 / admin 71，0 失败）与 mvn package。新建 light-ai-runtime 模块（无 Spring/无管理库依赖）：路由能力/上下文/熔断过滤与同级权重无放回（可控随机源可复算，过滤不消耗恢复预算）；凭证三策略选择（HEALTHY 优先、限流复位边界、禁用/无效排除）；恢复引擎固定矩阵（认证/参数终态不重试、429 先换凭证再 Fallback 后 Retry-After 截断、指数退避+抖动）与 Trace 级线性预算（1+retries+failovers+fallbacks 不乘法膨胀）；进程内原子容量存储（60 秒固定窗口、三层同次预占部分失败全回退、原窗口结算、终态互斥单次释放、未发送退还 RPM）+按 Alias FIFO 队列（满 QUEUE_FULL/取消/超时）+Watchdog 租约清扫端口；熔断引擎（429 不计失败、阈值自动 OPEN、到期惰性 HALF_OPEN、探测名额不超额、state_version CAS 人工命令）。管理面：限流/可靠性策略 CRUD（保存与启用两阶段唯一冲突，CONFLICT 携带 conflicting_policy_id）、启用需至少一限额、系统默认策略端点、熔断列表/详情/事件/人工 open-recover（C-013：PENDING 命令+受理审计→CAS→事件+终态同事务，未应用不报成功）。共享状态存储为端口+进程内实现（Embedded 合法），集群 Redis 实现按计划归属 BE-P05 storage-redis；容量/队列/恢复决策的 SQL 持久化在 P05/P09 服务装配时接入（capacity_reservation/queue_entry/recovery_decision 表结构已按 DATABASE_PLAN 预留）。真实 PostgreSQL 下 SQL 证据待 DB-P03 迁移。
 
-- [ ] 任务编号：BE-019
+- [x] 任务编号：BE-019
   模块：路由与治理；目标：候选能力过滤与加权顺序。
   接口/服务：RuntimeCore路由服务。
   请求参数与响应字段：请求/固定快照→RouteDecision/候选顺序；类型、必填及错误HTTP见协议字典和附录。
@@ -305,7 +306,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：过滤不创建Attempt，不消耗Fallback预算。
   测试要求：多能力/上下文混合、确定随机源；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-020
+- [x] 任务编号：BE-020
   模块：路由与治理；目标：凭证选择与Secret取得。
   接口/服务：CredentialSelector/Resolver。
   请求参数与响应字段：池策略/健康/容量/deadline→凭证及短期句柄；类型、必填及错误HTTP见协议字典和附录。
@@ -315,7 +316,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：不选禁用密钥，使用后清句柄，无明文缓存超期。
   测试要求：三策略、reset边界、解析失败；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-021
+- [x] 任务编号：BE-021
   模块：路由与治理；目标：限流策略与运行查询。
   接口/服务：/admin/limit-policies及usage/queue/enable/disable。
   请求参数与响应字段：4.3.1字段→策略/LimitUsageSnapshot/队列页；类型、必填及错误HTTP见协议字典和附录。
@@ -325,7 +326,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：无管理取消队列端点，空值不变0。
   测试要求：唯一冲突、QUEUE组合、角色；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-022
+- [x] 任务编号：BE-022
   模块：路由与治理；目标：可靠性策略和恢复判定。
   接口/服务：/admin/reliability-policies及default/recovery-decisions。
   请求参数与响应字段：4.3.2字段/错误分类→策略/RecoveryDecision；类型、必填及错误HTTP见协议字典和附录。
@@ -335,7 +336,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：动作计数全Trace累计，不发生预算乘法膨胀。
   测试要求：错误矩阵、Retry-After、总超时；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-023
+- [x] 任务编号：BE-023
   模块：路由与治理；目标：熔断窗口与人工命令。
   接口/服务：/admin/circuits及events/open/recover/probe。
   请求参数与响应字段：state_version/reason/open_seconds→CircuitDetail或pending命令；类型、必填及错误HTTP见协议字典和附录。
@@ -345,7 +346,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：429不计失败，HALF_OPEN不超额；未应用不报成功。
   测试要求：CAS竞态、故障注入、窗口/探测；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-024
+- [x] 任务编号：BE-024
   模块：路由与治理；目标：容量预占结算FIFO与Watchdog。
   接口/服务：CapacityStore及QueueService。
   请求参数与响应字段：三层策略/estimated/max_tokens→reservation或queue；类型、必填及错误HTTP见协议字典和附录。
