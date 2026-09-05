@@ -61,38 +61,31 @@ export const routes: RouteRecordRaw[] = [
   { path: '/ui/model-aliases/:id', name: 'alias-detail', component: () => import('@/pages/aliases/AliasDetailPage.vue'), meta: { title: '模型别名详情', permission: Permission.aliasView } },
   { path: '/ui/model-aliases/:id/edit', name: 'alias-edit', component: () => import('@/pages/aliases/AliasFormPage.vue'), meta: { title: '编辑模型别名', permission: Permission.aliasManage } },
 
-  moduleRoute('limit-list', '/ui/limit-policies', '限流策略', Permission.limitView),
-  moduleRoute('limit-new', '/ui/limit-policies/new', '新建限流策略', Permission.limitManage),
-  moduleRoute('limit-detail', '/ui/limit-policies/:id', '限流策略详情', Permission.limitView),
-  moduleRoute('limit-edit', '/ui/limit-policies/:id/edit', '编辑限流策略', Permission.limitManage),
+  { path: '/ui/limit-policies', name: 'limit-list', component: () => import('@/pages/limits/LimitListPage.vue'), meta: { title: '限流策略', permission: Permission.limitView } },
+  { path: '/ui/limit-policies/new', name: 'limit-new', component: () => import('@/pages/limits/LimitFormPage.vue'), meta: { title: '新建限流策略', permission: Permission.limitManage } },
+  { path: '/ui/limit-policies/:id/edit', name: 'limit-edit', component: () => import('@/pages/limits/LimitFormPage.vue'), meta: { title: '编辑限流策略', permission: Permission.limitManage } },
 
-  moduleRoute(
-    'reliability-list',
-    '/ui/reliability-policies',
-    '可靠性策略',
-    Permission.reliabilityView,
-  ),
-  moduleRoute(
-    'reliability-new',
-    '/ui/reliability-policies/new',
-    '新建可靠性策略',
-    Permission.reliabilityManage,
-  ),
-  moduleRoute(
-    'reliability-detail',
-    '/ui/reliability-policies/:id',
-    '可靠性策略详情',
-    Permission.reliabilityView,
-  ),
-  moduleRoute(
-    'reliability-edit',
-    '/ui/reliability-policies/:id/edit',
-    '编辑可靠性策略',
-    Permission.reliabilityManage,
-  ),
+  {
+    path: '/ui/reliability-policies',
+    name: 'reliability-list',
+    component: () => import('@/pages/reliabilities/ReliabilityListPage.vue'),
+    meta: { title: '可靠性策略', permission: Permission.reliabilityView },
+  },
+  {
+    path: '/ui/reliability-policies/new',
+    name: 'reliability-new',
+    component: () => import('@/pages/reliabilities/ReliabilityFormPage.vue'),
+    meta: { title: '新建可靠性策略', permission: Permission.reliabilityManage },
+  },
+  {
+    path: '/ui/reliability-policies/:id/edit',
+    name: 'reliability-edit',
+    component: () => import('@/pages/reliabilities/ReliabilityFormPage.vue'),
+    meta: { title: '编辑可靠性策略', permission: Permission.reliabilityManage },
+  },
 
-  moduleRoute('circuit-list', '/ui/circuits', '熔断状态', Permission.circuitView),
-  moduleRoute('circuit-detail', '/ui/circuits/:id', '熔断详情', Permission.circuitView),
+  { path: '/ui/circuits', name: 'circuit-list', component: () => import('@/pages/circuits/CircuitListPage.vue'), meta: { title: '熔断状态', permission: Permission.circuitView } },
+  { path: '/ui/circuits/:id', name: 'circuit-detail', component: () => import('@/pages/circuits/CircuitDetailPage.vue'), meta: { title: '熔断详情', permission: Permission.circuitView } },
 
   moduleRoute('trace-list', '/ui/traces', 'Trace', Permission.traceView, pages.traceList),
   moduleRoute('trace-detail', '/ui/traces/:traceId', 'Trace 详情', Permission.traceView, pages.traceDetail),

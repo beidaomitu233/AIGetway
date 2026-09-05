@@ -4,6 +4,7 @@ import type { ServerResponse } from 'node:http'
 import type { Connect, Plugin } from 'vite'
 import { bootstrapFixtures } from './fixtures/bootstrap'
 import { handleModelAccessApi } from './modelAccessMock'
+import { handleGovernanceApi } from './governanceMock'
 import { handleProviderApi, handlePoolApi } from './entities'
 import { handleTraceApi } from './traceMock'
 import { handleOverviewApi, handleUsageApi } from './overviewUsageMock'
@@ -45,6 +46,14 @@ async function handleAdminApi(req: Connect.IncomingMessage, res: ServerResponse)
     const roleParam = url.searchParams.get('role') ?? 'SYSTEM_ADMIN'
     const fixture = bootstrapFixtures[roleParam] ?? bootstrapFixtures.SYSTEM_ADMIN
     sendJson(res, 200, { data: fixture })
+    return true
+  }
+  if (
+    await handleGovernanceApi(
+      req as { method?: string | undefined; url?: string | undefined; on?: ((event: string, cb: (chunk?: Buffer) => void) => void) | undefined },
+      res,
+    )
+  ) {
     return true
   }
   if (handleProviderApi(req, url, res)) return true
