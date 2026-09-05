@@ -524,6 +524,8 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
 
 ## FE-P09 开发接入与交付（6项）
 
+> 领取锁定：前端执行模型（beidao）2026-09-05 领取 FE-049—FE-054 全部 6 项，分支 feature/frontend-developer（基于 dev 530efab，FE-P01/P02/P03/P04/P05/P06/P07/P08 已全部合入），执行期间请勿重复领取；完成记录见 COMMUNICATION.md H-010。
+
 - [ ] 任务编号：FE-049
   模块：开发接入与交付；目标：接入模式和授权Alias。
   实现说明：读取context并按模式显示地址、SDK/Maven/Spring配置区域。
