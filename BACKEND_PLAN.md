@@ -358,6 +358,8 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 > 领取锁定：后端执行模型（beidao，会话B）2026-09-06 领取 BE-P05 全部 6 项（BE-025—BE-030），分支 feature/backend-protocol（基于 dev 2c3fdf9，独立 worktree C:\AIgetway\AIGetway-models），执行期间请勿重复领取或并行修改同包任务；BE-P04（feature/backend-routing-governance）已由 H-007 会话并行领取，本包通过 RoutingPort/CapacityPort/TraceStore 端口解耦，其实现由 BE-P04 交付后接线；完成记录与测试证据见 COMMUNICATION.md。
 
+> 交付说明（2026-09-06）：BE-025—BE-030 已实现并通过 mvn test（全工程 162 例，本包新增 15 例：ChatPipeline 同步/流式/取消 10 例、UsageSettlement 3 例、SseEncoder 2 例）加上四 Adapter 线协议夹具（provider-common 5、anthropic 5、gemini 5）。遗留：真实 Provider HTTP 联调依赖部署方测试凭证（不使用真实密钥的夹具已覆盖请求构建/响应解析/SSE/错误分类）；/v1 HTTP 绑定（light-ai-server）端到端验证随 BE-P09/BE-055 执行；RoutingPort/CapacityPort/TraceStore 的生产实现由 BE-P04/BE-P06 交付后接线。
+
 - [ ] 任务编号：BE-025
   模块：协议与Provider；目标：Provider SPI及受控参数。
   接口/服务：ProviderAdapter各方法。
