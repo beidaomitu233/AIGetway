@@ -111,6 +111,8 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
 
 ## FE-P02 Provider与凭证池（6项）
 
+> 领取锁定：前端执行模型 2026-09-05 领取 FE-007—FE-012 全部 6 项，分支 feature/frontend-provider（基于 feature/frontend-foundation，FE-P01 审查合入后改基 dev），执行期间请勿重复领取；完成记录与测试证据见 COMMUNICATION.md H-003。
+
 - [ ] 任务编号：FE-007
   模块：Provider与凭证池；目标：Provider分页查询。
   实现说明：输入keyword/type/enabled/connection_status；输出名称、配置和检测状态及分页。
