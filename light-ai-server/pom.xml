@@ -10,9 +10,9 @@
     <version>0.1.0-SNAPSHOT</version>
   </parent>
 
-  <artifactId>light-ai-runtime</artifactId>
-  <name>Light AI Runtime</name>
-  <description>运行内核：路由、凭证选择、容量、恢复、熔断与统一调用管线、Usage 结算、取消协调；不依赖 Spring 与管理数据库</description>
+  <artifactId>light-ai-server</artifactId>
+  <name>Light AI Server</name>
+  <description>Standalone /v1 业务入口：模型目录、同步与流式 Chat、统一错误响应头；薄 HTTP 绑定层</description>
 
   <dependencies>
     <dependency>
@@ -23,15 +23,18 @@
       <groupId>com.lightai</groupId>
       <artifactId>light-ai-spi</artifactId>
     </dependency>
-
     <dependency>
-      <groupId>org.junit.jupiter</groupId>
-      <artifactId>junit-jupiter</artifactId>
-      <scope>test</scope>
+      <groupId>com.lightai</groupId>
+      <artifactId>light-ai-runtime</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.assertj</groupId>
-      <artifactId>assertj-core</artifactId>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
