@@ -3,6 +3,7 @@ import path from 'node:path'
 import type { ServerResponse } from 'node:http'
 import type { Connect, Plugin } from 'vite'
 import { bootstrapFixtures } from './fixtures/bootstrap'
+import { handleProviderApi, handlePoolApi } from './entities'
 
 /**
  * 契约 Mock：仅用于本地开发与深链验收（后端 BE-002 未交付）。
@@ -41,6 +42,8 @@ function handleAdminApi(req: Connect.IncomingMessage, res: ServerResponse): bool
     sendJson(res, 200, { data: fixture })
     return true
   }
+  if (handleProviderApi(req, url, res)) return true
+  if (handlePoolApi(req, url, res)) return true
   if (url.pathname.includes('/admin/')) {
     sendJson(res, 404, {
       error: {

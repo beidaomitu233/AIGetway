@@ -113,7 +113,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
 
 > 领取锁定：前端执行模型 2026-09-05 领取 FE-007—FE-012 全部 6 项，分支 feature/frontend-provider（基于 feature/frontend-foundation，FE-P01 审查合入后改基 dev），执行期间请勿重复领取；完成记录与测试证据见 COMMUNICATION.md H-003。
 
-- [ ] 任务编号：FE-007
+- [x] 任务编号：FE-007
   模块：Provider与凭证池；目标：Provider分页查询。
   实现说明：输入keyword/type/enabled/connection_status；输出名称、配置和检测状态及分页。
   依赖接口：GET /admin/providers。
@@ -122,7 +122,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：筛选持久，权限内动作可用，三个状态各自展示。
   测试要求：组合筛选、空页、请求失败；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-008
+- [x] 任务编号：FE-008
   模块：Provider与凭证池；目标：Provider新增与编辑。
   实现说明：按4.2.2字段提交；type创建后只读，禁认证头并校验超时组合。
   依赖接口：POST /admin/providers；PUT /admin/providers/{id}。
@@ -131,7 +131,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：合法保存取得version和草稿数，认证头/超时错误不提交。
   测试要求：字段边界与409；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-009
+- [x] 任务编号：FE-009
   模块：Provider与凭证池；目标：Provider详情和检测。
   实现说明：读取详情，输入检测模型/凭证/超时，展示CheckRecord及失败码。
   依赖接口：GET /admin/providers/{id}；POST /admin/providers/{id}/check。
@@ -140,7 +140,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：检测结果不误报已发布，耗时与错误可定位。
   测试要求：检测成功、401映射、超时；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-010
+- [x] 任务编号：FE-010
   模块：Provider与凭证池；目标：Provider启停删除影响。
   实现说明：先读取引用影响，再携带version和confirmed_impact_version确认。
   依赖接口：/admin/providers/{id}/impact、enable、disable；DELETE详情。
@@ -149,7 +149,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：引用变化重新确认，OBJECT_IN_USE列明阻塞，取消无变更。
   测试要求：影响过期、引用删除被拒；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-011
+- [x] 任务编号：FE-011
   模块：Provider与凭证池；目标：Pool列表与表单。
   实现说明：输入Provider/name/strategy/enabled，输出池详情；Provider不可改。
   依赖接口：GET/POST /admin/credential-pools；GET/PUT /admin/credential-pools/{id}。
@@ -158,7 +158,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：三种策略可选，非管理员只读，跨Provider编辑不存在。
   测试要求：名称重复、策略切换、权限；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-012
+- [x] 任务编号：FE-012
   模块：Provider与凭证池；目标：Pool详情与启停删除。
   实现说明：显示池状态、计数和Credential区域；先确认影响后停用/删除。
   依赖接口：/admin/credential-pools/{id}/impact、enable、disable；DELETE详情。

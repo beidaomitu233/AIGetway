@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
-import { type BootstrapPayload, fetchBootstrap } from '@/api/bootstrap'
+import { type AdapterDeclaration, type BootstrapPayload, fetchBootstrap } from '@/api/bootstrap'
 import { ApiError, TimeoutError } from '@/api/errors'
 import { registerCsrfToken } from '@/api/http'
 import { applyServerBasePaths } from '@/app/runtimeConfig'
@@ -25,6 +25,7 @@ export const useBootstrapStore = defineStore('bootstrap', () => {
   const currentSnapshotNo = ref<number | null>(null)
   const draftRevision = ref<number | null>(null)
   const draftChangeCount = ref(0)
+  const adapters = ref<AdapterDeclaration[]>([])
 
   const isAuthenticated = computed(() => status.value === 'ready')
   const isDeveloperScoped = computed(
@@ -72,6 +73,20 @@ export const useBootstrapStore = defineStore('bootstrap', () => {
     currentSnapshotNo.value = data.current_snapshot_no
     draftRevision.value = data.draft_revision
     draftChangeCount.value = data.draft_change_count
+    adapters.value = data.adapters ? [...data.adapters] : []
+  }
+
+  /** 写操作成功后静默刷新草稿计数与快照号；失败保持原值。 */
+  async function refreshDraftSummary(): Promise<void> {
+    if (status.value !== 'ready') return
+    try {
+      const data = await fetchBootstrap()
+      currentSnapshotNo.value = data.current_snapshot_no
+      draftRevision.value = data.draft_revision
+      draftChangeCount.value = data.draft_change_count
+    } catch {
+      // 摘要刷新失败不打断当前操作
+    }
   }
 
   function can(permission: string): boolean {
@@ -97,6 +112,7 @@ export const useBootstrapStore = defineStore('bootstrap', () => {
     currentSnapshotNo.value = null
     draftRevision.value = null
     draftChangeCount.value = 0
+    adapters.value = []
     error.value = null
   }
 
@@ -114,10 +130,12 @@ export const useBootstrapStore = defineStore('bootstrap', () => {
     currentSnapshotNo,
     draftRevision,
     draftChangeCount,
+    adapters,
     isAuthenticated,
     isDeveloperScoped,
     load,
     can,
     invalidate,
+    refreshDraftSummary,
   }
 })

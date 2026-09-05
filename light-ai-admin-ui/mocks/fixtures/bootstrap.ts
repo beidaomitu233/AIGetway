@@ -4,6 +4,43 @@ import type { BootstrapPayload } from '../../src/api/bootstrap'
  * 四角色 bootstrap 契约夹具：按 PROJECT_DOCUMENT 2.4.2 功能权限矩阵
  * 推导 permissions 取值，口径登记于 COMMUNICATION.md C-022，后端确认后同步。
  */
+
+/** 已加载 Adapter 的非敏感声明（BACKEND_PLAN"检测与适配器元数据补充"）。 */
+const builtinAdapters: BootstrapPayload['adapters'] = [
+  {
+    provider_type: 'OPENAI',
+    adapter_version: '1.0.0',
+    default_base_url: 'https://api.openai.com/v1/',
+    tokenizer_families: ['O200K', 'CL100K'],
+    capabilities: ['CHAT', 'STREAM', 'MODEL_LIST'],
+    provider_option_specs: [],
+  },
+  {
+    provider_type: 'ANTHROPIC',
+    adapter_version: '1.0.0',
+    default_base_url: 'https://api.anthropic.com/v1/',
+    tokenizer_families: ['ANTHROPIC'],
+    capabilities: ['CHAT', 'STREAM', 'MODEL_LIST'],
+    provider_option_specs: [],
+  },
+  {
+    provider_type: 'GEMINI',
+    adapter_version: '1.0.0',
+    default_base_url: 'https://generativelanguage.googleapis.com/v1beta/',
+    tokenizer_families: ['GEMINI'],
+    capabilities: ['CHAT', 'STREAM', 'MODEL_LIST'],
+    provider_option_specs: [],
+  },
+  {
+    provider_type: 'DEEPSEEK',
+    adapter_version: '1.0.0',
+    default_base_url: 'https://api.deepseek.com/v1/',
+    tokenizer_families: ['DEEPSEEK'],
+    capabilities: ['CHAT', 'STREAM', 'MODEL_LIST'],
+    provider_option_specs: [],
+  },
+]
+
 export const bootstrapFixtures: Record<string, BootstrapPayload> = {
   SYSTEM_ADMIN: {
     user: { id: 'user-admin', display_name: '系统管理员' },
@@ -35,6 +72,7 @@ export const bootstrapFixtures: Record<string, BootstrapPayload> = {
     current_snapshot_no: 12,
     draft_revision: 34,
     draft_change_count: 3,
+    adapters: builtinAdapters,
   },
   OPERATOR: {
     user: { id: 'user-ops', display_name: '运维人员' },
@@ -66,6 +104,7 @@ export const bootstrapFixtures: Record<string, BootstrapPayload> = {
     current_snapshot_no: 12,
     draft_revision: 34,
     draft_change_count: 3,
+    adapters: builtinAdapters,
   },
   DEVELOPER: {
     user: { id: 'user-dev', display_name: '开发人员' },
@@ -94,6 +133,7 @@ export const bootstrapFixtures: Record<string, BootstrapPayload> = {
     current_snapshot_no: 12,
     draft_revision: 34,
     draft_change_count: 3,
+    adapters: builtinAdapters,
   },
   VIEWER: {
     user: { id: 'user-viewer', display_name: '只读人员' },
@@ -122,6 +162,7 @@ export const bootstrapFixtures: Record<string, BootstrapPayload> = {
     current_snapshot_no: 12,
     draft_revision: 34,
     draft_change_count: 3,
+    adapters: builtinAdapters,
   },
 }
 

@@ -9,6 +9,10 @@ const props = withDefaults(
     message: string
     /** 影响对象列表（ImpactAnalysis.references）。 */
     impact?: ImpactReference[]
+    /** 当前操作被阻断的原因（ImpactAnalysis.blockers）。 */
+    blockers?: string[]
+    /** 影响分析或命令提交失败提示。 */
+    errorText?: string
     danger?: boolean
     /** 高风险操作要求填写原因。 */
     requireReason?: boolean
@@ -93,6 +97,20 @@ function confirm(): void {
             {{ item.entity_type }} · {{ item.name }}（{{ item.relation }}）
           </li>
         </ul>
+        <p
+          v-if="blockers && blockers.length > 0"
+          class="lai-dialog-blockers"
+          role="alert"
+        >
+          阻断原因：{{ blockers.join('；') }}
+        </p>
+        <p
+          v-if="errorText"
+          class="lai-form-message-error"
+          role="alert"
+        >
+          {{ errorText }}
+        </p>
         <div
           v-if="requireReason"
           class="lai-dialog-field"
