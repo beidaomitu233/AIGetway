@@ -5,6 +5,7 @@ import type { Connect, Plugin } from 'vite'
 import { bootstrapFixtures } from './fixtures/bootstrap'
 import { handleModelAccessApi } from './modelAccessMock'
 import { handleGovernanceApi } from './governanceMock'
+import { handleDeveloperApi } from './developerMock'
 import { handleProviderApi, handlePoolApi } from './entities'
 import { handleTraceApi } from './traceMock'
 import { handleOverviewApi, handleUsageApi } from './overviewUsageMock'
@@ -56,6 +57,7 @@ async function handleAdminApi(req: Connect.IncomingMessage, res: ServerResponse)
   ) {
     return true
   }
+  if (await handleDeveloperApi(req as { method?: string | undefined; url?: string | undefined; on?: ((event: string, cb: (chunk?: Buffer) => void) => void) | undefined }, res)) return true
   if (handleProviderApi(req, url, res)) return true
   if (handlePoolApi(req, url, res)) return true
   if (handleTraceApi(req, url, res)) return true

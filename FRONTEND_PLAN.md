@@ -524,7 +524,9 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
 
 ## FE-P09 开发接入与交付（6项）
 
-- [ ] 任务编号：FE-049
+> 领取锁定：前端执行模型（beidao）2026-09-05 领取 FE-049—FE-054 全部 6 项，分支 feature/frontend-developer（基于 dev 530efab，FE-P01/P02/P03/P04/P05/P06/P07/P08 已全部合入），执行期间请勿重复领取；完成记录见 COMMUNICATION.md H-010。
+
+- [x] 任务编号：FE-049
   模块：开发接入与交付；目标：接入模式和授权Alias。
   实现说明：读取context并按模式显示地址、SDK/Maven/Spring配置区域。
   依赖接口：GET /admin/developer-access/context。
@@ -533,7 +535,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：开发仅授权Alias，无已发布模型显示空态，模式切换清旧输出。
   测试要求：空目录、失效Alias、三模式；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-050
+- [x] 任务编号：FE-050
   模块：开发接入与交付；目标：安全代码示例复制。
   实现说明：按语言/模式/Alias请求code-sample，保留换行和占位Token。
   依赖接口：GET /admin/developer-access/code-sample。
@@ -542,7 +544,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：示例含正确Alias和base_url，无真实Secret；复制内容一致。
   测试要求：占位符扫描与剪贴内容；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-051
+- [x] 任务编号：FE-051
   模块：开发接入与交付；目标：同步在线测试。
   实现说明：输入model/system/user/temperature/top_p/max_tokens并提交chat。
   依赖接口：POST /admin/developer-access/test/chat。
@@ -551,7 +553,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：只读禁测试，参数错误定位，成功response与trace_id一致。
   测试要求：空user、权限、错误码；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-052
+- [x] 任务编号：FE-052
   模块：开发接入与交付；目标：流式在线测试解析。
   实现说明：POST stream读取UTF-8/SSE跨块分帧，按sequence追加并显示Usage。
   依赖接口：POST /admin/developer-access/test/chat/stream。
@@ -560,7 +562,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：角色/文本/Usage正常，提交后error保留已收文本且不报成功。
   测试要求：中文跨字节、分帧、流中断；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-053
+- [x] 任务编号：FE-053
   模块：开发接入与交付；目标：取消测试和离页清理。
   实现说明：Abort当前请求并终止输出，取消后允许新建独立调用。
   依赖接口：/admin/developer-access/test/chat、/admin/developer-access/test/chat/stream取消连接。

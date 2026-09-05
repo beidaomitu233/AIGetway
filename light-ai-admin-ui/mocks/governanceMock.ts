@@ -1,6 +1,7 @@
 // 运行治理契约 Mock（FE-019—FE-024）：仅用于本地开发（后端 BE-021—BE-023 未交付）。
 // 内存态覆盖限流/可靠性/熔断列表、详情、启停、人工操作与 CAS 冲突模拟；后端完成后整文件删除。
 import type { ServerResponse } from 'node:http'
+import { readMockBody } from './readBody'
 
 function nowIso(): string {
   return new Date().toISOString()
@@ -267,23 +268,7 @@ async function handle(req: { method?: string | undefined; url?: string | undefin
   const path = url.pathname.replace(/^\/(?:[^/]+\/)?admin/, '')
   const requestId = rid('req')
 
-  const body = await new Promise<Record<string, unknown>>((resolve) => {
-    if (!req.on || method === 'GET') {
-      resolve({})
-      return
-    }
-    let raw = ''
-    req.on('data', (chunk) => {
-      raw += String(chunk)
-    })
-    req.on('end', () => {
-      try {
-        resolve(raw === '' ? {} : (JSON.parse(raw) as Record<string, unknown>))
-      } catch {
-        resolve({})
-      }
-    })
-  })
+  const body = await readMockBody(req as import('vite').Connect.IncomingMessage)
 
   // —— 限流策略 ——
   if (method === 'GET' && path === '/limit-policies') {
