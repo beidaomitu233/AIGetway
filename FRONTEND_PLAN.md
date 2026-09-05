@@ -347,7 +347,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
 
 > 领取锁定：前端执行模型 2026-09-05 领取 FE-031—FE-036 全部 6 项，分支 feature/frontend-overview（基于 dev），执行期间请勿重复领取；完成记录与测试证据见 COMMUNICATION.md H-007。
 
-- [ ] 任务编号：FE-031
+- [x] 任务编号：FE-031
   模块：概览与Usage；目标：概览筛选与摘要。
   实现说明：读取授权筛选和摘要，统一时间/application/Alias/Provider。
   依赖接口：GET /admin/overview/filters、summary。
@@ -356,7 +356,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：请求数与Trace total一致；成功率分母正确，缺数据不显示0。
   测试要求：包含取消/运行/失败夹具；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-032
+- [x] 任务编号：FE-032
   模块：概览与Usage；目标：趋势与时间桶钻取。
   实现说明：按响应桶画请求/成功率/Token/分币种成本，点击带范围跳转。
   依赖接口：GET /admin/overview/trends。
@@ -365,7 +365,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：连续无重复桶，bucket_end不重复包含，取消旧请求。
   测试要求：跨日、空桶、两币种；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-033
+- [x] 任务编号：FE-033
   模块：概览与Usage；目标：异常定位与刷新。
   实现说明：展示OPEN/无候选/凭证异常/失败Trace，按类型进入有权详情。
   依赖接口：GET /admin/overview/exceptions。
@@ -374,7 +374,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：开发不接收Credential异常，刷新失败保留上次数据。
   测试要求：角色对比、对象删除、503；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-034
+- [x] 任务编号：FE-034
   模块：概览与Usage；目标：Usage筛选和摘要趋势。
   实现说明：同参数请求summary/trends，核对fingerprint并取最早更新时间。
   依赖接口：GET /admin/usage/summary、trends。
@@ -383,7 +383,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：指纹不同不混呈现，actual与estimated分别显示，费用分币种。
   测试要求：响应竞态、多币种、延迟；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-035
+- [x] 任务编号：FE-035
   模块：概览与Usage；目标：Usage分组排序与钻取。
   实现说明：输入group_by/sort，按维度及currency拆行并带条件进入Trace。
   依赖接口：GET /admin/usage/groups。
@@ -392,7 +392,7 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
   验收标准：多币种禁总费用排序，过Trace留存禁钻取，开发范围不可清除。
   测试要求：金额排序400、历史过期、权限；通过后勾选并在本包提交中附测试证据。
 
-- [ ] 任务编号：FE-036
+- [x] 任务编号：FE-036
   模块：概览与Usage；目标：Usage导出与保留状态。
   实现说明：按当前聚合筛选导出，展示桶/币种和安全错误，取消请求可停止。
   依赖接口：GET /admin/usage/export。
