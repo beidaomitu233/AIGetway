@@ -95,7 +95,10 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P01 基础契约（6项）
 
-- [ ] 任务编号：BE-001
+> 领取锁定：后端执行模型（beidao）2026-09-05 领取 BE-P01 全部 6 项（BE-001—BE-006），分支 feature/backend-foundation（基于 dev 0476609），执行期间请勿重复领取或并行修改同包任务；完成记录与测试证据见 COMMUNICATION.md。
+> 交付说明（2026-09-05）：BE-001—BE-006 已实现并通过 mvn test（95 例：client 32 / spi 4 / storage-jdbc 6 / admin 53，0 失败）与 mvn package；docs/contracts 提供协议 README 与 OpenAPI 3.1 夹具；light-ai-admin 含 AutoConfiguration.imports 装配（BE-055 做全量 Starter 条件装配时扩展）。其中 BE-003/005/006 的真实 PostgreSQL 行锁、迁移锁与同事务原子性证据依赖 DB-P01 迁移落地后补充联调复核，当前以契约实现与事务语义单元验证为完成基线。运行中发现协作并行（H-006），实现为双方互补合并结果。
+
+- [x] 任务编号：BE-001
   模块：基础契约；目标：冻结公共DTO与错误。
   接口/服务：公共管理/业务/内部协议。
   请求参数与响应字段：本文2节及附录请求→data或error、统一HTTP与字段类型；类型、必填及错误HTTP见协议字典和附录。
@@ -105,7 +108,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：每API有唯一method/path/schema，序列化不丢精度。
   测试要求：字段缺失、未知键、bigint与金额往返；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-002
+- [x] 任务编号：BE-002
   模块：基础契约；目标：管理身份与Bootstrap。
   接口/服务：GET /admin/bootstrap及所有管理入口。
   请求参数与响应字段：宿主/部署身份→roles/permissions/application_scope/模式；类型、必填及错误HTTP见协议字典和附录。
@@ -115,7 +118,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：四角色无越权；无用户注册密码接口。
   测试要求：四角色矩阵、伪造scope、Embedded匿名；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-003
+- [x] 任务编号：BE-003
   模块：基础契约；目标：仓储与迁移装配契约。
   接口/服务：启动schema-mode。
   请求参数与响应字段：DataSource/schema version→仓储就绪或结构错误；类型、必填及错误HTTP见协议字典和附录。
@@ -125,7 +128,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：本地SDK与远程client无数据库连接。
   测试要求：缺表、已有schema、迁移锁；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-004
+- [x] 任务编号：BE-004
   模块：基础契约；目标：列表查询与字段映射。
   接口/服务：各GET列表和详情。
   请求参数与响应字段：Query→PageResult/Detail；类型、必填及错误HTTP见协议字典和附录。
@@ -135,7 +138,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：分页不漏重，敏感列永不序列化。
   测试要求：排序注入、空集、权限范围；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-005
+- [x] 任务编号：BE-005
   模块：基础契约；目标：成功和失败审计。
   接口/服务：全部管理写操作。
   请求参数与响应字段：request_id/操作者/命令→AuditLog；类型、必填及错误HTTP见协议字典和附录。
@@ -145,7 +148,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：同request_id能定位成功或失败，无密钥值。
   测试要求：故意审计失败、version冲突；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-006
+- [x] 任务编号：BE-006
   模块：基础契约；目标：草稿锁与乐观版本。
   接口/服务：配置写服务。
   请求参数与响应字段：version/draft_revision→最新版本与变更数；类型、必填及错误HTTP见协议字典和附录。
@@ -158,7 +161,10 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P02 Provider与池（6项）
 
-- [ ] 任务编号：BE-007
+> 领取锁定：后端执行模型（beidao）2026-09-05 领取 BE-P02 全部 6 项（BE-007—BE-012），分支 feature/backend-provider（基于 dev f6fc471，BE-P01 已合入），执行期间请勿重复领取或并行修改同包任务；完成记录与测试证据见 COMMUNICATION.md H-007。
+> 交付说明（2026-09-05）：BE-007—BE-012 已实现并通过 mvn test（全仓 113 例：client 32 / spi 4 / storage-jdbc 6 / admin 71，0 失败）与 mvn package。检测编排通过 ProviderCheckExecutor SPI 对接 Adapter（BE-P05 交付前无执行器时返回 PROVIDER_ADAPTER_NOT_FOUND，不伪造记录）；Pool 运行指标 current_concurrency/rpm_used/tpm_used 由容量运行时（BE-P04）提供，当前为 0；provider/credential_pool 详情 created_by/updated_by 暂取 draft_change 操作者，专用列登记 C-025 待 DB-P02 确认。真实 PostgreSQL 下的 SQL 与事务证据待 DB-P02 迁移落地后联调复核。
+
+- [x] 任务编号：BE-007
   模块：Provider与池；目标：Provider列表详情。
   接口/服务：GET /admin/providers；GET /admin/providers/{id}。
   请求参数与响应字段：筛选/id→ProviderListItem/Detail；类型、必填及错误HTTP见协议字典和附录。
@@ -168,7 +174,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：筛选命中且运行状态不进入草稿。
   测试要求：过滤分页与角色字段；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-008
+- [x] 任务编号：BE-008
   模块：Provider与池；目标：Provider创建编辑。
   接口/服务：POST /admin/providers；PUT /admin/providers/{id}。
   请求参数与响应字段：4.2.2字段/version→ManagementOperationResult；类型、必填及错误HTTP见协议字典和附录。
@@ -178,7 +184,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：禁止认证头和不允许目标地址，保存不改变ACTIVE。
   测试要求：超时边界、SSRF目的、409；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-009
+- [x] 任务编号：BE-009
   模块：Provider与池；目标：Provider检测与记录。
   接口/服务：POST /admin/providers/{id}/check。
   请求参数与响应字段：ProviderCheckCommand→ProviderCheckRecord；类型、必填及错误HTTP见协议字典和附录。
@@ -188,7 +194,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：检测不改version，真实调用留Attempt与费用。
   测试要求：失败/成功/取消与密钥扫描；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-010
+- [x] 任务编号：BE-010
   模块：Provider与池；目标：Provider影响启停删除。
   接口/服务：GET impact；POST enable/disable；DELETE /admin/providers/{id}。
   请求参数与响应字段：version/confirmed_impact_version→操作结果；类型、必填及错误HTTP见协议字典和附录。
@@ -198,7 +204,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：影响变更必须重确认，启停仅发布生效。
   测试要求：确认后新增引用竞态；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-011
+- [x] 任务编号：BE-011
   模块：Provider与池；目标：Pool查询创建编辑。
   接口/服务：GET/POST /admin/credential-pools；GET/PUT /{id}。
   请求参数与响应字段：name/provider_id/strategy/enabled/version→详情/操作结果；类型、必填及错误HTTP见协议字典和附录。
@@ -208,7 +214,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：三策略保存正确，读不会暴露Secret。
   测试要求：跨Provider写、重复名称；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-012
+- [x] 任务编号：BE-012
   模块：Provider与池；目标：Pool影响与移除。
   接口/服务：GET /{id}/impact；POST enable/disable；DELETE池。
   请求参数与响应字段：version/影响→操作结果；类型、必填及错误HTTP见协议字典和附录。
@@ -221,7 +227,10 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P03 接入对象（6项）
 
-- [ ] 任务编号：BE-013
+> 领取锁定：后端执行模型（beidao）2026-09-05 领取 BE-P03 全部 6 项（BE-013—BE-018），分支 feature/backend-model-access（基于 dev 163f869，BE-P02 已合入），执行期间请勿重复领取或并行修改同包任务；完成记录与测试证据见 COMMUNICATION.md H-008。
+> 交付说明（2026-09-05）：BE-013—BE-018 已实现并通过 mvn test（全仓 131 例：client 43 / spi 4 / storage-jdbc 13 / admin 71，0 失败）与 mvn package。秘密与配置分离：secret_value 经 AES-256-GCM 加密落 credential_secret（主密钥来自部署配置，缺失时拒绝启动），掩码/引用展示不含明文；轮换走独立即时事务（executeStandalone）递增 secret_version，两次输入不一致 SECRET_CONFIRM_MISMATCH；来源不可切换；删除被容量占用时 CAPACITY_IN_USE（占用判定待 BE-P04 容量存储）。模型启用强制能力完整且 context>max_output（C-014）；导入逐对象事务、重复 skipped、强制停用导入；批量检测不写草稿、取消仅阻止未开始项。候选同 Provider 约束保存与发布两阶段拦截；重排要求完整集合+逐项 version 原子写入。available-models 与检测执行依赖 Adapter SPI（BE-P05），未加载时返回 MODEL_LIST_NOT_SUPPORTED / PROVIDER_ADAPTER_NOT_FOUND，不伪造结果。真实 PostgreSQL 下 SQL/事务证据待 DB-P02 迁移落地后联调复核。
+
+- [x] 任务编号：BE-013
   模块：接入对象；目标：Credential查询写入轮换和检测。
   接口/服务：池下credentials；/admin/credentials/{id}及rotate/check/enable/disable。
   请求参数与响应字段：4.2.4字段及version→脱敏详情/CheckRecord；类型、必填及错误HTTP见协议字典和附录。
@@ -231,7 +240,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：来源不可切换；旧Token不回读；运行已取Secret不被破坏。
   测试要求：密钥泄漏扫描、轮换竞态、占用删除；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-014
+- [x] 任务编号：BE-014
   模块：接入对象；目标：Model字段与能力管理。
   接口/服务：/admin/provider-models及/{id}/impact、enable、disable、check。
   请求参数与响应字段：4.2.6完整字段→详情/操作/检测；类型、必填及错误HTTP见协议字典和附录。
@@ -241,7 +250,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：停用导入可缺能力，启用必完整，历史价格不变。
   测试要求：能力边界、默认值、价格精度；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-015
+- [x] 任务编号：BE-015
   模块：接入对象；目标：模型导入与批量检测。
   接口/服务：available-models；import；batch-check；jobs/{id}/cancel。
   请求参数与响应字段：ImportCommand或模型IDs→逐项结果/任务；类型、必填及错误HTTP见协议字典和附录。
@@ -251,7 +260,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：重复导入skipped，部分失败保留成功，检测不写草稿。
   测试要求：重复、部分失败、取消；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-016
+- [x] 任务编号：BE-016
   模块：接入对象；目标：Alias列表详情写入与删除。
   接口/服务：/admin/model-aliases及/{id}/impact、enable、disable。
   请求参数与响应字段：alias/display_name/description/version→详情/结果；类型、必填及错误HTTP见协议字典和附录。
@@ -261,7 +270,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：无候选草稿可保存，发布时严格拦截。
   测试要求：空候选、权限、唯一冲突；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-017
+- [x] 任务编号：BE-017
   模块：接入对象；目标：候选增改删除和探测。
   接口/服务：/admin/model-aliases/{id}/candidates；/admin/route-candidates/{id}/check。
   请求参数与响应字段：model/pool/priority/weight/enabled/version→详情/结果；类型、必填及错误HTTP见协议字典和附录。
@@ -271,7 +280,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：跨Provider在保存和发布两阶段拒绝。
   测试要求：重复组合、错误引用、探测限流；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-018
+- [x] 任务编号：BE-018
   模块：接入对象；目标：候选原子重排与状态摘要。
   接口/服务：PUT /admin/model-aliases/{id}/candidates/reorder。
   请求参数与响应字段：items[id,priority,version]→候选数组；类型、必填及错误HTTP见协议字典和附录。
@@ -284,7 +293,10 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P04 路由与治理（6项）
 
-- [ ] 任务编号：BE-019
+> 领取锁定：后端执行模型（beidao）2026-09-05 领取 BE-P04 全部 6 项（BE-019—BE-024），分支 feature/backend-routing-governance（基于 dev a41fb8b，BE-P03 已合入），执行期间请勿重复领取或并行修改同包任务；完成记录与测试证据见 COMMUNICATION.md H-010。
+> 交付说明（2026-09-05）：BE-019—BE-024 已实现并通过 mvn test（全仓 161 例：client 43 / spi 4 / storage-jdbc 13 / runtime 30 / admin 71，0 失败）与 mvn package。新建 light-ai-runtime 模块（无 Spring/无管理库依赖）：路由能力/上下文/熔断过滤与同级权重无放回（可控随机源可复算，过滤不消耗恢复预算）；凭证三策略选择（HEALTHY 优先、限流复位边界、禁用/无效排除）；恢复引擎固定矩阵（认证/参数终态不重试、429 先换凭证再 Fallback 后 Retry-After 截断、指数退避+抖动）与 Trace 级线性预算（1+retries+failovers+fallbacks 不乘法膨胀）；进程内原子容量存储（60 秒固定窗口、三层同次预占部分失败全回退、原窗口结算、终态互斥单次释放、未发送退还 RPM）+按 Alias FIFO 队列（满 QUEUE_FULL/取消/超时）+Watchdog 租约清扫端口；熔断引擎（429 不计失败、阈值自动 OPEN、到期惰性 HALF_OPEN、探测名额不超额、state_version CAS 人工命令）。管理面：限流/可靠性策略 CRUD（保存与启用两阶段唯一冲突，CONFLICT 携带 conflicting_policy_id）、启用需至少一限额、系统默认策略端点、熔断列表/详情/事件/人工 open-recover（C-013：PENDING 命令+受理审计→CAS→事件+终态同事务，未应用不报成功）。共享状态存储为端口+进程内实现（Embedded 合法），集群 Redis 实现按计划归属 BE-P05 storage-redis；容量/队列/恢复决策的 SQL 持久化在 P05/P09 服务装配时接入（capacity_reservation/queue_entry/recovery_decision 表结构已按 DATABASE_PLAN 预留）。真实 PostgreSQL 下 SQL 证据待 DB-P03 迁移。
+
+- [x] 任务编号：BE-019
   模块：路由与治理；目标：候选能力过滤与加权顺序。
   接口/服务：RuntimeCore路由服务。
   请求参数与响应字段：请求/固定快照→RouteDecision/候选顺序；类型、必填及错误HTTP见协议字典和附录。
@@ -294,7 +306,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：过滤不创建Attempt，不消耗Fallback预算。
   测试要求：多能力/上下文混合、确定随机源；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-020
+- [x] 任务编号：BE-020
   模块：路由与治理；目标：凭证选择与Secret取得。
   接口/服务：CredentialSelector/Resolver。
   请求参数与响应字段：池策略/健康/容量/deadline→凭证及短期句柄；类型、必填及错误HTTP见协议字典和附录。
@@ -304,7 +316,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：不选禁用密钥，使用后清句柄，无明文缓存超期。
   测试要求：三策略、reset边界、解析失败；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-021
+- [x] 任务编号：BE-021
   模块：路由与治理；目标：限流策略与运行查询。
   接口/服务：/admin/limit-policies及usage/queue/enable/disable。
   请求参数与响应字段：4.3.1字段→策略/LimitUsageSnapshot/队列页；类型、必填及错误HTTP见协议字典和附录。
@@ -314,7 +326,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：无管理取消队列端点，空值不变0。
   测试要求：唯一冲突、QUEUE组合、角色；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-022
+- [x] 任务编号：BE-022
   模块：路由与治理；目标：可靠性策略和恢复判定。
   接口/服务：/admin/reliability-policies及default/recovery-decisions。
   请求参数与响应字段：4.3.2字段/错误分类→策略/RecoveryDecision；类型、必填及错误HTTP见协议字典和附录。
@@ -324,7 +336,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：动作计数全Trace累计，不发生预算乘法膨胀。
   测试要求：错误矩阵、Retry-After、总超时；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-023
+- [x] 任务编号：BE-023
   模块：路由与治理；目标：熔断窗口与人工命令。
   接口/服务：/admin/circuits及events/open/recover/probe。
   请求参数与响应字段：state_version/reason/open_seconds→CircuitDetail或pending命令；类型、必填及错误HTTP见协议字典和附录。
@@ -334,7 +346,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：429不计失败，HALF_OPEN不超额；未应用不报成功。
   测试要求：CAS竞态、故障注入、窗口/探测；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-024
+- [x] 任务编号：BE-024
   模块：路由与治理；目标：容量预占结算FIFO与Watchdog。
   接口/服务：CapacityStore及QueueService。
   请求参数与响应字段：三层策略/estimated/max_tokens→reservation或queue；类型、必填及错误HTTP见协议字典和附录。
@@ -346,6 +358,8 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 
 ## BE-P05 协议与Provider（6项）
+
+> 领取锁定：后端执行模型（beidao，会话B）2026-09-06 领取 BE-P05 全部 6 项（BE-025—BE-030），分支 feature/backend-protocol（基于 dev 2c3fdf9，独立 worktree C:\AIgetway\AIGetway-models），执行期间请勿重复领取或并行修改同包任务；BE-P04（feature/backend-routing-governance）已由 H-007 会话并行领取，本包通过 RoutingPort/CapacityPort/TraceStore 端口解耦，其实现由 BE-P04 交付后接线；完成记录与测试证据见 COMMUNICATION.md。
 
 - [ ] 任务编号：BE-025
   模块：协议与Provider；目标：Provider SPI及受控参数。

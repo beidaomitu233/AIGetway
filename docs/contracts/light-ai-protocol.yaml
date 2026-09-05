@@ -1,0 +1,145 @@
+openapi: 3.1.0
+info:
+  title: Light AI Management Protocol (BE-P01 subset)
+  version: 0.1.0
+  description: >
+    轻享 AI 管理协议公共 schema 与 /admin/bootstrap。字段全 snake_case；
+    金额与大整数以十进制字符串传输；未知写入字段严格拒绝。
+    错误码全集与 HTTP 映射见 BACKEND_PLAN 4.7.3 与 ErrorCode 常量。
+paths:
+  /admin/bootstrap:
+    get:
+      operationId: getBootstrap
+      summary: 管理端启动上下文（身份、权限矩阵、基础路径、草稿状态、已加载 Adapter 声明）
+      tags: [BOOTSTRAP]
+      responses:
+        '200':
+          description: 已认证管理身份的启动上下文
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementEnvelopeBootstrap'
+        '403':
+          description: 未认证或无权限（默认拒绝匿名）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnifiedErrorEnvelope'
+components:
+  schemas:
+    ManagementEnvelopeBootstrap:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/BootstrapPayload'
+    UnifiedErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/UnifiedError'
+    UnifiedError:
+      type: object
+      required: [code, type, message, retryable]
+      properties:
+        code: { type: string, description: BACKEND_PLAN 4.7.3 错误码 }
+        type:
+          type: string
+          enum: [invalid_request_error, authentication_error, permission_error,
+                 not_found_error, conflict_error, rate_limit_error,
+                 timeout_error, cancelled_error, api_error]
+        message: { type: string, description: 不含密钥、Token、消息正文与 Provider 原始敏感信息 }
+        retryable: { type: boolean }
+        param: { type: string }
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldIssue'
+        trace_id: { type: string, maxLength: 128 }
+        retry_after_ms: { type: integer, format: int64 }
+        request_id: { type: string, maxLength: 128 }
+        current_version: { type: integer, format: int64 }
+        current_state_version: { type: integer, format: int64 }
+    FieldIssue:
+      type: object
+      required: [field, code, message]
+      properties:
+        field: { type: string }
+        code: { type: string }
+        message: { type: string }
+    BootstrapPayload:
+      type: object
+      required: [user, roles, permissions, application_scope, allowed_alias_ids,
+                 runtime_mode, ui_base_path, admin_api_base_path, timezone,
+                 current_snapshot_no, draft_revision, draft_change_count]
+      properties:
+        user:
+          $ref: '#/components/schemas/BootstrapUser'
+        roles:
+          type: array
+          items: { type: string, enum: [SYSTEM_ADMIN, OPERATOR, DEVELOPER, VIEWER] }
+        permissions:
+          type: array
+          items: { type: string, description: 资源.动作 点分权限码（C-022） }
+        application_scope:
+          type: array
+          items: { type: string }
+        allowed_alias_ids:
+          type: array
+          items: { type: string }
+        runtime_mode:
+          type: string
+          enum: [LOCAL_RUNTIME, EMBEDDED, STANDALONE_SERVER]
+        ui_base_path: { type: string }
+        admin_api_base_path: { type: string }
+        timezone: { type: string }
+        current_snapshot_no: { type: integer, format: int64 }
+        draft_revision: { type: integer, format: int64 }
+        draft_change_count: { type: integer }
+        csrf_token:
+          type: string
+          description: 仅会话认证部署时返回；写请求以 X-CSRF-Token 回传
+        adapters:
+          type: array
+          description: 仅在装配 Adapter 元数据来源且非空时输出
+          items:
+            $ref: '#/components/schemas/AdapterDeclaration'
+    BootstrapUser:
+      type: object
+      required: [id, display_name]
+      properties:
+        id: { type: string }
+        display_name: { type: string }
+    AdapterDeclaration:
+      type: object
+      required: [provider_type, adapter_version, default_base_url,
+                 tokenizer_families, capabilities, provider_option_specs]
+      properties:
+        provider_type: { type: string, enum: [OPENAI, ANTHROPIC, GEMINI, DEEPSEEK, CUSTOM_SPI] }
+        adapter_version: { type: string }
+        default_base_url: { type: string }
+        tokenizer_families:
+          type: array
+          items: { type: string }
+        capabilities:
+          type: array
+          items: { type: string }
+        provider_option_specs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderOptionSpec'
+    ProviderOptionSpec:
+      type: object
+      required: [key, type, required, enum_values]
+      properties:
+        key: { type: string }
+        type: { type: string, enum: [STRING, INTEGER, DECIMAL, BOOLEAN] }
+        required: { type: boolean }
+        default: {}
+        min: {}
+        max: {}
+        enum_values:
+          type: array
+          items: { type: string }
+        description: { type: string }
