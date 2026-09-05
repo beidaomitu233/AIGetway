@@ -54,6 +54,8 @@
 
 | H-008 | 前端执行模型 | Git/任务领取 | 领取前端草稿发布包FE-P07全部6项（FE-037 草稿摘要和分组差异、FE-038 单项撤销与全部撤销、FE-039 固定修订配置校验、FE-040 警告确认与发布提交、FE-041 实例准备激活与收敛进度、FE-042 发布历史和快照摘要），领取即锁定，他人请勿重复领取；FE-P04已由H-005并行领取，本包不与其重叠 | 分支feature/frontend-publish基于dev 8243ddd；校验失败不创建发布（C-007）；PUBLISHING时草稿只读；敏感字段仅显示占位；网络超时提示在发布历史核对，不重复提交 | light-ai-admin-ui/pages/config（DraftsPage、PublishPage、PublishRecordDetailPage）、api/config、mocks/configMock | BE-037~BE-042 | config_draft_state、draft_change、config_validation、publish_record、config_snapshot、publish_instance_result、runtime_instance | 执行中 | 2026-09-05已交付：npm run lint（0问题）、typecheck（通过）、test（17文件122例通过）、build（成功）；浏览器验收草稿分组/敏感占位/阻塞提示/全部撤销确认文本/发布三步流程（校验→警告确认→提交→实例进度）通过；真实接口联调待BE-P07交付，不以Mock宣称联调验收 |
 
+| H-009 | 前端执行模型 | Git/任务领取 | 领取前端运行配置与访问包FE-P08全部6项（FE-043 运行参数编辑、FE-044 保留期缩短影响确认、FE-045 Access列表详情与表单、FE-046 Token签发轮换一次显示、FE-047 Access即时启停删除、FE-048 审计列表详情与导出），领取即锁定，他人请勿重复领取；FE-P04已由H-005并行领取，本包不与其重叠 | 分支feature/frontend-runtime-config基于dev 98dd08e；Access Token仅在弹窗展示一次并no-store；保留期影响10分钟过期需重估；Embedded模式无Access入口；交付后在本行补登commit与测试证据 | light-ai-admin-ui/pages/runtimeConfig、access、audit及api/runtimeConfig、accessCredentials、auditLogs | BE-043~BE-045 | runtime_config、retention_impact、access_credential、access_credential_alias、audit_log | 执行中 | 2026-09-05领取并锁定；实体接口以附录4.5 DTO契约夹具开发验证，不以Mock宣称联调验收 |
+
 推荐包分支：FE-P02→feature/frontend-provider，BE-P02→feature/backend-provider，DB-P02→feature/database-model-config，其余依包主题命名。每完成一个包提交一次；测试与Plan勾选同次提交。合并顺序为契约与迁移→后端→前端联调；前端Mock任务不得提前宣称真实调用验收完成。
 
 ## 4. 文档交付审查包 DOC-P01
