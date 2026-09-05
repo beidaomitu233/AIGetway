@@ -55,12 +55,20 @@ class LightAiAdminAutoConfigurationTest {
     @Test
     void storageBeansWiredWhenDataSourceReportsFullSchema() {
         WebApplicationContextRunner withDataSource = runner.withBean(DataSource.class,
-                LightAiAdminAutoConfigurationTest::fullSchemaDataSource);
+                        LightAiAdminAutoConfigurationTest::fullSchemaDataSource)
+                .withPropertyValues(
+                        // 32 字节全零 Base64，仅用于装配测试
+                        "light-ai.admin.secret-master-key-base64=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+                        "light-ai.admin.secret-master-key-id=test-key");
         withDataSource.run(context -> {
             assertThat(context).hasBean("lightAiDraftStateRepository");
             assertThat(context).hasBean("lightAiAuditRepository");
             assertThat(context).hasBean("lightAiDraftWriteService");
             assertThat(context).hasBean("lightAiManagementStateReader");
+            assertThat(context).hasBean("lightAiCredentialService");
+            assertThat(context).hasBean("lightAiProviderModelService");
+            assertThat(context).hasBean("lightAiModelAliasController");
+            assertThat(context).hasBean("lightAiSecretCipher");
         });
     }
 
