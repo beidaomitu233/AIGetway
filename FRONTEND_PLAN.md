@@ -170,6 +170,8 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
 
 ## FE-P03 模型接入（6项）
 
+> 领取锁定：前端执行模型（beidao）2026-09-05 领取 FE-013—FE-018 全部 6 项，分支 feature/frontend-models（worktree D:\AIBuilder\AIGetway-models，基于 b43ea0f），执行期间请勿重复领取；FE-P02（feature/frontend-provider）由另一协作者并行执行，池详情页挂载点由其提供，完成记录见 COMMUNICATION.md H-004。
+
 - [ ] 任务编号：FE-013
   模块：模型接入；目标：Credential查询和新增编辑。
   实现说明：在池详情提交名称、密钥来源、限额；两次密钥一致，引用编辑不回传掩码。
