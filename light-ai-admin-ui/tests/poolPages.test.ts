@@ -109,7 +109,7 @@ describe('PoolListPage（FE-011）', () => {
     const { wrapper } = await mountPage('/ui/credential-pools', 'SYSTEM_ADMIN')
     const text = wrapper.text()
     expect(text).toContain('OpenAI 主池')
-    expect(text).toContain('加权随机')
+    expect(text).toContain('按权重随机')
     expect(text).toContain('部分可用')
     expect(text).toContain('待发布')
     expect(text).toContain('18')
