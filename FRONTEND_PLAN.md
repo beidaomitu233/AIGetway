@@ -286,6 +286,8 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
 
 ## FE-P05 Trace（6项）
 
+> 领取锁定：前端执行模型 2026-09-05 领取 FE-025—FE-030 全部 6 项，分支 feature/frontend-trace（基于 dev），执行期间请勿重复领取；完成记录与测试证据见 COMMUNICATION.md H-006。
+
 - [ ] 任务编号：FE-025
   模块：Trace；目标：Trace组合和精确查询。
   实现说明：按4.4.1筛选，trace_id精确模式停用其他业务条件，保留范围控制。
