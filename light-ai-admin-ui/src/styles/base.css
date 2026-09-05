@@ -538,6 +538,10 @@
   border-bottom: 1px solid #f5f6f7;
 }
 
+.lai-related-link {
+  color: #0969da;
+}
+
 .lai-related-meta {
   color: #86909c;
   font-size: 12px;

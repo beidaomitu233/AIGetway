@@ -249,7 +249,9 @@ defineExpose({ filterByError })
           >（含原因）</span>
         </template>
         <template #entity_name="{ row }">
-          {{ row.entity_name }}
+          <RouterLink :to="`/ui/audit-logs/${row.id}`" class="lai-related-link">
+            {{ row.entity_name }}
+          </RouterLink>
           <span class="lai-related-meta">{{ row.entity_type }}</span>
         </template>
         <template #source_mode="{ row }">

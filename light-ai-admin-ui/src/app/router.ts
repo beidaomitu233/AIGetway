@@ -23,6 +23,7 @@ const pages = {
   accessList: () => import('@/pages/access/AccessListPage.vue'),
   accessDetail: () => import('@/pages/access/AccessDetailPage.vue'),
   auditList: () => import('@/pages/audit/AuditListPage.vue'),
+  auditDetail: () => import('@/pages/audit/AuditDetailPage.vue'),
 }
 
 function moduleRoute(
@@ -102,7 +103,7 @@ export const routes: RouteRecordRaw[] = [
   moduleRoute('access-detail', '/ui/access-credentials/:id', '访问凭证详情', Permission.accessView, pages.accessDetail),
 
   moduleRoute('audit-list', '/ui/audit-logs', '审计日志', Permission.auditView, pages.auditList),
-  moduleRoute('audit-detail', '/ui/audit-logs/:id', '审计详情', Permission.auditView),
+  moduleRoute('audit-detail', '/ui/audit-logs/:id', '审计详情', Permission.auditView, pages.auditDetail),
 
   {
     path: '/ui/developer-access',

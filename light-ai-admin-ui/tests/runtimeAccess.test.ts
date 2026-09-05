@@ -394,6 +394,18 @@ describe('AuditListPage（FE-048）', () => {
     }
   }
 
+  it('详情展示脱敏 diff 与 request_id，敏感字段不出现原文', async () => {
+    stub = installJsonFetchStub(handler())
+    const { wrapper } = await mountPage('/ui/audit-logs/aud-1', 'SYSTEM_ADMIN')
+    const text = wrapper.text()
+    expect(text).toContain('req-audit-001')
+    expect(text).toContain('read_timeout_ms')
+    expect(text).toContain('120000')
+    expect(text).toContain('已脱敏')
+    expect(text).not.toContain('sk-live')
+    expect(text).toContain('4 → 5')
+  })
+
   it('列表展示操作人、变更字段摘要与结果', async () => {
     stub = installJsonFetchStub(handler())
     const { wrapper } = await mountPage('/ui/audit-logs', 'SYSTEM_ADMIN')
