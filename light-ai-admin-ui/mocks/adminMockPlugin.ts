@@ -5,6 +5,7 @@ import type { Connect, Plugin } from 'vite'
 import { bootstrapFixtures } from './fixtures/bootstrap'
 import { handleModelAccessApi } from './modelAccessMock'
 import { handleProviderApi, handlePoolApi } from './entities'
+import { handleTraceApi } from './traceMock'
 
 /**
  * 契约 Mock：仅用于本地开发与深链验收（后端 BE-002 未交付）。
@@ -45,6 +46,7 @@ async function handleAdminApi(req: Connect.IncomingMessage, res: ServerResponse)
   }
   if (handleProviderApi(req, url, res)) return true
   if (handlePoolApi(req, url, res)) return true
+  if (handleTraceApi(req, url, res)) return true
   if (
     await handleModelAccessApi(
       req as { method?: string | undefined; url?: string | undefined; on?: ((event: string, cb: (chunk?: Buffer) => void) => void) | undefined },
