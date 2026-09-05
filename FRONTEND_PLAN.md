@@ -404,6 +404,8 @@ Pinia 只保存 bootstrap 身份/权限/运行模式/API根/显示时区/活动�
 
 ## FE-P07 草稿发布（6项）
 
+> 领取锁定：前端执行模型 2026-09-05 领取 FE-037—FE-042 全部 6 项，分支 feature/frontend-publish（基于 dev），执行期间请勿重复领取；完成记录与测试证据见 COMMUNICATION.md H-008。
+
 - [ ] 任务编号：FE-037
   模块：草稿发布；目标：草稿摘要和分组差异。
   实现说明：读取draft-state/summary/changes，按实体分组展示脱敏字段差异。
