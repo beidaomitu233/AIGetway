@@ -492,8 +492,9 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 ## BE-P07 草稿发布（6项）
 
 > 领取锁定：后端执行模型（beidao）2026-09-06 领取 BE-P07 全部 6 项（BE-037—BE-042），分支 feature/backend-config-publish（git worktree D:\AIBuilder\AIGetway-backend，基于 dev 4f23ed7；该分支早前基于 dev d943afd 的未推送领取与半成品由本会话接续并合入最新 dev），执行期间请勿重复领取或并行修改同包任务；BE-P05/P08 已合入 dev；完成记录与测试证据见 COMMUNICATION.md H-022。
+> 交付说明（2026-09-06）：BE-037—BE-042 已实现并通过 mvn test（全模块 0 失败，admin 模块 164 例含本包 49 例新增：草稿状态/差异脱敏展示与撤销阻塞、单项与全量撤销事务回滚、校验矩阵与凭据过期、发布准备/原子激活/幂等重提交、心跳命令、上报冲突与超时收敛、内部实例默认拒绝鉴权、四角色权限与统一错误信封）与 mvn package。发布校验矩阵交付可实现子集（REFERENCE_INVALID、PROVIDER_RELATION_INVALID、ALIAS_NO_AVAILABLE_CANDIDATE、MODEL_CAPABILITY_INVALID、PRICE_CONFIGURATION_INVALID、CREDENTIAL_CONFIGURATION_INVALID、LIMIT/RELIABILITY_POLICY_INVALID、ADAPTER_UNAVAILABLE、INSTANCE_VERSION_INCOMPATIBLE，WARNING：CONNECTION_CHECK_STALE、INSTANCE_NOT_ONLINE），唯一约束主要在写入期拦截；revert-all 恢复 runtime_config 发布参数待 BE-043 RuntimeConfig 全量落地后补全；真实 PostgreSQL 下事务/行锁/部分唯一索引证据沿用门控 IT 口径待 DB-P05 迁移落地后复核。
 
-- [ ] 任务编号：BE-037
+- [x] 任务编号：BE-037
   模块：草稿发布；目标：草稿状态与差异查询。
   接口/服务：GET /admin/config/draft-state、draft-changes/summary、draft-changes。
   请求参数与响应字段：筛选→state/summary/page；类型、必填及错误HTTP见协议字典和附录。
@@ -503,7 +504,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：新增再删除抵消，草稿数量一致。
   测试要求：多次编辑、字段脱敏；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-038
+- [x] 任务编号：BE-038
   模块：草稿发布；目标：单项和全量撤销。
   接口/服务：POST 单项revert与revert-all。
   请求参数与响应字段：version/revision/confirmation/reason→state；类型、必填及错误HTTP见协议字典和附录。
@@ -513,7 +514,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：任一步失败全回滚，秘密轮换不被撤销。
   测试要求：新对象依赖、旧编辑页、回滚；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-039
+- [x] 任务编号：BE-039
   模块：草稿发布；目标：固定修订校验。
   接口/服务：POST /admin/config/validate。
   请求参数与响应字段：draft_revision→Validation及Issue；类型、必填及错误HTTP见协议字典和附录。
@@ -523,7 +524,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：字段可定位、warning可确认、revision变化失效。
   测试要求：无候选、币种冲突、实例能力；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-040
+- [x] 任务编号：BE-040
   模块：草稿发布；目标：准备与原子激活。
   接口/服务：POST /admin/config/publish。
   请求参数与响应字段：validation/revision/warnings→PublishRecord；类型、必填及错误HTTP见协议字典和附录。
@@ -533,7 +534,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：准备失败保草稿；激活只有一个ACTIVE，重复提交不重建。
   测试要求：两实例失败、重复发布、事务崩溃；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-041
+- [x] 任务编号：BE-041
   模块：草稿发布；目标：内部心跳报告和收敛。
   接口/服务：POST heartbeat；GET snapshot；POST instance reports。
   请求参数与响应字段：mTLS身份/heartbeat/report→命令/实例结果；类型、必填及错误HTTP见协议字典和附录。
@@ -543,7 +544,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：内部内容只授权实例可取；PARTIAL_FAILED可收敛。
   测试要求：旧报告、伪造instance、加载中断；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-042
+- [x] 任务编号：BE-042
   模块：草稿发布；目标：发布查询与恢复协调。
   接口/服务：GET publish-records/详情、snapshot summary、runtime-instances。
   请求参数与响应字段：筛选/id→历史/实例/摘要；类型、必填及错误HTTP见协议字典和附录。

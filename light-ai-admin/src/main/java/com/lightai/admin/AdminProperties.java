@@ -17,6 +17,12 @@ public class AdminProperties {
     private boolean allowedProviderInternalNetworks = false;
     private String secretMasterKeyBase64;
     private String secretMasterKeyId = "primary";
+    /** 内部实例认证共享口令（BE-041）；未配置时 /internal/** 一律拒绝（默认拒绝匿名）。 */
+    private String internalInstanceToken;
+    /** 发布实例准备时限秒数（BE-040/042 超时收敛判定）。 */
+    private int publishInstanceTimeoutSeconds = 300;
+    /** 实例失联阈值秒数：超过为 STALE，超过三倍为 OFFLINE（4.5.2.5）。 */
+    private int instanceStaleSeconds = 45;
 
     public String getSecretMasterKeyBase64() {
         return secretMasterKeyBase64;
@@ -80,5 +86,29 @@ public class AdminProperties {
 
     public void setCsrfEnabled(boolean csrfEnabled) {
         this.csrfEnabled = csrfEnabled;
+    }
+
+    public String getInternalInstanceToken() {
+        return internalInstanceToken;
+    }
+
+    public void setInternalInstanceToken(String internalInstanceToken) {
+        this.internalInstanceToken = internalInstanceToken;
+    }
+
+    public int getPublishInstanceTimeoutSeconds() {
+        return publishInstanceTimeoutSeconds;
+    }
+
+    public void setPublishInstanceTimeoutSeconds(int publishInstanceTimeoutSeconds) {
+        this.publishInstanceTimeoutSeconds = publishInstanceTimeoutSeconds;
+    }
+
+    public int getInstanceStaleSeconds() {
+        return instanceStaleSeconds;
+    }
+
+    public void setInstanceStaleSeconds(int instanceStaleSeconds) {
+        this.instanceStaleSeconds = instanceStaleSeconds;
     }
 }
