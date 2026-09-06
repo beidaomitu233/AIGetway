@@ -75,6 +75,7 @@ public enum ErrorCode {
     CONFIG_DATA_UNAVAILABLE(503, true, ErrorType.API),
     AUDIT_DATA_UNAVAILABLE(503, true, ErrorType.API),
     NO_ONLINE_RUNTIME_INSTANCE(503, true, ErrorType.API),
+    SERVER_DRAINING(503, true, ErrorType.API),
     CONNECT_TIMEOUT(504, true, ErrorType.TIMEOUT),
     FIRST_TOKEN_TIMEOUT(504, true, ErrorType.TIMEOUT),
     TOTAL_TIMEOUT(504, true, ErrorType.TIMEOUT),

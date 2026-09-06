@@ -39,16 +39,24 @@ public class V1Controller {
     private final ModelsService modelsService;
     private final ChatPipeline chatPipeline;
     private final AccessTokenPort accessTokenPort;
+    private final com.lightai.server.lifecycle.ServerLifecycleService lifecycleService;
 
     public V1Controller(ModelsService modelsService, ChatPipeline chatPipeline, AccessTokenPort accessTokenPort) {
+        this(modelsService, chatPipeline, accessTokenPort, null);
+    }
+
+    public V1Controller(ModelsService modelsService, ChatPipeline chatPipeline, AccessTokenPort accessTokenPort,
+                        com.lightai.server.lifecycle.ServerLifecycleService lifecycleService) {
         this.modelsService = modelsService;
         this.chatPipeline = chatPipeline;
         this.accessTokenPort = accessTokenPort;
+        this.lifecycleService = lifecycleService;
     }
 
     @GetMapping("/v1/models")
     public ResponseEntity<String> models(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
+        checkAcceptingRequests();
         AccessTokenPort.Principal principal = authenticate(authorization);
         return ResponseEntity.ok()
                 .header(VERSION_HEADER, SERVER_VERSION)
@@ -63,6 +71,7 @@ public class V1Controller {
             @RequestHeader(value = "Content-Encoding", required = false) String contentEncoding,
             @RequestHeader(value = "X-Trace-Id", required = false) String headerTraceId,
             @RequestBody String body) {
+        checkAcceptingRequests();
         checkProtocol(contentType, contentEncoding);
         AccessTokenPort.Principal principal = authenticate(authorization);
         UnifiedChatRequest request = parseRequest(body);
@@ -73,12 +82,22 @@ public class V1Controller {
         if (headerTraceId != null && request.traceId() == null) {
             request = withTraceId(request, headerTraceId);
         }
-        ChatPipeline.ChatContext context = new ChatPipeline.ChatContext(principal, request, null);
-        return ResponseEntity.ok()
-                .header(VERSION_HEADER, SERVER_VERSION)
-                .header("X-Trace-Id", request.traceId() != null ? request.traceId() : "")
-                .header("Content-Type", "application/json;charset=UTF-8")
-                .body(json(chatPipeline.chat(context)));
+        com.lightai.server.lifecycle.ServerLifecycleService.ActiveRequestHandle handle = null;
+        if (lifecycleService != null) {
+            handle = lifecycleService.trackRequestStart(request.traceId(), null, null);
+        }
+        try {
+            ChatPipeline.ChatContext context = new ChatPipeline.ChatContext(principal, request, null);
+            return ResponseEntity.ok()
+                    .header(VERSION_HEADER, SERVER_VERSION)
+                    .header("X-Trace-Id", request.traceId() != null ? request.traceId() : "")
+                    .header("Content-Type", "application/json;charset=UTF-8")
+                    .body(json(chatPipeline.chat(context)));
+        } finally {
+            if (lifecycleService != null && handle != null) {
+                lifecycleService.trackRequestEnd(handle.requestId());
+            }
+        }
     }
 
     @PostMapping(value = "/v1/chat/completions", produces = "text/event-stream")
@@ -88,6 +107,7 @@ public class V1Controller {
             @RequestHeader(value = "Content-Encoding", required = false) String contentEncoding,
             @RequestHeader(value = "X-Trace-Id", required = false) String headerTraceId,
             @RequestBody String body) throws IOException {
+        checkAcceptingRequests();
         checkProtocol(contentType, contentEncoding);
         AccessTokenPort.Principal principal = authenticate(authorization);
         UnifiedChatRequest request = parseRequest(body);
@@ -101,41 +121,62 @@ public class V1Controller {
         }
         SseEmitter emitter = new SseEmitter(0L);
         emitter.send(SseEmitter.event().comment("light-ai stream open"));
-        ChatPipeline.ChatContext context = new ChatPipeline.ChatContext(principal, request, null);
-        try {
-            chatPipeline.chatStream(context, new ChatPipeline.StreamListener() {
-                @Override
-                public void onCommit() {
-                    // 响应头由 SseEmitter 机制提交；此处为提交边界标记
-                }
-
-                @Override
-                public void onChunk(UnifiedChatChunk chunk) {
-                    try {
-                        emitter.send(SseEmitter.event().data(SseEncoder.chunk(chunk)));
-                    } catch (IOException e) {
-                        throw new LightAiException(ErrorCode.CLIENT_CANCELLED, "客户端断开");
-                    }
-                }
-
-                @Override
-                public void onError(UnifiedError error) {
-                    try {
-                        emitter.send(SseEmitter.event().data(SseEncoder.error(error)));
-                    } catch (IOException ignored) {
-                        // 客户端已断开
-                    }
-                    emitter.complete();
+        com.lightai.server.lifecycle.ServerLifecycleService.ActiveRequestHandle handle = null;
+        if (lifecycleService != null) {
+            handle = lifecycleService.trackRequestStart(request.traceId(), null, () -> {
+                try {
+                    emitter.completeWithError(new LightAiException(ErrorCode.SERVER_DRAINING, "Server 停机中断连接"));
+                } catch (Exception ignored) {
                 }
             });
-            emitter.send(SseEmitter.event().data(SseEncoder.done()));
-            emitter.complete();
-        } catch (LightAiException e) {
-            // 提交前失败：发送错误事件并关闭（无 DONE）
-            emitter.send(SseEmitter.event().data(SseEncoder.error(e.toError())));
-            emitter.complete();
+        }
+        try {
+            ChatPipeline.ChatContext context = new ChatPipeline.ChatContext(principal, request, null);
+            try {
+                chatPipeline.chatStream(context, new ChatPipeline.StreamListener() {
+                    @Override
+                    public void onCommit() {
+                        // 响应头由 SseEmitter 机制提交；此处为提交边界标记
+                    }
+
+                    @Override
+                    public void onChunk(UnifiedChatChunk chunk) {
+                        try {
+                            emitter.send(SseEmitter.event().data(SseEncoder.chunk(chunk)));
+                        } catch (IOException e) {
+                            throw new LightAiException(ErrorCode.CLIENT_CANCELLED, "客户端断开");
+                        }
+                    }
+
+                    @Override
+                    public void onError(UnifiedError error) {
+                        try {
+                            emitter.send(SseEmitter.event().data(SseEncoder.error(error)));
+                        } catch (IOException ignored) {
+                            // 客户端已断开
+                        }
+                        emitter.complete();
+                    }
+                });
+                emitter.send(SseEmitter.event().data(SseEncoder.done()));
+                emitter.complete();
+            } catch (LightAiException e) {
+                // 提交前失败：发送错误事件并关闭（无 DONE）
+                emitter.send(SseEmitter.event().data(SseEncoder.error(e.toError())));
+                emitter.complete();
+            }
+        } finally {
+            if (lifecycleService != null && handle != null) {
+                lifecycleService.trackRequestEnd(handle.requestId());
+            }
         }
         return emitter;
+    }
+
+    private void checkAcceptingRequests() {
+        if (lifecycleService != null && !lifecycleService.isAcceptingRequests()) {
+            throw new LightAiException(ErrorCode.SERVER_DRAINING, "Server 正在优雅停机摘流中，拒绝新请求");
+        }
     }
 
     private AccessTokenPort.Principal authenticate(String authorization) {
