@@ -689,6 +689,8 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P10 交付与验收（6项）
 
+> 领取锁定：后端执行模型（beidao）2026-09-06 领取 BE-P10 全部 6 项（BE-055—BE-060），分支 feature/backend-delivery-acceptance（git worktree D:\AIBuilder\AIGetway-delivery，基于 dev 4a7eef9）；BE-P01—P08 均已合入 dev，BE-P09 并行推进中；执行期间请勿重复领取或并行修改同包任务；完成记录与测试证据见 COMMUNICATION.md H-024。
+
 - [ ] 任务编号：BE-055
   模块：交付与验收；目标：Starter两模式装配。
   接口/服务：AutoConfiguration与Embedded Admin。
