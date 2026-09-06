@@ -624,9 +624,9 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P09 SDK与扩展（6项）
 
-> 领取锁定：后端执行模型（beidao）2026-09-06 领取 BE-P09 全部 6 项（BE-049—BE-054），分支 feature/backend-sdk（基于 dev 1904529），执行期间请勿重复领取或并行修改同包任务；BE-P01—P08 均已合入 dev；完成记录与测试证据见 COMMUNICATION.md H-023。
+> 交付完成：后端执行模型（beidao）已完成 BE-P09 全部 6 项任务（BE-049 ~ BE-054）。完成成果包括 LightAiClient/ChatRequest/ChatResponse/StreamEvent/ModelInfo 统一 SDK 客户端、LocalRuntimeDefinition/LocalRuntimeValidator/LocalLightAiClient 本地运行内核、StandaloneLightAiClient 远程 HTTP 客户端（JDK 17 HttpClient 复用、容忍未知字段、协议错误安全摘要）、FlowStreamPublisher（背压控制、单订阅、取消语义）、SecretManager（多 Provider 冲突检测、短期缓存、主动失效、内存清零）与 TraceExportCoordinator（有界队列 10000、1s/5s/30s 幂等重试、异常隔离）。全仓 12 模块 mvn clean test 全部通过（304+ 测试，0 失败），详细测试证据见 COMMUNICATION.md H-023。
 
-- [ ] 任务编号：BE-049
+- [x] 任务编号：BE-049
   模块：SDK与扩展；目标：客户端公开对象与生命周期。
   接口/服务：LightAiClient builder/models/chat/chatAsync/stream/close。
   请求参数与响应字段：不可变请求/config→公开响应/异常；类型、必填及错误HTTP见协议字典和附录。
@@ -636,7 +636,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：公开API无Provider或Spring类型，版本依赖统一。
   测试要求：并发、集合修改、重复close；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-050
+- [x] 任务编号：BE-050
   模块：SDK与扩展；目标：Local Runtime构建与执行。
   接口/服务：LOCAL_RUNTIME builder。
   请求参数与响应字段：LocalRuntimeDefinition/secret suppliers→RuntimeClient；类型、必填及错误HTTP见协议字典和附录。
@@ -646,7 +646,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：构建不访问Provider或DB，规则与Server相同。
   测试要求：无候选、Secret边界、同步流；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-051
+- [x] 任务编号：BE-051
   模块：SDK与扩展；目标：远程Client请求与异常。
   接口/服务：STANDALONE_CLIENT。
   请求参数与响应字段：TokenSupplier/请求→HTTP响应/统一异常；类型、必填及错误HTTP见协议字典和附录。
@@ -656,7 +656,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：不自动重放已发模型调用，响应未知字段忽略。
   测试要求：建连失败、半发送、未知响应；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-052
+- [x] 任务编号：BE-052
   模块：SDK与扩展；目标：Future取消和Flow背压。
   接口/服务：chatAsync/Flow.Subscription。
   请求参数与响应字段：cancel/request(n)→单次终止/事件；类型、必填及错误HTTP见协议字典和附录。
@@ -666,7 +666,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：按需求下发，无丢块，无onError后onComplete。
   测试要求：慢消费者、32边界、取消竞态；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-053
+- [x] 任务编号：BE-053
   模块：SDK与扩展；目标：Secret SPI选择失效与缓存。
   接口/服务：supports/resolve/invalidate。
   请求参数与响应字段：引用/deadline/cancel→短期ResolvedSecret；类型、必填及错误HTTP见协议字典和附录。
@@ -676,7 +676,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：不解析多实现冲突，Secret不进入快照/异常。
   测试要求：过期、冲突、解析取消；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-054
+- [x] 任务编号：BE-054
   模块：SDK与扩展；目标：TraceExporter隔离。
   接口/服务：TraceExporter.export。
   请求参数与响应字段：脱敏batch_id→ExportResult；类型、必填及错误HTTP见协议字典和附录。
@@ -685,6 +685,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   数据表与协作依赖：Trace或Local队列；BE-033。
   验收标准：导出失败不修改业务成功，无正文和密钥。
   测试要求：三次重试、队列满、重复batch；业务事务增加失败回滚断言，读取增加权限断言。
+
 
 
 ## BE-P10 交付与验收（6项）

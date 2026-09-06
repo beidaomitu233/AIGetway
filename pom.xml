@@ -69,11 +69,6 @@
       </dependency>
       <dependency>
         <groupId>com.lightai</groupId>
-        <artifactId>light-ai-runtime</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.lightai</groupId>
         <artifactId>light-ai-provider-common</artifactId>
         <version>${project.version}</version>
       </dependency>
