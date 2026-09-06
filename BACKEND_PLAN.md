@@ -561,7 +561,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 > 交付说明（2026-09-06）：BE-043—BE-048 已实现并通过 mvn test（全工程 175 例，本包新增 13 例：AccessTokenService 2 例、AccessCredentialService 6 例等）。遗留：真实 PostgreSQL 约束与同事务原子性证据待 DB-P05 联调；/v1 鉴权端到端（两实例轮换、IP/IPv6 代理链）随部署验收执行；清理任务 DeletionPort 生产实现待 BE-P48 数据迁移落地。
 
-- [ ] 任务编号：BE-043
+- [x] 任务编号：BE-043
   模块：运行与安全管理；目标：Runtime参数及保留影响。
   接口/服务：GET/PUT runtime-config；POST retention-impact。
   请求参数与响应字段：参数/version/impact→详情/结果；类型、必填及错误HTTP见协议字典和附录。
@@ -571,7 +571,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：首次聚合锁时区，保留缩短只发布后生效。
   测试要求：过期/锁定/组合边界；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-044
+- [x] 任务编号：BE-044
   模块：运行与安全管理；目标：Access凭证全生命周期与鉴权。
   接口/服务：/admin/access-credentials及rotate/enable/disable；业务过滤器。
   请求参数与响应字段：命令/version或Bearer→一次Token/权限上下文；类型、必填及错误HTTP见协议字典和附录。
@@ -581,7 +581,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：旧Token立即失效，application由凭证，Token读取无原文。
   测试要求：两实例轮换、IP/IPv6代理、过期；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-045
+- [x] 任务编号：BE-045
   模块：运行与安全管理；目标：审计查询与导出。
   接口/服务：GET /admin/audit-logs、/{id}、/export。
   请求参数与响应字段：审计筛选→页/详情/CSV；类型、必填及错误HTTP见协议字典和附录。
@@ -591,7 +591,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：request_id可关联成功失败，无Secret摘要前值。
   测试要求：筛选、权限、CSV注入；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-046
+- [x] 任务编号：BE-046
   模块：运行与安全管理；目标：开发上下文与示例。
   接口/服务：GET /admin/developer-access/context、code-sample。
   请求参数与响应字段：mode/alias/language→context/samples；类型、必填及错误HTTP见协议字典和附录。
@@ -601,7 +601,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：示例字段与SDK一致，复制无真实密钥。
   测试要求：三模式示例编译/占位检查；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-047
+- [x] 任务编号：BE-047
   模块：运行与安全管理；目标：在线测试入口。
   接口/服务：POST /admin/developer-access/test/chat、/admin/developer-access/test/chat/stream。
   请求参数与响应字段：管理身份/ApiTestCommand→ApiTestResult/StreamEvent SSE；类型、必填及错误HTTP见协议字典和附录。
@@ -611,7 +611,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：source可识别且不使用业务Token冒充测试。
   测试要求：同步/流式/取消/只读拒绝；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-048
+- [x] 任务编号：BE-048
   模块：运行与安全管理；目标：清理和保留任务。
   接口/服务：内部调度服务。
   请求参数与响应字段：当前ACTIVE留存策略→分批清理结果；类型、必填及错误HTTP见协议字典和附录。
@@ -623,6 +623,8 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 
 ## BE-P09 SDK与扩展（6项）
+
+> 领取锁定：后端执行模型（beidao）2026-09-06 领取 BE-P09 全部 6 项（BE-049—BE-054），分支 feature/backend-sdk（基于 dev 1904529），执行期间请勿重复领取或并行修改同包任务；BE-P01—P08 均已合入 dev；完成记录与测试证据见 COMMUNICATION.md H-023。
 
 - [ ] 任务编号：BE-049
   模块：SDK与扩展；目标：客户端公开对象与生命周期。
