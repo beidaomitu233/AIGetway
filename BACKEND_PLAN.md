@@ -491,6 +491,8 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P07 草稿发布（6项）
 
+> 领取锁定：后端执行模型（beidao）2026-09-06 领取 BE-P07 全部 6 项（BE-037—BE-042），分支 feature/backend-config-publish（git worktree D:\AIBuilder\AIGetway-backend，基于 dev 4f23ed7；该分支早前基于 dev d943afd 的未推送领取与半成品由本会话接续并合入最新 dev），执行期间请勿重复领取或并行修改同包任务；BE-P05/P08 已合入 dev；完成记录与测试证据见 COMMUNICATION.md H-022。
+
 - [ ] 任务编号：BE-037
   模块：草稿发布；目标：草稿状态与差异查询。
   接口/服务：GET /admin/config/draft-state、draft-changes/summary、draft-changes。
