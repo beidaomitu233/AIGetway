@@ -23,6 +23,7 @@
     <module>light-ai-provider-deepseek</module>
     <module>light-ai-admin</module>
     <module>light-ai-server</module>
+    <module>light-ai-spring-boot-starter</module>
   </modules>
 
   <properties>
@@ -95,6 +96,11 @@
       <dependency>
         <groupId>com.lightai</groupId>
         <artifactId>light-ai-server</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.lightai</groupId>
+        <artifactId>light-ai-spring-boot-starter</artifactId>
         <version>${project.version}</version>
       </dependency>
     </dependencies>

@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * 内存 TraceStore（BE-P06 契约夹具）：唯一 trace_id 占位、Attempt 时间线、
@@ -16,8 +18,8 @@ import java.util.UUID;
  */
 public final class InMemoryTraceStore implements TraceStore {
 
-    private final Map<String, TraceRow> traces = new HashMap<>();
-    private final Set<String> clientTraceIds = new HashSet<>();
+    private final Map<String, TraceRow> traces = new ConcurrentHashMap<>();
+    private final Set<String> clientTraceIds = ConcurrentHashMap.newKeySet();
     private final Object lock = new Object();
 
     @Override
@@ -119,10 +121,10 @@ public final class InMemoryTraceStore implements TraceStore {
         private final String traceId;
         private final String model;
         private final String application;
-        private final List<AttemptRow> attempts = new ArrayList<>();
-        private boolean committed;
-        private boolean finalized;
-        private String status = "RUNNING";
+        private final List<AttemptRow> attempts = new CopyOnWriteArrayList<>();
+        private volatile boolean committed;
+        private volatile boolean finalized;
+        private volatile String status = "RUNNING";
 
         private TraceRow(String traceId, String model, String application) {
             this.traceId = traceId;
