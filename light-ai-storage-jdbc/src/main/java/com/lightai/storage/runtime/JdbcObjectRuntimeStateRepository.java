@@ -1,5 +1,7 @@
 package com.lightai.storage.runtime;
 
+import com.lightai.storage.dialect.AbstractJdbcRepository;
+import com.lightai.storage.dialect.DatabaseDialect;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -13,27 +15,30 @@ import java.util.UUID;
  * 运行状态由检测/外部调用即时更新，与配置草稿相互独立；
  * BE-P02 仅读取，写入由检测与运行内核（BE-P04/P05）负责。
  */
-public final class JdbcObjectRuntimeStateRepository {
+public final class JdbcObjectRuntimeStateRepository extends AbstractJdbcRepository {
 
     private static final String COLUMNS =
             "connection_status, health_status, last_success_at, last_checked_at, last_error_code";
 
-    private final String schemaName;
+    public JdbcObjectRuntimeStateRepository(String schemaName, DatabaseDialect explicitDialect) {
+        super(schemaName, explicitDialect);
+    }
 
     public JdbcObjectRuntimeStateRepository(String schemaName) {
-        this.schemaName = schemaName;
+        super(schemaName);
     }
 
     public JdbcObjectRuntimeStateRepository() {
-        this(com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME);
+        super();
     }
 
     public Optional<RuntimeStateSnapshot> findByEntity(Connection connection, String entityType, UUID entityId) {
-        String sql = "SELECT " + COLUMNS + " FROM " + schemaName
-                + ".object_runtime_state WHERE entity_type = ? AND entity_id = ?";
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "object_runtime_state")
+                + " WHERE entity_type = ? AND entity_id = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, entityType);
-            statement.setObject(2, entityId);
+            d.bindUuid(statement, 2, entityId);
             try (ResultSet rs = statement.executeQuery()) {
                 if (!rs.next()) {
                     return Optional.empty();
@@ -41,8 +46,8 @@ public final class JdbcObjectRuntimeStateRepository {
                 return Optional.of(new RuntimeStateSnapshot(
                         rs.getString("connection_status"),
                         rs.getString("health_status"),
-                        rs.getObject("last_success_at", OffsetDateTime.class),
-                        rs.getObject("last_checked_at", OffsetDateTime.class),
+                        d.readOffsetDateTime(rs, "last_success_at"),
+                        d.readOffsetDateTime(rs, "last_checked_at"),
                         rs.getString("last_error_code")));
             }
         } catch (SQLException e) {
@@ -63,3 +68,4 @@ public final class JdbcObjectRuntimeStateRepository {
         }
     }
 }
+

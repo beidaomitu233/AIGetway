@@ -2,12 +2,14 @@ package com.lightai.storage.model;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.lightai.client.json.ProtocolJson;
+import com.lightai.storage.dialect.AbstractJdbcRepository;
+import com.lightai.storage.dialect.DatabaseDialect;
+
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -16,8 +18,9 @@ import java.util.UUID;
 /**
  * provider_model JDBC 仓储（DATABASE_PLAN §5）。
  * (provider_id, model_id) 活行唯一；价格列 numeric(20,8) 以 BigDecimal 承载。
+ * 支持 PostgreSQL 与 MySQL 5.7 / 8.0 双方言自适应。
  */
-public class JdbcProviderModelRepository {
+public class JdbcProviderModelRepository extends AbstractJdbcRepository {
 
     private static final String COLUMNS =
             "id, provider_id, model_id, display_name, model_type, tokenizer_family, context_window, "
@@ -27,10 +30,12 @@ public class JdbcProviderModelRepository {
                     + "default_max_tokens, default_stop, input_price, output_price, price_unit, currency, "
                     + "enabled, import_source, import_adapter_version, version, created_at, updated_at";
 
-    protected final String schemaName;
+    public JdbcProviderModelRepository(String schemaName, DatabaseDialect explicitDialect) {
+        super(schemaName, explicitDialect);
+    }
 
     public JdbcProviderModelRepository(String schemaName) {
-        this.schemaName = schemaName;
+        super(schemaName);
     }
 
     public JdbcProviderModelRepository() {
@@ -38,21 +43,21 @@ public class JdbcProviderModelRepository {
     }
 
     public void insert(Connection connection, ProviderModelRecord record) {
-        // created_at/updated_at 由数据库事务 now 生成
+        DatabaseDialect d = dialect(connection);
         String insertColumns = COLUMNS.substring(0, COLUMNS.lastIndexOf(", created_at"));
-        String sql = "INSERT INTO %s.provider_model (%s, created_at, updated_at) VALUES (%s, now(), now())"
-                .formatted(qualified(), insertColumns, placeholders(insertColumns));
+        String sql = "INSERT INTO " + qualify(connection, "provider_model") + " (" + insertColumns + ", created_at, updated_at) "
+                + "VALUES (" + insertPlaceholders(insertColumns, d) + ", " + d.nowFunction() + ", " + d.nowFunction() + ")";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            bind(statement, record);
+            bind(statement, record, d);
             statement.executeUpdate();
         } catch (SQLException e) {
             throw translate("模型写入失败", e);
         }
     }
 
-    private void bind(PreparedStatement statement, ProviderModelRecord r) throws SQLException {
-        statement.setObject(1, r.id());
-        statement.setObject(2, r.providerId());
+    private void bind(PreparedStatement statement, ProviderModelRecord r, DatabaseDialect d) throws SQLException {
+        d.bindUuid(statement, 1, r.id());
+        d.bindUuid(statement, 2, r.providerId());
         statement.setString(3, r.modelId());
         statement.setString(4, r.displayName());
         statement.setString(5, r.modelType());
@@ -82,16 +87,16 @@ public class JdbcProviderModelRepository {
         statement.setString(29, r.importSource());
         statement.setString(30, r.importAdapterVersion());
         statement.setLong(31, r.version());
-        statement.setObject(32, r.createdAt());
-        statement.setObject(33, r.updatedAt());
     }
 
     public Optional<ProviderModelRecord> findLiveById(Connection connection, UUID id) {
-        String sql = "SELECT " + COLUMNS + " FROM " + qualified() + " WHERE id = ? AND deleted_at IS NULL";
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "provider_model")
+                + " WHERE id = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, id);
+            d.bindUuid(statement, 1, id);
             try (ResultSet rs = statement.executeQuery()) {
-                return rs.next() ? Optional.of(mapRow(rs)) : Optional.empty();
+                return rs.next() ? Optional.of(mapRow(rs, d)) : Optional.empty();
             }
         } catch (SQLException e) {
             throw translate("模型读取失败", e);
@@ -99,12 +104,13 @@ public class JdbcProviderModelRepository {
     }
 
     public Optional<ProviderModelRecord> lockLiveById(Connection connection, UUID id) {
-        String sql = "SELECT " + COLUMNS + " FROM " + qualified()
-                + " WHERE id = ? AND deleted_at IS NULL FOR UPDATE";
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "provider_model")
+                + " WHERE id = ? AND deleted_at IS NULL " + d.forUpdateClause();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, id);
+            d.bindUuid(statement, 1, id);
             try (ResultSet rs = statement.executeQuery()) {
-                return rs.next() ? Optional.of(mapRow(rs)) : Optional.empty();
+                return rs.next() ? Optional.of(mapRow(rs, d)) : Optional.empty();
             }
         } catch (SQLException e) {
             throw translate("模型锁定失败", e);
@@ -113,10 +119,11 @@ public class JdbcProviderModelRepository {
 
     /** 导入幂等检查：同一 Provider 下外部模型 ID 是否已存在（含软删除）。 */
     public boolean existsByProviderAndModelId(Connection connection, UUID providerId, String modelId) {
-        String sql = "SELECT 1 FROM " + qualified()
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT 1 FROM " + qualify(connection, "provider_model")
                 + " WHERE provider_id = ? AND model_id = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, providerId);
+            d.bindUuid(statement, 1, providerId);
             statement.setString(2, modelId);
             try (ResultSet rs = statement.executeQuery()) {
                 return rs.next();
@@ -128,60 +135,90 @@ public class JdbcProviderModelRepository {
 
     /** 全字段更新（能力、默认值、价格），version+1；model_id/provider_id 不可变。 */
     public ProviderModelRecord update(Connection connection, ProviderModelRecord record) {
-        String sql = """
-                UPDATE %s.provider_model SET
-                  display_name = ?, tokenizer_family = ?, context_window = ?, max_output_tokens = ?,
-                  support_stream = ?, support_system_message = ?, support_temperature = ?,
-                  support_top_p = ?, support_stop = ?, temperature_min = ?, temperature_max = ?,
-                  top_p_min = ?, top_p_max = ?, max_stop_sequences = ?, max_stop_length = ?,
-                  default_temperature = ?, default_top_p = ?, default_max_tokens = ?,
-                  default_stop = ?::jsonb, input_price = ?, output_price = ?, price_unit = ?,
-                  currency = ?, enabled = ?, version = version + 1, updated_at = now()
-                WHERE id = ? AND deleted_at IS NULL
-                RETURNING %s
-                """.strip().formatted(qualified(), COLUMNS);
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, record.displayName());
-            statement.setString(2, record.tokenizerFamily());
-            statement.setObject(3, record.contextWindow());
-            statement.setObject(4, record.maxOutputTokens());
-            statement.setObject(5, record.supportStream(), java.sql.Types.BOOLEAN);
-            statement.setObject(6, record.supportSystemMessage(), java.sql.Types.BOOLEAN);
-            statement.setObject(7, record.supportTemperature(), java.sql.Types.BOOLEAN);
-            statement.setObject(8, record.supportTopP(), java.sql.Types.BOOLEAN);
-            statement.setObject(9, record.supportStop(), java.sql.Types.BOOLEAN);
-            statement.setObject(10, record.temperatureMin());
-            statement.setObject(11, record.temperatureMax());
-            statement.setObject(12, record.topPMin());
-            statement.setObject(13, record.topPMax());
-            statement.setObject(14, record.maxStopSequences());
-            statement.setObject(15, record.maxStopLength());
-            statement.setObject(16, record.defaultTemperature());
-            statement.setObject(17, record.defaultTopP());
-            statement.setObject(18, record.defaultMaxTokens());
-            statement.setString(19, toJson(record.defaultStop()));
-            statement.setBigDecimal(20, record.inputPrice());
-            statement.setBigDecimal(21, record.outputPrice());
-            statement.setInt(22, record.priceUnit());
-            statement.setString(23, record.currency());
-            statement.setBoolean(24, record.enabled());
-            statement.setObject(25, record.id());
-            try (ResultSet rs = statement.executeQuery()) {
-                if (!rs.next()) {
+        DatabaseDialect d = dialect(connection);
+        if (d.supportsReturning()) {
+            String sql = """
+                    UPDATE %s SET
+                      display_name = ?, tokenizer_family = ?, context_window = ?, max_output_tokens = ?,
+                      support_stream = ?, support_system_message = ?, support_temperature = ?,
+                      support_top_p = ?, support_stop = ?, temperature_min = ?, temperature_max = ?,
+                      top_p_min = ?, top_p_max = ?, max_stop_sequences = ?, max_stop_length = ?,
+                      default_temperature = ?, default_top_p = ?, default_max_tokens = ?,
+                      default_stop = %s, input_price = ?, output_price = ?, price_unit = ?,
+                      currency = ?, enabled = ?, version = version + 1, updated_at = %s
+                    WHERE id = ? AND deleted_at IS NULL
+                    RETURNING %s
+                    """.strip().formatted(qualify(connection, "provider_model"), d.jsonPlaceholder(), d.nowFunction(), COLUMNS);
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                bindUpdateParams(statement, record, d);
+                try (ResultSet rs = statement.executeQuery()) {
+                    if (!rs.next()) {
+                        throw new IllegalStateException("模型更新未命中活行");
+                    }
+                    return mapRow(rs, d);
+                }
+            } catch (SQLException e) {
+                throw translate("模型更新失败", e);
+            }
+        } else {
+            String sql = "UPDATE " + qualify(connection, "provider_model") + " SET "
+                    + "display_name = ?, tokenizer_family = ?, context_window = ?, max_output_tokens = ?, "
+                    + "support_stream = ?, support_system_message = ?, support_temperature = ?, "
+                    + "support_top_p = ?, support_stop = ?, temperature_min = ?, temperature_max = ?, "
+                    + "top_p_min = ?, top_p_max = ?, max_stop_sequences = ?, max_stop_length = ?, "
+                    + "default_temperature = ?, default_top_p = ?, default_max_tokens = ?, "
+                    + "default_stop = " + d.jsonPlaceholder() + ", input_price = ?, output_price = ?, price_unit = ?, "
+                    + "currency = ?, enabled = ?, version = version + 1, updated_at = " + d.nowFunction() + " "
+                    + "WHERE id = ? AND deleted_at IS NULL";
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                bindUpdateParams(statement, record, d);
+                int affected = statement.executeUpdate();
+                if (affected == 0) {
                     throw new IllegalStateException("模型更新未命中活行");
                 }
-                return mapRow(rs);
+                return findLiveById(connection, record.id())
+                        .orElseThrow(() -> new IllegalStateException("模型更新后未找到活行"));
+            } catch (SQLException e) {
+                throw translate("模型更新失败", e);
             }
-        } catch (SQLException e) {
-            throw translate("模型更新失败", e);
         }
     }
 
+    private void bindUpdateParams(PreparedStatement statement, ProviderModelRecord record, DatabaseDialect d) throws SQLException {
+        statement.setString(1, record.displayName());
+        statement.setString(2, record.tokenizerFamily());
+        statement.setObject(3, record.contextWindow());
+        statement.setObject(4, record.maxOutputTokens());
+        statement.setObject(5, record.supportStream(), java.sql.Types.BOOLEAN);
+        statement.setObject(6, record.supportSystemMessage(), java.sql.Types.BOOLEAN);
+        statement.setObject(7, record.supportTemperature(), java.sql.Types.BOOLEAN);
+        statement.setObject(8, record.supportTopP(), java.sql.Types.BOOLEAN);
+        statement.setObject(9, record.supportStop(), java.sql.Types.BOOLEAN);
+        statement.setObject(10, record.temperatureMin());
+        statement.setObject(11, record.temperatureMax());
+        statement.setObject(12, record.topPMin());
+        statement.setObject(13, record.topPMax());
+        statement.setObject(14, record.maxStopSequences());
+        statement.setObject(15, record.maxStopLength());
+        statement.setObject(16, record.defaultTemperature());
+        statement.setObject(17, record.defaultTopP());
+        statement.setObject(18, record.defaultMaxTokens());
+        statement.setString(19, toJson(record.defaultStop()));
+        statement.setBigDecimal(20, record.inputPrice());
+        statement.setBigDecimal(21, record.outputPrice());
+        statement.setInt(22, record.priceUnit());
+        statement.setString(23, record.currency());
+        statement.setBoolean(24, record.enabled());
+        d.bindUuid(statement, 25, record.id());
+    }
+
     public void markDeleted(Connection connection, UUID id) {
-        String sql = "UPDATE %s.provider_model SET deleted_at = now(), updated_at = now() "
-                + "WHERE id = ? AND deleted_at IS NULL".formatted(qualified());
+        DatabaseDialect d = dialect(connection);
+        String sql = "UPDATE " + qualify(connection, "provider_model")
+                + " SET deleted_at = " + d.nowFunction() + ", updated_at = " + d.nowFunction()
+                + " WHERE id = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, id);
+            d.bindUuid(statement, 1, id);
             statement.executeUpdate();
         } catch (SQLException e) {
             throw translate("模型删除失败", e);
@@ -192,12 +229,14 @@ public class JdbcProviderModelRepository {
                                                     String keyword, Boolean supportStream,
                                                     Boolean enabled, String sortExpression,
                                                     int limit, int offset) {
+        DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT ").append(COLUMNS).append(" FROM ")
-                .append(qualified()).append(" WHERE provider_id = ? AND deleted_at IS NULL");
+                .append(qualify(connection, "provider_model")).append(" WHERE provider_id = ? AND deleted_at IS NULL");
         List<Object> params = new ArrayList<>();
         params.add(providerId);
         if (keyword != null && !keyword.isBlank()) {
-            sql.append(" AND (model_id ILIKE ? OR display_name ILIKE ?)");
+            sql.append(" AND (").append(d.ilikeClause("model_id"))
+                    .append(" OR ").append(d.ilikeClause("display_name")).append(")");
             params.add("%" + keyword.strip() + "%");
             params.add("%" + keyword.strip() + "%");
         }
@@ -211,15 +250,13 @@ public class JdbcProviderModelRepository {
         }
         sql.append(" ORDER BY ").append(sortExpression).append(", id ASC LIMIT ? OFFSET ?");
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
-            for (int i = 0; i < params.size(); i++) {
-                statement.setObject(i + 1, params.get(i));
-            }
+            bindParameters(statement, params, d);
             statement.setInt(params.size() + 1, limit);
             statement.setInt(params.size() + 2, offset);
             try (ResultSet rs = statement.executeQuery()) {
                 List<ProviderModelRecord> records = new ArrayList<>();
                 while (rs.next()) {
-                    records.add(mapRow(rs));
+                    records.add(mapRow(rs, d));
                 }
                 return List.copyOf(records);
             }
@@ -230,12 +267,14 @@ public class JdbcProviderModelRepository {
 
     public long countByProvider(Connection connection, UUID providerId, String keyword,
                                 Boolean supportStream, Boolean enabled) {
-        StringBuilder sql = new StringBuilder("SELECT count(*) FROM ").append(qualified())
-                .append(" WHERE provider_id = ? AND deleted_at IS NULL");
+        DatabaseDialect d = dialect(connection);
+        StringBuilder sql = new StringBuilder("SELECT count(*) FROM ")
+                .append(qualify(connection, "provider_model")).append(" WHERE provider_id = ? AND deleted_at IS NULL");
         List<Object> params = new ArrayList<>();
         params.add(providerId);
         if (keyword != null && !keyword.isBlank()) {
-            sql.append(" AND (model_id ILIKE ? OR display_name ILIKE ?)");
+            sql.append(" AND (").append(d.ilikeClause("model_id"))
+                    .append(" OR ").append(d.ilikeClause("display_name")).append(")");
             params.add("%" + keyword.strip() + "%");
             params.add("%" + keyword.strip() + "%");
         }
@@ -248,9 +287,7 @@ public class JdbcProviderModelRepository {
             params.add(enabled);
         }
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
-            for (int i = 0; i < params.size(); i++) {
-                statement.setObject(i + 1, params.get(i));
-            }
+            bindParameters(statement, params, d);
             try (ResultSet rs = statement.executeQuery()) {
                 rs.next();
                 return rs.getLong(1);
@@ -260,16 +297,16 @@ public class JdbcProviderModelRepository {
         }
     }
 
-    private ProviderModelRecord mapRow(ResultSet rs) throws SQLException {
+    private ProviderModelRecord mapRow(ResultSet rs, DatabaseDialect d) throws SQLException {
         return new ProviderModelRecord(
-                rs.getObject("id", UUID.class),
-                rs.getObject("provider_id", UUID.class),
+                d.readUuid(rs, "id"),
+                d.readUuid(rs, "provider_id"),
                 rs.getString("model_id"),
                 rs.getString("display_name"),
                 rs.getString("model_type"),
                 rs.getString("tokenizer_family"),
-                (Long) rs.getObject("context_window"),
-                (Long) rs.getObject("max_output_tokens"),
+                getLongOrNull(rs, "context_window"),
+                getLongOrNull(rs, "max_output_tokens"),
                 (Boolean) rs.getObject("support_stream"),
                 (Boolean) rs.getObject("support_system_message"),
                 (Boolean) rs.getObject("support_temperature"),
@@ -279,11 +316,11 @@ public class JdbcProviderModelRepository {
                 rs.getObject("temperature_max") == null ? null : rs.getBigDecimal("temperature_max"),
                 rs.getObject("top_p_min") == null ? null : rs.getBigDecimal("top_p_min"),
                 rs.getObject("top_p_max") == null ? null : rs.getBigDecimal("top_p_max"),
-                (Integer) rs.getObject("max_stop_sequences"),
-                (Integer) rs.getObject("max_stop_length"),
+                getIntOrNull(rs, "max_stop_sequences"),
+                getIntOrNull(rs, "max_stop_length"),
                 rs.getObject("default_temperature") == null ? null : rs.getBigDecimal("default_temperature"),
                 rs.getObject("default_top_p") == null ? null : rs.getBigDecimal("default_top_p"),
-                (Long) rs.getObject("default_max_tokens"),
+                getLongOrNull(rs, "default_max_tokens"),
                 fromJson(rs.getString("default_stop")),
                 rs.getBigDecimal("input_price"),
                 rs.getBigDecimal("output_price"),
@@ -293,8 +330,8 @@ public class JdbcProviderModelRepository {
                 rs.getString("import_source"),
                 rs.getString("import_adapter_version"),
                 rs.getLong("version"),
-                rs.getObject("created_at", OffsetDateTime.class),
-                rs.getObject("updated_at", OffsetDateTime.class));
+                d.readOffsetDateTime(rs, "created_at"),
+                d.readOffsetDateTime(rs, "updated_at"));
     }
 
     private static String toJson(List<String> stops) {
@@ -317,20 +354,19 @@ public class JdbcProviderModelRepository {
         }
     }
 
-    private static String placeholders(String columns) {
-        int count = columns.split(",").length;
-        return "(" + "?,".repeat(count - 1) + "?)";
-    }
-
-    private String qualified() {
-        return schemaName + ".provider_model";
-    }
-
-    protected static IllegalStateException translate(String message, SQLException e) {
-        String state = e.getSQLState() == null ? "" : e.getSQLState();
-        if ("23505".equals(state)) {
-            return new IllegalStateException("UNIQUE_VIOLATION: " + message, e);
+    private static String insertPlaceholders(String columns, DatabaseDialect d) {
+        String[] parts = columns.split(", ");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            if ("default_stop".equals(parts[i].trim())) {
+                sb.append(d.jsonPlaceholder());
+            } else {
+                sb.append("?");
+            }
         }
-        return new IllegalStateException(message + "：" + e.getClass().getSimpleName(), e);
+        return sb.toString();
     }
 }

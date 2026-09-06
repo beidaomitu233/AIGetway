@@ -1,5 +1,8 @@
 package com.lightai.storage.reference;
 
+import com.lightai.storage.dialect.AbstractJdbcRepository;
+import com.lightai.storage.dialect.DatabaseDialect;
+import com.lightai.storage.dialect.DatabaseType;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -16,36 +19,39 @@ import java.util.UUID;
  * 涉及 provider_model、credential、route_candidate 表（迁移由 DB-P02/P03 提供）；
  * 历史对象使用逻辑 ID，不级联配置清理。
  */
-public class JdbcConfigReferenceRepository {
+public class JdbcConfigReferenceRepository extends AbstractJdbcRepository {
 
-    private final String schemaName;
+    public JdbcConfigReferenceRepository(String schemaName, DatabaseDialect explicitDialect) {
+        super(schemaName, explicitDialect);
+    }
 
     public JdbcConfigReferenceRepository(String schemaName) {
-        this.schemaName = schemaName;
+        super(schemaName);
     }
 
     public JdbcConfigReferenceRepository() {
-        this(com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME);
+        super();
     }
 
     public long countProviderModels(Connection connection, UUID providerId) {
-        String sql = "SELECT count(*) FROM " + schemaName
-                + ".provider_model WHERE provider_id = ? AND deleted_at IS NULL";
+        String sql = "SELECT count(*) FROM " + qualify(connection, "provider_model")
+                + " WHERE provider_id = ? AND deleted_at IS NULL";
         return count(connection, sql, providerId);
     }
 
     public long countPools(Connection connection, UUID providerId) {
-        String sql = "SELECT count(*) FROM " + schemaName
-                + ".credential_pool WHERE provider_id = ? AND deleted_at IS NULL";
+        String sql = "SELECT count(*) FROM " + qualify(connection, "credential_pool")
+                + " WHERE provider_id = ? AND deleted_at IS NULL";
         return count(connection, sql, providerId);
     }
 
     /** 池内凭证明细：总数与启用数（健康计数由 object_runtime_state 组合）。 */
     public CredentialCounts countCredentialsByPool(Connection connection, UUID poolId) {
-        String sql = "SELECT count(*) AS total, count(*) FILTER (WHERE enabled) AS enabled_count "
-                + "FROM " + schemaName + ".credential WHERE pool_id = ? AND deleted_at IS NULL";
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT count(*) AS total, COUNT(CASE WHEN enabled = true THEN 1 END) AS enabled_count "
+                + "FROM " + qualify(connection, "credential") + " WHERE pool_id = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, poolId);
+            d.bindUuid(statement, 1, poolId);
             try (ResultSet rs = statement.executeQuery()) {
                 rs.next();
                 return new CredentialCounts(rs.getLong("total"), rs.getLong("enabled_count"));
@@ -56,32 +62,31 @@ public class JdbcConfigReferenceRepository {
     }
 
     public long countRouteCandidates(Connection connection, UUID poolId) {
-        String sql = "SELECT count(*) FROM " + schemaName
-                + ".route_candidate WHERE credential_pool_id = ? AND deleted_at IS NULL";
+        String sql = "SELECT count(*) FROM " + qualify(connection, "route_candidate")
+                + " WHERE credential_pool_id = ? AND deleted_at IS NULL";
         return count(connection, sql, poolId);
     }
 
     /** 池被引用的不同 Alias 数（BE-012 model_alias_count）。 */
     public long countAliasesByPool(Connection connection, UUID poolId) {
-        String sql = "SELECT count(DISTINCT alias_id) FROM " + schemaName
-                + ".route_candidate WHERE credential_pool_id = ? AND deleted_at IS NULL";
+        String sql = "SELECT count(DISTINCT alias_id) FROM " + qualify(connection, "route_candidate")
+                + " WHERE credential_pool_id = ? AND deleted_at IS NULL";
         return count(connection, sql, poolId);
     }
 
     /** Provider 被引用的 Alias 集合（经模型候选推导，BE-010 affected_alias_ids）。 */
     public List<UUID> aliasIdsByProvider(Connection connection, UUID providerId) {
-        String sql = """
-                SELECT DISTINCT rc.alias_id
-                  FROM %s.route_candidate rc
-                  JOIN %s.provider_model pm ON pm.id = rc.provider_model_id AND pm.deleted_at IS NULL
-                 WHERE pm.provider_id = ? AND rc.deleted_at IS NULL
-                """.strip().formatted(schemaName, schemaName);
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT DISTINCT rc.alias_id FROM "
+                + qualify(connection, "route_candidate") + " rc JOIN "
+                + qualify(connection, "provider_model") + " pm ON pm.id = rc.provider_model_id AND pm.deleted_at IS NULL "
+                + "WHERE pm.provider_id = ? AND rc.deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, providerId);
+            d.bindUuid(statement, 1, providerId);
             try (ResultSet rs = statement.executeQuery()) {
                 List<UUID> aliasIds = new ArrayList<>();
                 while (rs.next()) {
-                    aliasIds.add(rs.getObject("alias_id", UUID.class));
+                    aliasIds.add(d.readUuid(rs, "alias_id"));
                 }
                 return List.copyOf(aliasIds);
             }
@@ -92,30 +97,31 @@ public class JdbcConfigReferenceRepository {
 
     /** 引用明细：id → 名称，用于 ImpactAnalysis.references。 */
     public Map<UUID, String> poolNamesByProvider(Connection connection, UUID providerId) {
-        String sql = "SELECT id, name FROM " + schemaName
-                + ".credential_pool WHERE provider_id = ? AND deleted_at IS NULL ORDER BY name";
+        String sql = "SELECT id, name FROM " + qualify(connection, "credential_pool")
+                + " WHERE provider_id = ? AND deleted_at IS NULL ORDER BY name";
         return nameMap(connection, sql, providerId);
     }
 
     public Map<UUID, String> providerModelNamesByProvider(Connection connection, UUID providerId) {
-        String sql = "SELECT id, display_name FROM " + schemaName
-                + ".provider_model WHERE provider_id = ? AND deleted_at IS NULL ORDER BY display_name";
+        String sql = "SELECT id, display_name FROM " + qualify(connection, "provider_model")
+                + " WHERE provider_id = ? AND deleted_at IS NULL ORDER BY display_name";
         return nameMap(connection, sql, providerId);
     }
 
     public Map<UUID, String> credentialNamesByPool(Connection connection, UUID poolId) {
-        String sql = "SELECT id, name FROM " + schemaName
-                + ".credential WHERE pool_id = ? AND deleted_at IS NULL ORDER BY name";
+        String sql = "SELECT id, name FROM " + qualify(connection, "credential")
+                + " WHERE pool_id = ? AND deleted_at IS NULL ORDER BY name";
         return nameMap(connection, sql, poolId);
     }
 
     private Map<UUID, String> nameMap(Connection connection, String sql, UUID id) {
+        DatabaseDialect d = dialect(connection);
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, id);
+            d.bindUuid(statement, 1, id);
             try (ResultSet rs = statement.executeQuery()) {
                 Map<UUID, String> names = new LinkedHashMap<>();
                 while (rs.next()) {
-                    names.put(rs.getObject(1, UUID.class), rs.getString(2));
+                    names.put(d.readUuid(rs, 1), rs.getString(2));
                 }
                 return java.util.Collections.unmodifiableMap(names);
             }
@@ -126,27 +132,24 @@ public class JdbcConfigReferenceRepository {
 
     /** 批量计数（列表组合引用数，避免 N+1）。 */
     public Map<UUID, Long> countProviderModelsByProviders(Connection connection, List<UUID> providerIds) {
-        String sql = "SELECT provider_id, count(*) FROM " + schemaName
-                + ".provider_model WHERE deleted_at IS NULL AND provider_id = ANY(?) GROUP BY provider_id";
-        return countGrouped(connection, sql, providerIds);
+        return countGrouped(connection, "provider_model", "provider_id", providerIds);
     }
 
     public Map<UUID, Long> countPoolsByProviders(Connection connection, List<UUID> providerIds) {
-        String sql = "SELECT provider_id, count(*) FROM " + schemaName
-                + ".credential_pool WHERE deleted_at IS NULL AND provider_id = ANY(?) GROUP BY provider_id";
-        return countGrouped(connection, sql, providerIds);
+        return countGrouped(connection, "credential_pool", "provider_id", providerIds);
     }
 
     /** 检测命令目标解析：Provider 下的模型（BE-009）。 */
     public Optional<UUID> findModelIdByProviderAndModelId(Connection connection, UUID providerId,
                                                           String externalModelId) {
-        String sql = "SELECT id FROM " + schemaName
-                + ".provider_model WHERE provider_id = ? AND model_id = ? AND deleted_at IS NULL";
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT id FROM " + qualify(connection, "provider_model")
+                + " WHERE provider_id = ? AND model_id = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, providerId);
+            d.bindUuid(statement, 1, providerId);
             statement.setString(2, externalModelId);
             try (ResultSet rs = statement.executeQuery()) {
-                return rs.next() ? Optional.of(rs.getObject(1, UUID.class)) : Optional.empty();
+                return rs.next() ? Optional.of(d.readUuid(rs, 1)) : Optional.empty();
             }
         } catch (SQLException e) {
             throw new IllegalStateException("模型查询失败：" + e.getClass().getSimpleName(), e);
@@ -155,14 +158,13 @@ public class JdbcConfigReferenceRepository {
 
     /** 检测命令目标解析：凭证须属于该 Provider 的池（BE-009）。 */
     public boolean credentialBelongsToProvider(Connection connection, UUID credentialId, UUID providerId) {
-        String sql = """
-                SELECT 1 FROM %s.credential c
-                  JOIN %s.credential_pool p ON p.id = c.pool_id AND p.deleted_at IS NULL
-                 WHERE c.id = ? AND p.provider_id = ? AND c.deleted_at IS NULL
-                """.strip().formatted(schemaName, schemaName);
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT 1 FROM " + qualify(connection, "credential") + " c JOIN "
+                + qualify(connection, "credential_pool") + " p ON p.id = c.pool_id AND p.deleted_at IS NULL "
+                + "WHERE c.id = ? AND p.provider_id = ? AND c.deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, credentialId);
-            statement.setObject(2, providerId);
+            d.bindUuid(statement, 1, credentialId);
+            d.bindUuid(statement, 2, providerId);
             try (ResultSet rs = statement.executeQuery()) {
                 return rs.next();
             }
@@ -173,37 +175,58 @@ public class JdbcConfigReferenceRepository {
 
     /** 池候选引用明细：候选 id → Alias 名称（BE-012 blockers）。 */
     public Map<UUID, String> candidateNamesByPool(Connection connection, UUID poolId) {
-        String sql = """
-                SELECT rc.id, COALESCE(ma.alias, ma.display_name, rc.id::text) AS name
-                  FROM %s.route_candidate rc
-                  LEFT JOIN %s.model_alias ma ON ma.id = rc.alias_id
-                 WHERE rc.credential_pool_id = ? AND rc.deleted_at IS NULL
-                 ORDER BY name
-                """.strip().formatted(schemaName, schemaName);
+        DatabaseDialect d = dialect(connection);
+        String castExpr = (d.databaseType() == DatabaseType.POSTGRESQL) ? "rc.id::text" : "CAST(rc.id AS CHAR)";
+        String sql = "SELECT rc.id, COALESCE(ma.alias, ma.display_name, " + castExpr + ") AS name FROM "
+                + qualify(connection, "route_candidate") + " rc LEFT JOIN "
+                + qualify(connection, "model_alias") + " ma ON ma.id = rc.alias_id "
+                + "WHERE rc.credential_pool_id = ? AND rc.deleted_at IS NULL ORDER BY name";
         return nameMap(connection, sql, poolId);
     }
 
-    private Map<UUID, Long> countGrouped(Connection connection, String sql, List<UUID> ids) {
-        if (ids.isEmpty()) {
+    private Map<UUID, Long> countGrouped(Connection connection, String tableName, String column, List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
             return Map.of();
         }
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setArray(1, connection.createArrayOf("uuid", ids.toArray(UUID[]::new)));
-            try (ResultSet rs = statement.executeQuery()) {
-                Map<UUID, Long> counts = new LinkedHashMap<>();
-                while (rs.next()) {
-                    counts.put(rs.getObject(1, UUID.class), rs.getLong(2));
-                }
-                return java.util.Collections.unmodifiableMap(counts);
+        DatabaseDialect d = dialect(connection);
+        String qualifiedTable = qualify(connection, tableName);
+        if (d.supportsArrayType()) {
+            String sql = "SELECT " + column + ", count(*) FROM " + qualifiedTable
+                    + " WHERE deleted_at IS NULL AND " + column + " = ANY(?) GROUP BY " + column;
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setArray(1, connection.createArrayOf("uuid", ids.toArray(UUID[]::new)));
+                return executeCountGrouped(d, statement);
+            } catch (SQLException e) {
+                throw new IllegalStateException("引用计数失败：" + e.getClass().getSimpleName(), e);
             }
-        } catch (SQLException e) {
-            throw new IllegalStateException("引用计数失败：" + e.getClass().getSimpleName(), e);
+        } else {
+            String sql = "SELECT " + column + ", count(*) FROM " + qualifiedTable
+                    + " WHERE deleted_at IS NULL AND " + column + " IN (" + inPlaceholders(ids.size()) + ") GROUP BY " + column;
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                for (int i = 0; i < ids.size(); i++) {
+                    d.bindUuid(statement, i + 1, ids.get(i));
+                }
+                return executeCountGrouped(d, statement);
+            } catch (SQLException e) {
+                throw new IllegalStateException("引用计数失败：" + e.getClass().getSimpleName(), e);
+            }
+        }
+    }
+
+    private Map<UUID, Long> executeCountGrouped(DatabaseDialect d, PreparedStatement statement) throws SQLException {
+        try (ResultSet rs = statement.executeQuery()) {
+            Map<UUID, Long> counts = new LinkedHashMap<>();
+            while (rs.next()) {
+                counts.put(d.readUuid(rs, 1), rs.getLong(2));
+            }
+            return java.util.Collections.unmodifiableMap(counts);
         }
     }
 
     private long count(Connection connection, String sql, UUID id) {
+        DatabaseDialect d = dialect(connection);
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, id);
+            d.bindUuid(statement, 1, id);
             try (ResultSet rs = statement.executeQuery()) {
                 rs.next();
                 return rs.getLong(1);
@@ -216,3 +239,4 @@ public class JdbcConfigReferenceRepository {
     public record CredentialCounts(long total, long enabledCount) {
     }
 }
+

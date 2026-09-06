@@ -2,11 +2,13 @@ package com.lightai.storage.provider;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.lightai.client.json.ProtocolJson;
+import com.lightai.storage.dialect.AbstractJdbcRepository;
+import com.lightai.storage.dialect.DatabaseDialect;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -16,18 +18,20 @@ import java.util.UUID;
 
 /**
  * provider JDBC 仓储（DATABASE_PLAN §1）。
- * 活行语义 deleted_at IS NULL；软删除仅置 deleted_at；排序表达由服务层白名单生成。
+ * 支持 PostgreSQL 与 MySQL 5.7 / 8.0 双方言自适应。
  */
-public class JdbcProviderRepository {
+public class JdbcProviderRepository extends AbstractJdbcRepository {
 
     private static final String COLUMNS =
             "id, name, type, base_url, proxy_url, connect_timeout_ms, read_timeout_ms, "
                     + "default_headers, enabled, version, created_at, updated_at";
 
-    private final String schemaName;
+    public JdbcProviderRepository(String schemaName, DatabaseDialect explicitDialect) {
+        super(schemaName, explicitDialect);
+    }
 
     public JdbcProviderRepository(String schemaName) {
-        this.schemaName = schemaName;
+        super(schemaName);
     }
 
     public JdbcProviderRepository() {
@@ -35,10 +39,11 @@ public class JdbcProviderRepository {
     }
 
     public void insert(Connection connection, ProviderRecord record) {
-        String sql = "INSERT INTO %s.provider (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, now(), now())"
-                .formatted(qualified(), COLUMNS);
+        DatabaseDialect d = dialect(connection);
+        String sql = "INSERT INTO " + qualify(connection, "provider") + " (" + COLUMNS + ") "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, " + d.jsonPlaceholder() + ", ?, ?, " + d.nowFunction() + ", " + d.nowFunction() + ")";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, record.id());
+            d.bindUuid(statement, 1, record.id());
             statement.setString(2, record.name());
             statement.setString(3, record.type());
             statement.setString(4, record.baseUrl());
@@ -55,11 +60,12 @@ public class JdbcProviderRepository {
     }
 
     public Optional<ProviderRecord> findLiveById(Connection connection, UUID id) {
-        String sql = "SELECT " + COLUMNS + " FROM " + qualified() + " WHERE id = ? AND deleted_at IS NULL";
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "provider") + " WHERE id = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, id);
+            d.bindUuid(statement, 1, id);
             try (ResultSet rs = statement.executeQuery()) {
-                return rs.next() ? Optional.of(mapRow(rs)) : Optional.empty();
+                return rs.next() ? Optional.of(mapRow(rs, d)) : Optional.empty();
             }
         } catch (SQLException e) {
             throw translate("Provider读取失败", e);
@@ -67,12 +73,13 @@ public class JdbcProviderRepository {
     }
 
     public Optional<ProviderRecord> lockLiveById(Connection connection, UUID id) {
-        String sql = "SELECT " + COLUMNS + " FROM " + qualified()
-                + " WHERE id = ? AND deleted_at IS NULL FOR UPDATE";
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "provider")
+                + " WHERE id = ? AND deleted_at IS NULL " + d.forUpdateClause();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, id);
+            d.bindUuid(statement, 1, id);
             try (ResultSet rs = statement.executeQuery()) {
-                return rs.next() ? Optional.of(mapRow(rs)) : Optional.empty();
+                return rs.next() ? Optional.of(mapRow(rs, d)) : Optional.empty();
             }
         } catch (SQLException e) {
             throw translate("Provider锁定失败", e);
@@ -80,7 +87,7 @@ public class JdbcProviderRepository {
     }
 
     public boolean existsByLiveName(Connection connection, String name) {
-        String sql = "SELECT 1 FROM " + qualified() + " WHERE name = ? AND deleted_at IS NULL";
+        String sql = "SELECT 1 FROM " + qualify(connection, "provider") + " WHERE name = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, name);
             try (ResultSet rs = statement.executeQuery()) {
@@ -93,10 +100,11 @@ public class JdbcProviderRepository {
 
     /** 唯一约束兜底检查：排除自身（编辑未改名场景）。 */
     public boolean existsByLiveNameExcept(Connection connection, String name, UUID exceptId) {
-        String sql = "SELECT 1 FROM " + qualified() + " WHERE name = ? AND id <> ? AND deleted_at IS NULL";
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT 1 FROM " + qualify(connection, "provider") + " WHERE name = ? AND id <> ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, name);
-            statement.setObject(2, exceptId);
+            d.bindUuid(statement, 2, exceptId);
             try (ResultSet rs = statement.executeQuery()) {
                 return rs.next();
             }
@@ -107,41 +115,71 @@ public class JdbcProviderRepository {
 
     /** 更新可编辑字段并递增 version；version 校验由草稿写事务先行完成。 */
     public ProviderRecord update(Connection connection, ProviderRecord record) {
-        String sql = """
-                UPDATE %s.provider
-                   SET name = ?, type = ?, base_url = ?, proxy_url = ?, connect_timeout_ms = ?,
-                       read_timeout_ms = ?, default_headers = ?::jsonb, enabled = ?,
-                       version = version + 1, updated_at = now()
-                 WHERE id = ? AND deleted_at IS NULL
-                RETURNING %s
-                """.strip().formatted(qualified(), COLUMNS);
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, record.name());
-            statement.setString(2, record.type());
-            statement.setString(3, record.baseUrl());
-            statement.setString(4, record.proxyUrl());
-            statement.setInt(5, record.connectTimeoutMs());
-            statement.setInt(6, record.readTimeoutMs());
-            statement.setString(7, toJson(record.defaultHeaders()));
-            statement.setBoolean(8, record.enabled());
-            statement.setObject(9, record.id());
-            try (ResultSet rs = statement.executeQuery()) {
-                if (!rs.next()) {
+        DatabaseDialect d = dialect(connection);
+        if (d.supportsReturning()) {
+            String sql = """
+                    UPDATE %s
+                       SET name = ?, type = ?, base_url = ?, proxy_url = ?, connect_timeout_ms = ?,
+                           read_timeout_ms = ?, default_headers = %s, enabled = ?,
+                           version = version + 1, updated_at = %s
+                     WHERE id = ? AND deleted_at IS NULL
+                    RETURNING %s
+                    """.strip().formatted(qualify(connection, "provider"), d.jsonPlaceholder(), d.nowFunction(), COLUMNS);
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setString(1, record.name());
+                statement.setString(2, record.type());
+                statement.setString(3, record.baseUrl());
+                statement.setString(4, record.proxyUrl());
+                statement.setInt(5, record.connectTimeoutMs());
+                statement.setInt(6, record.readTimeoutMs());
+                statement.setString(7, toJson(record.defaultHeaders()));
+                statement.setBoolean(8, record.enabled());
+                d.bindUuid(statement, 9, record.id());
+                try (ResultSet rs = statement.executeQuery()) {
+                    if (!rs.next()) {
+                        throw new IllegalStateException("Provider更新未命中活行");
+                    }
+                    return mapRow(rs, d);
+                }
+            } catch (SQLException e) {
+                throw translate("Provider更新失败", e);
+            }
+        } else {
+            String sql = """
+                    UPDATE %s
+                       SET name = ?, type = ?, base_url = ?, proxy_url = ?, connect_timeout_ms = ?,
+                           read_timeout_ms = ?, default_headers = %s, enabled = ?,
+                           version = version + 1, updated_at = %s
+                     WHERE id = ? AND deleted_at IS NULL
+                    """.strip().formatted(qualify(connection, "provider"), d.jsonPlaceholder(), d.nowFunction());
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setString(1, record.name());
+                statement.setString(2, record.type());
+                statement.setString(3, record.baseUrl());
+                statement.setString(4, record.proxyUrl());
+                statement.setInt(5, record.connectTimeoutMs());
+                statement.setInt(6, record.readTimeoutMs());
+                statement.setString(7, toJson(record.defaultHeaders()));
+                statement.setBoolean(8, record.enabled());
+                d.bindUuid(statement, 9, record.id());
+                int updated = statement.executeUpdate();
+                if (updated == 0) {
                     throw new IllegalStateException("Provider更新未命中活行");
                 }
-                return mapRow(rs);
+                return findLiveById(connection, record.id()).orElseThrow(() -> new IllegalStateException("Provider更新未命中活行"));
+            } catch (SQLException e) {
+                throw translate("Provider更新失败", e);
             }
-        } catch (SQLException e) {
-            throw translate("Provider更新失败", e);
         }
     }
 
     /** 软删除；引用检查由服务层先行完成。 */
     public void markDeleted(Connection connection, UUID id) {
-        String sql = "UPDATE %s.provider SET deleted_at = now(), updated_at = now() "
-                + "WHERE id = ? AND deleted_at IS NULL".formatted(qualified());
+        DatabaseDialect d = dialect(connection);
+        String sql = "UPDATE " + qualify(connection, "provider") + " SET deleted_at = " + d.nowFunction() + ", updated_at = " + d.nowFunction()
+                + " WHERE id = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, id);
+            d.bindUuid(statement, 1, id);
             statement.executeUpdate();
         } catch (SQLException e) {
             throw translate("Provider删除失败", e);
@@ -150,41 +188,60 @@ public class JdbcProviderRepository {
 
     /** 启停：仅改 enabled，version+1；发布后才影响新调用。 */
     public ProviderRecord setEnabled(Connection connection, UUID id, boolean enabled) {
-        String sql = """
-                UPDATE %s.provider
-                   SET enabled = ?, version = version + 1, updated_at = now()
-                 WHERE id = ? AND deleted_at IS NULL
-                RETURNING %s
-                """.strip().formatted(qualified(), COLUMNS);
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setBoolean(1, enabled);
-            statement.setObject(2, id);
-            try (ResultSet rs = statement.executeQuery()) {
-                if (!rs.next()) {
+        DatabaseDialect d = dialect(connection);
+        if (d.supportsReturning()) {
+            String sql = """
+                    UPDATE %s
+                       SET enabled = ?, version = version + 1, updated_at = %s
+                     WHERE id = ? AND deleted_at IS NULL
+                    RETURNING %s
+                    """.strip().formatted(qualify(connection, "provider"), d.nowFunction(), COLUMNS);
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setBoolean(1, enabled);
+                d.bindUuid(statement, 2, id);
+                try (ResultSet rs = statement.executeQuery()) {
+                    if (!rs.next()) {
+                        throw new IllegalStateException("Provider启停未命中活行");
+                    }
+                    return mapRow(rs, d);
+                }
+            } catch (SQLException e) {
+                throw translate("Provider启停失败", e);
+            }
+        } else {
+            String sql = """
+                    UPDATE %s
+                       SET enabled = ?, version = version + 1, updated_at = %s
+                     WHERE id = ? AND deleted_at IS NULL
+                    """.strip().formatted(qualify(connection, "provider"), d.nowFunction());
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setBoolean(1, enabled);
+                d.bindUuid(statement, 2, id);
+                int updated = statement.executeUpdate();
+                if (updated == 0) {
                     throw new IllegalStateException("Provider启停未命中活行");
                 }
-                return mapRow(rs);
+                return findLiveById(connection, id).orElseThrow(() -> new IllegalStateException("Provider启停未命中活行"));
+            } catch (SQLException e) {
+                throw translate("Provider启停失败", e);
             }
-        } catch (SQLException e) {
-            throw translate("Provider启停失败", e);
         }
     }
 
     public List<ProviderRecord> list(Connection connection, ProviderFilter filter,
                                      String sortExpression, int limit, int offset) {
+        DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT ").append(COLUMNS).append(" FROM ")
-                .append(qualified()).append(" WHERE deleted_at IS NULL");
+                .append(qualify(connection, "provider")).append(" WHERE deleted_at IS NULL");
         List<Object> params = new ArrayList<>();
-        appendFilter(sql, filter, params);
-        sql.append(" ORDER BY ").append(sortExpression).append(", id ASC LIMIT ? OFFSET ?");
+        appendFilter(sql, filter, params, connection, d);
+        sql.append(" ORDER BY ").append(sortExpression).append(", id ASC ").append(d.limitOffsetClause(limit, offset));
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
-            bind(statement, params);
-            statement.setInt(params.size() + 1, limit);
-            statement.setInt(params.size() + 2, offset);
+            bindParameters(statement, params, d);
             try (ResultSet rs = statement.executeQuery()) {
                 List<ProviderRecord> records = new ArrayList<>();
                 while (rs.next()) {
-                    records.add(mapRow(rs));
+                    records.add(mapRow(rs, d));
                 }
                 return List.copyOf(records);
             }
@@ -194,12 +251,13 @@ public class JdbcProviderRepository {
     }
 
     public long count(Connection connection, ProviderFilter filter) {
-        StringBuilder sql = new StringBuilder("SELECT count(*) FROM ").append(qualified())
+        DatabaseDialect d = dialect(connection);
+        StringBuilder sql = new StringBuilder("SELECT count(*) FROM ").append(qualify(connection, "provider"))
                 .append(" WHERE deleted_at IS NULL");
         List<Object> params = new ArrayList<>();
-        appendFilter(sql, filter, params);
+        appendFilter(sql, filter, params, connection, d);
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
-            bind(statement, params);
+            bindParameters(statement, params, d);
             try (ResultSet rs = statement.executeQuery()) {
                 rs.next();
                 return rs.getLong(1);
@@ -219,12 +277,12 @@ public class JdbcProviderRepository {
         }
     }
 
-    private void appendFilter(StringBuilder sql, ProviderFilter filter, List<Object> params) {
+    private void appendFilter(StringBuilder sql, ProviderFilter filter, List<Object> params, Connection connection, DatabaseDialect d) {
         if (filter == null) {
             return;
         }
         if (filter.keyword() != null && !filter.keyword().isBlank()) {
-            sql.append(" AND name ILIKE ?");
+            sql.append(" AND ").append(d.ilikeClause("name"));
             params.add("%" + filter.keyword().strip() + "%");
         }
         if (filter.type() != null && !filter.type().isBlank()) {
@@ -236,28 +294,21 @@ public class JdbcProviderRepository {
             params.add(filter.enabled());
         }
         if (filter.connectionStatus() != null && !filter.connectionStatus().isBlank()) {
-            sql.append(" AND EXISTS (SELECT 1 FROM ").append(schemaName)
-                    .append(".object_runtime_state s")
+            sql.append(" AND EXISTS (SELECT 1 FROM ").append(qualify(connection, "object_runtime_state")).append(" s")
                     .append(" WHERE s.entity_type = 'PROVIDER' AND s.entity_id = provider.id")
                     .append(" AND s.connection_status = ?)");
             params.add(filter.connectionStatus().strip());
         }
         if (filter.draftChanged() != null) {
             sql.append(" AND ").append(filter.draftChanged() ? "" : "NOT ").append(
-                    "EXISTS (SELECT 1 FROM ").append(schemaName).append(".draft_change dc")
+                    "EXISTS (SELECT 1 FROM ").append(qualify(connection, "draft_change")).append(" dc")
                     .append(" WHERE dc.entity_type = 'PROVIDER' AND dc.entity_id = provider.id)");
         }
     }
 
-    private static void bind(PreparedStatement statement, List<Object> params) throws SQLException {
-        for (int i = 0; i < params.size(); i++) {
-            statement.setObject(i + 1, params.get(i));
-        }
-    }
-
-    private ProviderRecord mapRow(ResultSet rs) throws SQLException {
+    private ProviderRecord mapRow(ResultSet rs, DatabaseDialect d) throws SQLException {
         return new ProviderRecord(
-                rs.getObject("id", UUID.class),
+                d.readUuid(rs, "id"),
                 rs.getString("name"),
                 rs.getString("type"),
                 rs.getString("base_url"),
@@ -267,8 +318,8 @@ public class JdbcProviderRepository {
                 fromJson(rs.getString("default_headers")),
                 rs.getBoolean("enabled"),
                 rs.getLong("version"),
-                rs.getObject("created_at", OffsetDateTime.class),
-                rs.getObject("updated_at", OffsetDateTime.class));
+                d.readOffsetDateTime(rs, "created_at"),
+                d.readOffsetDateTime(rs, "updated_at"));
     }
 
     private static String toJson(Map<String, String> headers) {
@@ -288,17 +339,5 @@ public class JdbcProviderRepository {
         } catch (Exception e) {
             throw new IllegalStateException("default_headers 解析失败", e);
         }
-    }
-
-    private String qualified() {
-        return schemaName + ".provider";
-    }
-
-    private static IllegalStateException translate(String message, SQLException e) {
-        String state = e.getSQLState() == null ? "" : e.getSQLState();
-        if ("23505".equals(state)) {
-            return new IllegalStateException("UNIQUE_VIOLATION: " + message, e);
-        }
-        return new IllegalStateException(message + "：" + e.getClass().getSimpleName(), e);
     }
 }
