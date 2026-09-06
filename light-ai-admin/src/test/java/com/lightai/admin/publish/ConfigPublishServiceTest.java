@@ -136,7 +136,7 @@ class ConfigPublishServiceTest {
     }
 
     @Test
-    void expiredOrUsedValidationIsRejected() {
+    void expiredValidationIsRejected() {
         ConfigValidationRecord validation = seedValidation();
         validations.lastRecord = shiftExpiry(validation, OffsetDateTime.now(CLOCK).minusSeconds(1));
 
@@ -145,15 +145,23 @@ class ConfigPublishServiceTest {
                 .isInstanceOf(LightAiException.class)
                 .extracting(e -> ((LightAiException) e).code())
                 .isEqualTo(ErrorCode.CONFIG_VALIDATION_EXPIRED);
-
-        ConfigValidationRecord reusable = seedValidation();
-        validations.markUsed(null, reusable.validationId(), UUID.randomUUID());
-        assertThatThrownBy(() -> service.publish("req-2", "admin", "203.0.113.*",
-                new ConfigPublishCommand(reusable.validationId().toString(), 5, List.of(), null)))
-                .isInstanceOf(LightAiException.class)
-                .extracting(e -> ((LightAiException) e).code())
-                .isEqualTo(ErrorCode.CONFIG_VALIDATION_EXPIRED);
         assertThat(publishes.records).isEmpty();
+        assertFailureAudit("req-1", "CONFIG_VALIDATION_EXPIRED");
+    }
+
+    @Test
+    void duplicatePublishWithSameValidationReturnsExistingRecord() {
+        ConfigValidationRecord validation = seedValidation();
+        PublishRecordDetailView first = service.publish("req-1", "admin", "203.0.113.*",
+                new ConfigPublishCommand(validation.validationId().toString(), 5, List.of(), null));
+
+        PublishRecordDetailView second = service.publish("req-2", "admin", "203.0.113.*",
+                new ConfigPublishCommand(validation.validationId().toString(), 5, List.of(), null));
+
+        // 同 validation 重复提交幂等返回既有记录，不重建（4.5.6.1）
+        assertThat(second.id()).isEqualTo(first.id());
+        assertThat(publishes.records).hasSize(1);
+        assertThat(snapshots.snapshots).hasSize(1);
     }
 
     @Test
