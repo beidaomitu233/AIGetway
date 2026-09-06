@@ -361,6 +361,8 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 > 领取锁定：后端执行模型（beidao，会话B）2026-09-06 领取 BE-P05 全部 6 项（BE-025—BE-030），分支 feature/backend-protocol（基于 dev 2c3fdf9，独立 worktree C:\AIgetway\AIGetway-models），执行期间请勿重复领取或并行修改同包任务；BE-P04（feature/backend-routing-governance）已由 H-007 会话并行领取，本包通过 RoutingPort/CapacityPort/TraceStore 端口解耦，其实现由 BE-P04 交付后接线；完成记录与测试证据见 COMMUNICATION.md。
 
+> 交付说明（2026-09-06）：BE-025—BE-030 已实现并通过 mvn test（全工程 162 例，本包新增 15 例：ChatPipeline 同步/流式/取消 10 例、UsageSettlement 3 例、SseEncoder 2 例）加上四 Adapter 线协议夹具（provider-common 5、anthropic 5、gemini 5）。遗留：真实 Provider HTTP 联调依赖部署方测试凭证（不使用真实密钥的夹具已覆盖请求构建/响应解析/SSE/错误分类）；/v1 HTTP 绑定（light-ai-server）端到端验证随 BE-P09/BE-055 执行；RoutingPort/CapacityPort/TraceStore 的生产实现由 BE-P04/BE-P06 交付后接线。
+
 - [ ] 任务编号：BE-025
   模块：协议与Provider；目标：Provider SPI及受控参数。
   接口/服务：ProviderAdapter各方法。
@@ -424,7 +426,9 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P06 调用观测（6项）
 
-- [ ] 任务编号：BE-031
+> 领取锁定：后端执行模型（beidao）2026-09-06 领取 BE-P06 全部 6 项（BE-031—BE-036），分支 feature/backend-observability（基于 dev d943afd，独立 worktree D:\AIBuilder\AIGetway-observability），执行期间请勿重复领取或并行修改同包任务；BE-P05（feature/backend-protocol）并行执行中，本包不修改 /v1 管道与 Adapter 文件，TraceFinalizer 以服务+事务边界交付，/v1 管道终端化接线在 BE-P05 合入后协调；完成记录与测试证据见 COMMUNICATION.md H-019。
+
+- [x] 任务编号：BE-031
   模块：调用观测；目标：Trace列表筛选导出查询底座。
   接口/服务：GET /admin/traces。
   请求参数与响应字段：TraceListQuery→PageResult；类型、必填及错误HTTP见协议字典和附录。
@@ -434,7 +438,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：越权精确ID空集，final路径过滤与Attempt类型exists正确。
   测试要求：组合查询、边界时间、执行计划；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-032
+- [x] 任务编号：BE-032
   模块：调用观测；目标：Trace详情和时间线。
   接口/服务：GET /admin/traces/{traceId}。
   请求参数与响应字段：traceId/include_diagnostics→TraceDetail；类型、必填及错误HTTP见协议字典和附录。
@@ -444,7 +448,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：attempt数一致，无权诊断字段不序列化。
   测试要求：同时间序、无Attempt、过期样本；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-033
+- [x] 任务编号：BE-033
   模块：调用观测；目标：最终化与幂等聚合。
   接口/服务：TraceFinalizer/UsageAggregator。
   请求参数与响应字段：终态Trace+Attempt→唯一event→HOUR/DAY；类型、必填及错误HTTP见协议字典和附录。
@@ -454,7 +458,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：同event重放零增量；失败Provider仍有Token、无请求数。
   测试要求：重放/接管/双粒度回滚/路径归因；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-034
+- [x] 任务编号：BE-034
   模块：调用观测；目标：概览摘要趋势异常。
   接口/服务：GET /admin/overview/filters、summary、trends、exceptions。
   请求参数与响应字段：公共筛选→摘要/连续桶/异常；类型、必填及错误HTTP见协议字典和附录。
@@ -464,7 +468,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：请求数与同范围Trace一致，开发无Credential异常。
   测试要求：终态混合、空桶、多币种、四角色；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-035
+- [x] 任务编号：BE-035
   模块：调用观测；目标：Usage统一查询。
   接口/服务：GET /admin/usage/summary、trends、groups。
   请求参数与响应字段：UsageQuery→三类Result/fingerprint；类型、必填及错误HTTP见协议字典和附录。
@@ -474,7 +478,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：三个结果同fingerprint，不能平均桶P95。
   测试要求：多维复算、时区/DST、排序；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-036
+- [x] 任务编号：BE-036
   模块：调用观测；目标：安全流式导出。
   接口/服务：GET /admin/traces/export、/admin/usage/export。
   请求参数与响应字段：同筛选→CSV；类型、必填及错误HTTP见协议字典和附录。
@@ -487,7 +491,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 ## BE-P07 草稿发布（6项）
 
-> 领取锁定：后端执行模型（beidao）2026-09-06 领取 BE-P07 全部 6 项（BE-037—BE-042），分支 feature/backend-config-publish（基于 dev d943afd，BE-P01—BE-P04 已合入），执行期间请勿重复领取或并行修改同包任务；完成记录与测试证据见 COMMUNICATION.md H-019。
+> 领取锁定：后端执行模型（beidao）2026-09-06 领取 BE-P07 全部 6 项（BE-037—BE-042），分支 feature/backend-config-publish（git worktree D:\AIBuilder\AIGetway-backend，基于 dev 4f23ed7；该分支早前基于 dev d943afd 的未推送领取与半成品由本会话接续并合入最新 dev），执行期间请勿重复领取或并行修改同包任务；BE-P05/P08 已合入 dev；完成记录与测试证据见 COMMUNICATION.md H-022。
 
 - [ ] 任务编号：BE-037
   模块：草稿发布；目标：草稿状态与差异查询。
@@ -551,6 +555,10 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 
 ## BE-P08 运行与安全管理（6项）
+
+> 领取锁定：后端执行模型（beidao，会话B）2026-09-06 领取 BE-P08 全部 6 项（BE-043—BE-048），分支 feature/backend-security（基于 dev 0c46813，独立 worktree C:\AIGetway\AIGetway-models），执行期间请勿重复领取或并行修改同包任务；其 BE-P06 领取已释放改领本包（dev 续号 H-020/H-021，见 COMMUNICATION.md）；完成记录与测试证据见 COMMUNICATION.md。
+
+> 交付说明（2026-09-06）：BE-043—BE-048 已实现并通过 mvn test（全工程 175 例，本包新增 13 例：AccessTokenService 2 例、AccessCredentialService 6 例等）。遗留：真实 PostgreSQL 约束与同事务原子性证据待 DB-P05 联调；/v1 鉴权端到端（两实例轮换、IP/IPv6 代理链）随部署验收执行；清理任务 DeletionPort 生产实现待 BE-P48 数据迁移落地。
 
 - [ ] 任务编号：BE-043
   模块：运行与安全管理；目标：Runtime参数及保留影响。

@@ -16,7 +16,13 @@
     <module>light-ai-spi</module>
     <module>light-ai-storage-jdbc</module>
     <module>light-ai-runtime</module>
+    <module>light-ai-provider-common</module>
+    <module>light-ai-provider-openai</module>
+    <module>light-ai-provider-anthropic</module>
+    <module>light-ai-provider-gemini</module>
+    <module>light-ai-provider-deepseek</module>
     <module>light-ai-admin</module>
+    <module>light-ai-server</module>
   </modules>
 
   <properties>
@@ -59,6 +65,41 @@
       <dependency>
         <groupId>com.lightai</groupId>
         <artifactId>light-ai-admin</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.lightai</groupId>
+        <artifactId>light-ai-runtime</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.lightai</groupId>
+        <artifactId>light-ai-provider-common</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.lightai</groupId>
+        <artifactId>light-ai-provider-openai</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.lightai</groupId>
+        <artifactId>light-ai-provider-anthropic</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.lightai</groupId>
+        <artifactId>light-ai-provider-gemini</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.lightai</groupId>
+        <artifactId>light-ai-provider-deepseek</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.lightai</groupId>
+        <artifactId>light-ai-server</artifactId>
         <version>${project.version}</version>
       </dependency>
     </dependencies>

@@ -26,6 +26,7 @@ import com.lightai.storage.schema.SchemaMigrator;
 import java.time.Clock;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.SmartLifecycle;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -158,16 +159,14 @@ public class LightAiAdminAutoConfiguration {
 
         @Bean
         @ConditionalOnMissingBean
-        public com.lightai.storage.draft.JdbcDraftStateRepository lightAiDraftStateRepository(
-                StorageProperties properties) {
-            return new com.lightai.storage.draft.JdbcDraftStateRepository(properties.getSchemaName());
+        public DraftStateRepository lightAiDraftStateRepository(StorageProperties properties) {
+            return new JdbcDraftStateRepository(properties.getSchemaName());
         }
 
         @Bean
         @ConditionalOnMissingBean
-        public com.lightai.storage.draft.JdbcDraftChangeRepository lightAiDraftChangeRepository(
-                StorageProperties properties) {
-            return new com.lightai.storage.draft.JdbcDraftChangeRepository(properties.getSchemaName());
+        public DraftChangeRepository lightAiDraftChangeRepository(StorageProperties properties) {
+            return new JdbcDraftChangeRepository(properties.getSchemaName());
         }
 
         @Bean
@@ -567,6 +566,164 @@ public class LightAiAdminAutoConfiguration {
                 com.lightai.admin.governance.CircuitManagementService circuitService) {
             return new com.lightai.admin.governance.GovernanceController(governanceService,
                     circuitService);
+        }
+
+        // ---- 调用观测（BE-P06：BE-031~036）----
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.trace.JdbcTraceRepository lightAiTraceRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.trace.JdbcTraceRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.trace.JdbcTraceDetailRepository lightAiTraceDetailRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.trace.JdbcTraceDetailRepository(
+                    properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.trace.JdbcUsageAggregateRepository lightAiUsageAggregateRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.trace.JdbcUsageAggregateRepository(
+                    properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.trace.JdbcUsageAggregationEventRepository
+                lightAiUsageAggregationEventRepository(StorageProperties properties) {
+            return new com.lightai.storage.trace.JdbcUsageAggregationEventRepository(
+                    properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.trace.JdbcOverviewStatsRepository lightAiOverviewStatsRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.trace.JdbcOverviewStatsRepository(
+                    properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.trace.JdbcObservationConfigReader
+                lightAiObservationConfigReader(StorageProperties properties) {
+            return new com.lightai.storage.trace.JdbcObservationConfigReader(
+                    properties.getSchemaName());
+        }
+
+        @Bean
+        public com.lightai.admin.trace.TraceService lightAiTraceService(DataSource dataSource,
+                com.lightai.storage.trace.JdbcTraceRepository traceRepository, Clock clock) {
+            return new com.lightai.admin.trace.TraceService(dataSource, traceRepository,
+                    new com.lightai.admin.query.PageResultFactory(clock), clock);
+        }
+
+        @Bean
+        public com.lightai.admin.trace.TraceDetailService lightAiTraceDetailService(
+                DataSource dataSource,
+                com.lightai.storage.trace.JdbcTraceRepository traceRepository,
+                com.lightai.storage.trace.JdbcTraceDetailRepository traceDetailRepository,
+                com.lightai.storage.trace.JdbcObservationConfigReader observationConfigReader,
+                com.lightai.admin.audit.AuditService auditService, Clock clock) {
+            return new com.lightai.admin.trace.TraceDetailService(dataSource, traceRepository,
+                    traceDetailRepository, observationConfigReader, auditService, clock);
+        }
+
+        @Bean
+        public com.lightai.admin.trace.TraceExportService lightAiTraceExportService(
+                DataSource dataSource,
+                com.lightai.storage.trace.JdbcTraceRepository traceRepository) {
+            return new com.lightai.admin.trace.TraceExportService(dataSource, traceRepository);
+        }
+
+        @Bean
+        public com.lightai.admin.trace.TraceFinalizer lightAiTraceFinalizer(DataSource dataSource,
+                com.lightai.storage.trace.JdbcTraceRepository traceRepository,
+                com.lightai.storage.trace.JdbcUsageAggregationEventRepository eventRepository,
+                PlatformTransactionManager transactionManager) {
+            return new com.lightai.admin.trace.TraceFinalizer(dataSource, traceRepository,
+                    eventRepository, transactionManager);
+        }
+
+        @Bean
+        public com.lightai.admin.usage.UsageAggregator lightAiUsageAggregator(
+                DataSource dataSource,
+                com.lightai.storage.trace.JdbcTraceRepository traceRepository,
+                com.lightai.storage.trace.JdbcUsageAggregateRepository aggregateRepository,
+                com.lightai.storage.trace.JdbcUsageAggregationEventRepository eventRepository,
+                com.lightai.storage.trace.JdbcObservationConfigReader observationConfigReader,
+                PlatformTransactionManager transactionManager, Clock clock) {
+            return new com.lightai.admin.usage.UsageAggregator(dataSource, traceRepository,
+                    aggregateRepository, eventRepository, observationConfigReader,
+                    transactionManager, clock);
+        }
+
+        @Bean
+        public com.lightai.admin.usage.UsageService lightAiUsageService(DataSource dataSource,
+                com.lightai.storage.trace.JdbcUsageAggregateRepository aggregateRepository,
+                com.lightai.storage.trace.JdbcObservationConfigReader observationConfigReader,
+                Clock clock) {
+            return new com.lightai.admin.usage.UsageService(dataSource, aggregateRepository,
+                    observationConfigReader, clock);
+        }
+
+        @Bean
+        public com.lightai.admin.usage.UsageExportService lightAiUsageExportService(
+                DataSource dataSource,
+                com.lightai.storage.trace.JdbcUsageAggregateRepository aggregateRepository,
+                com.lightai.admin.usage.UsageService usageService) {
+            return new com.lightai.admin.usage.UsageExportService(dataSource, aggregateRepository,
+                    usageService);
+        }
+
+        @Bean
+        public com.lightai.admin.usage.UsageController lightAiUsageController(
+                com.lightai.admin.usage.UsageService usageService,
+                com.lightai.admin.usage.UsageExportService usageExportService) {
+            return new com.lightai.admin.usage.UsageController(usageService, usageExportService);
+        }
+
+        @Bean
+        public com.lightai.admin.overview.OverviewService lightAiOverviewService(
+                DataSource dataSource,
+                com.lightai.storage.trace.JdbcOverviewStatsRepository overviewStatsRepository,
+                com.lightai.storage.trace.JdbcObservationConfigReader observationConfigReader,
+                Clock clock) {
+            return new com.lightai.admin.overview.OverviewService(dataSource,
+                    overviewStatsRepository, observationConfigReader, clock);
+        }
+
+        @Bean
+        public com.lightai.admin.overview.OverviewController lightAiOverviewController(
+                com.lightai.admin.overview.OverviewService overviewService) {
+            return new com.lightai.admin.overview.OverviewController(overviewService);
+        }
+
+        @Bean
+        public com.lightai.admin.trace.TraceObservationController lightAiTraceObservationController(
+                com.lightai.admin.trace.TraceService traceService,
+                com.lightai.admin.trace.TraceDetailService traceDetailService,
+                com.lightai.admin.trace.TraceExportService traceExportService) {
+            return new com.lightai.admin.trace.TraceObservationController(traceService,
+                    traceDetailService, traceExportService);
+        }
+
+        /**
+         * 聚合事件轮询（BE-033）：单线程定时消费 Outbox 事件，
+         * 允许两个 dashboard_refresh_seconds 内的聚合延迟；宿主可显式关闭。
+         */
+        @Bean
+        @ConditionalOnProperty(name = "light-ai.admin.usage-aggregation-enabled",
+                havingValue = "true", matchIfMissing = true)
+        public SmartLifecycle lightAiUsageAggregationPoller(
+                com.lightai.admin.usage.UsageAggregator aggregator) {
+            return new com.lightai.admin.usage.UsageAggregationPoller(aggregator);
         }
 
         // ---------- 草稿发布（BE-P07） ----------

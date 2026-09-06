@@ -12,7 +12,7 @@
 
   <artifactId>light-ai-runtime</artifactId>
   <name>Light AI Runtime</name>
-  <description>运行内核：路由、凭证选择、容量、恢复与熔断；不依赖 Spring 与管理数据库</description>
+  <description>运行内核：路由、凭证选择、容量、恢复、熔断与统一调用管线、Usage 结算、取消协调；不依赖 Spring 与管理数据库</description>
 
   <dependencies>
     <dependency>
