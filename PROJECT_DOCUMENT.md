@@ -27,7 +27,7 @@
 | light-ai-storage-jdbc/src/main/resources/db/migration | 版本化迁移与最小初始数据，独占数据库模型修改范围 | 数据库 |
 | docs/contracts | 执行阶段维护 OpenAPI 3.1、DTO 字典和协议样例；不得独立变更字段语义 | 后端主责，前端/数据库审查 |
 
-默认技术选择：Vue 3 + TypeScript；Java 17 + Maven 多模块；服务入口使用 Spring Boot 3.5 兼容基线；JDBC + PostgreSQL，Redis 原子共享状态。具体补丁版本在实施任务中锁定，不用动态版本。普通 Java Local Runtime 无数据库依赖；Standalone Client 不执行本地治理；Embedded 单实例允许进程内原子状态，集群必须共享状态。数据库方言覆盖范围为待确认项 C-002，禁止自行增加多数据库兼容层。
+默认技术选择：Vue 3 + TypeScript；Java 17 + Maven 多模块；服务入口使用 Spring Boot 3.5 兼容基线；JDBC 持久化采用数据库方言抽象（DatabaseDialect），支持 PostgreSQL、MySQL 8.0 与 MySQL 5.7 自由切换；Starter 支持 dynamic-datasource 多数据源动态路由与运行时方言解析；Redis 原子共享状态。具体补丁版本在实施任务中锁定，不用动态版本。普通 Java Local Runtime 无数据库依赖；Standalone Client 不执行本地治理；Embedded 单实例允许进程内原子状态，集群必须共享状态。
 
 ## 3. 接口与字段协作总则
 
@@ -49,6 +49,7 @@ PUT 提交完整可编辑对象与 version；不可变字段不出现在可编�
 
 | 编号 | 采用口径 | 依据/解决范围 |
 |---|---|---|
+| C-002 | 采用 DatabaseDialect SPI 支持 PostgreSQL、MySQL 8.0 与 MySQL 5.7 自由切换，Starter 支持 dynamic-datasource 动态数据源路由 | 用户明确要求适配多数据库与 dynamic-datasource，仓储层消除 CTE/UPDATE-FROM/SKIP LOCKED/FILTER 等语法差异，全量测试保证兼容性 |
 | C-003 | source_mode 固定 LOCAL_RUNTIME、EMBEDDED、STANDALONE_SERVER；管理测试增加 invocation_source=ADMIN_TEST，普通调用 APPLICATION | 统一 2.6、4.4、4.6 的 SDK/LOCAL_RUNTIME 等歧义，不混入部署模式 |
 | C-004 | 写入及筛选字段均为 overflow_strategy | 4.3.1 表单；修正列表中的 overflow_action |
 | C-005 | 模型导入逐对象事务并返回 created/skipped/failed；每个成功对象与审计原子 | 采用 4.2.9.5，避免一个错误对象撤销所有成功导入 |

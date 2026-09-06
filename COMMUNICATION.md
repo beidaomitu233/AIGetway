@@ -13,7 +13,7 @@
 | 序号 | 提出方 | 问题类型 | 功能问题描述 | 优化说明 | 涉及前端文件/模块 | 涉及后端文件/模块 | 涉及数据库表 | 状态 | 处理结论 |
 |---|---|---|---|---|---|---|---|---|---|
 | C-001 | 架构规划 | 身份接入 | Standalone管理身份提供方和登录入口未指定，PRD没有账户密码实体 | 采用部署认证适配/AuthContext与默认拒绝匿名；测试用四角色夹具 | admin-ui/auth、FE-002 | admin/AuthContext、BE-002 | 不新增用户/角色密码表 | 待确认 | 产品/部署负责人指定身份来源、会话与退出入口；不阻断其他模块规划 |
-| C-002 | 架构规划 | 技术选型 | 无代码基线；PRD未指定数据库方言和构建工具 | 默认PostgreSQL独立schema、JDBC、Redis单主高可用、Maven、Vue3/TS；Java17与Boot矩阵遵循PRD | FE-001 | BE-001/003/055 | 全部39表 | 待确认 | 确认宿主数据库与部署版本后锁定依赖；不默认建设多库兼容层 |
+| C-002 | 架构规划 | 技术选型 | 无代码基线；PRD未指定数据库方言和构建工具 | 用户明确要求适配多数据源动态切换（dynamic-datasource）并兼容 PostgreSQL、MySQL 8.0 与 MySQL 5.7 | FE-001 | BE-001/003/055、light-ai-storage-jdbc 全部 36 个仓储 | 全部39表 | 已完成 | 确认并落地：引入 DatabaseDialect SPI（PostgresDialect、MySqlDialect）与 DialectResolver，重构全部 36 个 JDBC 仓储类统一继承 AbstractJdbcRepository，消除 CTE/UPDATE-FROM/SKIP LOCKED/FILTER 等语法差异；Starter 引入 dynamic-datasource-spring-boot3-starter 并编写 DynamicDataSourceRoutingTest 验证动态切换；全工程 13 模块 335 例测试全通过 |
 | C-003 | 架构规划 | 枚举冲突 | PRD source_mode混用SDK、LOCAL_RUNTIME、STANDALONE等，管理测试来源混在部署形态 | 固定LOCAL_RUNTIME/EMBEDDED/STANDALONE_SERVER，另设invocation_source | traces/overview、FE-025 | protocol/trace、BE-001/027 | trace | 待确认 | 全套规划采用分离枚举，产品确认后固定OpenAPI |
 | C-004 | 架构规划 | 字段冲突 | 限流列表overflow_action与表单overflow_strategy不一致 | API查询和写入均用overflow_strategy | limit-policies、FE-019 | BE-021 | limit_policy | 待确认 | 不提供两个同义参数；校验夹具采用strategy |
 | C-005 | 架构规划 | 事务冲突 | 模型导入4.2.5.2整批事务与4.2.9.5逐对象事务不一致 | 采用详细接口规则的逐对象事务，每对象审计原子，返回created/skipped/failed | model-import、FE-016 | BE-015 | provider_model、audit_log | 待确认 | 单项失败保留其余成功，重复导入skipped |

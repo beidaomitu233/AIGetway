@@ -4,7 +4,7 @@
 
 Java 17字节码、Maven模块，验证Java17/21。Server以Boot3.5兼容基线实施；Starter必须验证PRD指定Boot3.3/3.4/3.5。公共client/spi/runtime不依赖Spring。DTO不可变，Java Flow公开流接口，传输复用JDK HttpClient连接池，不能每次请求新建客户端。[JDK17 HttpClient](https://docs.oracle.com/en/java/javase/17/docs/api/java.net.http/java/net/http/HttpClient.html) 提供同步/异步请求能力；背压及取消语义由本项目契约验证。
 
-持久化使用JDBC、数据库事务和显式查询；Standalone默认PostgreSQL；迁移用版本化工具（建议Flyway，执行时锁定兼容版）。集群Redis使用原子脚本，连接由宿主或Server配置；脚本同时校验多层计数，不能先读后分别加。[Redis原子脚本说明](https://redis.io/docs/latest/develop/programmability/eval-intro/) 是原子状态操作的技术依据。Redis Cluster若采用分片，相关键必须同slot；V1先使用单主高可用Redis容量命名空间，不新增跨slot分布式事务。
+持久化使用 JDBC、数据库事务和显式查询；通过 DatabaseDialect SPI（PostgresDialect、MySqlDialect）与 DialectResolver 支持 PostgreSQL、MySQL 8.0 以及 MySQL 5.7 自由切换与连接级自适应；Starter 引入 dynamic-datasource-spring-boot3-starter 支持多数据源动态路由与运行时方言解析；严格保证 MySQL 5.7 语法兼容（消除 CTE WITH、UPDATE...FROM、SKIP LOCKED、FILTER (WHERE...)、原生数组与 ?::jsonb，使用派生子查询、ANSI CASE WHEN、LIMIT...OFFSET、ON DUPLICATE KEY UPDATE 等）；迁移用版本化工具（建议 Flyway，执行时锁定兼容版）。集群 Redis 使用原子脚本，连接由宿主或 Server 配置；脚本同时校验多层计数，不能先读后分别加。[Redis原子脚本说明](https://redis.io/docs/latest/develop/programmability/eval-intro/) 是原子状态操作的技术依据。Redis Cluster 若采用分片，相关键必须同 slot；V1 先使用单主高可用 Redis 容量命名空间，不新增跨 slot 分布式事务。
 
 Boot使用独立light-ai命名空间、AutoConfiguration.imports、ConditionalOnMissingBean。[Spring官方自动装配](https://docs.spring.io/spring-boot/reference/features/developing-auto-configuration.html) 作为实现参考。测试采用JUnit5、可控时钟/随机源、HTTP Stub和真实数据库/Redis集成环境；版本由执行包锁定。四个Adapter通过相同契约套件，不依赖线上密钥执行日常测试。
 
@@ -122,11 +122,11 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   模块：基础契约；目标：仓储与迁移装配契约。
   接口/服务：启动schema-mode。
   请求参数与响应字段：DataSource/schema version→仓储就绪或结构错误；类型、必填及错误HTTP见协议字典和附录。
-  业务流程：执行VALIDATE/MIGRATE边界，数据库迁移由DB方提供。
+  业务流程：执行VALIDATE/MIGRATE边界，引入DatabaseDialect SPI支持PostgreSQL、MySQL 8.0与MySQL 5.7方言自适应，Starter支持dynamic-datasource多数据源路由，数据库迁移由DB方提供。
   异常处理：缺表/错误版本阻止就绪。
   数据表与协作依赖：全部表；DB-P01。
-  验收标准：本地SDK与远程client无数据库连接。
-  测试要求：缺表、已有schema、迁移锁；业务事务增加失败回滚断言，读取增加权限断言。
+  验收标准：本地SDK与远程client无数据库连接；仓储统一继承AbstractJdbcRepository实现连接级方言自适应。
+  测试要求：缺表、已有schema、迁移锁、MySQL 5.7/8.0/PostgreSQL方言测试；业务事务增加失败回滚断言，读取增加权限断言。
 
 - [x] 任务编号：BE-004
   模块：基础契约；目标：列表查询与字段映射。

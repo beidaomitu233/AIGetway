@@ -2,9 +2,9 @@
 
 ## 1. 选型、所有权与命名
 
-默认PostgreSQL，独立schema `light_ai`；表名snake_case，实体ID为UUID，API作为不透明字符串。宿主复用DataSource时产品只访问自身schema。当前无既有数据库；本文件为物理设计，不包含DDL、迁移或生产脚本。执行方确认C-002后编写迁移，其他模型不同时修改迁移目录。
+支持 PostgreSQL（默认，独立 schema `light_ai`）与 MySQL 8.0 / MySQL 5.7 自由切换；仓储层采用 DatabaseDialect 抹平方言差异，Starter 集成 dynamic-datasource-spring-boot3-starter 支持动态多数据源路由。表名 snake_case，实体 ID 为 UUID（PostgreSQL 下为 uuid 原生类型，MySQL 下为 varchar(36) 存储），API 作为不透明字符串。宿主复用 DataSource 时按方言自动适配表名修饰（PostgreSQL 为 schema.table，MySQL 为 `table` 或 `schema`.`table`）。当前无既有数据库；本文件为物理设计，不包含 DDL、迁移或生产脚本。
 
-数据库支持主键、检查、唯一与外键约束，涉及软删除的唯一性采用部分唯一索引；详细能力参见 [PostgreSQL约束文档](https://www.postgresql.org/docs/current/ddl-constraints.html)。V1不主动构建MySQL等兼容层。
+数据库支持主键、检查、唯一与外键约束：在 PostgreSQL 下涉及软删除的唯一性采用部分唯一索引（WHERE deleted_at IS NULL）；在 MySQL 5.7 / 8.0 下因不支持部分索引，唯一约束通过应用层写入校验结合逻辑约束保证，所有查询均显式携带 `deleted_at IS NULL` 过滤。SQL 语法全面适配 MySQL 5.7（消除 CTE、消除 UPDATE...FROM、消除 SKIP LOCKED、消除 FILTER (WHERE...)、消除原生数组，使用派生子查询、ANSI CASE WHEN、LIMIT...OFFSET、ON DUPLICATE KEY UPDATE 等）。
 
 统一规则：timestamp采用timestamptz，存UTC、API ISO8601；数据库事务使用同一now；id由应用生成UUID；version用bigint从1递增。数量bigint非负，限额null为不限，0不合法；价格numeric(20,8)，金额numeric(30,8)，比例numeric(9,4)，币种char(3)。接口bigint/decimal字符串规则见总文档。所有字段未列默认时不得靠隐式业务默认补齐。
 
