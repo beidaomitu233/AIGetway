@@ -90,7 +90,8 @@ public final class JdbcConfigSnapshotRepository implements ConfigSnapshotReposit
                 + "SET status = 'ACTIVE', activated_at = now(), updated_at = now() "
                 + "WHERE snapshot_no = ? AND status = 'CREATED'";
         String pointer = "UPDATE " + schemaName + ".runtime_config "
-                + "SET current_snapshot_no = ?, updated_at = now() WHERE singleton_key = 1";
+                + "SET current_snapshot_no = ?, published_at = now(), updated_at = now() "
+                + "WHERE singleton_key = 1";
         try (PreparedStatement s1 = connection.prepareStatement(supersede);
              PreparedStatement s2 = connection.prepareStatement(activate);
              PreparedStatement s3 = connection.prepareStatement(pointer)) {
