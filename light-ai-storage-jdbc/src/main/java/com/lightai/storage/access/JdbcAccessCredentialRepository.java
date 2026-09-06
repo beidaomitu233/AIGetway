@@ -1,0 +1,304 @@
+package com.lightai.storage.access;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+/**
+ * access_credential / access_credential_alias JDBC 实现（DATABASE_PLAN §36/§37）。
+ * U(token_hash) 供业务鉴权；alias 白名单随实体同事务维护。
+ */
+public final class JdbcAccessCredentialRepository implements AccessCredentialRepository {
+
+    private static final String COLUMNS = """
+            id, name, application, token_prefix, token_hash, token_hash_version, masked_value,
+            ip_allowlist, expires_at, enabled, rotation_generation, issued_at, rotated_at,
+            last_used_at, last_used_ip_masked, version, created_at, updated_at, deleted_at""";
+
+    private final String schemaName;
+
+    public JdbcAccessCredentialRepository(String schemaName) {
+        this.schemaName = schemaName;
+    }
+
+    public JdbcAccessCredentialRepository() {
+        this(com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME);
+    }
+
+    @Override
+    public Optional<AccessCredentialRecord> find(Connection connection, UUID id) {
+        String sql = "SELECT " + COLUMNS + " FROM " + qualified() + " WHERE id = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, id);
+            try (ResultSet rs = statement.executeQuery()) {
+                return rs.next() ? Optional.of(mapRow(rs)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("access_credential 读取失败：" + e.getClass().getSimpleName(), e);
+        }
+    }
+
+    @Override
+    public Optional<AccessCredentialRecord> findByTokenHash(Connection connection, byte[] tokenHash) {
+        String sql = "SELECT " + COLUMNS + " FROM " + qualified()
+                + " WHERE token_hash = ? AND deleted_at IS NULL LIMIT 1";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setBytes(1, tokenHash);
+            try (ResultSet rs = statement.executeQuery()) {
+                return rs.next() ? Optional.of(mapRow(rs)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("access_credential 鉴权读取失败：" + e.getClass().getSimpleName(), e);
+        }
+    }
+
+    @Override
+    public boolean existsAliveByName(Connection connection, String name) {
+        String sql = "SELECT 1 FROM " + qualified() + " WHERE name = ? AND deleted_at IS NULL LIMIT 1";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, name);
+            try (ResultSet rs = statement.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("access_credential 名称检查失败：" + e.getClass().getSimpleName(), e);
+        }
+    }
+
+    @Override
+    public void insert(Connection connection, AccessCredentialRecord record, List<UUID> allowedAliasIds) {
+        String sql = "INSERT INTO " + qualified() + " (" + COLUMNS + ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            bind(statement, record);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("access_credential 写入失败：" + e.getClass().getSimpleName(), e);
+        }
+        replaceAliases(connection, record.id(), allowedAliasIds);
+    }
+
+    @Override
+    public void update(Connection connection, AccessCredentialRecord record, List<UUID> allowedAliasIds) {
+        String sql = """
+                UPDATE %s SET name=?, application=?, token_prefix=?, token_hash=?, token_hash_version=?,
+                masked_value=?, ip_allowlist=?, expires_at=?, enabled=?, rotation_generation=?, issued_at=?,
+                rotated_at=?, last_used_at=?, last_used_ip_masked=?, version=?, updated_at=?, deleted_at=?
+                WHERE id=?""".formatted(qualified());
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            int i = 1;
+            statement.setString(i++, record.name());
+            statement.setString(i++, record.application());
+            statement.setString(i++, record.tokenPrefix());
+            statement.setBytes(i++, record.tokenHash());
+            statement.setInt(i++, record.tokenHashVersion());
+            statement.setString(i++, record.maskedValue());
+            statement.setString(i++, toJson(record.ipAllowlist()));
+            statement.setTimestamp(i++, record.expiresAt() == null ? null : Timestamp.from(record.expiresAt().toInstant()));
+            statement.setBoolean(i++, record.enabled());
+            statement.setLong(i++, record.rotationGeneration());
+            statement.setTimestamp(i++, Timestamp.from(record.issuedAt().toInstant()));
+            statement.setTimestamp(i++, record.rotatedAt() == null ? null : Timestamp.from(record.rotatedAt().toInstant()));
+            statement.setTimestamp(i++, record.lastUsedAt() == null ? null : Timestamp.from(record.lastUsedAt().toInstant()));
+            statement.setString(i++, record.lastUsedIpMasked());
+            statement.setLong(i++, record.version());
+            statement.setTimestamp(i++, Timestamp.from(record.updatedAt().toInstant()));
+            statement.setTimestamp(i++, record.deletedAt() == null ? null : Timestamp.from(record.deletedAt().toInstant()));
+            statement.setObject(i, record.id());
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("access_credential 更新失败：" + e.getClass().getSimpleName(), e);
+        }
+        replaceAliases(connection, record.id(), allowedAliasIds);
+    }
+
+    private void replaceAliases(Connection connection, UUID credentialId, List<UUID> aliasIds) {
+        try (PreparedStatement delete = connection.prepareStatement(
+                "DELETE FROM " + aliasQualified() + " WHERE access_credential_id = ?");
+             PreparedStatement insert = connection.prepareStatement(
+                     "INSERT INTO " + aliasQualified() + " (id, access_credential_id, alias_id, created_at) VALUES (?,?,?,?)")) {
+            delete.setObject(1, credentialId);
+            delete.executeUpdate();
+            OffsetDateTime now = OffsetDateTime.now();
+            for (UUID aliasId : aliasIds == null ? List.<UUID>of() : aliasIds) {
+                insert.setObject(1, UUID.randomUUID());
+                insert.setObject(2, credentialId);
+                insert.setObject(3, aliasId);
+                insert.setTimestamp(4, Timestamp.from(now.toInstant()));
+                insert.addBatch();
+            }
+            insert.executeBatch();
+        } catch (SQLException e) {
+            throw new IllegalStateException("access_credential_alias 维护失败：" + e.getClass().getSimpleName(), e);
+        }
+    }
+
+    @Override
+    public List<UUID> aliasIdsOf(Connection connection, UUID credentialId) {
+        String sql = "SELECT alias_id FROM " + aliasQualified() + " WHERE access_credential_id = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, credentialId);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<UUID> ids = new ArrayList<>();
+                while (rs.next()) {
+                    ids.add(rs.getObject(1, UUID.class));
+                }
+                return ids;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("alias 白名单读取失败：" + e.getClass().getSimpleName(), e);
+        }
+    }
+
+    @Override
+    public List<AccessCredentialRecord> list(Connection connection, String filterSql, List<Object> filterValues,
+                                             String orderSql, long offset, int limit) {
+        String sql = "SELECT " + COLUMNS + " FROM " + qualified() + " WHERE deleted_at IS NULL"
+                + (filterSql == null || filterSql.isBlank() ? "" : " AND " + filterSql)
+                + " ORDER BY " + orderSql + " OFFSET ? LIMIT ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            int i = 1;
+            for (Object value : filterValues) {
+                statement.setObject(i++, value);
+            }
+            statement.setLong(i++, offset);
+            statement.setInt(i, limit);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<AccessCredentialRecord> rows = new ArrayList<>();
+                while (rs.next()) {
+                    rows.add(mapRow(rs));
+                }
+                return rows;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("access_credential 列表读取失败：" + e.getClass().getSimpleName(), e);
+        }
+    }
+
+    @Override
+    public long count(Connection connection, String filterSql, List<Object> filterValues) {
+        String sql = "SELECT count(*) FROM " + qualified() + " WHERE deleted_at IS NULL"
+                + (filterSql == null || filterSql.isBlank() ? "" : " AND " + filterSql);
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            int i = 1;
+            for (Object value : filterValues) {
+                statement.setObject(i++, value);
+            }
+            try (ResultSet rs = statement.executeQuery()) {
+                return rs.next() ? rs.getLong(1) : 0L;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("access_credential 计数失败：" + e.getClass().getSimpleName(), e);
+        }
+    }
+
+    @Override
+    public void touch(Connection connection, UUID id, OffsetDateTime usedAt, String maskedIp) {
+        String sql = "UPDATE " + qualified()
+                + " SET last_used_at = ?, last_used_ip_masked = ?, updated_at = ? WHERE id = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setTimestamp(1, Timestamp.from(usedAt.toInstant()));
+            statement.setString(2, maskedIp);
+            statement.setTimestamp(3, Timestamp.from(usedAt.toInstant()));
+            statement.setObject(4, id);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("access_credential 活动摘要更新失败：" + e.getClass().getSimpleName(), e);
+        }
+    }
+
+    private static AccessCredentialRecord mapRow(ResultSet rs) throws SQLException {
+        Timestamp expiresAt = rs.getTimestamp("expires_at");
+        Timestamp rotatedAt = rs.getTimestamp("rotated_at");
+        Timestamp lastUsedAt = rs.getTimestamp("last_used_at");
+        Timestamp deletedAt = rs.getTimestamp("deleted_at");
+        return new AccessCredentialRecord(
+                rs.getObject("id", UUID.class),
+                rs.getString("name"),
+                rs.getString("application"),
+                rs.getString("token_prefix"),
+                rs.getBytes("token_hash"),
+                rs.getInt("token_hash_version"),
+                rs.getString("masked_value"),
+                fromJson(rs.getString("ip_allowlist")),
+                expiresAt == null ? null : offset(expiresAt),
+                rs.getBoolean("enabled"),
+                rs.getLong("rotation_generation"),
+                offset(rs.getTimestamp("issued_at")),
+                rotatedAt == null ? null : offset(rotatedAt),
+                lastUsedAt == null ? null : offset(lastUsedAt),
+                rs.getString("last_used_ip_masked"),
+                rs.getLong("version"),
+                offset(rs.getTimestamp("created_at")),
+                offset(rs.getTimestamp("updated_at")),
+                deletedAt == null ? null : offset(deletedAt));
+    }
+
+    private static void bind(PreparedStatement statement, AccessCredentialRecord record) throws SQLException {
+        int i = 1;
+        statement.setObject(i++, record.id());
+        statement.setString(i++, record.name());
+        statement.setString(i++, record.application());
+        statement.setString(i++, record.tokenPrefix());
+        statement.setBytes(i++, record.tokenHash());
+        statement.setInt(i++, record.tokenHashVersion());
+        statement.setString(i++, record.maskedValue());
+        statement.setString(i++, toJson(record.ipAllowlist()));
+        statement.setTimestamp(i++, record.expiresAt() == null ? null : Timestamp.from(record.expiresAt().toInstant()));
+        statement.setBoolean(i++, record.enabled());
+        statement.setLong(i++, record.rotationGeneration());
+        statement.setTimestamp(i++, Timestamp.from(record.issuedAt().toInstant()));
+        statement.setTimestamp(i++, record.rotatedAt() == null ? null : Timestamp.from(record.rotatedAt().toInstant()));
+        statement.setTimestamp(i++, record.lastUsedAt() == null ? null : Timestamp.from(record.lastUsedAt().toInstant()));
+        statement.setString(i++, record.lastUsedIpMasked());
+        statement.setLong(i++, record.version());
+        statement.setTimestamp(i++, Timestamp.from(record.createdAt().toInstant()));
+        statement.setTimestamp(i++, Timestamp.from(record.updatedAt().toInstant()));
+        statement.setTimestamp(i, record.deletedAt() == null ? null : Timestamp.from(record.deletedAt().toInstant()));
+    }
+
+    private static String toJson(List<String> values) {
+        StringBuilder json = new StringBuilder("[");
+        for (int i = 0; i < (values == null ? 0 : values.size()); i++) {
+            if (i > 0) {
+                json.append(',');
+            }
+            json.append('"').append(values.get(i).replace("\\", "\\\\").replace("\"", "\\\"")).append('"');
+        }
+        return json.append(']').toString();
+    }
+
+    private static List<String> fromJson(String json) {
+        if (json == null || json.isBlank() || "[]".equals(json.trim())) {
+            return List.of();
+        }
+        String body = json.trim();
+        body = body.substring(1, body.length() - 1);
+        if (body.isBlank()) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        for (String part : body.split(",")) {
+            values.add(part.trim().replaceFirst("^\"", "").replaceFirst("\"$", "").replace("\\\"", "\""));
+        }
+        return List.copyOf(values);
+    }
+
+    private String qualified() {
+        return schemaName + ".access_credential";
+    }
+
+    private String aliasQualified() {
+        return schemaName + ".access_credential_alias";
+    }
+
+    private static OffsetDateTime offset(Timestamp timestamp) {
+        return timestamp == null ? null : OffsetDateTime.ofInstant(timestamp.toInstant(), java.time.ZoneOffset.UTC);
+    }
+}
