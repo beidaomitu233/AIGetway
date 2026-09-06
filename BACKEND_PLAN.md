@@ -426,7 +426,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
 
 > 领取锁定：后端执行模型（beidao）2026-09-06 领取 BE-P06 全部 6 项（BE-031—BE-036），分支 feature/backend-observability（基于 dev d943afd，独立 worktree D:\AIBuilder\AIGetway-observability），执行期间请勿重复领取或并行修改同包任务；BE-P05（feature/backend-protocol）并行执行中，本包不修改 /v1 管道与 Adapter 文件，TraceFinalizer 以服务+事务边界交付，/v1 管道终端化接线在 BE-P05 合入后协调；完成记录与测试证据见 COMMUNICATION.md H-019。
 
-- [ ] 任务编号：BE-031
+- [x] 任务编号：BE-031
   模块：调用观测；目标：Trace列表筛选导出查询底座。
   接口/服务：GET /admin/traces。
   请求参数与响应字段：TraceListQuery→PageResult；类型、必填及错误HTTP见协议字典和附录。
@@ -436,7 +436,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：越权精确ID空集，final路径过滤与Attempt类型exists正确。
   测试要求：组合查询、边界时间、执行计划；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-032
+- [x] 任务编号：BE-032
   模块：调用观测；目标：Trace详情和时间线。
   接口/服务：GET /admin/traces/{traceId}。
   请求参数与响应字段：traceId/include_diagnostics→TraceDetail；类型、必填及错误HTTP见协议字典和附录。
@@ -446,7 +446,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：attempt数一致，无权诊断字段不序列化。
   测试要求：同时间序、无Attempt、过期样本；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-033
+- [x] 任务编号：BE-033
   模块：调用观测；目标：最终化与幂等聚合。
   接口/服务：TraceFinalizer/UsageAggregator。
   请求参数与响应字段：终态Trace+Attempt→唯一event→HOUR/DAY；类型、必填及错误HTTP见协议字典和附录。
@@ -456,7 +456,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：同event重放零增量；失败Provider仍有Token、无请求数。
   测试要求：重放/接管/双粒度回滚/路径归因；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-034
+- [x] 任务编号：BE-034
   模块：调用观测；目标：概览摘要趋势异常。
   接口/服务：GET /admin/overview/filters、summary、trends、exceptions。
   请求参数与响应字段：公共筛选→摘要/连续桶/异常；类型、必填及错误HTTP见协议字典和附录。
@@ -466,7 +466,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：请求数与同范围Trace一致，开发无Credential异常。
   测试要求：终态混合、空桶、多币种、四角色；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-035
+- [x] 任务编号：BE-035
   模块：调用观测；目标：Usage统一查询。
   接口/服务：GET /admin/usage/summary、trends、groups。
   请求参数与响应字段：UsageQuery→三类Result/fingerprint；类型、必填及错误HTTP见协议字典和附录。
@@ -476,7 +476,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   验收标准：三个结果同fingerprint，不能平均桶P95。
   测试要求：多维复算、时区/DST、排序；业务事务增加失败回滚断言，读取增加权限断言。
 
-- [ ] 任务编号：BE-036
+- [x] 任务编号：BE-036
   模块：调用观测；目标：安全流式导出。
   接口/服务：GET /admin/traces/export、/admin/usage/export。
   请求参数与响应字段：同筛选→CSV；类型、必填及错误HTTP见协议字典和附录。
