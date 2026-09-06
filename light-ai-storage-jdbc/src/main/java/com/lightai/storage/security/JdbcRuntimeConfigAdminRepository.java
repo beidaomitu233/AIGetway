@@ -1,5 +1,9 @@
 package com.lightai.storage.security;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.lightai.client.json.ProtocolJson;
+import com.lightai.storage.dialect.AbstractJdbcRepository;
+import com.lightai.storage.dialect.DatabaseDialect;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -13,7 +17,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /** runtime_config JDBC 管理读写实现（DATABASE_PLAN §10）。 */
-public final class JdbcRuntimeConfigAdminRepository implements RuntimeConfigAdminRepository {
+public final class JdbcRuntimeConfigAdminRepository extends AbstractJdbcRepository implements RuntimeConfigAdminRepository {
 
     private static final String COLUMNS = """
             id, timezone, timezone_locked, trace_retention_days, usage_retention_days, audit_retention_days,
@@ -23,22 +27,25 @@ public final class JdbcRuntimeConfigAdminRepository implements RuntimeConfigAdmi
             instance_stale_seconds, default_alias_id, current_snapshot_no, published_at, version,
             created_at, updated_at""";
 
-    private final String schemaName;
+    public JdbcRuntimeConfigAdminRepository(String schemaName, DatabaseDialect explicitDialect) {
+        super(schemaName, explicitDialect);
+    }
 
     public JdbcRuntimeConfigAdminRepository(String schemaName) {
-        this.schemaName = schemaName;
+        super(schemaName);
     }
 
     public JdbcRuntimeConfigAdminRepository() {
-        this(com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME);
+        super();
     }
 
     @Override
     public Optional<RuntimeConfigRow> find(Connection connection) {
-        String sql = "SELECT " + COLUMNS + " FROM " + qualified() + " WHERE singleton_key = 1";
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "runtime_config") + " WHERE singleton_key = 1";
         try (PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet rs = statement.executeQuery()) {
-            return rs.next() ? Optional.of(mapRow(rs)) : Optional.empty();
+            return rs.next() ? Optional.of(mapRow(d, rs)) : Optional.empty();
         } catch (SQLException e) {
             throw new IllegalStateException("runtime_config 读取失败：" + e.getClass().getSimpleName(), e);
         }
@@ -46,13 +53,13 @@ public final class JdbcRuntimeConfigAdminRepository implements RuntimeConfigAdmi
 
     @Override
     public void update(Connection connection, RuntimeConfigRow row) {
-        String sql = """
-                UPDATE %s SET timezone=?, timezone_locked=?, trace_retention_days=?, usage_retention_days=?,
-                audit_retention_days=?, dashboard_refresh_seconds=?, max_message_chars=?, max_request_chars=?,
-                diagnostic_sampling_enabled=?, diagnostic_sample_rate=?, diagnostic_sample_retention_days=?,
-                diagnostic_sample_max_chars=?, client_ip_recording_enabled=?, trusted_proxy_cidrs=?,
-                publish_instance_timeout_seconds=?, instance_stale_seconds=?, default_alias_id=?, version=?,
-                updated_at=? WHERE singleton_key=1""".formatted(qualified());
+        DatabaseDialect d = dialect(connection);
+        String sql = "UPDATE " + qualify(connection, "runtime_config") + " SET timezone=?, timezone_locked=?, trace_retention_days=?, usage_retention_days=?, "
+                + "audit_retention_days=?, dashboard_refresh_seconds=?, max_message_chars=?, max_request_chars=?, "
+                + "diagnostic_sampling_enabled=?, diagnostic_sample_rate=?, diagnostic_sample_retention_days=?, "
+                + "diagnostic_sample_max_chars=?, client_ip_recording_enabled=?, trusted_proxy_cidrs=" + d.jsonPlaceholder() + ", "
+                + "publish_instance_timeout_seconds=?, instance_stale_seconds=?, default_alias_id=?, version=?, "
+                + "updated_at=? WHERE singleton_key=1";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             int i = 1;
             statement.setString(i++, row.timezone());
@@ -68,10 +75,10 @@ public final class JdbcRuntimeConfigAdminRepository implements RuntimeConfigAdmi
             statement.setInt(i++, row.diagnosticSampleRetentionDays());
             statement.setInt(i++, row.diagnosticSampleMaxChars());
             statement.setBoolean(i++, row.clientIpRecordingEnabled());
-            statement.setString(i++, toJson(row.trustedProxyCidrs()));
+            d.bindJson(statement, i++, toJson(row.trustedProxyCidrs()));
             statement.setInt(i++, row.publishInstanceTimeoutSeconds());
             statement.setInt(i++, row.instanceStaleSeconds());
-            statement.setObject(i++, row.defaultAliasId());
+            d.bindUuid(statement, i++, row.defaultAliasId());
             statement.setLong(i++, row.version());
             statement.setTimestamp(i, Timestamp.from(row.updatedAt().toInstant()));
             statement.executeUpdate();
@@ -82,7 +89,7 @@ public final class JdbcRuntimeConfigAdminRepository implements RuntimeConfigAdmi
 
     @Override
     public Optional<Long> findVersion(Connection connection) {
-        String sql = "SELECT version FROM " + qualified() + " WHERE singleton_key = 1";
+        String sql = "SELECT version FROM " + qualify(connection, "runtime_config") + " WHERE singleton_key = 1";
         try (PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet rs = statement.executeQuery()) {
             return rs.next() ? Optional.of(rs.getLong(1)) : Optional.empty();
@@ -91,21 +98,17 @@ public final class JdbcRuntimeConfigAdminRepository implements RuntimeConfigAdmi
         }
     }
 
-    private static RuntimeConfigRow mapRow(ResultSet rs) throws SQLException {
-        Timestamp publishedAt = rs.getTimestamp("published_at");
-        java.sql.Array cidrs = rs.getArray("trusted_proxy_cidrs");
+    private static RuntimeConfigRow mapRow(DatabaseDialect d, ResultSet rs) throws SQLException {
+        String json = d.readJson(rs, "trusted_proxy_cidrs");
         List<String> cidrList = new ArrayList<>();
-        if (cidrs != null) {
+        if (json != null && !json.isBlank()) {
             try {
-                for (String value : (String[]) cidrs.getArray()) {
-                    cidrList.add(value);
-                }
+                cidrList = ProtocolJson.protocol().readValue(json, new TypeReference<List<String>>() {});
             } catch (Exception ignored) {
-                // jsonb 数组以字符串解析；空数组保持默认
             }
         }
         return new RuntimeConfigRow(
-                rs.getObject("id", UUID.class),
+                d.readUuid(rs, "id"),
                 rs.getString("timezone"),
                 rs.getBoolean("timezone_locked"),
                 rs.getInt("trace_retention_days"),
@@ -122,12 +125,12 @@ public final class JdbcRuntimeConfigAdminRepository implements RuntimeConfigAdmi
                 cidrList,
                 rs.getInt("publish_instance_timeout_seconds"),
                 rs.getInt("instance_stale_seconds"),
-                rs.getObject("default_alias_id", UUID.class),
+                d.readUuid(rs, "default_alias_id"),
                 rs.getLong("current_snapshot_no"),
-                publishedAt == null ? null : offset(publishedAt),
+                d.readOffsetDateTime(rs, "published_at"),
                 rs.getLong("version"),
-                offset(rs.getTimestamp("created_at")),
-                offset(rs.getTimestamp("updated_at")));
+                d.readOffsetDateTime(rs, "created_at"),
+                d.readOffsetDateTime(rs, "updated_at"));
     }
 
     private static String toJson(List<String> values) {
@@ -140,12 +143,5 @@ public final class JdbcRuntimeConfigAdminRepository implements RuntimeConfigAdmi
         }
         return json.append(']').toString();
     }
-
-    private String qualified() {
-        return schemaName + ".runtime_config";
-    }
-
-    private static OffsetDateTime offset(Timestamp timestamp) {
-        return timestamp == null ? null : OffsetDateTime.ofInstant(timestamp.toInstant(), java.time.ZoneOffset.UTC);
-    }
 }
+

@@ -1,5 +1,7 @@
 package com.lightai.storage.publish;
 
+import com.lightai.storage.dialect.AbstractJdbcRepository;
+import com.lightai.storage.dialect.DatabaseDialect;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -15,7 +17,7 @@ import java.util.UUID;
  * publish_record JDBC 实现（DATABASE_PLAN §33）。
  * validation_id 唯一：同一校验重复发布返回既有记录（4.5.2.4，服务层核对）。
  */
-public final class JdbcPublishRecordRepository implements PublishRecordRepository {
+public final class JdbcPublishRecordRepository extends AbstractJdbcRepository implements PublishRecordRepository {
 
     private static final String COLUMNS =
             "id, validation_id, from_snapshot_no, target_snapshot_no, draft_revision, status, "
@@ -23,30 +25,31 @@ public final class JdbcPublishRecordRepository implements PublishRecordRepositor
                     + "completed_at, converged_at, duration_ms, error_code, error_summary, "
                     + "created_at, updated_at";
 
-    private final String schemaName;
-
     public JdbcPublishRecordRepository(String schemaName) {
-        this.schemaName = schemaName;
+        super(schemaName);
     }
 
     public JdbcPublishRecordRepository() {
-        this(com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME);
+        super();
     }
 
+    @Override
     public void insert(Connection connection, PublishRecordRecord record) {
-        String sql = "INSERT INTO " + schemaName + ".publish_record (" + COLUMNS + ") "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, now(), now())";
+        DatabaseDialect d = dialect(connection);
+        String sql = "INSERT INTO " + qualify(connection, "publish_record") + " (" + COLUMNS + ") "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, " + d.jsonPlaceholder() + ", " + d.jsonPlaceholder()
+                + ", ?, ?, ?, ?, ?, " + d.nowFunction() + ", " + d.nowFunction() + ")";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, record.id());
-            statement.setObject(2, record.validationId());
+            d.bindUuid(statement, 1, record.id());
+            d.bindUuid(statement, 2, record.validationId());
             statement.setLong(3, record.fromSnapshotNo());
             statement.setLong(4, record.targetSnapshotNo());
             statement.setLong(5, record.draftRevision());
             statement.setString(6, record.status());
             statement.setString(7, record.publishedBy());
             statement.setString(8, record.publishNote());
-            statement.setString(9, toJsonArray(record.acknowledgedWarningIds()));
-            statement.setString(10, toUuidArray(record.targetInstanceIds()));
+            d.bindJson(statement, 9, toJsonArray(record.acknowledgedWarningIds()));
+            d.bindJson(statement, 10, toUuidArray(record.targetInstanceIds()));
             statement.setObject(11, record.completedAt());
             statement.setObject(12, record.convergedAt());
             statement.setObject(13, record.durationMs());
@@ -54,17 +57,19 @@ public final class JdbcPublishRecordRepository implements PublishRecordRepositor
             statement.setString(15, record.errorSummary());
             statement.executeUpdate();
         } catch (SQLException e) {
-            throw new IllegalStateException("发布记录写入失败：" + e.getClass().getSimpleName(), e);
+            throw translate("发布记录写入失败", e);
         }
     }
 
     /** 状态与终态字段更新；duration/completed 只允许设置一次（首轮口径）。 */
+    @Override
     public void updateOutcome(Connection connection, UUID id, String status,
                               OffsetDateTime completedAt, OffsetDateTime convergedAt,
                               Long durationMs, String errorCode, String errorSummary) {
-        String sql = "UPDATE " + schemaName + ".publish_record SET status = ?, "
+        DatabaseDialect d = dialect(connection);
+        String sql = "UPDATE " + qualify(connection, "publish_record") + " SET status = ?, "
                 + "completed_at = COALESCE(completed_at, ?), converged_at = ?, "
-                + "duration_ms = COALESCE(duration_ms, ?), error_code = ?, error_summary = ?, updated_at = now() "
+                + "duration_ms = COALESCE(duration_ms, ?), error_code = ?, error_summary = ?, updated_at = " + d.nowFunction() + " "
                 + "WHERE id = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, status);
@@ -73,116 +78,130 @@ public final class JdbcPublishRecordRepository implements PublishRecordRepositor
             statement.setObject(4, durationMs);
             statement.setString(5, errorCode);
             statement.setString(6, errorSummary);
-            statement.setObject(7, id);
+            d.bindUuid(statement, 7, id);
             statement.executeUpdate();
         } catch (SQLException e) {
-            throw new IllegalStateException("发布记录更新失败：" + e.getClass().getSimpleName(), e);
+            throw translate("发布记录更新失败", e);
         }
     }
 
+    @Override
     public Optional<PublishRecordRecord> find(Connection connection, UUID id) {
-        String sql = "SELECT " + COLUMNS + " FROM " + schemaName + ".publish_record WHERE id = ?";
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "publish_record") + " WHERE id = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, id);
+            d.bindUuid(statement, 1, id);
             try (ResultSet rs = statement.executeQuery()) {
-                return rs.next() ? Optional.of(mapRow(rs)) : Optional.empty();
+                return rs.next() ? Optional.of(mapRow(d, rs)) : Optional.empty();
             }
         } catch (SQLException e) {
-            throw new IllegalStateException("发布记录读取失败：" + e.getClass().getSimpleName(), e);
+            throw translate("发布记录读取失败", e);
         }
     }
 
+    @Override
     public Optional<PublishRecordRecord> findByValidation(Connection connection, UUID validationId) {
-        String sql = "SELECT " + COLUMNS + " FROM " + schemaName
-                + ".publish_record WHERE validation_id = ?";
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "publish_record")
+                + " WHERE validation_id = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, validationId);
+            d.bindUuid(statement, 1, validationId);
             try (ResultSet rs = statement.executeQuery()) {
-                return rs.next() ? Optional.of(mapRow(rs)) : Optional.empty();
+                return rs.next() ? Optional.of(mapRow(d, rs)) : Optional.empty();
             }
         } catch (SQLException e) {
-            throw new IllegalStateException("发布记录读取失败：" + e.getClass().getSimpleName(), e);
+            throw translate("发布记录读取失败", e);
         }
     }
 
     /** 发布历史筛选（4.5.2.6）；sort 已由白名单校验后原样进入 ORDER BY。 */
+    @Override
     public List<PublishRecordRecord> list(Connection connection, PublishRecordFilter filter,
                                           String sortExpression, int limit, long offset) {
+        DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT " + COLUMNS + " FROM ")
-                .append(schemaName).append(".publish_record WHERE deleted_at IS NULL");
-        appendFilter(filter, sql);
+                .append(qualify(connection, "publish_record")).append(" WHERE deleted_at IS NULL");
+        appendFilter(d, filter, sql);
         sql.append(" ORDER BY ").append(sortExpression).append(" LIMIT ? OFFSET ?");
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
-            int index = bindFilter(statement, filter);
+            int index = bindFilter(d, statement, filter);
             statement.setInt(index++, limit);
             statement.setLong(index, offset);
             try (ResultSet rs = statement.executeQuery()) {
                 List<PublishRecordRecord> records = new ArrayList<>();
                 while (rs.next()) {
-                    records.add(mapRow(rs));
+                    records.add(mapRow(d, rs));
                 }
                 return List.copyOf(records);
             }
         } catch (SQLException e) {
-            throw new IllegalStateException("发布历史查询失败：" + e.getClass().getSimpleName(), e);
+            throw translate("发布历史查询失败", e);
         }
     }
 
+    @Override
     public long count(Connection connection, PublishRecordFilter filter) {
+        DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT count(*) FROM ")
-                .append(schemaName).append(".publish_record WHERE deleted_at IS NULL");
-        appendFilter(filter, sql);
+                .append(qualify(connection, "publish_record")).append(" WHERE deleted_at IS NULL");
+        appendFilter(d, filter, sql);
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
-            bindFilter(statement, filter);
+            bindFilter(d, statement, filter);
             try (ResultSet rs = statement.executeQuery()) {
                 rs.next();
                 return rs.getLong(1);
             }
         } catch (SQLException e) {
-            throw new IllegalStateException("发布历史计数失败：" + e.getClass().getSimpleName(), e);
+            throw translate("发布历史计数失败", e);
         }
     }
 
     /** 超时/重启恢复扫描候选：未终态记录。 */
+    @Override
     public List<PublishRecordRecord> listUnfinished(Connection connection) {
-        String sql = "SELECT " + COLUMNS + " FROM " + schemaName + ".publish_record "
-                + "WHERE status IN ('PREPARING', 'ACTIVATING') ORDER BY created_at ASC";
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "publish_record")
+                + " WHERE status IN ('PREPARING', 'ACTIVATING') ORDER BY created_at ASC";
         try (PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet rs = statement.executeQuery()) {
             List<PublishRecordRecord> records = new ArrayList<>();
             while (rs.next()) {
-                records.add(mapRow(rs));
+                records.add(mapRow(d, rs));
             }
             return List.copyOf(records);
         } catch (SQLException e) {
-            throw new IllegalStateException("未完成发布查询失败：" + e.getClass().getSimpleName(), e);
+            throw translate("未完成发布查询失败", e);
         }
     }
 
-    private PublishRecordRecord mapRow(ResultSet rs) throws SQLException {
+    private PublishRecordRecord mapRow(DatabaseDialect d, ResultSet rs) throws SQLException {
         return new PublishRecordRecord(
-                rs.getObject("id", UUID.class),
-                rs.getObject("validation_id", UUID.class),
+                d.readUuid(rs, "id"),
+                d.readUuid(rs, "validation_id"),
                 rs.getLong("from_snapshot_no"),
                 rs.getLong("target_snapshot_no"),
                 rs.getLong("draft_revision"),
                 rs.getString("status"),
                 rs.getString("published_by"),
                 rs.getString("publish_note"),
-                fromJsonArray(rs.getString("acknowledged_warning_ids")),
-                fromUuidArray(rs.getString("target_instance_ids")),
-                rs.getObject("completed_at", OffsetDateTime.class),
-                rs.getObject("converged_at", OffsetDateTime.class),
-                rs.getObject("duration_ms", Long.class),
+                fromJsonArray(d.readJson(rs, "acknowledged_warning_ids")),
+                fromUuidArray(d.readJson(rs, "target_instance_ids")),
+                d.readOffsetDateTime(rs, "completed_at"),
+                d.readOffsetDateTime(rs, "converged_at"),
+                getLongOrNull(rs, "duration_ms"),
                 rs.getString("error_code"),
                 rs.getString("error_summary"),
-                rs.getObject("created_at", OffsetDateTime.class),
-                rs.getObject("updated_at", OffsetDateTime.class));
+                d.readOffsetDateTime(rs, "created_at"),
+                d.readOffsetDateTime(rs, "updated_at"));
     }
 
-    private static void appendFilter(PublishRecordFilter filter, StringBuilder sql) {
+    private static void appendFilter(DatabaseDialect d, PublishRecordFilter filter, StringBuilder sql) {
         if (filter.statuses() != null && !filter.statuses().isEmpty()) {
-            sql.append(" AND status = ANY(?)");
+            if (d.supportsArrayType()) {
+                sql.append(" AND status = ANY(?)");
+            } else {
+                sql.append(" AND status IN (").append(inPlaceholders(filter.statuses().size())).append(")");
+            }
         }
         if (filter.publishedBy() != null && !filter.publishedBy().isBlank()) {
             sql.append(" AND published_by = ?");
@@ -197,16 +216,23 @@ public final class JdbcPublishRecordRepository implements PublishRecordRepositor
             sql.append(" AND created_at < ?");
         }
         if (filter.keyword() != null && !filter.keyword().isBlank()) {
-            sql.append(" AND (published_by ILIKE ? OR publish_note ILIKE ?)");
+            sql.append(" AND (").append(d.ilikeClause("published_by"))
+                    .append(" OR ").append(d.ilikeClause("publish_note")).append(")");
         }
     }
 
-    private static int bindFilter(PreparedStatement statement, PublishRecordFilter filter)
+    private static int bindFilter(DatabaseDialect d, PreparedStatement statement, PublishRecordFilter filter)
             throws SQLException {
         int index = 1;
         if (filter.statuses() != null && !filter.statuses().isEmpty()) {
-            statement.setArray(index++, statement.getConnection()
-                    .createArrayOf("text", filter.statuses().toArray()));
+            if (d.supportsArrayType()) {
+                statement.setArray(index++, statement.getConnection()
+                        .createArrayOf("text", filter.statuses().toArray()));
+            } else {
+                for (String st : filter.statuses()) {
+                    statement.setString(index++, st);
+                }
+            }
         }
         if (filter.publishedBy() != null && !filter.publishedBy().isBlank()) {
             statement.setString(index++, filter.publishedBy());
@@ -259,3 +285,4 @@ public final class JdbcPublishRecordRepository implements PublishRecordRepositor
     }
 
 }
+

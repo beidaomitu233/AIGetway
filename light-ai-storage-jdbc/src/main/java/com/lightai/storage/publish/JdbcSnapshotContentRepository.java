@@ -1,5 +1,7 @@
 package com.lightai.storage.publish;
 
+import com.lightai.storage.dialect.AbstractJdbcRepository;
+import com.lightai.storage.dialect.DatabaseDialect;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -8,6 +10,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * ConfigSnapshot.content 装配与恢复（BE-038/BE-040/BE-041）。
@@ -15,16 +19,14 @@ import java.util.Map;
  * 排除 created_at/updated_at/deleted_at、全部秘密列与完整 secret_ref、运行状态列。
  * 序列化采用固定键序 + 数组按 id 排序，checksum 对规范化 JSON 字节计算。
  */
-public final class JdbcSnapshotContentRepository implements SnapshotContentRepository {
-
-    private final String schemaName;
+public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository implements SnapshotContentRepository {
 
     public JdbcSnapshotContentRepository(String schemaName) {
-        this.schemaName = schemaName;
+        super(schemaName);
     }
 
     public JdbcSnapshotContentRepository() {
-        this(com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME);
+        super();
     }
 
     /** 实体类型 → (存储表, JSON 键, 白名单列)。顺序即快照键序。 */
@@ -32,17 +34,17 @@ public final class JdbcSnapshotContentRepository implements SnapshotContentRepos
             new EntityColumns("provider", "providers",
                     "id, name, type, base_url, proxy_url, connect_timeout_ms, read_timeout_ms, "
                             + "default_headers, enabled, version",
-                    java.util.Set.of("default_headers"),
-                    java.util.Set.of()),
+                    Set.of("default_headers"),
+                    Set.of()),
             new EntityColumns("credential_pool", "credential_pools",
                     "id, provider_id, name, selection_strategy, enabled, version",
-                    java.util.Set.of(),
-                    java.util.Set.of("provider_id")),
+                    Set.of(),
+                    Set.of("provider_id")),
             new EntityColumns("credential", "credentials",
                     "id, pool_id, name, secret_source, weight, rpm_limit, tpm_limit, concurrent_limit, "
                             + "enabled, version",
-                    java.util.Set.of(),
-                    java.util.Set.of("pool_id")),
+                    Set.of(),
+                    Set.of("pool_id")),
             new EntityColumns("provider_model", "provider_models",
                     "id, provider_id, model_id, display_name, model_type, tokenizer_family, context_window, "
                             + "max_output_tokens, support_stream, support_system_message, support_temperature, "
@@ -50,21 +52,21 @@ public final class JdbcSnapshotContentRepository implements SnapshotContentRepos
                             + "max_stop_sequences, max_stop_length, default_temperature, default_top_p, "
                             + "default_max_tokens, default_stop, input_price, output_price, price_unit, currency, "
                             + "enabled, import_source, import_adapter_version, version",
-                    java.util.Set.of(),
-                    java.util.Set.of("provider_id")),
+                    Set.of(),
+                    Set.of("provider_id")),
             new EntityColumns("model_alias", "model_aliases",
                     "id, alias, display_name, description, route_strategy, enabled, version",
-                    java.util.Set.of(),
-                    java.util.Set.of()),
+                    Set.of(),
+                    Set.of()),
             new EntityColumns("route_candidate", "route_candidates",
                     "id, alias_id, provider_model_id, credential_pool_id, priority, weight, enabled, version",
-                    java.util.Set.of(),
-                    java.util.Set.of("alias_id", "provider_model_id", "credential_pool_id")),
+                    Set.of(),
+                    Set.of("alias_id", "provider_model_id", "credential_pool_id")),
             new EntityColumns("limit_policy", "limit_policies",
                     "id, name, scope_type, scope_id, rpm_limit, tpm_limit, concurrent_limit, "
                             + "overflow_strategy, queue_timeout_ms, queue_max_size, enabled, version",
-                    java.util.Set.of(),
-                    java.util.Set.of("scope_id")),
+                    Set.of(),
+                    Set.of("scope_id")),
             new EntityColumns("reliability_policy", "reliability_policies",
                     "id, name, alias_id, connect_timeout_ms, first_token_timeout_ms, total_timeout_ms, "
                             + "max_retries, max_credential_failovers, initial_backoff_ms, backoff_multiplier, "
@@ -72,10 +74,11 @@ public final class JdbcSnapshotContentRepository implements SnapshotContentRepos
                             + "max_fallbacks, circuit_window_seconds, circuit_min_requests, circuit_failure_rate, "
                             + "circuit_open_seconds, circuit_half_open_probes, circuit_half_open_successes, "
                             + "enabled, version",
-                    java.util.Set.of(),
-                    java.util.Set.of("alias_id")));
+                    Set.of(),
+                    Set.of("alias_id")));
 
     /** 当前全部活行配置的规范化快照树（固定键序，数组按 id asc）。 */
+    @Override
     public Map<String, Object> assemble(Connection connection, String timezone) {
         Map<String, Object> content = new LinkedHashMap<>();
         content.put("schema_version", 1);
@@ -93,6 +96,7 @@ public final class JdbcSnapshotContentRepository implements SnapshotContentRepos
     }
 
     /** 数量安全摘要（config_snapshot.content_summary）。 */
+    @Override
     public Map<String, Long> summarize(Map<String, Object> content) {
         Map<String, Long> counts = new LinkedHashMap<>();
         for (EntityColumns entity : ENTITIES) {
@@ -103,6 +107,7 @@ public final class JdbcSnapshotContentRepository implements SnapshotContentRepos
     }
 
     /** 规范化 JSON 字符串（固定键序，ProtocolJson BigDecimal/时间口径），checksum 输入。 */
+    @Override
     public String canonicalJson(Map<String, Object> content) {
         try {
             return com.lightai.client.json.ProtocolJson.protocol().writeValueAsString(content);
@@ -112,6 +117,7 @@ public final class JdbcSnapshotContentRepository implements SnapshotContentRepos
     }
 
     /** 恢复快照行：upsert 白名单字段并重新生成 version；返回恢复的 (类型, id) 集合。 */
+    @Override
     public List<RestoredEntity> restore(Connection connection, Map<String, Object> content) {
         List<RestoredEntity> restored = new ArrayList<>();
         for (EntityColumns entity : ENTITIES) {
@@ -134,7 +140,7 @@ public final class JdbcSnapshotContentRepository implements SnapshotContentRepos
 
     /** 全量活行读取（发布前草稿对比与快照内容生成都使用同一白名单）。 */
     public List<Map<String, Object>> readRows(Connection connection, EntityColumns entity) {
-        String sql = "SELECT " + entity.columns() + " FROM " + schemaName + "." + entity.table()
+        String sql = "SELECT " + entity.columns() + " FROM " + qualify(connection, entity.table())
                 + " WHERE deleted_at IS NULL ORDER BY id";
         String[] columns = entity.columns().split(", ");
         try (PreparedStatement statement = connection.prepareStatement(sql);
@@ -149,43 +155,56 @@ public final class JdbcSnapshotContentRepository implements SnapshotContentRepos
             }
             return rows;
         } catch (SQLException e) {
-            throw new IllegalStateException("快照行读取失败：" + entity.table() + ": "
-                    + e.getClass().getSimpleName(), e);
+            throw translate("快照行读取失败：" + entity.table(), e);
         }
     }
 
     private void upsertRow(Connection connection, EntityColumns entity, Map<String, Object> row) {
+        DatabaseDialect d = dialect(connection);
         String[] columns = entity.columns().split(", ");
-        String updates = java.util.Arrays.stream(entity.columns().split(", "))
-                .filter(column -> !column.equals("id"))
-                .map(column -> column + " = EXCLUDED." + column)
-                .reduce((a, b) -> a + ", " + b)
-                .orElse("");
-        String sql = "INSERT INTO " + schemaName + "." + entity.table()
-                + " (" + entity.columns() + ", created_at, updated_at, deleted_at) "
-                + "VALUES (" + placeholders(entity.columns(), entity) + ", now(), now(), NULL) "
-                + "ON CONFLICT (id) DO UPDATE SET " + updates
-                + ", deleted_at = NULL, updated_at = now()";
+        String sql;
+        if (d.supportsReturning()) {
+            String updates = java.util.Arrays.stream(entity.columns().split(", "))
+                    .filter(column -> !column.equals("id"))
+                    .map(column -> column + " = EXCLUDED." + column)
+                    .reduce((a, b) -> a + ", " + b)
+                    .orElse("");
+            sql = "INSERT INTO " + qualify(connection, entity.table())
+                    + " (" + entity.columns() + ", created_at, updated_at, deleted_at) "
+                    + "VALUES (" + placeholders(d, entity.columns(), entity) + ", now(), now(), NULL) "
+                    + "ON CONFLICT (id) DO UPDATE SET " + updates
+                    + ", deleted_at = NULL, updated_at = now()";
+        } else {
+            String updates = java.util.Arrays.stream(entity.columns().split(", "))
+                    .filter(column -> !column.equals("id"))
+                    .map(column -> column + " = VALUES(" + column + ")")
+                    .reduce((a, b) -> a + ", " + b)
+                    .orElse("");
+            sql = "INSERT INTO " + qualify(connection, entity.table())
+                    + " (" + entity.columns() + ", created_at, updated_at, deleted_at) "
+                    + "VALUES (" + placeholders(d, entity.columns(), entity) + ", " + d.nowFunction() + ", " + d.nowFunction() + ", NULL) "
+                    + "ON DUPLICATE KEY UPDATE " + updates
+                    + ", deleted_at = NULL, updated_at = " + d.nowFunction();
+        }
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             int index = 1;
             for (String column : columns) {
-                index = bindValue(statement, index, column, row.get(column), entity);
+                index = bindValue(d, statement, index, column, row.get(column), entity);
             }
             statement.executeUpdate();
         } catch (SQLException e) {
-            throw new IllegalStateException("快照行恢复失败：" + entity.table() + ": "
-                    + e.getClass().getSimpleName(), e);
+            throw translate("快照行恢复失败：" + entity.table(), e);
         }
     }
 
-    private static String placeholders(String columns, EntityColumns entity) {
+    private static String placeholders(DatabaseDialect d, String columns, EntityColumns entity) {
         String[] parts = columns.split(", ");
         StringBuilder markers = new StringBuilder();
         for (int i = 0; i < parts.length; i++) {
             if (i > 0) {
                 markers.append(", ");
             }
-            markers.append(entity.jsonbColumns().contains(parts[i]) ? "?::jsonb" : "?");
+            markers.append(entity.jsonbColumns().contains(parts[i]) ? d.jsonPlaceholder() : "?");
         }
         return markers.toString();
     }
@@ -207,7 +226,7 @@ public final class JdbcSnapshotContentRepository implements SnapshotContentRepos
     }
 
     private static Object normalize(Object value) {
-        if (value instanceof java.util.UUID uuid) {
+        if (value instanceof UUID uuid) {
             return uuid.toString();
         }
         if (value instanceof java.sql.Timestamp timestamp) {
@@ -219,7 +238,7 @@ public final class JdbcSnapshotContentRepository implements SnapshotContentRepos
         return value;
     }
 
-    private int bindValue(PreparedStatement statement, int index, String column, Object value,
+    private int bindValue(DatabaseDialect d, PreparedStatement statement, int index, String column, Object value,
                           EntityColumns entity) throws SQLException {
         if (value == null) {
             statement.setObject(index, null);
@@ -227,15 +246,15 @@ public final class JdbcSnapshotContentRepository implements SnapshotContentRepos
         }
         if (entity.jsonbColumns().contains(column)) {
             try {
-                statement.setString(index, com.lightai.client.json.ProtocolJson.protocol()
+                d.bindJson(statement, index, com.lightai.client.json.ProtocolJson.protocol()
                         .writeValueAsString(value));
             } catch (Exception e) {
                 throw new IllegalStateException("快照 jsonb 序列化失败：" + column, e);
             }
             return index + 1;
         }
-        if (entity.uuidColumns().contains(column)) {
-            statement.setObject(index, java.util.UUID.fromString(String.valueOf(value)));
+        if ("id".equals(column) || entity.uuidColumns().contains(column)) {
+            d.bindUuid(statement, index, UUID.fromString(String.valueOf(value)));
             return index + 1;
         }
         if (value instanceof String text) {
@@ -255,32 +274,34 @@ public final class JdbcSnapshotContentRepository implements SnapshotContentRepos
     }
 
     /** 撤销 CREATE：草稿新建对象软删除并重新生成 version（BE-038）。 */
+    @Override
     public int deleteDraftObject(Connection connection, String entityType, String entityId) {
+        DatabaseDialect d = dialect(connection);
         EntityColumns entity = requireEntity(entityType);
-        String sql = "UPDATE " + schemaName + "." + entity.table()
-                + " SET deleted_at = now(), version = version + 1, updated_at = now() "
-                + "WHERE id = ?::uuid AND deleted_at IS NULL";
+        String sql = "UPDATE " + qualify(connection, entity.table())
+                + " SET deleted_at = " + d.nowFunction() + ", version = version + 1, updated_at = " + d.nowFunction() + " "
+                + "WHERE id = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, entityId);
+            d.bindUuid(statement, 1, UUID.fromString(entityId));
             return statement.executeUpdate();
         } catch (SQLException e) {
-            throw new IllegalStateException("草稿对象删除失败：" + entity.table() + ": "
-                    + e.getClass().getSimpleName(), e);
+            throw translate("草稿对象删除失败：" + entity.table(), e);
         }
     }
 
     /** 撤销 DELETE：仅清除删除标记并重新生成 version（BE-038，4.5.1.5）。 */
+    @Override
     public int restoreUndelete(Connection connection, String entityType, String entityId) {
+        DatabaseDialect d = dialect(connection);
         EntityColumns entity = requireEntity(entityType);
-        String sql = "UPDATE " + schemaName + "." + entity.table()
-                + " SET deleted_at = NULL, version = version + 1, updated_at = now() "
-                + "WHERE id = ?::uuid";
+        String sql = "UPDATE " + qualify(connection, entity.table())
+                + " SET deleted_at = NULL, version = version + 1, updated_at = " + d.nowFunction() + " "
+                + "WHERE id = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, entityId);
+            d.bindUuid(statement, 1, UUID.fromString(entityId));
             return statement.executeUpdate();
         } catch (SQLException e) {
-            throw new IllegalStateException("草稿对象恢复失败：" + entity.table() + ": "
-                    + e.getClass().getSimpleName(), e);
+            throw translate("草稿对象恢复失败：" + entity.table(), e);
         }
     }
 
@@ -301,8 +322,8 @@ public final class JdbcSnapshotContentRepository implements SnapshotContentRepos
             String entityType,
             String jsonKey,
             String columns,
-            java.util.Set<String> jsonbColumns,
-            java.util.Set<String> uuidColumns) {
+            Set<String> jsonbColumns,
+            Set<String> uuidColumns) {
 
         String table() {
             return entityType;
@@ -310,3 +331,4 @@ public final class JdbcSnapshotContentRepository implements SnapshotContentRepos
     }
 
 }
+

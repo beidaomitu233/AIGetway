@@ -1,5 +1,7 @@
 package com.lightai.storage.runtimeconfig;
 
+import com.lightai.storage.dialect.AbstractJdbcRepository;
+import com.lightai.storage.dialect.DatabaseDialect;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -10,22 +12,24 @@ import java.util.Optional;
  * runtime_config JDBC 只读实现（DATABASE_PLAN §10）。
  * 单例行 singleton_key=1；timezone 为全局锁定时区。
  */
-public final class JdbcRuntimeConfigRepository implements RuntimeConfigRepository {
+public final class JdbcRuntimeConfigRepository extends AbstractJdbcRepository implements RuntimeConfigRepository {
 
-    private final String schemaName;
+    public JdbcRuntimeConfigRepository(String schemaName, DatabaseDialect explicitDialect) {
+        super(schemaName, explicitDialect);
+    }
 
     public JdbcRuntimeConfigRepository(String schemaName) {
-        this.schemaName = schemaName;
+        super(schemaName);
     }
 
     public JdbcRuntimeConfigRepository() {
-        this(com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME);
+        super();
     }
 
     @Override
     public Optional<RuntimeConfigState> findRuntimeState(Connection connection) {
-        String sql = "SELECT current_snapshot_no, timezone FROM " + schemaName
-                + ".runtime_config WHERE singleton_key = 1";
+        String sql = "SELECT current_snapshot_no, timezone FROM " + qualify(connection, "runtime_config")
+                + " WHERE singleton_key = 1";
         try (PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet rs = statement.executeQuery()) {
             if (!rs.next()) {
@@ -37,3 +41,4 @@ public final class JdbcRuntimeConfigRepository implements RuntimeConfigRepositor
         }
     }
 }
+

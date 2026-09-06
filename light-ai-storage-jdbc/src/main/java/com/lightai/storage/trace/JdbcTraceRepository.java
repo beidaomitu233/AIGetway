@@ -2,6 +2,9 @@ package com.lightai.storage.trace;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.lightai.client.json.ProtocolJson;
+import com.lightai.storage.dialect.AbstractJdbcRepository;
+import com.lightai.storage.dialect.DatabaseDialect;
+import com.lightai.storage.dialect.DatabaseType;
 import com.lightai.storage.trace.ObservationRows.TraceRow;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -21,7 +24,7 @@ import java.util.function.Consumer;
  * R 类运行事实无软删除；排序表达由服务层白名单生成；
  * 精确 trace_id 与普通组合查询共用同一筛选构造，权限范围由服务层先注入。
  */
-public class JdbcTraceRepository {
+public class JdbcTraceRepository extends AbstractJdbcRepository {
 
     private static final String COLUMNS =
             "id, trace_id, application, project, tenant, tags, source_mode, invocation_source, "
@@ -73,22 +76,25 @@ public class JdbcTraceRepository {
         }
     }
 
-    private final String schemaName;
+    public JdbcTraceRepository(String schemaName, DatabaseDialect explicitDialect) {
+        super(schemaName, explicitDialect);
+    }
 
     public JdbcTraceRepository(String schemaName) {
-        this.schemaName = schemaName;
+        super(schemaName);
     }
 
     public JdbcTraceRepository() {
-        this(com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME);
+        super();
     }
 
     public Optional<TraceRow> findByTraceId(Connection connection, String traceId) {
-        String sql = "SELECT " + COLUMNS + " FROM " + qualified() + " WHERE trace_id = ?";
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "trace") + " trace WHERE trace_id = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, traceId);
             try (ResultSet rs = statement.executeQuery()) {
-                return rs.next() ? Optional.of(mapRow(rs)) : Optional.empty();
+                return rs.next() ? Optional.of(mapRow(rs, d)) : Optional.empty();
             }
         } catch (SQLException e) {
             throw translate("Trace读取失败", e);
@@ -97,19 +103,20 @@ public class JdbcTraceRepository {
 
     public List<TraceRow> list(Connection connection, TraceFilter filter, String sortExpression,
                                int limit, long offset) {
+        DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT ").append(COLUMNS).append(" FROM ")
-                .append(qualified()).append(" WHERE 1 = 1");
+                .append(qualify(connection, "trace")).append(" trace WHERE 1 = 1");
         List<Object> params = new ArrayList<>();
-        appendFilter(sql, params, filter);
+        appendFilter(sql, params, filter, connection, d);
         sql.append(" ORDER BY ").append(sortExpression).append(", trace_id ASC LIMIT ? OFFSET ?");
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
-            bind(statement, params);
+            bind(statement, params, d);
             statement.setInt(params.size() + 1, limit);
             statement.setLong(params.size() + 2, offset);
             try (ResultSet rs = statement.executeQuery()) {
                 List<TraceRow> rows = new ArrayList<>();
                 while (rs.next()) {
-                    rows.add(mapRow(rs));
+                    rows.add(mapRow(rs, d));
                 }
                 return List.copyOf(rows);
             }
@@ -119,12 +126,13 @@ public class JdbcTraceRepository {
     }
 
     public long count(Connection connection, TraceFilter filter) {
-        StringBuilder sql = new StringBuilder("SELECT count(*) FROM ").append(qualified())
-                .append(" WHERE 1 = 1");
+        DatabaseDialect d = dialect(connection);
+        StringBuilder sql = new StringBuilder("SELECT count(*) FROM ").append(qualify(connection, "trace"))
+                .append(" trace WHERE 1 = 1");
         List<Object> params = new ArrayList<>();
-        appendFilter(sql, params, filter);
+        appendFilter(sql, params, filter, connection, d);
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
-            bind(statement, params);
+            bind(statement, params, d);
             try (ResultSet rs = statement.executeQuery()) {
                 rs.next();
                 return rs.getLong(1);
@@ -140,18 +148,19 @@ public class JdbcTraceRepository {
      */
     public void forEachRow(Connection connection, TraceFilter filter, String sortExpression,
                            int fetchSize, Consumer<TraceRow> consumer) {
+        DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT ").append(COLUMNS).append(" FROM ")
-                .append(qualified()).append(" WHERE 1 = 1");
+                .append(qualify(connection, "trace")).append(" trace WHERE 1 = 1");
         List<Object> params = new ArrayList<>();
-        appendFilter(sql, params, filter);
+        appendFilter(sql, params, filter, connection, d);
         sql.append(" ORDER BY ").append(sortExpression).append(", trace_id ASC");
         try (PreparedStatement statement = connection.prepareStatement(sql.toString(),
                 java.sql.ResultSet.TYPE_FORWARD_ONLY, java.sql.ResultSet.CONCUR_READ_ONLY)) {
             statement.setFetchSize(fetchSize);
-            bind(statement, params);
+            bind(statement, params, d);
             try (ResultSet rs = statement.executeQuery()) {
                 while (rs.next()) {
-                    consumer.accept(mapRow(rs));
+                    consumer.accept(mapRow(rs, d));
                 }
             }
         } catch (SQLException e) {
@@ -168,14 +177,15 @@ public class JdbcTraceRepository {
 
     /** Attempt 按 sequence 升序；详情与聚合共用同一读取。 */
     public List<ObservationRows.AttemptRow> listAttempts(Connection connection, String traceId) {
+        DatabaseDialect d = dialect(connection);
         List<ObservationRows.AttemptRow> attempts = new ArrayList<>();
-        String sql = "SELECT " + ATTEMPT_COLUMNS + " FROM " + schemaName + ".attempt "
-                + "WHERE trace_id = ? ORDER BY sequence ASC";
+        String sql = "SELECT " + ATTEMPT_COLUMNS + " FROM " + qualify(connection, "attempt")
+                + " WHERE trace_id = ? ORDER BY sequence ASC";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, traceId);
             try (ResultSet rs = statement.executeQuery()) {
                 while (rs.next()) {
-                    attempts.add(mapAttempt(rs));
+                    attempts.add(mapAttempt(rs, d));
                 }
             }
         } catch (SQLException e) {
@@ -187,7 +197,8 @@ public class JdbcTraceRepository {
     public record TerminalTrace(TraceRow trace, List<ObservationRows.AttemptRow> attempts) {
     }
 
-    private void appendFilter(StringBuilder sql, List<Object> params, TraceFilter filter) {
+    private void appendFilter(StringBuilder sql, List<Object> params, TraceFilter filter,
+                              Connection connection, DatabaseDialect d) {
         if (filter == null) {
             return;
         }
@@ -204,19 +215,23 @@ public class JdbcTraceRepository {
             sql.append(" AND started_at < ?");
             params.add(filter.endAt());
         }
-        appendIn(sql, params, "application", filter.applications());
-        appendIn(sql, params, "application", filter.scopeApplications());
-        appendIn(sql, params, "alias_id", filter.aliasIds());
-        appendIn(sql, params, "final_provider_id", filter.providerIds());
-        appendIn(sql, params, "final_provider_model_id", filter.providerModelIds());
-        appendIn(sql, params, "status", filter.statuses());
-        appendIn(sql, params, "project", filter.projects());
-        appendIn(sql, params, "tenant", filter.tenants());
-        appendIn(sql, params, "source_mode", filter.sourceModes());
-        appendIn(sql, params, "access_credential_id", filter.accessCredentialIds());
-        appendIn(sql, params, "final_credential_id", filter.credentialIds());
+        appendIn(sql, params, "application", filter.applications(), d);
+        appendIn(sql, params, "application", filter.scopeApplications(), d);
+        appendIn(sql, params, "alias_id", filter.aliasIds(), d);
+        appendIn(sql, params, "final_provider_id", filter.providerIds(), d);
+        appendIn(sql, params, "final_provider_model_id", filter.providerModelIds(), d);
+        appendIn(sql, params, "status", filter.statuses(), d);
+        appendIn(sql, params, "project", filter.projects(), d);
+        appendIn(sql, params, "tenant", filter.tenants(), d);
+        appendIn(sql, params, "source_mode", filter.sourceModes(), d);
+        appendIn(sql, params, "access_credential_id", filter.accessCredentialIds(), d);
+        appendIn(sql, params, "final_credential_id", filter.credentialIds(), d);
         if (filter.tagKey() != null && !filter.tagKey().isBlank()) {
-            sql.append(" AND tags ->> ? = ?");
+            if (d.databaseType() == DatabaseType.MYSQL) {
+                sql.append(" AND JSON_UNQUOTE(JSON_EXTRACT(tags, CONCAT('$.', ?))) = ?");
+            } else {
+                sql.append(" AND tags ->> ? = ?");
+            }
             params.add(filter.tagKey().strip());
             params.add(filter.tagValue() == null ? "" : filter.tagValue().strip());
         }
@@ -225,21 +240,25 @@ public class JdbcTraceRepository {
             params.add(filter.requestUser().strip());
         }
         if (filter.clientIp() != null && !filter.clientIp().isBlank()) {
-            sql.append(" AND host(client_ip) = ?");
+            if (d.databaseType() == DatabaseType.MYSQL) {
+                sql.append(" AND client_ip = ?");
+            } else {
+                sql.append(" AND host(client_ip) = ?");
+            }
             params.add(filter.clientIp().strip());
         }
         if (filter.attemptTypes() != null && !filter.attemptTypes().isEmpty()) {
-            sql.append(" AND EXISTS (SELECT 1 FROM ").append(schemaName)
-                    .append(".attempt a WHERE a.trace_id = trace.trace_id AND a.attempt_type IN ")
+            sql.append(" AND EXISTS (SELECT 1 FROM ").append(qualify(connection, "attempt"))
+                    .append(" a WHERE a.trace_id = trace.trace_id AND a.attempt_type IN ")
                     .append(placeholders(filter.attemptTypes().size())).append(")");
             params.addAll(filter.attemptTypes());
         }
-        appendIn(sql, params, "error_code", filter.errorCodes());
+        appendIn(sql, params, "error_code", filter.errorCodes(), d);
         if (filter.requestedStream() != null) {
             sql.append(" AND requested_stream = ?");
             params.add(filter.requestedStream());
         }
-        appendIn(sql, params, "usage_source", filter.usageSources());
+        appendIn(sql, params, "usage_source", filter.usageSources(), d);
         appendCountCompare(sql, params, "retry_count", filter.hasRetry());
         appendCountCompare(sql, params, "credential_failover_count", filter.hasCredentialFailover());
         appendCountCompare(sql, params, "fallback_count", filter.hasFallback());
@@ -252,7 +271,7 @@ public class JdbcTraceRepository {
             params.add(filter.maxTotalMs());
         }
         if (filter.anomalousRunning() != null) {
-            String anomalous = "status = 'RUNNING' AND deadline_at < now() - interval '30 seconds'";
+            String anomalous = "status = 'RUNNING' AND deadline_at < " + d.intervalSecondsBeforeNow(30);
             sql.append(filter.anomalousRunning() ? " AND " : " AND NOT (").append(anomalous);
             if (!filter.anomalousRunning()) {
                 sql.append(")");
@@ -269,26 +288,31 @@ public class JdbcTraceRepository {
     }
 
     private static void appendIn(StringBuilder sql, List<Object> params, String column,
-                                 List<String> values) {
+                                 List<String> values, DatabaseDialect d) {
         if (values == null || values.isEmpty()) {
             return;
         }
+        boolean isUuidCol = column.endsWith("_id") && !column.equals("trace_id");
         sql.append(" AND ").append(column).append(" IN ").append(placeholders(values.size()));
-        params.addAll(values);
+        for (String val : values) {
+            if (isUuidCol && val != null) {
+                try {
+                    params.add(UUID.fromString(val));
+                } catch (IllegalArgumentException e) {
+                    params.add(val);
+                }
+            } else {
+                params.add(val);
+            }
+        }
     }
 
     private static String placeholders(int count) {
         return "(" + String.join(", ", java.util.Collections.nCopies(count, "?")) + ")";
     }
 
-    private static void bind(PreparedStatement statement, List<Object> params) throws SQLException {
-        for (int i = 0; i < params.size(); i++) {
-            statement.setObject(i + 1, params.get(i));
-        }
-    }
-
-    private String qualified() {
-        return schemaName + ".trace";
+    private void bind(PreparedStatement statement, List<Object> params, DatabaseDialect d) throws SQLException {
+        bindParameters(statement, params, d);
     }
 
     private static final String ATTEMPT_COLUMNS =
@@ -303,9 +327,9 @@ public class JdbcTraceRepository {
                     + "input_price, output_price, price_unit, currency, input_cost, output_cost, "
                     + "total_cost, settled_at";
 
-    private TraceRow mapRow(ResultSet rs) throws SQLException {
+    private TraceRow mapRow(ResultSet rs, DatabaseDialect d) throws SQLException {
         return new TraceRow(
-                rs.getObject("id", UUID.class),
+                d.readUuid(rs, "id"),
                 rs.getString("trace_id"),
                 rs.getString("application"),
                 rs.getString("project"),
@@ -313,27 +337,27 @@ public class JdbcTraceRepository {
                 fromJsonMap(rs.getString("tags")),
                 rs.getString("source_mode"),
                 rs.getString("invocation_source"),
-                rs.getObject("alias_id", UUID.class),
+                d.readUuid(rs, "alias_id"),
                 rs.getString("alias"),
                 rs.getLong("config_snapshot_no"),
                 rs.getBoolean("requested_stream"),
                 rs.getBoolean("response_committed"),
                 rs.getString("status"),
-                rs.getObject("started_at", OffsetDateTime.class),
-                rs.getObject("deadline_at", OffsetDateTime.class),
-                rs.getObject("ended_at", OffsetDateTime.class),
-                (Integer) rs.getObject("total_ms"),
-                (Integer) rs.getObject("first_token_ms"),
+                d.readOffsetDateTime(rs, "started_at"),
+                d.readOffsetDateTime(rs, "deadline_at"),
+                d.readOffsetDateTime(rs, "ended_at"),
+                getIntOrNull(rs, "total_ms"),
+                getIntOrNull(rs, "first_token_ms"),
                 rs.getLong("queued_ms"),
                 rs.getInt("attempt_count"),
                 rs.getInt("retry_count"),
                 rs.getInt("credential_failover_count"),
                 rs.getInt("fallback_count"),
-                rs.getObject("final_attempt_id", UUID.class),
-                rs.getObject("final_provider_id", UUID.class),
-                rs.getObject("final_provider_model_id", UUID.class),
-                rs.getObject("final_credential_id", UUID.class),
-                rs.getObject("access_credential_id", UUID.class),
+                d.readUuid(rs, "final_attempt_id"),
+                d.readUuid(rs, "final_provider_id"),
+                d.readUuid(rs, "final_provider_model_id"),
+                d.readUuid(rs, "final_credential_id"),
+                d.readUuid(rs, "access_credential_id"),
                 rs.getString("final_provider_name"),
                 rs.getString("final_provider_model_name"),
                 rs.getString("access_credential_name"),
@@ -357,36 +381,36 @@ public class JdbcTraceRepository {
                 fromJsonMapObject(rs.getString("request_summary")),
                 rs.getString("client_ip"),
                 rs.getString("user_agent"),
-                rs.getObject("updated_at", OffsetDateTime.class));
+                d.readOffsetDateTime(rs, "updated_at"));
     }
 
-    private ObservationRows.AttemptRow mapAttempt(ResultSet rs) throws SQLException {
+    private ObservationRows.AttemptRow mapAttempt(ResultSet rs, DatabaseDialect d) throws SQLException {
         return new ObservationRows.AttemptRow(
-                rs.getObject("id", UUID.class),
+                d.readUuid(rs, "id"),
                 rs.getString("trace_id"),
                 rs.getInt("sequence"),
                 rs.getString("attempt_type"),
-                rs.getObject("route_candidate_id", UUID.class),
-                rs.getObject("provider_id", UUID.class),
-                rs.getObject("provider_model_id", UUID.class),
-                rs.getObject("credential_pool_id", UUID.class),
-                rs.getObject("credential_id", UUID.class),
+                d.readUuid(rs, "route_candidate_id"),
+                d.readUuid(rs, "provider_id"),
+                d.readUuid(rs, "provider_model_id"),
+                d.readUuid(rs, "credential_pool_id"),
+                d.readUuid(rs, "credential_id"),
                 rs.getString("provider_name_snapshot"),
                 rs.getString("provider_model_name_snapshot"),
                 rs.getString("model_id_snapshot"),
                 rs.getString("credential_name_snapshot"),
                 rs.getString("status"),
-                rs.getObject("started_at", OffsetDateTime.class),
-                rs.getObject("provider_started_at", OffsetDateTime.class),
-                rs.getObject("response_headers_at", OffsetDateTime.class),
-                rs.getObject("first_token_at", OffsetDateTime.class),
-                rs.getObject("ended_at", OffsetDateTime.class),
-                (Integer) rs.getObject("dispatch_ms"),
-                (Integer) rs.getObject("response_header_ms"),
-                (Integer) rs.getObject("first_token_ms"),
-                (Integer) rs.getObject("total_ms"),
+                d.readOffsetDateTime(rs, "started_at"),
+                d.readOffsetDateTime(rs, "provider_started_at"),
+                d.readOffsetDateTime(rs, "response_headers_at"),
+                d.readOffsetDateTime(rs, "first_token_at"),
+                d.readOffsetDateTime(rs, "ended_at"),
+                getIntOrNull(rs, "dispatch_ms"),
+                getIntOrNull(rs, "response_header_ms"),
+                getIntOrNull(rs, "first_token_ms"),
+                getIntOrNull(rs, "total_ms"),
                 rs.getString("endpoint_host"),
-                (Integer) rs.getObject("http_status"),
+                getIntOrNull(rs, "http_status"),
                 rs.getString("provider_request_id"),
                 rs.getBoolean("response_committed"),
                 rs.getString("finish_reason"),
@@ -395,7 +419,7 @@ public class JdbcTraceRepository {
                 rs.getString("error_stage"),
                 rs.getString("error_summary"),
                 rs.getBoolean("retryable"),
-                (Integer) rs.getObject("retry_after_ms"),
+                getIntOrNull(rs, "retry_after_ms"),
                 fromJsonMapObject(rs.getString("resolved_parameters")),
                 rs.getLong("input_tokens"),
                 rs.getLong("output_tokens"),
@@ -403,12 +427,12 @@ public class JdbcTraceRepository {
                 rs.getString("usage_source"),
                 rs.getBigDecimal("input_price"),
                 rs.getBigDecimal("output_price"),
-                rs.getInt("price_unit"),
+                getIntOrNull(rs, "price_unit") == null ? 0 : getIntOrNull(rs, "price_unit"),
                 rs.getString("currency"),
                 rs.getBigDecimal("input_cost"),
                 rs.getBigDecimal("output_cost"),
                 rs.getBigDecimal("total_cost"),
-                rs.getObject("settled_at", OffsetDateTime.class));
+                d.readOffsetDateTime(rs, "settled_at"));
     }
 
     private static Map<String, String> fromJsonMap(String json) {
@@ -431,9 +455,5 @@ public class JdbcTraceRepository {
         } catch (Exception e) {
             throw new IllegalStateException("JSON列解析失败", e);
         }
-    }
-
-    private static IllegalStateException translate(String message, SQLException e) {
-        return new IllegalStateException(message + "：" + e.getClass().getSimpleName(), e);
     }
 }

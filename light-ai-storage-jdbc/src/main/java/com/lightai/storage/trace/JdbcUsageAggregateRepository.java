@@ -1,5 +1,8 @@
 package com.lightai.storage.trace;
 
+import com.lightai.storage.dialect.AbstractJdbcRepository;
+import com.lightai.storage.dialect.DatabaseDialect;
+import com.lightai.storage.dialect.DatabaseType;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -7,26 +10,26 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
  * usage_aggregate JDBC 仓储（DATABASE_PLAN 第 27 表，BE-033/035）。
- * 聚合更新用原子 upsert 增量；直方图以 jsonb_each 合并，不在 SQL 外读改写，
+ * 聚合更新用原子 upsert 增量；直方图在 PostgreSQL 以 jsonb_each 原生合并，
+ * 在 MySQL 以行锁读取 + 内存精准键值求和回写，不在语句外读改写，
  * 避免两个 worker 同时命中同一聚合行时丢失计数。
  * 请求/执行贡献按相同 dimension_key 合并由调用方（ContributionCalculator）保证。
  */
-public class JdbcUsageAggregateRepository {
-
-    private final String schemaName;
+public class JdbcUsageAggregateRepository extends AbstractJdbcRepository {
 
     public JdbcUsageAggregateRepository(String schemaName) {
-        this.schemaName = schemaName;
+        super(schemaName);
     }
 
     public JdbcUsageAggregateRepository() {
-        this(com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME);
+        super();
     }
 
     /** 一次聚合贡献：HOUR 与 DAY 各写一行（同 dimension_key 与币种）。 */
@@ -90,7 +93,7 @@ public class JdbcUsageAggregateRepository {
                        SELECT key, value FROM jsonb_each(EXCLUDED.%s)) e
                 GROUP BY e.key))""".strip();
 
-    private static final String UPSERT_SQL = """
+    private static final String PG_UPSERT_SQL = """
             INSERT INTO %s.usage_aggregate
               (id, granularity, bucket_start, bucket_end, dimension_key, application, project, tenant,
                alias_id, provider_id, provider_model_id, credential_pool_id, credential_id,
@@ -141,64 +144,263 @@ public class JdbcUsageAggregateRepository {
             + ",\n              updated_at = now()";
 
     public void upsertContribution(Connection connection, Contribution c) {
-        try (PreparedStatement statement = connection.prepareStatement(upsertSql())) {
-            statement.setObject(1, UUID.randomUUID());
-            statement.setString(2, c.granularity());
-            statement.setObject(3, c.bucketStart());
-            statement.setObject(4, c.bucketEnd());
-            statement.setString(5, c.dimensionKey());
-            statement.setString(6, c.application());
-            statement.setString(7, c.project());
-            statement.setString(8, c.tenant());
-            statement.setObject(9, c.aliasId());
-            statement.setObject(10, c.providerId());
-            statement.setObject(11, c.providerModelId());
-            statement.setObject(12, c.credentialPoolId());
-            statement.setObject(13, c.credentialId());
-            statement.setString(14, c.traceStatus());
-            statement.setString(15, c.errorCode());
-            statement.setString(16, c.usageSource());
-            statement.setBoolean(17, c.requestedStream());
-            statement.setString(18, c.currency());
-            statement.setString(19, toJson(c.dimensionNames()));
-            statement.setLong(20, c.requestCount());
-            statement.setLong(21, c.successCount());
-            statement.setLong(22, c.failureCount());
-            statement.setLong(23, c.cancelledCount());
-            statement.setLong(24, c.streamInterruptedCount());
-            statement.setLong(25, c.queuedCount());
-            statement.setLong(26, c.streamCount());
-            statement.setLong(27, c.attemptCount());
-            statement.setLong(28, c.initialCount());
-            statement.setLong(29, c.retryCount());
-            statement.setLong(30, c.credentialFailoverCount());
-            statement.setLong(31, c.fallbackCount());
-            statement.setLong(32, c.halfOpenProbeCount());
-            statement.setLong(33, c.inputTokens());
-            statement.setLong(34, c.outputTokens());
-            statement.setLong(35, c.totalTokens());
-            statement.setLong(36, c.actualInputTokens());
-            statement.setLong(37, c.actualOutputTokens());
-            statement.setLong(38, c.estimatedInputTokens());
-            statement.setLong(39, c.estimatedOutputTokens());
-            statement.setBigDecimal(40, c.inputCost());
-            statement.setBigDecimal(41, c.outputCost());
-            statement.setBigDecimal(42, c.totalCost());
-            statement.setLong(43, c.totalMsSum());
-            statement.setLong(44, c.totalMsCount());
-            statement.setLong(45, c.firstTokenMsSum());
-            statement.setLong(46, c.firstTokenMsCount());
-            statement.setLong(47, c.queuedMsSum());
-            statement.setString(48, toJsonNumberKeys(c.latencyHistogram()));
-            statement.setString(49, toJsonNumberKeys(c.firstTokenHistogram()));
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            throw translate("聚合贡献写入失败", e);
+        DatabaseDialect d = dialect(connection);
+        if (d.databaseType() == DatabaseType.POSTGRESQL) {
+            String sql = PG_UPSERT_SQL.formatted(schemaName);
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setObject(1, UUID.randomUUID());
+                statement.setString(2, c.granularity());
+                statement.setObject(3, c.bucketStart());
+                statement.setObject(4, c.bucketEnd());
+                statement.setString(5, c.dimensionKey());
+                statement.setString(6, c.application());
+                statement.setString(7, c.project());
+                statement.setString(8, c.tenant());
+                statement.setObject(9, c.aliasId());
+                statement.setObject(10, c.providerId());
+                statement.setObject(11, c.providerModelId());
+                statement.setObject(12, c.credentialPoolId());
+                statement.setObject(13, c.credentialId());
+                statement.setString(14, c.traceStatus());
+                statement.setString(15, c.errorCode());
+                statement.setString(16, c.usageSource());
+                statement.setBoolean(17, c.requestedStream());
+                statement.setString(18, c.currency());
+                statement.setString(19, toJson(c.dimensionNames()));
+                statement.setLong(20, c.requestCount());
+                statement.setLong(21, c.successCount());
+                statement.setLong(22, c.failureCount());
+                statement.setLong(23, c.cancelledCount());
+                statement.setLong(24, c.streamInterruptedCount());
+                statement.setLong(25, c.queuedCount());
+                statement.setLong(26, c.streamCount());
+                statement.setLong(27, c.attemptCount());
+                statement.setLong(28, c.initialCount());
+                statement.setLong(29, c.retryCount());
+                statement.setLong(30, c.credentialFailoverCount());
+                statement.setLong(31, c.fallbackCount());
+                statement.setLong(32, c.halfOpenProbeCount());
+                statement.setLong(33, c.inputTokens());
+                statement.setLong(34, c.outputTokens());
+                statement.setLong(35, c.totalTokens());
+                statement.setLong(36, c.actualInputTokens());
+                statement.setLong(37, c.actualOutputTokens());
+                statement.setLong(38, c.estimatedInputTokens());
+                statement.setLong(39, c.estimatedOutputTokens());
+                statement.setBigDecimal(40, c.inputCost());
+                statement.setBigDecimal(41, c.outputCost());
+                statement.setBigDecimal(42, c.totalCost());
+                statement.setLong(43, c.totalMsSum());
+                statement.setLong(44, c.totalMsCount());
+                statement.setLong(45, c.firstTokenMsSum());
+                statement.setLong(46, c.firstTokenMsCount());
+                statement.setLong(47, c.queuedMsSum());
+                statement.setString(48, toJsonNumberKeys(c.latencyHistogram()));
+                statement.setString(49, toJsonNumberKeys(c.firstTokenHistogram()));
+                statement.executeUpdate();
+            } catch (SQLException e) {
+                throw translate("聚合贡献写入失败", e);
+            }
+        } else {
+            upsertContributionMySql(connection, c, d);
         }
     }
 
-    private String upsertSql() {
-        return UPSERT_SQL.formatted(schemaName);
+    private void upsertContributionMySql(Connection connection, Contribution c, DatabaseDialect d) {
+        String table = qualify(connection, "usage_aggregate");
+        String selectSql = "SELECT id, latency_histogram, first_token_histogram FROM " + table
+                + " WHERE granularity = ? AND bucket_start = ? AND dimension_key = ? AND currency = ? "
+                + d.forUpdateClause();
+        UUID existingId = null;
+        String existingLatencyJson = null;
+        String existingFirstTokenJson = null;
+        try (PreparedStatement sel = connection.prepareStatement(selectSql)) {
+            sel.setString(1, c.granularity());
+            sel.setObject(2, c.bucketStart());
+            sel.setString(3, c.dimensionKey());
+            sel.setString(4, c.currency());
+            try (ResultSet rs = sel.executeQuery()) {
+                if (rs.next()) {
+                    existingId = d.readUuid(rs, "id");
+                    existingLatencyJson = rs.getString("latency_histogram");
+                    existingFirstTokenJson = rs.getString("first_token_histogram");
+                }
+            }
+        } catch (SQLException e) {
+            throw translate("聚合行锁定查询失败", e);
+        }
+
+        if (existingId != null) {
+            Map<String, Long> mergedLatency = mergeHistograms(parseHistogram(existingLatencyJson), c.latencyHistogram());
+            Map<String, Long> mergedFirstToken = mergeHistograms(parseHistogram(existingFirstTokenJson), c.firstTokenHistogram());
+            String updateSql = "UPDATE " + table + " SET "
+                    + "request_count = request_count + ?, "
+                    + "success_count = success_count + ?, "
+                    + "failure_count = failure_count + ?, "
+                    + "cancelled_count = cancelled_count + ?, "
+                    + "stream_interrupted_count = stream_interrupted_count + ?, "
+                    + "queued_count = queued_count + ?, "
+                    + "stream_count = stream_count + ?, "
+                    + "attempt_count = attempt_count + ?, "
+                    + "initial_count = initial_count + ?, "
+                    + "retry_count = retry_count + ?, "
+                    + "credential_failover_count = credential_failover_count + ?, "
+                    + "fallback_count = fallback_count + ?, "
+                    + "half_open_probe_count = half_open_probe_count + ?, "
+                    + "input_tokens = input_tokens + ?, "
+                    + "output_tokens = output_tokens + ?, "
+                    + "total_tokens = total_tokens + ?, "
+                    + "actual_input_tokens = actual_input_tokens + ?, "
+                    + "actual_output_tokens = actual_output_tokens + ?, "
+                    + "estimated_input_tokens = estimated_input_tokens + ?, "
+                    + "estimated_output_tokens = estimated_output_tokens + ?, "
+                    + "input_cost = input_cost + ?, "
+                    + "output_cost = output_cost + ?, "
+                    + "total_cost = total_cost + ?, "
+                    + "total_ms_sum = total_ms_sum + ?, "
+                    + "total_ms_count = total_ms_count + ?, "
+                    + "first_token_ms_sum = first_token_ms_sum + ?, "
+                    + "first_token_ms_count = first_token_ms_count + ?, "
+                    + "queued_ms_sum = queued_ms_sum + ?, "
+                    + "latency_histogram = ?, "
+                    + "first_token_histogram = ?, "
+                    + "updated_at = " + d.nowFunction() + " "
+                    + "WHERE id = ?";
+            try (PreparedStatement upd = connection.prepareStatement(updateSql)) {
+                upd.setLong(1, c.requestCount());
+                upd.setLong(2, c.successCount());
+                upd.setLong(3, c.failureCount());
+                upd.setLong(4, c.cancelledCount());
+                upd.setLong(5, c.streamInterruptedCount());
+                upd.setLong(6, c.queuedCount());
+                upd.setLong(7, c.streamCount());
+                upd.setLong(8, c.attemptCount());
+                upd.setLong(9, c.initialCount());
+                upd.setLong(10, c.retryCount());
+                upd.setLong(11, c.credentialFailoverCount());
+                upd.setLong(12, c.fallbackCount());
+                upd.setLong(13, c.halfOpenProbeCount());
+                upd.setLong(14, c.inputTokens());
+                upd.setLong(15, c.outputTokens());
+                upd.setLong(16, c.totalTokens());
+                upd.setLong(17, c.actualInputTokens());
+                upd.setLong(18, c.actualOutputTokens());
+                upd.setLong(19, c.estimatedInputTokens());
+                upd.setLong(20, c.estimatedOutputTokens());
+                upd.setBigDecimal(21, c.inputCost());
+                upd.setBigDecimal(22, c.outputCost());
+                upd.setBigDecimal(23, c.totalCost());
+                upd.setLong(24, c.totalMsSum());
+                upd.setLong(25, c.totalMsCount());
+                upd.setLong(26, c.firstTokenMsSum());
+                upd.setLong(27, c.firstTokenMsCount());
+                upd.setLong(28, c.queuedMsSum());
+                d.bindJson(upd, 29, toJsonNumberKeys(mergedLatency));
+                d.bindJson(upd, 30, toJsonNumberKeys(mergedFirstToken));
+                d.bindUuid(upd, 31, existingId);
+                upd.executeUpdate();
+            } catch (SQLException e) {
+                throw translate("聚合贡献更新失败", e);
+            }
+        } else {
+            String insertSql = "INSERT INTO " + table
+                    + " (id, granularity, bucket_start, bucket_end, dimension_key, application, project, tenant, "
+                    + "  alias_id, provider_id, provider_model_id, credential_pool_id, credential_id, "
+                    + "  trace_status, error_code, usage_source, requested_stream, currency, dimension_names, "
+                    + "  request_count, success_count, failure_count, cancelled_count, stream_interrupted_count, "
+                    + "  queued_count, stream_count, attempt_count, initial_count, retry_count, "
+                    + "  credential_failover_count, fallback_count, half_open_probe_count, "
+                    + "  input_tokens, output_tokens, total_tokens, "
+                    + "  actual_input_tokens, actual_output_tokens, estimated_input_tokens, estimated_output_tokens, "
+                    + "  input_cost, output_cost, total_cost, "
+                    + "  total_ms_sum, total_ms_count, first_token_ms_sum, first_token_ms_count, queued_ms_sum, "
+                    + "  latency_histogram, first_token_histogram, created_at, updated_at) "
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                    + "        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                    + "        ?, ?, " + d.nowFunction() + ", " + d.nowFunction() + ")";
+            try (PreparedStatement ins = connection.prepareStatement(insertSql)) {
+                d.bindUuid(ins, 1, UUID.randomUUID());
+                ins.setString(2, c.granularity());
+                ins.setObject(3, c.bucketStart());
+                ins.setObject(4, c.bucketEnd());
+                ins.setString(5, c.dimensionKey());
+                ins.setString(6, c.application());
+                ins.setString(7, c.project());
+                ins.setString(8, c.tenant());
+                d.bindUuid(ins, 9, c.aliasId());
+                d.bindUuid(ins, 10, c.providerId());
+                d.bindUuid(ins, 11, c.providerModelId());
+                d.bindUuid(ins, 12, c.credentialPoolId());
+                d.bindUuid(ins, 13, c.credentialId());
+                ins.setString(14, c.traceStatus());
+                ins.setString(15, c.errorCode());
+                ins.setString(16, c.usageSource());
+                ins.setBoolean(17, c.requestedStream());
+                ins.setString(18, c.currency());
+                d.bindJson(ins, 19, toJson(c.dimensionNames()));
+                ins.setLong(20, c.requestCount());
+                ins.setLong(21, c.successCount());
+                ins.setLong(22, c.failureCount());
+                ins.setLong(23, c.cancelledCount());
+                ins.setLong(24, c.streamInterruptedCount());
+                ins.setLong(25, c.queuedCount());
+                ins.setLong(26, c.streamCount());
+                ins.setLong(27, c.attemptCount());
+                ins.setLong(28, c.initialCount());
+                ins.setLong(29, c.retryCount());
+                ins.setLong(30, c.credentialFailoverCount());
+                ins.setLong(31, c.fallbackCount());
+                ins.setLong(32, c.halfOpenProbeCount());
+                ins.setLong(33, c.inputTokens());
+                ins.setLong(34, c.outputTokens());
+                ins.setLong(35, c.totalTokens());
+                ins.setLong(36, c.actualInputTokens());
+                ins.setLong(37, c.actualOutputTokens());
+                ins.setLong(38, c.estimatedInputTokens());
+                ins.setLong(39, c.estimatedOutputTokens());
+                ins.setBigDecimal(40, c.inputCost());
+                ins.setBigDecimal(41, c.outputCost());
+                ins.setBigDecimal(42, c.totalCost());
+                ins.setLong(43, c.totalMsSum());
+                ins.setLong(44, c.totalMsCount());
+                ins.setLong(45, c.firstTokenMsSum());
+                ins.setLong(46, c.firstTokenMsCount());
+                ins.setLong(47, c.queuedMsSum());
+                d.bindJson(ins, 48, toJsonNumberKeys(c.latencyHistogram()));
+                d.bindJson(ins, 49, toJsonNumberKeys(c.firstTokenHistogram()));
+                ins.executeUpdate();
+            } catch (SQLException e) {
+                String state = e.getSQLState() == null ? "" : e.getSQLState();
+                if ("23505".equals(state) || "23000".equals(state) || e.getErrorCode() == 1062) {
+                    upsertContributionMySql(connection, c, d);
+                } else {
+                    throw translate("聚合贡献写入失败", e);
+                }
+            }
+        }
+    }
+
+    private static Map<String, Long> mergeHistograms(Map<String, Long> a, Map<String, Long> b) {
+        Map<String, Long> result = new LinkedHashMap<>();
+        if (a != null) {
+            result.putAll(a);
+        }
+        if (b != null) {
+            b.forEach((k, v) -> result.merge(k, v, Long::sum));
+        }
+        return result;
+    }
+
+    private static Map<String, Long> parseHistogram(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return com.lightai.client.json.ProtocolJson.protocol().readValue(
+                    json, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Long>>() {});
+        } catch (Exception e) {
+            return Map.of();
+        }
     }
 
     /** 聚合行筛选：维度多值已由服务层校验个数与枚举；范围以桶边界表达。 */
@@ -280,12 +482,13 @@ public class JdbcUsageAggregateRepository {
                     + "coalesce(sum(estimated_output_tokens),0) AS estimated_output_tokens";
 
     public UsageTotals summarize(Connection connection, AggregateFilter filter) {
+        DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT ").append(SUM_COLUMNS).append(" FROM ")
-                .append(qualified()).append(" WHERE 1 = 1");
+                .append(qualify(connection, "usage_aggregate")).append(" WHERE 1 = 1");
         List<Object> params = new ArrayList<>();
         appendFilter(sql, params, filter);
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
-            bind(statement, params);
+            bindParameters(statement, params, d);
             try (ResultSet rs = statement.executeQuery()) {
                 rs.next();
                 return new UsageTotals(
@@ -308,7 +511,7 @@ public class JdbcUsageAggregateRepository {
     public List<CurrencyCost> costsByCurrency(Connection connection, AggregateFilter filter) {
         StringBuilder sql = new StringBuilder("SELECT currency, coalesce(sum(input_cost),0) AS input_cost, "
                 + "coalesce(sum(output_cost),0) AS output_cost, coalesce(sum(total_cost),0) AS total_cost FROM ")
-                .append(qualified()).append(" WHERE 1 = 1");
+                .append(qualify(connection, "usage_aggregate")).append(" WHERE 1 = 1");
         List<Object> params = new ArrayList<>();
         appendFilter(sql, params, filter);
         sql.append(" GROUP BY currency ORDER BY currency ASC");
@@ -346,14 +549,15 @@ public class JdbcUsageAggregateRepository {
     }
 
     public List<BucketTotals> trendBuckets(Connection connection, AggregateFilter filter) {
+        DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT bucket_start, bucket_end, ").append(SUM_COLUMNS)
-                .append(" FROM ").append(qualified()).append(" WHERE 1 = 1");
+                .append(" FROM ").append(qualify(connection, "usage_aggregate")).append(" WHERE 1 = 1");
         List<Object> params = new ArrayList<>();
         appendFilter(sql, params, filter);
         sql.append(" GROUP BY bucket_start, bucket_end ORDER BY bucket_start ASC");
         return queryList(connection, sql.toString(), params, rs -> new BucketTotals(
-                rs.getObject("bucket_start", OffsetDateTime.class),
-                rs.getObject("bucket_end", OffsetDateTime.class),
+                d.readOffsetDateTime(rs, "bucket_start"),
+                d.readOffsetDateTime(rs, "bucket_end"),
                 rs.getLong("request_count"), rs.getLong("success_count"), rs.getLong("failure_count"),
                 rs.getLong("stream_interrupted_count"),
                 rs.getLong("attempt_count"), rs.getLong("initial_count"), rs.getLong("retry_count"),
@@ -365,15 +569,16 @@ public class JdbcUsageAggregateRepository {
     }
 
     public List<BucketCurrencyCost> costsByBucket(Connection connection, AggregateFilter filter) {
+        DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT bucket_start, currency, "
                 + "coalesce(sum(input_cost),0) AS input_cost, coalesce(sum(output_cost),0) AS output_cost, "
                 + "coalesce(sum(total_cost),0) AS total_cost FROM ")
-                .append(qualified()).append(" WHERE 1 = 1");
+                .append(qualify(connection, "usage_aggregate")).append(" WHERE 1 = 1");
         List<Object> params = new ArrayList<>();
         appendFilter(sql, params, filter);
         sql.append(" GROUP BY bucket_start, currency ORDER BY bucket_start ASC, currency ASC");
         return queryList(connection, sql.toString(), params, rs -> new BucketCurrencyCost(
-                rs.getObject("bucket_start", OffsetDateTime.class), rs.getString("currency"),
+                d.readOffsetDateTime(rs, "bucket_start"), rs.getString("currency"),
                 rs.getBigDecimal("input_cost"), rs.getBigDecimal("output_cost"),
                 rs.getBigDecimal("total_cost")));
     }
@@ -407,17 +612,21 @@ public class JdbcUsageAggregateRepository {
     }
 
     public List<GroupRow> groupRows(Connection connection, AggregateFilter filter, String dimensionColumn) {
+        DatabaseDialect d = dialect(connection);
+        String maxDimNames = d.databaseType() == DatabaseType.MYSQL
+                ? "MAX(CAST(dimension_names AS CHAR(2000)))"
+                : "max(dimension_names::text)";
         StringBuilder sql = new StringBuilder("SELECT ").append(dimensionColumn)
-                .append(" AS dimension_value, currency, max(dimension_names) AS dimension_names, ")
+                .append(" AS dimension_value, currency, ").append(maxDimNames).append(" AS dimension_names, ")
                 .append(SUM_COLUMNS).append(", coalesce(sum(input_cost),0) AS input_cost, "
                         + "coalesce(sum(output_cost),0) AS output_cost, "
                         + "coalesce(sum(total_cost),0) AS total_cost FROM ")
-                .append(qualified()).append(" WHERE 1 = 1");
+                .append(qualify(connection, "usage_aggregate")).append(" WHERE 1 = 1");
         List<Object> params = new ArrayList<>();
         appendFilter(sql, params, filter);
         sql.append(" GROUP BY ").append(dimensionColumn).append(", currency");
         return queryList(connection, sql.toString(), params, rs -> {
-            Map<String, String> names = namesFromJson(rs.getString("dimension_names"));
+            Map<String, String> names = namesFromJson(d.readJson(rs, "dimension_names"));
             return new GroupRow(
                     rs.getString("dimension_value"), rs.getString("currency"), names,
                     rs.getLong("request_count"), rs.getLong("success_count"), rs.getLong("failure_count"),
@@ -435,15 +644,16 @@ public class JdbcUsageAggregateRepository {
 
     /** 数据水位：命中行最大 updated_at，用于 data_updated_at 一致性核对。 */
     public OffsetDateTime maxUpdatedAt(Connection connection, AggregateFilter filter) {
+        DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT max(updated_at) AS max_updated FROM ")
-                .append(qualified()).append(" WHERE 1 = 1");
+                .append(qualify(connection, "usage_aggregate")).append(" WHERE 1 = 1");
         List<Object> params = new ArrayList<>();
         appendFilter(sql, params, filter);
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
-            bind(statement, params);
+            bindParameters(statement, params, d);
             try (ResultSet rs = statement.executeQuery()) {
                 rs.next();
-                return rs.getObject("max_updated", OffsetDateTime.class);
+                return d.readOffsetDateTime(rs, "max_updated");
             }
         } catch (SQLException e) {
             throw translate("Usage水位查询失败", e);
@@ -477,14 +687,15 @@ public class JdbcUsageAggregateRepository {
     /** 导出行数上限前置判断：桶×维度×币种组合计数，不加载明细。 */
     public long countExportRows(Connection connection, AggregateFilter filter,
                                 String dimensionColumn) {
+        DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT count(*) FROM (SELECT 1 FROM ")
-                .append(qualified()).append(" WHERE 1 = 1");
+                .append(qualify(connection, "usage_aggregate")).append(" WHERE 1 = 1");
         List<Object> params = new ArrayList<>();
         appendFilter(sql, params, filter);
         sql.append(" GROUP BY bucket_start, bucket_end, ").append(dimensionColumn)
                 .append(", currency) combinations");
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
-            bind(statement, params);
+            bindParameters(statement, params, d);
             try (ResultSet rs = statement.executeQuery()) {
                 rs.next();
                 return rs.getLong(1);
@@ -496,25 +707,29 @@ public class JdbcUsageAggregateRepository {
 
     public List<ExportRow> exportRows(Connection connection, AggregateFilter filter,
                                       String dimensionColumn) {
+        DatabaseDialect d = dialect(connection);
+        String maxDimNames = d.databaseType() == DatabaseType.MYSQL
+                ? "MAX(CAST(dimension_names AS CHAR(2000)))"
+                : "max(dimension_names::text)";
         StringBuilder sql = new StringBuilder("SELECT bucket_start, bucket_end, ")
                 .append(dimensionColumn).append(" AS dimension_value, currency, ")
-                .append("max(dimension_names) AS dimension_names, ").append(SUM_COLUMNS)
+                .append(maxDimNames).append(" AS dimension_names, ").append(SUM_COLUMNS)
                 .append(", coalesce(sum(input_cost),0) AS input_cost, "
                         + "coalesce(sum(output_cost),0) AS output_cost, "
                         + "coalesce(sum(total_cost),0) AS total_cost FROM ")
-                .append(qualified()).append(" WHERE 1 = 1");
+                .append(qualify(connection, "usage_aggregate")).append(" WHERE 1 = 1");
         List<Object> params = new ArrayList<>();
         appendFilter(sql, params, filter);
         sql.append(" GROUP BY bucket_start, bucket_end, ").append(dimensionColumn)
                 .append(", currency ORDER BY bucket_start ASC, ").append(dimensionColumn)
                 .append(" ASC, currency ASC");
         return queryList(connection, sql.toString(), params, rs -> {
-            Map<String, String> names = namesFromJson(rs.getString("dimension_names"));
+            Map<String, String> names = namesFromJson(d.readJson(rs, "dimension_names"));
             long actual = rs.getLong("actual_input_tokens") + rs.getLong("actual_output_tokens");
             long estimated = rs.getLong("estimated_input_tokens") + rs.getLong("estimated_output_tokens");
             return new ExportRow(
-                    rs.getObject("bucket_start", OffsetDateTime.class),
-                    rs.getObject("bucket_end", OffsetDateTime.class),
+                    d.readOffsetDateTime(rs, "bucket_start"),
+                    d.readOffsetDateTime(rs, "bucket_end"),
                     rs.getString("dimension_value"), rs.getString("currency"), names,
                     rs.getLong("request_count"), rs.getLong("success_count"),
                     rs.getLong("failure_count"), rs.getLong("attempt_count"),
@@ -526,9 +741,8 @@ public class JdbcUsageAggregateRepository {
         });
     }
 
-
     public List<String> distinctCurrencies(Connection connection) {
-        String sql = "SELECT DISTINCT currency FROM " + qualified() + " ORDER BY currency ASC";
+        String sql = "SELECT DISTINCT currency FROM " + qualify(connection, "usage_aggregate") + " ORDER BY currency ASC";
         try (PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet rs = statement.executeQuery()) {
             List<String> currencies = new ArrayList<>();
@@ -584,21 +798,16 @@ public class JdbcUsageAggregateRepository {
             return;
         }
         sql.append(" AND ").append(column).append(" IN (")
-                .append(String.join(", ", java.util.Collections.nCopies(values.size(), "?")))
+                .append(inPlaceholders(values.size()))
                 .append(")");
         params.addAll(values);
     }
 
-    private static void bind(PreparedStatement statement, List<Object> params) throws SQLException {
-        for (int i = 0; i < params.size(); i++) {
-            statement.setObject(i + 1, params.get(i));
-        }
-    }
-
     private <T> List<T> queryList(Connection connection, String sql, List<Object> params,
                                   RowMapper<T> mapper) {
+        DatabaseDialect d = dialect(connection);
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            bind(statement, params);
+            bindParameters(statement, params, d);
             try (ResultSet rs = statement.executeQuery()) {
                 List<T> rows = new ArrayList<>();
                 while (rs.next()) {
@@ -637,7 +846,6 @@ public class JdbcUsageAggregateRepository {
         }
     }
 
-
     private static Map<String, String> namesFromJson(String json) {
         if (json == null || json.isBlank()) {
             return Map.of();
@@ -649,12 +857,5 @@ public class JdbcUsageAggregateRepository {
             throw new IllegalStateException("dimension_names 解析失败", e);
         }
     }
-
-    private String qualified() {
-        return schemaName + ".usage_aggregate";
-    }
-
-    private static IllegalStateException translate(String message, SQLException e) {
-        return new IllegalStateException(message + "：" + e.getClass().getSimpleName(), e);
-    }
 }
+

@@ -1,5 +1,7 @@
 package com.lightai.storage.access;
 
+import com.lightai.storage.dialect.AbstractJdbcRepository;
+import com.lightai.storage.dialect.DatabaseDialect;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -15,30 +17,33 @@ import java.util.UUID;
  * access_credential / access_credential_alias JDBC 实现（DATABASE_PLAN §36/§37）。
  * U(token_hash) 供业务鉴权；alias 白名单随实体同事务维护。
  */
-public final class JdbcAccessCredentialRepository implements AccessCredentialRepository {
+public final class JdbcAccessCredentialRepository extends AbstractJdbcRepository implements AccessCredentialRepository {
 
     private static final String COLUMNS = """
             id, name, application, token_prefix, token_hash, token_hash_version, masked_value,
             ip_allowlist, expires_at, enabled, rotation_generation, issued_at, rotated_at,
             last_used_at, last_used_ip_masked, version, created_at, updated_at, deleted_at""";
 
-    private final String schemaName;
+    public JdbcAccessCredentialRepository(String schemaName, DatabaseDialect explicitDialect) {
+        super(schemaName, explicitDialect);
+    }
 
     public JdbcAccessCredentialRepository(String schemaName) {
-        this.schemaName = schemaName;
+        super(schemaName);
     }
 
     public JdbcAccessCredentialRepository() {
-        this(com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME);
+        super();
     }
 
     @Override
     public Optional<AccessCredentialRecord> find(Connection connection, UUID id) {
-        String sql = "SELECT " + COLUMNS + " FROM " + qualified() + " WHERE id = ?";
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "access_credential") + " WHERE id = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, id);
+            d.bindUuid(statement, 1, id);
             try (ResultSet rs = statement.executeQuery()) {
-                return rs.next() ? Optional.of(mapRow(rs)) : Optional.empty();
+                return rs.next() ? Optional.of(mapRow(rs, d)) : Optional.empty();
             }
         } catch (SQLException e) {
             throw new IllegalStateException("access_credential 读取失败：" + e.getClass().getSimpleName(), e);
@@ -47,12 +52,13 @@ public final class JdbcAccessCredentialRepository implements AccessCredentialRep
 
     @Override
     public Optional<AccessCredentialRecord> findByTokenHash(Connection connection, byte[] tokenHash) {
-        String sql = "SELECT " + COLUMNS + " FROM " + qualified()
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "access_credential")
                 + " WHERE token_hash = ? AND deleted_at IS NULL LIMIT 1";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setBytes(1, tokenHash);
             try (ResultSet rs = statement.executeQuery()) {
-                return rs.next() ? Optional.of(mapRow(rs)) : Optional.empty();
+                return rs.next() ? Optional.of(mapRow(rs, d)) : Optional.empty();
             }
         } catch (SQLException e) {
             throw new IllegalStateException("access_credential 鉴权读取失败：" + e.getClass().getSimpleName(), e);
@@ -61,7 +67,7 @@ public final class JdbcAccessCredentialRepository implements AccessCredentialRep
 
     @Override
     public boolean existsAliveByName(Connection connection, String name) {
-        String sql = "SELECT 1 FROM " + qualified() + " WHERE name = ? AND deleted_at IS NULL LIMIT 1";
+        String sql = "SELECT 1 FROM " + qualify(connection, "access_credential") + " WHERE name = ? AND deleted_at IS NULL LIMIT 1";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, name);
             try (ResultSet rs = statement.executeQuery()) {
@@ -74,9 +80,10 @@ public final class JdbcAccessCredentialRepository implements AccessCredentialRep
 
     @Override
     public void insert(Connection connection, AccessCredentialRecord record, List<UUID> allowedAliasIds) {
-        String sql = "INSERT INTO " + qualified() + " (" + COLUMNS + ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        DatabaseDialect d = dialect(connection);
+        String sql = "INSERT INTO " + qualify(connection, "access_credential") + " (" + COLUMNS + ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            bind(statement, record);
+            bind(statement, record, d);
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("access_credential 写入失败：" + e.getClass().getSimpleName(), e);
@@ -86,11 +93,11 @@ public final class JdbcAccessCredentialRepository implements AccessCredentialRep
 
     @Override
     public void update(Connection connection, AccessCredentialRecord record, List<UUID> allowedAliasIds) {
-        String sql = """
-                UPDATE %s SET name=?, application=?, token_prefix=?, token_hash=?, token_hash_version=?,
-                masked_value=?, ip_allowlist=?, expires_at=?, enabled=?, rotation_generation=?, issued_at=?,
-                rotated_at=?, last_used_at=?, last_used_ip_masked=?, version=?, updated_at=?, deleted_at=?
-                WHERE id=?""".formatted(qualified());
+        DatabaseDialect d = dialect(connection);
+        String sql = ("UPDATE " + qualify(connection, "access_credential") + " SET name=?, application=?, token_prefix=?, token_hash=?, token_hash_version=?, "
+                + "masked_value=?, ip_allowlist=?, expires_at=?, enabled=?, rotation_generation=?, issued_at=?, "
+                + "rotated_at=?, last_used_at=?, last_used_ip_masked=?, version=?, updated_at=?, deleted_at=? "
+                + "WHERE id=?").strip();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             int i = 1;
             statement.setString(i++, record.name());
@@ -110,7 +117,7 @@ public final class JdbcAccessCredentialRepository implements AccessCredentialRep
             statement.setLong(i++, record.version());
             statement.setTimestamp(i++, Timestamp.from(record.updatedAt().toInstant()));
             statement.setTimestamp(i++, record.deletedAt() == null ? null : Timestamp.from(record.deletedAt().toInstant()));
-            statement.setObject(i, record.id());
+            d.bindUuid(statement, i, record.id());
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("access_credential 更新失败：" + e.getClass().getSimpleName(), e);
@@ -119,17 +126,18 @@ public final class JdbcAccessCredentialRepository implements AccessCredentialRep
     }
 
     private void replaceAliases(Connection connection, UUID credentialId, List<UUID> aliasIds) {
+        DatabaseDialect d = dialect(connection);
         try (PreparedStatement delete = connection.prepareStatement(
-                "DELETE FROM " + aliasQualified() + " WHERE access_credential_id = ?");
+                "DELETE FROM " + qualify(connection, "access_credential_alias") + " WHERE access_credential_id = ?");
              PreparedStatement insert = connection.prepareStatement(
-                     "INSERT INTO " + aliasQualified() + " (id, access_credential_id, alias_id, created_at) VALUES (?,?,?,?)")) {
-            delete.setObject(1, credentialId);
+                     "INSERT INTO " + qualify(connection, "access_credential_alias") + " (id, access_credential_id, alias_id, created_at) VALUES (?,?,?,?)")) {
+            d.bindUuid(delete, 1, credentialId);
             delete.executeUpdate();
             OffsetDateTime now = OffsetDateTime.now();
             for (UUID aliasId : aliasIds == null ? List.<UUID>of() : aliasIds) {
-                insert.setObject(1, UUID.randomUUID());
-                insert.setObject(2, credentialId);
-                insert.setObject(3, aliasId);
+                d.bindUuid(insert, 1, UUID.randomUUID());
+                d.bindUuid(insert, 2, credentialId);
+                d.bindUuid(insert, 3, aliasId);
                 insert.setTimestamp(4, Timestamp.from(now.toInstant()));
                 insert.addBatch();
             }
@@ -141,13 +149,14 @@ public final class JdbcAccessCredentialRepository implements AccessCredentialRep
 
     @Override
     public List<UUID> aliasIdsOf(Connection connection, UUID credentialId) {
-        String sql = "SELECT alias_id FROM " + aliasQualified() + " WHERE access_credential_id = ?";
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT alias_id FROM " + qualify(connection, "access_credential_alias") + " WHERE access_credential_id = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, credentialId);
+            d.bindUuid(statement, 1, credentialId);
             try (ResultSet rs = statement.executeQuery()) {
                 List<UUID> ids = new ArrayList<>();
                 while (rs.next()) {
-                    ids.add(rs.getObject(1, UUID.class));
+                    ids.add(d.readUuid(rs, 1));
                 }
                 return ids;
             }
@@ -159,20 +168,19 @@ public final class JdbcAccessCredentialRepository implements AccessCredentialRep
     @Override
     public List<AccessCredentialRecord> list(Connection connection, String filterSql, List<Object> filterValues,
                                              String orderSql, long offset, int limit) {
-        String sql = "SELECT " + COLUMNS + " FROM " + qualified() + " WHERE deleted_at IS NULL"
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "access_credential") + " WHERE deleted_at IS NULL"
                 + (filterSql == null || filterSql.isBlank() ? "" : " AND " + filterSql)
-                + " ORDER BY " + orderSql + " OFFSET ? LIMIT ?";
+                + " ORDER BY " + orderSql + " LIMIT ? OFFSET ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            int i = 1;
-            for (Object value : filterValues) {
-                statement.setObject(i++, value);
-            }
-            statement.setLong(i++, offset);
-            statement.setInt(i, limit);
+            bindParameters(statement, filterValues, d);
+            int i = filterValues.size() + 1;
+            statement.setInt(i++, limit);
+            statement.setLong(i, offset);
             try (ResultSet rs = statement.executeQuery()) {
                 List<AccessCredentialRecord> rows = new ArrayList<>();
                 while (rs.next()) {
-                    rows.add(mapRow(rs));
+                    rows.add(mapRow(rs, d));
                 }
                 return rows;
             }
@@ -183,13 +191,11 @@ public final class JdbcAccessCredentialRepository implements AccessCredentialRep
 
     @Override
     public long count(Connection connection, String filterSql, List<Object> filterValues) {
-        String sql = "SELECT count(*) FROM " + qualified() + " WHERE deleted_at IS NULL"
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT count(*) FROM " + qualify(connection, "access_credential") + " WHERE deleted_at IS NULL"
                 + (filterSql == null || filterSql.isBlank() ? "" : " AND " + filterSql);
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            int i = 1;
-            for (Object value : filterValues) {
-                statement.setObject(i++, value);
-            }
+            bindParameters(statement, filterValues, d);
             try (ResultSet rs = statement.executeQuery()) {
                 return rs.next() ? rs.getLong(1) : 0L;
             }
@@ -200,26 +206,23 @@ public final class JdbcAccessCredentialRepository implements AccessCredentialRep
 
     @Override
     public void touch(Connection connection, UUID id, OffsetDateTime usedAt, String maskedIp) {
-        String sql = "UPDATE " + qualified()
+        DatabaseDialect d = dialect(connection);
+        String sql = "UPDATE " + qualify(connection, "access_credential")
                 + " SET last_used_at = ?, last_used_ip_masked = ?, updated_at = ? WHERE id = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setTimestamp(1, Timestamp.from(usedAt.toInstant()));
             statement.setString(2, maskedIp);
             statement.setTimestamp(3, Timestamp.from(usedAt.toInstant()));
-            statement.setObject(4, id);
+            d.bindUuid(statement, 4, id);
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("access_credential 活动摘要更新失败：" + e.getClass().getSimpleName(), e);
         }
     }
 
-    private static AccessCredentialRecord mapRow(ResultSet rs) throws SQLException {
-        Timestamp expiresAt = rs.getTimestamp("expires_at");
-        Timestamp rotatedAt = rs.getTimestamp("rotated_at");
-        Timestamp lastUsedAt = rs.getTimestamp("last_used_at");
-        Timestamp deletedAt = rs.getTimestamp("deleted_at");
+    private static AccessCredentialRecord mapRow(ResultSet rs, DatabaseDialect d) throws SQLException {
         return new AccessCredentialRecord(
-                rs.getObject("id", UUID.class),
+                d.readUuid(rs, "id"),
                 rs.getString("name"),
                 rs.getString("application"),
                 rs.getString("token_prefix"),
@@ -227,22 +230,22 @@ public final class JdbcAccessCredentialRepository implements AccessCredentialRep
                 rs.getInt("token_hash_version"),
                 rs.getString("masked_value"),
                 fromJson(rs.getString("ip_allowlist")),
-                expiresAt == null ? null : offset(expiresAt),
+                d.readOffsetDateTime(rs, "expires_at"),
                 rs.getBoolean("enabled"),
                 rs.getLong("rotation_generation"),
-                offset(rs.getTimestamp("issued_at")),
-                rotatedAt == null ? null : offset(rotatedAt),
-                lastUsedAt == null ? null : offset(lastUsedAt),
+                d.readOffsetDateTime(rs, "issued_at"),
+                d.readOffsetDateTime(rs, "rotated_at"),
+                d.readOffsetDateTime(rs, "last_used_at"),
                 rs.getString("last_used_ip_masked"),
                 rs.getLong("version"),
-                offset(rs.getTimestamp("created_at")),
-                offset(rs.getTimestamp("updated_at")),
-                deletedAt == null ? null : offset(deletedAt));
+                d.readOffsetDateTime(rs, "created_at"),
+                d.readOffsetDateTime(rs, "updated_at"),
+                d.readOffsetDateTime(rs, "deleted_at"));
     }
 
-    private static void bind(PreparedStatement statement, AccessCredentialRecord record) throws SQLException {
+    private static void bind(PreparedStatement statement, AccessCredentialRecord record, DatabaseDialect d) throws SQLException {
         int i = 1;
-        statement.setObject(i++, record.id());
+        d.bindUuid(statement, i++, record.id());
         statement.setString(i++, record.name());
         statement.setString(i++, record.application());
         statement.setString(i++, record.tokenPrefix());
@@ -288,17 +291,5 @@ public final class JdbcAccessCredentialRepository implements AccessCredentialRep
             values.add(part.trim().replaceFirst("^\"", "").replaceFirst("\"$", "").replace("\\\"", "\""));
         }
         return List.copyOf(values);
-    }
-
-    private String qualified() {
-        return schemaName + ".access_credential";
-    }
-
-    private String aliasQualified() {
-        return schemaName + ".access_credential_alias";
-    }
-
-    private static OffsetDateTime offset(Timestamp timestamp) {
-        return timestamp == null ? null : OffsetDateTime.ofInstant(timestamp.toInstant(), java.time.ZoneOffset.UTC);
     }
 }

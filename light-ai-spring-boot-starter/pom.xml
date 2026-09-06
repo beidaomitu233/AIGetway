@@ -58,6 +58,13 @@
       <artifactId>spring-boot-configuration-processor</artifactId>
       <optional>true</optional>
     </dependency>
+    <!-- 多数据源动态路由支持（可选） -->
+    <dependency>
+      <groupId>com.baomidou</groupId>
+      <artifactId>dynamic-datasource-spring-boot3-starter</artifactId>
+      <optional>true</optional>
+    </dependency>
+
 
     <!-- Test dependencies -->
     <dependency>

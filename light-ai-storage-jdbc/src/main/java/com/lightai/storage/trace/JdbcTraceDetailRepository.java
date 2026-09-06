@@ -2,6 +2,8 @@ package com.lightai.storage.trace;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.lightai.client.json.ProtocolJson;
+import com.lightai.storage.dialect.AbstractJdbcRepository;
+import com.lightai.storage.dialect.DatabaseDialect;
 import com.lightai.storage.trace.ObservationRows.CircuitEventRow;
 import com.lightai.storage.trace.ObservationRows.ContentSampleRow;
 import com.lightai.storage.trace.ObservationRows.QueueEntryRow;
@@ -26,50 +28,52 @@ import java.util.UUID;
  * 详情按 trace_id 批量读取；任何下级读取失败由调用方收敛为
  * OBSERVATION_DATA_UNAVAILABLE，不返回局部详情。
  */
-public class JdbcTraceDetailRepository {
+public class JdbcTraceDetailRepository extends AbstractJdbcRepository {
 
-    private final String schemaName;
+    public JdbcTraceDetailRepository(String schemaName, DatabaseDialect explicitDialect) {
+        super(schemaName, explicitDialect);
+    }
 
     public JdbcTraceDetailRepository(String schemaName) {
-        this.schemaName = schemaName;
+        super(schemaName);
     }
 
     public JdbcTraceDetailRepository() {
-        this(com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME);
+        super();
     }
 
     public List<RouteDecisionRow> routeDecisions(Connection connection, String traceId) {
         String sql = "SELECT id, trace_id, sequence, route_candidate_id, decision, reason_code, "
-                + "reason_detail, observed_status, created_at FROM " + schemaName
-                + ".route_decision WHERE trace_id = ? ORDER BY sequence ASC";
-        return query(connection, sql, traceId, rs -> new RouteDecisionRow(
-                rs.getObject("id", UUID.class),
+                + "reason_detail, observed_status, created_at FROM " + qualify(connection, "route_decision")
+                + " WHERE trace_id = ? ORDER BY sequence ASC";
+        return query(connection, sql, traceId, (rs, dl) -> new RouteDecisionRow(
+                dl.readUuid(rs, "id"),
                 rs.getString("trace_id"),
                 rs.getInt("sequence"),
-                rs.getObject("route_candidate_id", UUID.class),
+                dl.readUuid(rs, "route_candidate_id"),
                 rs.getString("decision"),
                 rs.getString("reason_code"),
                 rs.getString("reason_detail"),
                 rs.getString("observed_status"),
-                rs.getObject("created_at", OffsetDateTime.class)));
+                dl.readOffsetDateTime(rs, "created_at")));
     }
 
     public List<QueueEntryRow> queueEntries(Connection connection, String traceId) {
         String sql = "SELECT id, trace_id, alias_id, sequence, blocking_policy_ids, estimated_tokens, "
                 + "status, enqueued_at, deadline_at, acquired_at, ended_at, wake_reason, error_code "
-                + "FROM " + schemaName + ".queue_entry WHERE trace_id = ? ORDER BY sequence ASC";
-        return query(connection, sql, traceId, rs -> new QueueEntryRow(
-                rs.getObject("id", UUID.class),
+                + "FROM " + qualify(connection, "queue_entry") + " WHERE trace_id = ? ORDER BY sequence ASC";
+        return query(connection, sql, traceId, (rs, dl) -> new QueueEntryRow(
+                dl.readUuid(rs, "id"),
                 rs.getString("trace_id"),
-                rs.getObject("alias_id", UUID.class),
+                dl.readUuid(rs, "alias_id"),
                 rs.getLong("sequence"),
                 fromJsonList(rs.getString("blocking_policy_ids")),
                 rs.getLong("estimated_tokens"),
                 rs.getString("status"),
-                rs.getObject("enqueued_at", OffsetDateTime.class),
-                rs.getObject("deadline_at", OffsetDateTime.class),
-                rs.getObject("acquired_at", OffsetDateTime.class),
-                rs.getObject("ended_at", OffsetDateTime.class),
+                dl.readOffsetDateTime(rs, "enqueued_at"),
+                dl.readOffsetDateTime(rs, "deadline_at"),
+                dl.readOffsetDateTime(rs, "acquired_at"),
+                dl.readOffsetDateTime(rs, "ended_at"),
                 rs.getString("wake_reason"),
                 rs.getString("error_code")));
     }
@@ -77,26 +81,26 @@ public class JdbcTraceDetailRepository {
     /** 预占与其 item 的 policy_ids 一次装配。 */
     public List<ReservationWithItems> reservations(Connection connection, String traceId) {
         String sql = "SELECT id, trace_id, attempt_id, status, reserved_tokens, actual_tokens, "
-                + "created_at, settled_at, release_reason FROM " + schemaName
-                + ".capacity_reservation WHERE trace_id = ? ORDER BY created_at ASC, id ASC";
+                + "created_at, settled_at, release_reason FROM " + qualify(connection, "capacity_reservation")
+                + " WHERE trace_id = ? ORDER BY created_at ASC, id ASC";
         List<ReservationWithItems> result = new ArrayList<>();
-        List<ReservationRow> rows = query(connection, sql, traceId, rs -> new ReservationRow(
-                rs.getObject("id", UUID.class),
+        List<ReservationRow> rows = query(connection, sql, traceId, (rs, dl) -> new ReservationRow(
+                dl.readUuid(rs, "id"),
                 rs.getString("trace_id"),
-                rs.getObject("attempt_id", UUID.class),
+                dl.readUuid(rs, "attempt_id"),
                 rs.getString("status"),
                 rs.getLong("reserved_tokens"),
-                (Long) rs.getObject("actual_tokens"),
-                rs.getObject("created_at", OffsetDateTime.class),
-                rs.getObject("settled_at", OffsetDateTime.class),
+                getLongOrNull(rs, "actual_tokens"),
+                dl.readOffsetDateTime(rs, "created_at"),
+                dl.readOffsetDateTime(rs, "settled_at"),
                 rs.getString("release_reason")));
         if (rows.isEmpty()) {
             return List.of();
         }
         Map<UUID, List<String>> policyIds = new HashMap<>();
         StringBuilder itemSql = new StringBuilder("SELECT id, reservation_id, scope_id, scope_type, "
-                + "policy_ids FROM ").append(schemaName)
-                .append(".capacity_reservation_item WHERE reservation_id IN (");
+                + "policy_ids FROM ").append(qualify(connection, "capacity_reservation_item"))
+                .append(" WHERE reservation_id IN (");
         List<Object> params = new ArrayList<>();
         for (ReservationRow row : rows) {
             if (params.size() > 0) {
@@ -106,12 +110,12 @@ public class JdbcTraceDetailRepository {
             params.add(row.id());
         }
         itemSql.append(")");
-        List<ReservationItemRow> items = queryList(connection, itemSql.toString(), params, rs -> {
-            UUID reservationId = rs.getObject("reservation_id", UUID.class);
+        List<ReservationItemRow> items = queryList(connection, itemSql.toString(), params, (rs, dl) -> {
+            UUID reservationId = dl.readUuid(rs, "reservation_id");
             List<String> policies = fromJsonList(rs.getString("policy_ids"));
             policyIds.computeIfAbsent(reservationId, k -> new ArrayList<>()).addAll(policies);
-            return new ReservationItemRow(rs.getObject("id", UUID.class), reservationId,
-                    rs.getObject("scope_id", UUID.class), rs.getString("scope_type"), policies);
+            return new ReservationItemRow(dl.readUuid(rs, "id"), reservationId,
+                    dl.readUuid(rs, "scope_id"), rs.getString("scope_type"), policies);
         });
         for (ReservationRow row : rows) {
             result.add(new ReservationWithItems(row, policyIds.getOrDefault(row.id(), List.of())));
@@ -126,53 +130,54 @@ public class JdbcTraceDetailRepository {
         String sql = "SELECT id, trace_id, sequence, source_attempt_id, action, reason_code, "
                 + "scheduled_delay_ms, target_route_candidate_id, target_credential_id, retries_used, "
                 + "credential_failovers_used, fallbacks_used, remaining_timeout_ms, created_at FROM "
-                + schemaName + ".recovery_decision WHERE trace_id = ? ORDER BY sequence ASC";
-        return query(connection, sql, traceId, rs -> new RecoveryDecisionRow(
-                rs.getObject("id", UUID.class),
+                + qualify(connection, "recovery_decision") + " WHERE trace_id = ? ORDER BY sequence ASC";
+        return query(connection, sql, traceId, (rs, dl) -> new RecoveryDecisionRow(
+                dl.readUuid(rs, "id"),
                 rs.getString("trace_id"),
                 rs.getInt("sequence"),
-                rs.getObject("source_attempt_id", UUID.class),
+                dl.readUuid(rs, "source_attempt_id"),
                 rs.getString("action"),
                 rs.getString("reason_code"),
                 rs.getInt("scheduled_delay_ms"),
-                rs.getObject("target_route_candidate_id", UUID.class),
-                rs.getObject("target_credential_id", UUID.class),
+                dl.readUuid(rs, "target_route_candidate_id"),
+                dl.readUuid(rs, "target_credential_id"),
                 rs.getInt("retries_used"),
                 rs.getInt("credential_failovers_used"),
                 rs.getInt("fallbacks_used"),
                 rs.getInt("remaining_timeout_ms"),
-                rs.getObject("created_at", OffsetDateTime.class)));
+                dl.readOffsetDateTime(rs, "created_at")));
     }
 
     /** 仅读取 trigger_trace_id 等于本 Trace 的事件（FE-027）。 */
     public List<CircuitEventRow> circuitEvents(Connection connection, String traceId) {
         String sql = "SELECT id, circuit_id, from_state, to_state, trigger_type, error_code, reason, "
-                + "occurred_at FROM " + schemaName + ".circuit_event "
+                + "occurred_at FROM " + qualify(connection, "circuit_event") + " "
                 + "WHERE trigger_trace_id = ? ORDER BY occurred_at ASC, created_at ASC";
-        return query(connection, sql, traceId, rs -> new CircuitEventRow(
-                rs.getObject("id", UUID.class),
-                rs.getObject("circuit_id", UUID.class),
+        return query(connection, sql, traceId, (rs, dl) -> new CircuitEventRow(
+                dl.readUuid(rs, "id"),
+                dl.readUuid(rs, "circuit_id"),
                 rs.getString("from_state"),
                 rs.getString("to_state"),
                 rs.getString("trigger_type"),
                 rs.getString("error_code"),
                 rs.getString("reason"),
-                rs.getObject("occurred_at", OffsetDateTime.class)));
+                dl.readOffsetDateTime(rs, "occurred_at")));
     }
 
     public Optional<ContentSampleRow> contentSample(Connection connection, String traceId) {
+        DatabaseDialect d = dialect(connection);
         String sql = "SELECT id, trace_id, sampled_messages, sampled_response, redaction_version, "
-                + "expires_at FROM " + schemaName + ".trace_content_sample WHERE trace_id = ?";
+                + "expires_at FROM " + qualify(connection, "trace_content_sample") + " WHERE trace_id = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, traceId);
             try (ResultSet rs = statement.executeQuery()) {
                 return rs.next() ? Optional.of(new ContentSampleRow(
-                        rs.getObject("id", UUID.class),
+                        d.readUuid(rs, "id"),
                         rs.getString("trace_id"),
                         rs.getString("sampled_messages"),
                         rs.getString("sampled_response"),
                         rs.getString("redaction_version"),
-                        rs.getObject("expires_at", OffsetDateTime.class))) : Optional.empty();
+                        d.readOffsetDateTime(rs, "expires_at"))) : Optional.empty();
             }
         } catch (SQLException e) {
             throw translate("诊断样本读取失败", e);
@@ -185,19 +190,20 @@ public class JdbcTraceDetailRepository {
         if (credentialIds == null || credentialIds.isEmpty()) {
             return Map.of();
         }
+        DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT credential_id, masked_value FROM ")
-                .append(schemaName).append(".credential_secret WHERE credential_id IN (")
-                .append(String.join(", ", java.util.Collections.nCopies(credentialIds.size(), "?")))
+                .append(qualify(connection, "credential_secret")).append(" WHERE credential_id IN (")
+                .append(inPlaceholders(credentialIds.size()))
                 .append(")");
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
             int index = 1;
             for (UUID id : credentialIds) {
-                statement.setObject(index++, id);
+                d.bindUuid(statement, index++, id);
             }
             try (ResultSet rs = statement.executeQuery()) {
                 Map<UUID, String> masks = new HashMap<>();
                 while (rs.next()) {
-                    masks.put(rs.getObject("credential_id", UUID.class), rs.getString("masked_value"));
+                    masks.put(d.readUuid(rs, "credential_id"), rs.getString("masked_value"));
                 }
                 return Map.copyOf(masks);
             }
@@ -207,17 +213,18 @@ public class JdbcTraceDetailRepository {
     }
 
     private interface RowMapper<T> {
-        T map(ResultSet rs) throws SQLException;
+        T map(ResultSet rs, DatabaseDialect d) throws SQLException;
     }
 
     private <T> List<T> query(Connection connection, String sql, String traceId,
                               RowMapper<T> mapper) {
+        DatabaseDialect d = dialect(connection);
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, traceId);
             try (ResultSet rs = statement.executeQuery()) {
                 List<T> rows = new ArrayList<>();
                 while (rs.next()) {
-                    rows.add(mapper.map(rs));
+                    rows.add(mapper.map(rs, d));
                 }
                 return List.copyOf(rows);
             }
@@ -228,14 +235,13 @@ public class JdbcTraceDetailRepository {
 
     private <T> List<T> queryList(Connection connection, String sql, List<Object> params,
                                   RowMapper<T> mapper) {
+        DatabaseDialect d = dialect(connection);
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            for (int i = 0; i < params.size(); i++) {
-                statement.setObject(i + 1, params.get(i));
-            }
+            bindParameters(statement, params, d);
             try (ResultSet rs = statement.executeQuery()) {
                 List<T> rows = new ArrayList<>();
                 while (rs.next()) {
-                    rows.add(mapper.map(rs));
+                    rows.add(mapper.map(rs, d));
                 }
                 return List.copyOf(rows);
             }
@@ -253,9 +259,5 @@ public class JdbcTraceDetailRepository {
         } catch (Exception e) {
             throw new IllegalStateException("policy_ids 解析失败", e);
         }
-    }
-
-    private static IllegalStateException translate(String message, SQLException e) {
-        return new IllegalStateException(message + "：" + e.getClass().getSimpleName(), e);
     }
 }
