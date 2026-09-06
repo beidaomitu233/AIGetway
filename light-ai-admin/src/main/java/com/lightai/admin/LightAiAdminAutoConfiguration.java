@@ -158,14 +158,16 @@ public class LightAiAdminAutoConfiguration {
 
         @Bean
         @ConditionalOnMissingBean
-        public DraftStateRepository lightAiDraftStateRepository(StorageProperties properties) {
-            return new JdbcDraftStateRepository(properties.getSchemaName());
+        public com.lightai.storage.draft.JdbcDraftStateRepository lightAiDraftStateRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.draft.JdbcDraftStateRepository(properties.getSchemaName());
         }
 
         @Bean
         @ConditionalOnMissingBean
-        public DraftChangeRepository lightAiDraftChangeRepository(StorageProperties properties) {
-            return new JdbcDraftChangeRepository(properties.getSchemaName());
+        public com.lightai.storage.draft.JdbcDraftChangeRepository lightAiDraftChangeRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.draft.JdbcDraftChangeRepository(properties.getSchemaName());
         }
 
         @Bean
@@ -565,6 +567,166 @@ public class LightAiAdminAutoConfiguration {
                 com.lightai.admin.governance.CircuitManagementService circuitService) {
             return new com.lightai.admin.governance.GovernanceController(governanceService,
                     circuitService);
+        }
+
+        // ---------- 草稿发布（BE-P07） ----------
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.publish.ConfigValidationRepository lightAiConfigValidationRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.publish.JdbcConfigValidationRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.publish.ConfigSnapshotRepository lightAiConfigSnapshotRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.publish.JdbcConfigSnapshotRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.publish.PublishRecordRepository lightAiPublishRecordRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.publish.JdbcPublishRecordRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.publish.PublishInstanceResultRepository lightAiPublishInstanceResultRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.publish.JdbcPublishInstanceResultRepository(
+                    properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.publish.RuntimeInstanceRepository lightAiRuntimeInstanceRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.publish.JdbcRuntimeInstanceRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.publish.SnapshotContentRepository lightAiSnapshotContentRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.publish.JdbcSnapshotContentRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.publish.DraftDependencyRepository lightAiDraftDependencyRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.publish.JdbcDraftDependencyRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        public com.lightai.admin.publish.DraftStateQueryService lightAiDraftStateQueryService(
+                DataSource dataSource, DraftStateRepository draftStateRepository,
+                com.lightai.storage.draft.JdbcDraftChangeRepository draftChangeRepository,
+                com.lightai.storage.publish.DraftDependencyRepository dependencyRepository) {
+            return new com.lightai.admin.publish.DraftStateQueryService(dataSource, draftStateRepository,
+                    draftChangeRepository, dependencyRepository);
+        }
+
+        @Bean
+        public com.lightai.admin.publish.DraftRevertService lightAiDraftRevertService(
+                DataSource dataSource, PlatformTransactionManager transactionManager,
+                com.lightai.storage.draft.JdbcDraftStateRepository draftStateRepository,
+                com.lightai.storage.draft.JdbcDraftChangeRepository draftChangeRepository,
+                com.lightai.storage.publish.ConfigSnapshotRepository snapshotRepository,
+                com.lightai.storage.publish.SnapshotContentRepository snapshotContentRepository,
+                com.lightai.storage.publish.DraftDependencyRepository dependencyRepository,
+                com.lightai.admin.audit.AuditService auditService,
+                AdminProperties properties) {
+            return new com.lightai.admin.publish.DraftRevertService(dataSource, transactionManager,
+                    draftStateRepository, draftStateRepository,
+                    draftChangeRepository,
+                    snapshotRepository, snapshotContentRepository, dependencyRepository,
+                    auditService, properties.getRuntimeMode());
+        }
+
+        @Bean
+        public com.lightai.admin.publish.ConfigValidationService lightAiConfigValidationService(
+                DataSource dataSource, PlatformTransactionManager transactionManager, Clock clock,
+                DraftStateRepository draftStateRepository,
+                com.lightai.storage.draft.JdbcDraftChangeRepository draftChangeRepository,
+                com.lightai.storage.publish.ConfigSnapshotRepository snapshotRepository,
+                com.lightai.storage.publish.SnapshotContentRepository snapshotContentRepository,
+                com.lightai.storage.publish.ConfigValidationRepository validationRepository,
+                com.lightai.storage.publish.RuntimeInstanceRepository runtimeInstanceRepository,
+                com.lightai.admin.provider.ProviderTypeRegistry providerTypeRegistry,
+                com.lightai.storage.check.JdbcProviderCheckRecordRepository checkRecordRepository,
+                com.lightai.admin.audit.AuditService auditService,
+                AdminProperties properties) {
+            return new com.lightai.admin.publish.ConfigValidationService(dataSource, transactionManager,
+                    clock, draftStateRepository, draftChangeRepository,
+                    snapshotRepository, snapshotContentRepository, validationRepository,
+                    runtimeInstanceRepository, providerTypeRegistry, checkRecordRepository,
+                    auditService, properties.getTimezone(), properties.getRuntimeMode());
+        }
+
+        @Bean
+        public com.lightai.admin.publish.ConfigPublishService lightAiConfigPublishService(
+                DataSource dataSource, PlatformTransactionManager transactionManager, Clock clock,
+                com.lightai.storage.draft.JdbcDraftStateRepository draftStateRepository,
+                com.lightai.storage.draft.JdbcDraftChangeRepository draftChangeRepository,
+                com.lightai.storage.publish.ConfigSnapshotRepository snapshotRepository,
+                com.lightai.storage.publish.SnapshotContentRepository snapshotContentRepository,
+                com.lightai.storage.publish.ConfigValidationRepository validationRepository,
+                com.lightai.storage.publish.PublishRecordRepository publishRecordRepository,
+                com.lightai.storage.publish.PublishInstanceResultRepository instanceResultRepository,
+                com.lightai.storage.publish.RuntimeInstanceRepository runtimeInstanceRepository,
+                com.lightai.admin.audit.AuditService auditService, AdminProperties properties) {
+            return new com.lightai.admin.publish.ConfigPublishService(dataSource, transactionManager,
+                    clock, draftStateRepository, draftStateRepository,
+                    draftChangeRepository,
+                    snapshotRepository, snapshotContentRepository, validationRepository,
+                    publishRecordRepository, instanceResultRepository, runtimeInstanceRepository,
+                    auditService, properties);
+        }
+
+        @Bean
+        public com.lightai.admin.publish.InternalInstanceAuth lightAiInternalInstanceAuth(
+                AdminProperties properties) {
+            return new com.lightai.admin.publish.InternalInstanceAuth(
+                    properties.getInternalInstanceToken());
+        }
+
+        @Bean
+        public com.lightai.admin.publish.ConfigDraftController lightAiConfigDraftController(
+                com.lightai.admin.publish.DraftStateQueryService queryService,
+                com.lightai.admin.publish.DraftRevertService revertService) {
+            return new com.lightai.admin.publish.ConfigDraftController(queryService, revertService);
+        }
+
+        @Bean
+        public com.lightai.admin.publish.ConfigPublishController lightAiConfigPublishController(
+                com.lightai.admin.publish.ConfigValidationService validationService,
+                com.lightai.admin.publish.ConfigPublishService publishService) {
+            return new com.lightai.admin.publish.ConfigPublishController(validationService, publishService);
+        }
+
+        @Bean
+        public com.lightai.admin.publish.InternalInstanceController lightAiInternalInstanceController(
+                com.lightai.admin.publish.ConfigPublishService publishService,
+                com.lightai.admin.publish.InternalInstanceAuth instanceAuth) {
+            return new com.lightai.admin.publish.InternalInstanceController(publishService, instanceAuth);
+        }
+
+        /** /internal/** 实例认证拦截注册（仅存储装配时存在内部接口）。 */
+        @Bean
+        public WebMvcConfigurer lightAiInternalWebMvcConfigurer(
+                com.lightai.admin.publish.InternalInstanceAuth instanceAuth) {
+            return new WebMvcConfigurer() {
+                @Override
+                public void addInterceptors(InterceptorRegistry registry) {
+                    registry.addInterceptor(
+                            new com.lightai.admin.publish.InternalAuthInterceptor(instanceAuth))
+                            .addPathPatterns("/internal/**");
+                }
+            };
         }
 
         /** 启动结构检查（BE-003）：VALIDATE 校验、MIGRATE 先迁移后校验；失败阻止就绪。 */

@@ -11,7 +11,7 @@ import java.util.UUID;
  * config_draft_state JDBC 实现（DATABASE_PLAN §28）。
  * 单例行 singleton_key=1；lock 使用 FOR UPDATE，事务边界由业务服务定义。
  */
-public final class JdbcDraftStateRepository implements DraftStateRepository {
+public final class JdbcDraftStateRepository implements DraftStateRepository, DraftPublishStateRepository {
 
     private static final String COLUMNS = "base_snapshot_no, draft_revision, status, publish_record_id, change_count";
 
@@ -89,5 +89,49 @@ public final class JdbcDraftStateRepository implements DraftStateRepository {
 
     private String qualified() {
         return schemaName + ".config_draft_state";
+    }
+
+    // ---------- DraftPublishStateRepository（BE-040） ----------
+
+    @Override
+    public void markPublishing(Connection connection, UUID publishRecordId) {
+        String sql = "UPDATE " + qualified()
+                + " SET status = 'PUBLISHING', publish_record_id = ?, lock_acquired_at = now(), updated_at = now() "
+                + "WHERE singleton_key = 1 AND status = 'EDITABLE'";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, publishRecordId);
+            int updated = statement.executeUpdate();
+            if (updated != 1) {
+                throw new IllegalStateException("草稿发布锁状态不满足 EDITABLE，无法开始发布");
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("草稿发布锁更新失败：" + e.getClass().getSimpleName(), e);
+        }
+    }
+
+    @Override
+    public void releaseToEditable(Connection connection) {
+        String sql = "UPDATE " + qualified()
+                + " SET status = 'EDITABLE', publish_record_id = NULL, lock_acquired_at = NULL, updated_at = now() "
+                + "WHERE singleton_key = 1";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("草稿发布锁释放失败：" + e.getClass().getSimpleName(), e);
+        }
+    }
+
+    @Override
+    public void activateBaseline(Connection connection, long targetSnapshotNo) {
+        String sql = "UPDATE " + qualified()
+                + " SET base_snapshot_no = ?, change_count = 0, status = 'EDITABLE', "
+                + "publish_record_id = NULL, lock_acquired_at = NULL, updated_at = now() "
+                + "WHERE singleton_key = 1";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, targetSnapshotNo);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("草稿基线切换失败：" + e.getClass().getSimpleName(), e);
+        }
     }
 }

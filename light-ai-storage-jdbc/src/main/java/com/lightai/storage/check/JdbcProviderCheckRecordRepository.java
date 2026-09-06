@@ -103,6 +103,24 @@ public class JdbcProviderCheckRecordRepository {
         }
     }
 
+    /** 发布校验 CONNECTION_CHECK_STALE 数据源：近期是否有成功检测（BE-039）。 */
+    public boolean existsSuccessSince(Connection connection, String targetType, UUID targetId,
+                                      java.time.OffsetDateTime since) {
+        String sql = "SELECT 1 FROM " + qualified()
+                + " WHERE target_type = ? AND target_id = ? AND status = 'SUCCEEDED' "
+                + "AND created_at >= ? LIMIT 1";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, targetType);
+            statement.setObject(2, targetId);
+            statement.setObject(3, since);
+            try (ResultSet rs = statement.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("近期成功检测查询失败：" + e.getClass().getSimpleName(), e);
+        }
+    }
+
     private CheckRecordRow mapRow(ResultSet rs) throws SQLException {
         String usageJson = rs.getString("usage");
         UsageSummary usage = null;
