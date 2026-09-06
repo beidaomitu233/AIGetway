@@ -4,6 +4,8 @@ import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 
 /**
  * Provider/代理目标地址安全策略（PROJECT_DOCUMENT 第 6 节 SSRF 约束）：
@@ -62,7 +64,21 @@ public final class TargetUrlPolicy {
     }
 
     private static boolean literalIpIsInternal(String host) {
-        // 仅判断 IPv4 字面量与常见 IPv6 内部前缀；解析期防护由调用时校验补充
+        String normalized = host;
+        if (normalized.startsWith("[") && normalized.endsWith("]")) {
+            normalized = normalized.substring(1, normalized.length() - 1);
+        }
+        try {
+            InetAddress address = InetAddress.getByName(normalized);
+            if (address.isAnyLocalAddress() || address.isLoopbackAddress()
+                    || address.isLinkLocalAddress() || address.isSiteLocalAddress()
+                    || address.isMulticastAddress()) {
+                return true;
+            }
+        } catch (UnknownHostException ignored) {
+            // 域名由实际连接边界再次解析；此处只做字面量检查。
+        }
+        host = normalized;
         String[] parts = host.split("\\.");
         if (parts.length == 4) {
             try {
@@ -85,8 +101,9 @@ public final class TargetUrlPolicy {
                 return false;
             }
         }
-        return host.startsWith("[::1]") || host.startsWith("[fc") || host.startsWith("[fd")
-                || host.startsWith("[fe80");
+        String lower = host.toLowerCase();
+        return lower.startsWith("::") || lower.startsWith("fc") || lower.startsWith("fd")
+                || lower.startsWith("fe80");
     }
 
     private static LightAiException fieldError(String field, String code, String message) {

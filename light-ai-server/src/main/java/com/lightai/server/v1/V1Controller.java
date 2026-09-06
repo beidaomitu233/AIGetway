@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -35,7 +36,6 @@ public class V1Controller {
 
     public static final String VERSION_HEADER = "X-Light-AI-Version";
     public static final String SERVER_VERSION = "0.1.0";
-
     private final ModelsService modelsService;
     private final ChatPipeline chatPipeline;
     private final AccessTokenPort accessTokenPort;
@@ -45,6 +45,7 @@ public class V1Controller {
         this(modelsService, chatPipeline, accessTokenPort, null);
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
     public V1Controller(ModelsService modelsService, ChatPipeline chatPipeline, AccessTokenPort accessTokenPort,
                         com.lightai.server.lifecycle.ServerLifecycleService lifecycleService) {
         this.modelsService = modelsService;
@@ -53,11 +54,16 @@ public class V1Controller {
         this.lifecycleService = lifecycleService;
     }
 
+    public ResponseEntity<String> models(String authorization) {
+        return models(authorization, null);
+    }
+
     @GetMapping("/v1/models")
     public ResponseEntity<String> models(
-            @RequestHeader(value = "Authorization", required = false) String authorization) {
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            HttpServletRequest servletRequest) {
         checkAcceptingRequests();
-        AccessTokenPort.Principal principal = authenticate(authorization);
+        AccessTokenPort.Principal principal = authenticate(authorization, servletRequest);
         return ResponseEntity.ok()
                 .header(VERSION_HEADER, SERVER_VERSION)
                 .header("Content-Type", "application/json;charset=UTF-8")
@@ -70,10 +76,11 @@ public class V1Controller {
             @RequestHeader(value = "Content-Type", required = false) String contentType,
             @RequestHeader(value = "Content-Encoding", required = false) String contentEncoding,
             @RequestHeader(value = "X-Trace-Id", required = false) String headerTraceId,
-            @RequestBody String body) {
+            @RequestBody String body,
+            HttpServletRequest servletRequest) {
         checkAcceptingRequests();
         checkProtocol(contentType, contentEncoding);
-        AccessTokenPort.Principal principal = authenticate(authorization);
+        AccessTokenPort.Principal principal = authenticate(authorization, servletRequest);
         UnifiedChatRequest request = parseRequest(body);
         if (headerTraceId != null && request.traceId() != null && !headerTraceId.equals(request.traceId())) {
             throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
@@ -106,10 +113,11 @@ public class V1Controller {
             @RequestHeader(value = "Content-Type", required = false) String contentType,
             @RequestHeader(value = "Content-Encoding", required = false) String contentEncoding,
             @RequestHeader(value = "X-Trace-Id", required = false) String headerTraceId,
-            @RequestBody String body) throws IOException {
+            @RequestBody String body,
+            HttpServletRequest servletRequest) throws IOException {
         checkAcceptingRequests();
         checkProtocol(contentType, contentEncoding);
-        AccessTokenPort.Principal principal = authenticate(authorization);
+        AccessTokenPort.Principal principal = authenticate(authorization, servletRequest);
         UnifiedChatRequest request = parseRequest(body);
         if (!request.stream()) {
             throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
@@ -179,11 +187,12 @@ public class V1Controller {
         }
     }
 
-    private AccessTokenPort.Principal authenticate(String authorization) {
+    private AccessTokenPort.Principal authenticate(String authorization, HttpServletRequest request) {
         if (authorization == null || !authorization.startsWith("Bearer ")) {
             throw new LightAiException(ErrorCode.ACCESS_TOKEN_INVALID, "缺少 Bearer 业务访问凭证");
         }
-        return accessTokenPort.authenticate(authorization.substring("Bearer ".length()));
+        return accessTokenPort.authenticate(authorization.substring("Bearer ".length()),
+                request == null ? null : request.getRemoteAddr());
     }
 
     private static void checkProtocol(String contentType, String contentEncoding) {

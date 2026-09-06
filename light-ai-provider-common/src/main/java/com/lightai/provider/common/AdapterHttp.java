@@ -9,6 +9,8 @@ import com.lightai.spi.provider.ProviderErrorClassification;
 import com.lightai.spi.provider.ProviderFailure;
 import java.io.IOException;
 import java.net.URI;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -51,8 +53,9 @@ public class AdapterHttp {
     public static String postJson(ProviderConfigView config, String path, String jsonBody,
                            Instant deadline, Map<String, String> extraHeaders) {
         long readTimeoutMs = remainingMs(config, deadline);
+        URI target = checkedUri(config.baseUrl(), path);
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(stripTrailingSlash(config.baseUrl()) + path))
+                .uri(target)
                 .timeout(Duration.ofMillis(Math.max(1, readTimeoutMs)))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
@@ -88,8 +91,9 @@ public class AdapterHttp {
                                                         Instant deadline,
                                                         Map<String, String> extraHeaders) {
         long readTimeoutMs = remainingMs(config, deadline);
+        URI target = checkedUri(config.baseUrl(), path);
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(stripTrailingSlash(config.baseUrl()) + path))
+                .uri(target)
                 .timeout(Duration.ofMillis(Math.max(1, readTimeoutMs)))
                 .header("Content-Type", "application/json")
                 .header("Accept", "text/event-stream")
@@ -146,6 +150,27 @@ public class AdapterHttp {
 
     private static String stripTrailingSlash(String baseUrl) {
         return baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+    }
+
+    /** 在每次实际连接前解析全部地址，阻断 loopback、私网、链路本地和 DNS 重绑定目标。 */
+    private static URI checkedUri(String baseUrl, String path) {
+        URI uri = URI.create(stripTrailingSlash(baseUrl) + path);
+        String host = uri.getHost();
+        if (host == null || host.isBlank()) {
+            throw new IllegalArgumentException("Provider URL 缺少主机名");
+        }
+        try {
+            for (InetAddress address : InetAddress.getAllByName(host)) {
+                if (address.isAnyLocalAddress() || address.isLoopbackAddress()
+                        || address.isLinkLocalAddress() || address.isSiteLocalAddress()
+                        || address.isMulticastAddress()) {
+                    throw new IllegalArgumentException("Provider URL 指向受限制的内部地址");
+                }
+            }
+        } catch (UnknownHostException e) {
+            throw new IllegalArgumentException("Provider URL 主机无法解析", e);
+        }
+        return uri;
     }
 
     /** 错误正文安全片段：只保留异常类名与有限长度，避免正文进日志。 */

@@ -2,9 +2,9 @@
 
 ## 1. 选型、所有权与命名
 
-支持 PostgreSQL（默认，独立 schema `light_ai`）与 MySQL 8.0 / MySQL 5.7 自由切换；仓储层采用 DatabaseDialect 抹平方言差异，Starter 集成 dynamic-datasource-spring-boot3-starter 支持动态多数据源路由。表名 snake_case，实体 ID 为 UUID（PostgreSQL 下为 uuid 原生类型，MySQL 下为 varchar(36) 存储），API 作为不透明字符串。宿主复用 DataSource 时按方言自动适配表名修饰（PostgreSQL 为 schema.table，MySQL 为 `table` 或 `schema`.`table`）。当前无既有数据库；本文件为物理设计，不包含 DDL、迁移或生产脚本。
+支持 PostgreSQL（默认，独立 schema `light_ai`）与 MySQL 8.0 / MySQL 5.7 自由切换；仓储层采用 DatabaseDialect 抹平方言差异，Starter 集成 dynamic-datasource-spring-boot3-starter 支持动态多数据源路由。表名 snake_case，实体 ID 为 UUID（PostgreSQL 下为 uuid 原生类型，MySQL 下为 varchar(36) 存储），API 作为不透明字符串。宿主复用 DataSource 时按方言自动适配表名修饰（PostgreSQL 为 schema.table，MySQL 为 `table` 或 `schema`.`table`）。当前已交付 schema/postgres/light_ai_schema.sql 与 schema/mysql/light_ai_schema.sql 版本化 DDL 及 DefaultSchemaMigrator 迁移实现。
 
-数据库支持主键、检查、唯一与外键约束：在 PostgreSQL 下涉及软删除的唯一性采用部分唯一索引（WHERE deleted_at IS NULL）；在 MySQL 5.7 / 8.0 下因不支持部分索引，唯一约束通过应用层写入校验结合逻辑约束保证，所有查询均显式携带 `deleted_at IS NULL` 过滤。SQL 语法全面适配 MySQL 5.7（消除 CTE、消除 UPDATE...FROM、消除 SKIP LOCKED、消除 FILTER (WHERE...)、消除原生数组，使用派生子查询、ANSI CASE WHEN、LIMIT...OFFSET、ON DUPLICATE KEY UPDATE 等）。
+数据库支持主键、检查、唯一与外键约束：在 PostgreSQL 下涉及软删除的唯一性采用部分唯一索引（WHERE deleted_at IS NULL）；在 MySQL 5.7 / 8.0 下因不支持部分索引，唯一约束通过应用层写入校验结合逻辑约束保证，C类与S类实体查询显式携带 `deleted_at IS NULL` 过滤，无 deleted_at 的 R类与I类实体采用物理管理。SQL 语法全面适配 MySQL 5.7（消除 CTE、消除 UPDATE...FROM、消除 SKIP LOCKED、消除 FILTER (WHERE...)、消除原生数组，使用派生子查询、ANSI CASE WHEN、LIMIT...OFFSET、ON DUPLICATE KEY UPDATE 等）。
 
 统一规则：timestamp采用timestamptz，存UTC、API ISO8601；数据库事务使用同一now；id由应用生成UUID；version用bigint从1递增。数量bigint非负，限额null为不限，0不合法；价格numeric(20,8)，金额numeric(30,8)，比例numeric(9,4)，币种char(3)。接口bigint/decimal字符串规则见总文档。所有字段未列默认时不得靠隐式业务默认补齐。
 
@@ -849,7 +849,7 @@
 
 使用接口与页面：/admin/config/draft-changes；草稿页。
 
-索引、唯一约束与关联：U(entity_type,entity_id)；I(modified_by,updated_at)；实体多态逻辑关联。U为唯一索引，I为普通索引；活行表示deleted_at IS NULL。未标注的普通索引均使用B-tree。
+索引、唯一约束与关联：U(entity_type,entity_id)；I(modified_by,updated_at)；实体多态逻辑关联。U为唯一索引，I为普通索引；R类记录无 deleted_at 字段，采用物理行管理。未标注的普通索引均使用B-tree。
 
 | 字段 | 类型 | 必填 | 默认值 | 说明/约束 |
 |---|---|---|---|---|

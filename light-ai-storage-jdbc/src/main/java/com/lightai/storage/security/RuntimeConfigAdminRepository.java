@@ -15,6 +15,12 @@ public interface RuntimeConfigAdminRepository {
     /** 更新可编辑字段与 version；timezone_locked 由服务判定透传。 */
     void update(Connection connection, RuntimeConfigRow row);
 
+    /** 带 expected version 的原子更新；返回 false 表示版本竞争失败。 */
+    default boolean updateIfVersionMatches(Connection connection, RuntimeConfigRow row, long expectedVersion) {
+        update(connection, row);
+        return true;
+    }
+
     Optional<Long> findVersion(Connection connection);
 
     /** 运行参数行（C类单例）。 */

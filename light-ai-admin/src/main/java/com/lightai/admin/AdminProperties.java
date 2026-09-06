@@ -23,6 +23,15 @@ public class AdminProperties {
     private int publishInstanceTimeoutSeconds = 300;
     /** 实例失联阈值秒数：超过为 STALE，超过三倍为 OFFLINE（4.5.2.5）。 */
     private int instanceStaleSeconds = 45;
+    private String accessTokenPepper = "light-ai-default-access-token-pepper";
+
+    public String getAccessTokenPepper() {
+        return accessTokenPepper;
+    }
+
+    public void setAccessTokenPepper(String accessTokenPepper) {
+        this.accessTokenPepper = accessTokenPepper;
+    }
 
     public String getSecretMasterKeyBase64() {
         return secretMasterKeyBase64;

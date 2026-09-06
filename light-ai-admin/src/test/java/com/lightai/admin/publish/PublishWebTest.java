@@ -190,15 +190,17 @@ class PublishWebTest {
 
     @Test
     void internalHeartbeatWithTokenUpsertsInstanceAndReturnsCommands() throws Exception {
+        UUID instanceId = UUID.randomUUID();
         MvcResult result = mockMvc.perform(post("/internal/runtime-instances/heartbeat")
                         .header("X-Light-AI-Instance-Token", "deploy-secret")
+                        .header("X-Light-AI-Instance-Id", instanceId.toString())
                         .contentType("application/json")
                         .content("""
                                 {"instance_id":"%s","runtime_mode":"STANDALONE_SERVER",
                                  "runtime_version":"1.0.0-test","application":"app",
                                  "supported_schema_versions":["1"],"loaded_adapter_types":["OPENAI"],
                                  "active_snapshot_no":0,"accepting_requests":true}
-                                """.formatted(UUID.randomUUID())))
+                                """.formatted(instanceId)))
                 .andExpect(status().isOk())
                 .andReturn();
         JsonNode data = ProtocolJson.protocol()
@@ -207,6 +209,25 @@ class PublishWebTest {
         assertThat(data.get("active_snapshot_no").asLong()).isZero();
         assertThat(data.has("prepare_command")).isTrue();
         assertThat(data.has("activation_command")).isTrue();
+    }
+
+    @Test
+    void internalEndpointsRejectForgedInstanceId() throws Exception {
+        UUID authenticatedInstanceId = UUID.randomUUID();
+        UUID forgedInstanceId = UUID.randomUUID();
+        MvcResult result = mockMvc.perform(post("/internal/runtime-instances/heartbeat")
+                        .header("X-Light-AI-Instance-Token", "deploy-secret")
+                        .header("X-Light-AI-Instance-Id", authenticatedInstanceId.toString())
+                        .contentType("application/json")
+                        .content("""
+                                {"instance_id":"%s","runtime_mode":"STANDALONE_SERVER",
+                                 "runtime_version":"1.0.0-test","application":"app",
+                                 "supported_schema_versions":["1"],"loaded_adapter_types":["OPENAI"],
+                                 "active_snapshot_no":0,"accepting_requests":true}
+                                """.formatted(forgedInstanceId)))
+                .andExpect(status().isUnauthorized())
+                .andReturn();
+        assertThat(errorCode(result)).isEqualTo("INSTANCE_AUTH_FAILED");
     }
 
     @Test

@@ -28,6 +28,7 @@ public class ReadinessService {
     private final ServerLifecycleService lifecycleService;
     private final ConfigSnapshotPort configSnapshotPort;
     private final AdapterRegistryPort adapterRegistryPort;
+    private final ObjectProvider<com.lightai.runtime.capacity.CapacityStore> capacityStoreProvider;
 
     // 可插拔/可测试的健康探针检查器
     private BooleanSupplier databaseHealthCheck = () -> true;
@@ -37,13 +38,16 @@ public class ReadinessService {
     private final AtomicBoolean databaseUp = new AtomicBoolean(true);
     private final AtomicBoolean capacityStoreUp = new AtomicBoolean(true);
 
+    @org.springframework.beans.factory.annotation.Autowired
     public ReadinessService(
             ServerLifecycleService lifecycleService,
             ObjectProvider<ConfigSnapshotPort> snapshotPortProvider,
-            ObjectProvider<AdapterRegistryPort> adapterRegistryPortProvider) {
-        this(lifecycleService,
-                snapshotPortProvider != null ? snapshotPortProvider.getIfAvailable(ConfigSnapshotPort::empty) : ConfigSnapshotPort.empty(),
-                adapterRegistryPortProvider != null ? adapterRegistryPortProvider.getIfAvailable() : null);
+            ObjectProvider<AdapterRegistryPort> adapterRegistryPortProvider,
+            ObjectProvider<com.lightai.runtime.capacity.CapacityStore> capacityStoreProvider) {
+        this.lifecycleService = lifecycleService;
+        this.configSnapshotPort = snapshotPortProvider != null ? snapshotPortProvider.getIfAvailable(ConfigSnapshotPort::empty) : ConfigSnapshotPort.empty();
+        this.adapterRegistryPort = adapterRegistryPortProvider != null ? adapterRegistryPortProvider.getIfAvailable() : null;
+        this.capacityStoreProvider = capacityStoreProvider;
     }
 
     public ReadinessService(
@@ -53,6 +57,7 @@ public class ReadinessService {
         this.lifecycleService = lifecycleService;
         this.configSnapshotPort = configSnapshotPort != null ? configSnapshotPort : ConfigSnapshotPort.empty();
         this.adapterRegistryPort = adapterRegistryPort;
+        this.capacityStoreProvider = null;
     }
 
     public boolean isReady() {
@@ -79,7 +84,16 @@ public class ReadinessService {
     }
 
     public boolean isCapacityStoreUp() {
-        return capacityStoreUp.get() && capacityStoreHealthCheck.getAsBoolean();
+        if (!capacityStoreUp.get() || !capacityStoreHealthCheck.getAsBoolean()) {
+            return false;
+        }
+        if (capacityStoreProvider != null) {
+            com.lightai.runtime.capacity.CapacityStore store = capacityStoreProvider.getIfAvailable();
+            if (store instanceof com.lightai.runtime.capacity.InMemoryCapacityStore imc) {
+                return imc.isAvailable();
+            }
+        }
+        return true;
     }
 
     public boolean isConfigSnapshotUp() {

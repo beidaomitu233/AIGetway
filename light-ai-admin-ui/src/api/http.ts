@@ -20,6 +20,17 @@ export function registerCsrfToken(token: string | undefined): void {
   csrfToken = token
 }
 
+export function protectedRequestHeaders(method: string, requestId = newRequestId()): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'X-Request-Id': requestId,
+  }
+  if (method.toUpperCase() !== 'GET' && csrfToken) {
+    headers['X-CSRF-Token'] = csrfToken
+  }
+  return headers
+}
+
 function newRequestId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
@@ -79,10 +90,7 @@ export async function request<T>(options: RequestOptions): Promise<T> {
   const requestId = newRequestId()
   const { signal, cancelTimeout } = combineSignals(options.signal, options.timeoutMs ?? 30000)
   const url = `${getRuntimeConfig().adminApiBase}${options.path}${serializeQuery(options.query)}`
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-    'X-Request-Id': requestId,
-  }
+  const headers = protectedRequestHeaders(method, requestId)
   if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json'
   }
@@ -101,31 +109,27 @@ export async function request<T>(options: RequestOptions): Promise<T> {
   if (options.body !== undefined) {
     init.body = JSON.stringify(options.body)
   }
-  const response = await fetch(url, init)
-  cancelTimeout()
-
-  let payload: unknown = undefined
-  const text = await response.text()
-  if (text !== '') {
-    try {
-      payload = JSON.parse(text)
-    } catch {
-      payload = undefined
+  try {
+    const response = await fetch(url, init)
+    let payload: unknown = undefined
+    const text = await response.text()
+    if (text !== '') {
+      try {
+        payload = JSON.parse(text)
+      } catch {
+        payload = undefined
+      }
     }
+    const envelope = payload as { data?: T; error?: UnifiedErrorPayload } | undefined
+    if (response.ok && envelope && envelope.data !== undefined) {
+      return envelope.data
+    }
+    const errorPayload: UnifiedErrorPayload =
+      envelope && envelope.error
+        ? envelope.error
+        : { code: `HTTP_${response.status}`, type: 'protocol', message: '服务响应格式异常' }
+    throw new ApiError(response.status, errorPayload, requestId)
+  } finally {
+    cancelTimeout()
   }
-
-  const envelope = payload as { data?: T; error?: UnifiedErrorPayload } | undefined
-  if (response.ok && envelope && envelope.data !== undefined) {
-    return envelope.data
-  }
-
-  const errorPayload: UnifiedErrorPayload =
-    envelope && envelope.error
-      ? envelope.error
-      : {
-          code: `HTTP_${response.status}`,
-          type: 'protocol',
-          message: '服务响应格式异常',
-        }
-  throw new ApiError(response.status, errorPayload, requestId)
 }

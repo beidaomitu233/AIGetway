@@ -76,24 +76,189 @@ public class LightAiEmbeddedConfiguration {
     @Bean
     @ConditionalOnMissingBean(LightAiClient.class)
     public LightAiClient embeddedLightAiClient(SpringLightAiProperties properties,
-                                              ObjectProvider<List<ProviderAdapter>> adaptersProvider,
-                                              ObjectProvider<List<SecretProvider>> secretProvidersProvider) {
-        LocalRuntimeDefinition definition = LocalRuntimeDefinition.builder()
-                .addProvider("default-provider", "OPENAI", "https://api.openai.com")
-                .addPool("default-pool", "default-provider")
-                .addCredential("default-cred", "default-pool", "default-provider", "inline://default")
-                .addModel("default-model-id", "default-provider", "gpt-4o")
-                .addAlias("default-model", "default-model-id", "default-pool")
-                .build();
+                                              ObjectProvider<com.lightai.runtime.ports.ConfigSnapshotPort> configSnapshotPortProvider,
+                                              ObjectProvider<com.lightai.runtime.chat.ChatPipeline> chatPipelineProvider) {
+        com.lightai.runtime.chat.ChatPipeline pipeline = chatPipelineProvider.getIfAvailable();
+        com.lightai.runtime.ports.ConfigSnapshotPort snapshotPort =
+                configSnapshotPortProvider.getIfAvailable(com.lightai.runtime.ports.ConfigSnapshotPort::empty);
+        return new EmbeddedPipelineLightAiClient(snapshotPort, pipeline, properties.getApplication());
+    }
 
-        List<ProviderAdapter> adapters = adaptersProvider.getIfAvailable(ArrayList::new);
-        List<SecretProvider> secretProviders = secretProvidersProvider.getIfAvailable(ArrayList::new);
+    public static class EmbeddedPipelineLightAiClient implements LightAiClient {
+        private final com.lightai.runtime.ports.ConfigSnapshotPort snapshotPort;
+        private final com.lightai.runtime.chat.ChatPipeline chatPipeline;
+        private final String application;
+        private final java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean(false);
 
-        return LightAiClient.builder()
-                .localRuntimeDefinition(definition)
-                .adapters(adapters)
-                .secretProviders(secretProviders)
-                .build();
+        public EmbeddedPipelineLightAiClient(com.lightai.runtime.ports.ConfigSnapshotPort snapshotPort,
+                                             com.lightai.runtime.chat.ChatPipeline chatPipeline,
+                                             String application) {
+            this.snapshotPort = snapshotPort != null ? snapshotPort : com.lightai.runtime.ports.ConfigSnapshotPort.empty();
+            this.chatPipeline = chatPipeline;
+            this.application = application != null ? application : "default";
+        }
+
+        private void checkOpen() {
+            if (closed.get()) {
+                throw new LightAiException(ErrorCode.CLIENT_CLOSED, "Java LightAiClient 已关闭，拒绝新调用");
+            }
+        }
+
+        @Override
+        public List<com.lightai.client.ModelInfo> models() {
+            checkOpen();
+            com.lightai.runtime.ports.ConfigSnapshotPort.ActiveSnapshot snapshot = snapshotPort.active();
+            List<com.lightai.client.ModelInfo> result = new ArrayList<>();
+            for (com.lightai.runtime.ports.ConfigSnapshotPort.AliasView alias : snapshot.aliases()) {
+                if (!alias.enabled()) continue;
+                List<com.lightai.runtime.ports.ConfigSnapshotPort.CandidateView> enabledCands = alias.enabledCandidates();
+                if (enabledCands.isEmpty()) continue;
+                com.lightai.runtime.ports.ConfigSnapshotPort.CandidateView first = enabledCands.get(0);
+                result.add(new com.lightai.client.ModelInfo(
+                        alias.alias(),
+                        alias.displayName(),
+                        alias.supportsStream(),
+                        enabledCands.stream().anyMatch(c -> !Boolean.FALSE.equals(c.supportSystem())),
+                        first.contextWindow(),
+                        first.maxOutputTokens(),
+                        first.temperatureMin(),
+                        first.temperatureMax(),
+                        first.topPMin(),
+                        first.topPMax(),
+                        first.maxStopSequences(),
+                        null
+                ));
+            }
+            return List.copyOf(result);
+        }
+
+        @Override
+        public com.lightai.client.ChatResponse chat(com.lightai.client.ChatRequest request) {
+            checkOpen();
+            java.util.Objects.requireNonNull(request, "request 不能为空");
+            com.lightai.runtime.ports.AccessTokenPort.Principal principal =
+                    new com.lightai.runtime.ports.AccessTokenPort.Principal(application, List.of());
+            com.lightai.runtime.chat.CancellationSignal cancellation = new com.lightai.runtime.chat.CancellationSignal("embedded-chat");
+            com.lightai.client.chat.UnifiedChatResponse response =
+                    chatPipeline.chat(new com.lightai.runtime.chat.ChatPipeline.ChatContext(principal, request.toUnified(), cancellation));
+            return com.lightai.client.ChatResponse.fromUnified(response);
+        }
+
+        @Override
+        public java.util.concurrent.CompletableFuture<com.lightai.client.ChatResponse> chatAsync(com.lightai.client.ChatRequest request) {
+            checkOpen();
+            java.util.Objects.requireNonNull(request, "request 不能为空");
+            java.util.concurrent.CompletableFuture<com.lightai.client.ChatResponse> future = new java.util.concurrent.CompletableFuture<>();
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                try {
+                    future.complete(chat(request));
+                } catch (Throwable t) {
+                    future.completeExceptionally(t);
+                }
+            });
+            return future;
+        }
+
+        @Override
+        public java.util.concurrent.Flow.Publisher<com.lightai.client.StreamEvent> stream(com.lightai.client.ChatRequest request) {
+            checkOpen();
+            java.util.Objects.requireNonNull(request, "request 不能为空");
+            com.lightai.client.ChatRequest streamReq = request.stream() ? request : new com.lightai.client.ChatRequest(
+                    request.model(), request.messages(), true, request.temperature(), request.topP(),
+                    request.maxTokens(), request.stop(), request.traceId(), request.metadata(),
+                    request.providerOptions(), request.streamOptions());
+            com.lightai.runtime.chat.CancellationSignal cancellation = new com.lightai.runtime.chat.CancellationSignal("embedded-stream");
+            com.lightai.runtime.ports.AccessTokenPort.Principal principal =
+                    new com.lightai.runtime.ports.AccessTokenPort.Principal(application, List.of());
+            com.lightai.runtime.chat.ChatPipeline.ChatContext context =
+                    new com.lightai.runtime.chat.ChatPipeline.ChatContext(principal, streamReq.toUnified(), cancellation);
+            com.lightai.client.internal.FlowStreamPublisher publisher =
+                    new com.lightai.client.internal.FlowStreamPublisher(() -> cancellation.cancel("client-cancelled"));
+
+            java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
+            java.util.concurrent.atomic.AtomicBoolean doneEmitted = new java.util.concurrent.atomic.AtomicBoolean(false);
+            java.util.concurrent.atomic.AtomicReference<String> lastTraceId = new java.util.concurrent.atomic.AtomicReference<>();
+            java.util.concurrent.atomic.AtomicReference<String> lastModel = new java.util.concurrent.atomic.AtomicReference<>(streamReq.model());
+            java.util.concurrent.atomic.AtomicReference<String> lastProvider = new java.util.concurrent.atomic.AtomicReference<>();
+            java.util.concurrent.atomic.AtomicReference<String> lastProviderModel = new java.util.concurrent.atomic.AtomicReference<>();
+            java.util.concurrent.atomic.AtomicLong lastSequence = new java.util.concurrent.atomic.AtomicLong(0);
+
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                try {
+                    chatPipeline.chatStream(context, new com.lightai.runtime.chat.ChatPipeline.StreamListener() {
+                        @Override
+                        public void onCommit() {}
+
+                        @Override
+                        public void onChunk(com.lightai.client.chat.UnifiedChatChunk chunk) {
+                            if (chunk.id() != null) lastTraceId.set(chunk.id());
+                            if (chunk.model() != null) lastModel.set(chunk.model());
+                            if (chunk.lightAi() != null) {
+                                if (chunk.lightAi().traceId() != null) lastTraceId.set(chunk.lightAi().traceId());
+                                if (chunk.lightAi().provider() != null) lastProvider.set(chunk.lightAi().provider());
+                                if (chunk.lightAi().providerModel() != null) lastProviderModel.set(chunk.lightAi().providerModel());
+                                lastSequence.set(Math.max(lastSequence.get(), chunk.lightAi().sequence()));
+                            }
+                            if (started.compareAndSet(false, true)) {
+                                publisher.submit(com.lightai.client.StreamEvent.start(lastTraceId.get(), lastModel.get(),
+                                        lastProvider.get(), lastProviderModel.get()));
+                            }
+                            if (chunk.choices() != null) {
+                                for (com.lightai.client.chat.UnifiedChatChunk.ChunkChoice choice : chunk.choices()) {
+                                    if (choice.delta() != null && choice.delta().content() != null && !choice.delta().content().isEmpty()) {
+                                        publisher.submit(com.lightai.client.StreamEvent.delta(lastTraceId.get(), lastSequence.get(),
+                                                lastModel.get(), lastProvider.get(), lastProviderModel.get(), choice.delta().content()));
+                                    }
+                                    if (choice.finishReason() != null) {
+                                        publisher.submit(com.lightai.client.StreamEvent.done(lastTraceId.get(), lastSequence.get(),
+                                                lastModel.get(), lastProvider.get(), lastProviderModel.get(), choice.finishReason(), null));
+                                        doneEmitted.set(true);
+                                    }
+                                }
+                            }
+                            if (chunk.usage() != null) {
+                                publisher.submit(com.lightai.client.StreamEvent.usage(lastTraceId.get(), lastSequence.get(),
+                                        lastModel.get(), lastProvider.get(), lastProviderModel.get(), chunk.usage(),
+                                        chunk.lightAi() != null ? chunk.lightAi().cost() : null));
+                            }
+                        }
+
+                        @Override
+                        public void onError(com.lightai.client.error.UnifiedError error) {
+                            publisher.error(new LightAiException(ErrorCode.valueOf(error.code()), error.message()));
+                        }
+                    });
+
+                    if (!cancellation.cancelled()) {
+                        if (doneEmitted.compareAndSet(false, true)) {
+                            publisher.submit(com.lightai.client.StreamEvent.done(lastTraceId.get(), lastSequence.get() + 1,
+                                    lastModel.get(), lastProvider.get(), lastProviderModel.get(), "stop", null));
+                        }
+                        publisher.complete();
+                    }
+                } catch (LightAiException e) {
+                    if (!cancellation.cancelled()) {
+                        publisher.error(e);
+                    }
+                } catch (Throwable t) {
+                    if (!cancellation.cancelled()) {
+                        publisher.error(new LightAiException(ErrorCode.INTERNAL_ERROR, t.getMessage()));
+                    }
+                }
+            });
+
+            return publisher;
+        }
+
+        @Override
+        public void close() {
+            closed.set(true);
+        }
+
+        @Override
+        public boolean isClosed() {
+            return closed.get();
+        }
     }
 
     /**
@@ -192,16 +357,41 @@ public class LightAiEmbeddedConfiguration {
         }
 
         private static boolean isLoopbackOrTrusted(String remoteAddr, List<String> trustedCidrs) {
-            if (remoteAddr == null) return false;
-            if (remoteAddr.equals("127.0.0.1") || remoteAddr.equals("0:0:0:0:0:0:0:1") || remoteAddr.equals("::1") || remoteAddr.equals("localhost")) {
-                return true;
+            if (remoteAddr == null || remoteAddr.isBlank()) return false;
+            String addr = remoteAddr.strip();
+            if (addr.startsWith("[") && addr.endsWith("]")) {
+                addr = addr.substring(1, addr.length() - 1);
             }
-            if (trustedCidrs != null) {
-                for (String cidr : trustedCidrs) {
-                    if (remoteAddr.startsWith(cidr.replace("/24", "").replace("/16", ""))) {
-                        return true;
-                    }
+            try {
+                java.net.InetAddress target = java.net.InetAddress.getByName(addr);
+                if (target.isLoopbackAddress() || target.isAnyLocalAddress()) {
+                    return true;
                 }
+                if (trustedCidrs == null || trustedCidrs.isEmpty()) {
+                    return false;
+                }
+                byte[] actual = target.getAddress();
+                for (String raw : trustedCidrs) {
+                    if (raw == null || raw.isBlank()) continue;
+                    String value = raw.strip();
+                    int slash = value.indexOf('/');
+                    byte[] expected = java.net.InetAddress.getByName(slash < 0 ? value : value.substring(0, slash)).getAddress();
+                    if (expected.length != actual.length) continue;
+                    int prefix = slash < 0 ? expected.length * 8 : Integer.parseInt(value.substring(slash + 1));
+                    if (prefix < 0 || prefix > expected.length * 8) continue;
+                    int fullBytes = prefix / 8;
+                    int remaining = prefix % 8;
+                    boolean match = true;
+                    for (int i = 0; i < fullBytes; i++) {
+                        if (actual[i] != expected[i]) { match = false; break; }
+                    }
+                    if (match && remaining > 0) {
+                        int mask = 0xff << (8 - remaining);
+                        match = (actual[fullBytes] & mask) == (expected[fullBytes] & mask);
+                    }
+                    if (match) return true;
+                }
+            } catch (Exception ignored) {
             }
             return false;
         }

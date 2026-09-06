@@ -8,8 +8,7 @@ import java.util.List;
 /**
  * 保留清理服务（BE-048）：按当前 ACTIVE 留存策略分批清理，
  * 每批 ≤1000 Trace，只有聚合成功的可删；样本独立；快照保护引用；
- * 未消费事件跳过并告警，不删活动快照，不遗留孤儿数据。
- * 删除仓储端口由 DB-P05 迁移落地后提供 JDBC 实现。
+ * 未消费事件仅跳过 Trace 及明细删除并告警，不阻断审计、样本与 Usage 清理；不删活动快照，不遗留孤儿数据。
  */
 public class RetentionCleanupService {
 
@@ -26,6 +25,8 @@ public class RetentionCleanupService {
         long deleteExpiredAudit(OffsetDateTime cutoff);
 
         long deleteExpiredSamples(OffsetDateTime cutoff);
+
+        long deleteExpiredUsage(OffsetDateTime cutoff);
 
         /** 未消费聚合事件数量（>0 时跳过对应 Trace 删除并告警）。 */
         long pendingAggregationEvents();
@@ -57,21 +58,22 @@ public class RetentionCleanupService {
     public CleanupReport run() {
         CleanupReport report = new CleanupReport();
         if (deletionPort.pendingAggregationEvents() > 0) {
-            // 未消费事件：跳过本批 Trace 删除并告警，避免孤儿数据
+            // 未消费事件：仅跳过本批 Trace 删除并告警，避免孤儿数据；不阻断独立的 Audit、Sample、Usage 清理
             report.skippedPendingAggregation = true;
-            return report;
-        }
-        boolean more = true;
-        while (more) {
-            List<String> traceIds = deletionPort.findExpiredTraceIds(traceCutoff.cutoff(), BATCH_SIZE);
-            if (traceIds.isEmpty()) {
-                break;
+        } else {
+            boolean more = true;
+            while (more) {
+                List<String> traceIds = deletionPort.findExpiredTraceIds(traceCutoff.cutoff(), BATCH_SIZE);
+                if (traceIds.isEmpty()) {
+                    break;
+                }
+                report.deletedTraceDetails += deletionPort.deleteTraceDetails(traceIds);
+                report.deletedTraces += deletionPort.deleteTraces(traceIds);
+                report.batches++;
+                more = traceIds.size() == BATCH_SIZE;
             }
-            report.deletedTraceDetails += deletionPort.deleteTraceDetails(traceIds);
-            report.deletedTraces += deletionPort.deleteTraces(traceIds);
-            report.batches++;
-            more = traceIds.size() == BATCH_SIZE;
         }
+        report.deletedUsage = deletionPort.deleteExpiredUsage(usageCutoff.cutoff());
         report.deletedAudit = deletionPort.deleteExpiredAudit(auditCutoff.cutoff());
         report.deletedSamples = deletionPort.deleteExpiredSamples(sampleCutoff.cutoff());
         report.finishedAt = OffsetDateTime.now(clock);
@@ -83,6 +85,7 @@ public class RetentionCleanupService {
         public int batches;
         public long deletedTraces;
         public long deletedTraceDetails;
+        public long deletedUsage;
         public long deletedAudit;
         public long deletedSamples;
         public boolean skippedPendingAggregation;

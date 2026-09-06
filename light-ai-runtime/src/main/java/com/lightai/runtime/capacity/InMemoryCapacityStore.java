@@ -27,6 +27,22 @@ public class InMemoryCapacityStore implements CapacityStore {
     // key: scopeType:scopeId:windowStart:metric → counter
     private final Map<String, AtomicLong> counters = new ConcurrentHashMap<>();
     private final Map<UUID, Reservation> reservations = new ConcurrentHashMap<>();
+    private volatile boolean unavailable = false;
+    private volatile String unavailableReason;
+
+    public void setUnavailable(String reason) {
+        this.unavailable = true;
+        this.unavailableReason = reason;
+    }
+
+    public void setAvailable() {
+        this.unavailable = false;
+        this.unavailableReason = null;
+    }
+
+    public boolean isAvailable() {
+        return !unavailable;
+    }
 
     public void registerLimit(String scopeType, UUID scopeId, ScopeLimit limit) {
         limits.put(scopeType + ":" + scopeId, limit);
@@ -48,8 +64,16 @@ public class InMemoryCapacityStore implements CapacityStore {
                 key -> new AtomicLong());
     }
 
+    private void checkAvailable() {
+        if (unavailable) {
+            throw new CapacityStateUnavailableException(
+                    "容量共享状态不可用: " + (unavailableReason != null ? unavailableReason : "未就绪"));
+        }
+    }
+
     @Override
     public ReservationHandle reserve(ReserveRequest request) {
+        checkAvailable();
         long window = windowStart(Instant.now());
         UUID reservationId = UUID.randomUUID();
         String[] scopeTypes = {"alias", "provider_model", "credential"};
@@ -106,6 +130,7 @@ public class InMemoryCapacityStore implements CapacityStore {
 
     @Override
     public void settle(UUID reservationId, long actualTokens, boolean requestSent) {
+        checkAvailable();
         Reservation reservation = reservations.get(reservationId);
         if (reservation == null || !reservation.markTerminal()) {
             return; // 幂等：未知预留或已终态
@@ -128,6 +153,7 @@ public class InMemoryCapacityStore implements CapacityStore {
 
     @Override
     public void release(UUID reservationId) {
+        checkAvailable();
         Reservation reservation = reservations.get(reservationId);
         if (reservation == null || !reservation.markTerminal()) {
             return;
@@ -144,6 +170,7 @@ public class InMemoryCapacityStore implements CapacityStore {
 
     @Override
     public UsageSnapshot usage(String scopeType, UUID scopeId) {
+        checkAvailable();
         long window = windowStart(Instant.now());
         return new UsageSnapshot(window,
                 counter(scopeType, scopeId, window, "rpm").get(),

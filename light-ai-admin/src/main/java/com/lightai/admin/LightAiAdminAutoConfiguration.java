@@ -182,6 +182,39 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.security.RuntimeConfigAdminRepository lightAiRuntimeConfigAdminRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.security.JdbcRuntimeConfigAdminRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.admin.runtimeconfig.RuntimeConfigAdminService lightAiRuntimeConfigAdminService(
+                DataSource dataSource, PlatformTransactionManager transactionManager,
+                com.lightai.storage.security.RuntimeConfigAdminRepository repository,
+                com.lightai.admin.audit.AuditService auditService,
+                DraftStateRepository draftStateRepository,
+                Clock clock, AdminProperties properties) {
+            java.util.function.Supplier<Long> revision = () -> {
+                try (java.sql.Connection connection = dataSource.getConnection()) {
+                    return draftStateRepository.find(connection).map(com.lightai.storage.draft.DraftStateSnapshot::draftRevision)
+                            .orElse(0L);
+                } catch (Exception e) {
+                    throw new IllegalStateException("草稿修订读取失败", e);
+                }
+            };
+            return new com.lightai.admin.runtimeconfig.RuntimeConfigAdminService(dataSource, transactionManager,
+                    repository, auditService, clock, revision, properties.getRuntimeMode());
+        }
+
+        @Bean
+        public com.lightai.admin.runtimeconfig.RuntimeConfigController lightAiRuntimeConfigController(
+                com.lightai.admin.runtimeconfig.RuntimeConfigAdminService service) {
+            return new com.lightai.admin.runtimeconfig.RuntimeConfigController(service);
+        }
+
+        @Bean
         public ManagementStateReader lightAiManagementStateReader(
                 DataSource dataSource, RuntimeConfigRepository runtimeConfigRepository,
                 DraftStateRepository draftStateRepository, AdminProperties properties) {
@@ -517,11 +550,15 @@ public class LightAiAdminAutoConfiguration {
             return new com.lightai.storage.governance.JdbcCircuitRepository(properties.getSchemaName());
         }
 
-        /** Embedded 单实例进程内容量存储；集群由 BE-P05 storage-redis 替换。 */
+        /** Embedded 单实例进程内容量存储；Standalone 模式下无共享 Redis 时 fail-closed 拒绝新预占（CR-004）。 */
         @Bean
         @ConditionalOnMissingBean(com.lightai.runtime.capacity.CapacityStore.class)
-        public com.lightai.runtime.capacity.CapacityStore lightAiCapacityStore() {
-            return new com.lightai.runtime.capacity.InMemoryCapacityStore();
+        public com.lightai.runtime.capacity.CapacityStore lightAiCapacityStore(AdminProperties properties) {
+            com.lightai.runtime.capacity.InMemoryCapacityStore store = new com.lightai.runtime.capacity.InMemoryCapacityStore();
+            if ("STANDALONE_SERVER".equalsIgnoreCase(properties.getRuntimeMode())) {
+                store.setUnavailable("集群模式未装配共享 Redis 容量存储");
+            }
+            return store;
         }
 
         @Bean
@@ -884,6 +921,169 @@ public class LightAiAdminAutoConfiguration {
                             .addPathPatterns("/internal/**");
                 }
             };
+        }
+
+        // ---------- 数据迁移执行器（BE-003 / CR-015） ----------
+
+        @Bean
+        @ConditionalOnMissingBean(com.lightai.storage.schema.SchemaMigrator.class)
+        public com.lightai.storage.schema.SchemaMigrator lightAiSchemaMigrator(DataSource dataSource) {
+            return new com.lightai.storage.schema.DefaultSchemaMigrator(dataSource);
+        }
+
+        // ---------- 访问凭证管理与鉴权（BE-044 / CR-003, CR-005） ----------
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.access.AccessCredentialRepository lightAiAccessCredentialRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.access.JdbcAccessCredentialRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.admin.security.AccessTokenService.PepperProvider lightAiAccessTokenPepperProvider(
+                AdminProperties properties) {
+            String pepper = properties.getAccessTokenPepper();
+            if (pepper == null || pepper.isBlank()) {
+                pepper = "light-ai-default-access-token-pepper";
+            }
+            return com.lightai.admin.security.AccessTokenService.fixedPepper(1, pepper);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.admin.security.AccessTokenService lightAiAccessTokenService(
+                com.lightai.admin.security.AccessTokenService.PepperProvider pepperProvider) {
+            return new com.lightai.admin.security.AccessTokenService(pepperProvider);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.admin.accesscred.AccessCredentialService lightAiAccessCredentialService(
+                DataSource dataSource,
+                com.lightai.storage.access.AccessCredentialRepository repository,
+                com.lightai.admin.security.AccessTokenService tokenService,
+                ObjectProvider<com.lightai.admin.audit.AuditService> auditServiceProvider,
+                Clock clock, AdminProperties properties) {
+            boolean isStandalone = "STANDALONE_SERVER".equalsIgnoreCase(properties.getRuntimeMode());
+            return new com.lightai.admin.accesscred.AccessCredentialService(
+                    dataSource, repository, tokenService,
+                    auditServiceProvider::getIfAvailable,
+                    clock, properties.getRuntimeMode(), isStandalone);
+        }
+
+        @Bean
+        public com.lightai.admin.accesscred.AccessCredentialController lightAiAccessCredentialController(
+                com.lightai.admin.accesscred.AccessCredentialService service) {
+            return new com.lightai.admin.accesscred.AccessCredentialController(service);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(com.lightai.runtime.ports.AccessTokenPort.class)
+        public com.lightai.runtime.ports.AccessTokenPort lightAiAccessTokenPort(
+                DataSource dataSource,
+                com.lightai.storage.access.AccessCredentialRepository repository,
+                com.lightai.admin.security.AccessTokenService tokenService,
+                Clock clock, AdminProperties properties) {
+            return new com.lightai.admin.accesscred.AccessTokenAuthService(
+                    dataSource, repository, tokenService, clock, false);
+        }
+
+        // ---------- 审计查询与导出（BE-045 / CR-003） ----------
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.audit.AuditQueryRepository lightAiAuditQueryRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.audit.JdbcAuditQueryRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.admin.audit.AuditQueryService lightAiAuditQueryService(
+                DataSource dataSource, com.lightai.storage.audit.AuditQueryRepository repository) {
+            return new com.lightai.admin.audit.AuditQueryService(dataSource, repository);
+        }
+
+        @Bean
+        public com.lightai.admin.audit.AuditController lightAiAuditController(
+                com.lightai.admin.audit.AuditQueryService service) {
+            return new com.lightai.admin.audit.AuditController(service);
+        }
+
+        // ---------- 开发接入与在线测试（BE-046/047 / CR-003, CR-006） ----------
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.admin.developer.DeveloperAccessService lightAiDeveloperAccessService(
+                ObjectProvider<com.lightai.runtime.ports.ConfigSnapshotPort> snapshotPortProvider,
+                ObjectProvider<com.lightai.runtime.ports.AccessTokenPort.RuntimeConfigPort> runtimeConfigPortProvider,
+                ObjectProvider<com.lightai.runtime.chat.ChatPipeline> chatPipelineProvider,
+                AdminProperties properties, Clock clock) {
+            com.lightai.runtime.ports.ConfigSnapshotPort snapshotPort =
+                    snapshotPortProvider.getIfAvailable(com.lightai.runtime.ports.ConfigSnapshotPort::empty);
+            com.lightai.runtime.ports.AccessTokenPort.RuntimeConfigPort runtimeConfigPort =
+                    runtimeConfigPortProvider.getIfAvailable(() -> java.util.Optional::empty);
+            com.lightai.runtime.chat.ChatPipeline chatPipeline = chatPipelineProvider.getIfAvailable();
+            return new com.lightai.admin.developer.DeveloperAccessService(
+                    snapshotPort, runtimeConfigPort, chatPipeline, properties.getRuntimeMode(),
+                    properties.getAdminApiBasePath(), clock);
+        }
+
+        @Bean
+        public com.lightai.admin.developer.DeveloperAccessController lightAiDeveloperAccessController(
+                com.lightai.admin.developer.DeveloperAccessService service) {
+            return new com.lightai.admin.developer.DeveloperAccessController(service);
+        }
+
+        // ---------- 留存数据清理（BE-048 / CR-014） ----------
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.cleanup.RetentionDeletionRepository lightAiRetentionDeletionRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.cleanup.JdbcRetentionDeletionRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.admin.cleanup.RetentionCleanupService lightAiRetentionCleanupService(
+                DataSource dataSource,
+                com.lightai.storage.security.RuntimeConfigAdminRepository runtimeConfigRepository,
+                com.lightai.storage.cleanup.RetentionDeletionRepository retentionDeletionRepository,
+                Clock clock) {
+            com.lightai.admin.cleanup.JdbcDeletionPortAdapter port =
+                    new com.lightai.admin.cleanup.JdbcDeletionPortAdapter(dataSource, retentionDeletionRepository);
+            return new com.lightai.admin.cleanup.RetentionCleanupService(port, clock,
+                    () -> {
+                        try (java.sql.Connection conn = dataSource.getConnection()) {
+                            return runtimeConfigRepository.find(conn).map(c -> java.time.OffsetDateTime.now(clock).minusDays(c.traceRetentionDays())).orElse(java.time.OffsetDateTime.now(clock).minusDays(7));
+                        } catch (Exception e) {
+                            return java.time.OffsetDateTime.now(clock).minusDays(7);
+                        }
+                    },
+                    () -> {
+                        try (java.sql.Connection conn = dataSource.getConnection()) {
+                            return runtimeConfigRepository.find(conn).map(c -> java.time.OffsetDateTime.now(clock).minusDays(c.usageRetentionDays())).orElse(java.time.OffsetDateTime.now(clock).minusDays(90));
+                        } catch (Exception e) {
+                            return java.time.OffsetDateTime.now(clock).minusDays(90);
+                        }
+                    },
+                    () -> {
+                        try (java.sql.Connection conn = dataSource.getConnection()) {
+                            return runtimeConfigRepository.find(conn).map(c -> java.time.OffsetDateTime.now(clock).minusDays(c.auditRetentionDays())).orElse(java.time.OffsetDateTime.now(clock).minusDays(365));
+                        } catch (Exception e) {
+                            return java.time.OffsetDateTime.now(clock).minusDays(365);
+                        }
+                    },
+                    () -> {
+                        try (java.sql.Connection conn = dataSource.getConnection()) {
+                            return runtimeConfigRepository.find(conn).map(c -> java.time.OffsetDateTime.now(clock).minusDays(c.diagnosticSampleRetentionDays())).orElse(java.time.OffsetDateTime.now(clock).minusDays(3));
+                        } catch (Exception e) {
+                            return java.time.OffsetDateTime.now(clock).minusDays(3);
+                        }
+                    });
         }
 
         /** 启动结构检查（BE-003）：VALIDATE 校验、MIGRATE 先迁移后校验；失败阻止就绪。 */

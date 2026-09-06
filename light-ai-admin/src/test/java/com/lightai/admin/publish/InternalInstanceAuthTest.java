@@ -53,6 +53,29 @@ class InternalInstanceAuthTest {
     }
 
     @Test
+    void correctTokenWithInstanceIdHeaderBindsIdentity() {
+        InternalInstanceAuth auth = new InternalInstanceAuth("deploy-secret");
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-Light-AI-Instance-Token", "deploy-secret");
+        UUID expectedId = UUID.randomUUID();
+        request.addHeader("X-Light-AI-Instance-Id", expectedId.toString());
+
+        Optional<UUID> identity = auth.authenticate(request);
+        assertThat(identity).contains(expectedId);
+    }
+
+    @Test
+    void structuredTokenBindsIdentity() {
+        InternalInstanceAuth auth = new InternalInstanceAuth("deploy-secret");
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        UUID expectedId = UUID.randomUUID();
+        request.addHeader("X-Light-AI-Instance-Token", "deploy-secret:" + expectedId);
+
+        Optional<UUID> identity = auth.authenticate(request);
+        assertThat(identity).contains(expectedId);
+    }
+
+    @Test
     void requireIdentityRejectsMismatchAndInvalidIds() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         UUID bound = UUID.randomUUID();
@@ -65,7 +88,14 @@ class InternalInstanceAuthTest {
                 .isEqualTo(ErrorCode.INSTANCE_AUTH_FAILED);
 
         MockHttpServletRequest unbound = new MockHttpServletRequest();
+        assertThatThrownBy(() -> InternalInstanceAuth.requireIdentity(unbound, UUID.randomUUID().toString()))
+                .isInstanceOf(LightAiException.class)
+                .extracting(e -> ((LightAiException) e).code())
+                .isEqualTo(ErrorCode.INSTANCE_AUTH_FAILED);
+
         assertThatThrownBy(() -> InternalInstanceAuth.requireIdentity(unbound, "not-a-uuid"))
-                .isInstanceOf(LightAiException.class);
+                .isInstanceOf(LightAiException.class)
+                .extracting(e -> ((LightAiException) e).code())
+                .isEqualTo(ErrorCode.INSTANCE_AUTH_FAILED);
     }
 }

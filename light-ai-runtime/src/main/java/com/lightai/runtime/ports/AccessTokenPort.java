@@ -14,6 +14,10 @@ public interface AccessTokenPort {
     /** 校验 Bearer Token；无效/过期/停用抛 ACCESS_TOKEN_INVALID。 */
     Principal authenticate(String bearerToken);
 
+    default Principal authenticate(String bearerToken, String sourceIp) {
+        return authenticate(bearerToken);
+    }
+
     /** application 由凭证决定，客户端不能伪造；空 allowed_alias_ids 表示全部已发布 Alias。 */
     record Principal(String application, List<String> allowedAliasIds) {
 

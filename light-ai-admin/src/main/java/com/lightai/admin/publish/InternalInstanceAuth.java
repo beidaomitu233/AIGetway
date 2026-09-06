@@ -15,7 +15,8 @@ import java.util.UUID;
 public final class InternalInstanceAuth {
 
     public static final String ATTRIBUTE = "com.lightai.admin.internalInstanceId";
-    static final String TOKEN_HEADER = "X-Light-AI-Instance-Token";
+    public static final String TOKEN_HEADER = "X-Light-AI-Instance-Token";
+    public static final String INSTANCE_ID_HEADER = "X-Light-AI-Instance-Id";
 
     private final String configuredToken;
 
@@ -23,32 +24,57 @@ public final class InternalInstanceAuth {
         this.configuredToken = configuredToken;
     }
 
-    /** 校验请求并返回已绑定的实例身份；共享口令方案不绑定身份，返回空。 */
+    /** 校验请求并返回已绑定的实例身份；支持 X-Light-AI-Instance-Id 头或 token:instance_id 格式绑定。 */
     public Optional<UUID> authenticate(HttpServletRequest request) {
         if (configuredToken == null || configuredToken.isBlank()) {
             throw new LightAiException(ErrorCode.INSTANCE_AUTH_FAILED, "内部实例认证未配置，拒绝访问");
         }
         String presented = request.getHeader(TOKEN_HEADER);
-        if (presented == null || !constantTimeEquals(presented, configuredToken)) {
+        if (presented == null) {
             throw new LightAiException(ErrorCode.INSTANCE_AUTH_FAILED, "内部实例认证失败");
         }
-        return Optional.empty();
+        UUID boundInstanceId = null;
+        if (presented.contains(":")) {
+            String[] parts = presented.split(":", 2);
+            if (!constantTimeEquals(parts[0], configuredToken)) {
+                throw new LightAiException(ErrorCode.INSTANCE_AUTH_FAILED, "内部实例认证失败");
+            }
+            try {
+                boundInstanceId = UUID.fromString(parts[1]);
+            } catch (IllegalArgumentException e) {
+                throw new LightAiException(ErrorCode.INSTANCE_AUTH_FAILED, "内部实例 ID 不合法");
+            }
+        } else {
+            if (!constantTimeEquals(presented, configuredToken)) {
+                throw new LightAiException(ErrorCode.INSTANCE_AUTH_FAILED, "内部实例认证失败");
+            }
+        }
+
+        String instanceIdHeader = request.getHeader(INSTANCE_ID_HEADER);
+        if (instanceIdHeader != null && !instanceIdHeader.isBlank()) {
+            try {
+                UUID headerId = UUID.fromString(instanceIdHeader.trim());
+                if (boundInstanceId != null && !boundInstanceId.equals(headerId)) {
+                    throw new LightAiException(ErrorCode.INSTANCE_AUTH_FAILED, "实例 Token 身份与头部不一致");
+                }
+                boundInstanceId = headerId;
+            } catch (IllegalArgumentException e) {
+                throw new LightAiException(ErrorCode.INSTANCE_AUTH_FAILED, "内部实例 ID 不合法");
+            }
+        }
+        return Optional.ofNullable(boundInstanceId);
     }
 
-    /** 路径/请求体 instance_id 与认证身份一致性校验。 */
+    /** 路径/请求体 instance_id 与认证身份一致性校验；必须已绑定且一致。 */
     public static UUID requireIdentity(HttpServletRequest request, String claimedInstanceId) {
         Object bound = request.getAttribute(ATTRIBUTE);
         if (bound instanceof UUID boundId) {
-            if (!boundId.toString().equals(claimedInstanceId)) {
+            if (claimedInstanceId == null || !boundId.toString().equalsIgnoreCase(claimedInstanceId.trim())) {
                 throw new LightAiException(ErrorCode.INSTANCE_AUTH_FAILED, "instance_id 与认证身份不一致");
             }
             return boundId;
         }
-        try {
-            return UUID.fromString(claimedInstanceId);
-        } catch (IllegalArgumentException e) {
-            throw new LightAiException(ErrorCode.INSTANCE_AUTH_FAILED, "instance_id 不合法");
-        }
+        throw new LightAiException(ErrorCode.INSTANCE_AUTH_FAILED, "未绑定实例认证身份，拒绝上报");
     }
 
     private static boolean constantTimeEquals(String left, String right) {

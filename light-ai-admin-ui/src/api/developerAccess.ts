@@ -3,7 +3,7 @@
 // {error: UnifiedError}；不使用 /v1 的 choices 解析器，无 [DONE] 字面串。
 // 测试正文只保存在当前页内存；Token 位置固定占位符 lai_your_token。
 
-import { request } from './http'
+import { request, protectedRequestHeaders } from './http'
 import { getRuntimeConfig } from '../app/runtimeConfig'
 import type { RuntimeMode } from './bootstrap'
 import type { UnifiedErrorPayload } from './errors'
@@ -144,7 +144,7 @@ export async function openTestStream(
 ): Promise<void> {
   const response = await fetch(`${getRuntimeConfig().adminApiBase}/developer-access/test/chat/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    headers: { ...protectedRequestHeaders('POST'), 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     body: JSON.stringify({ ...command, stream: true }),
     signal,
     credentials: 'same-origin',

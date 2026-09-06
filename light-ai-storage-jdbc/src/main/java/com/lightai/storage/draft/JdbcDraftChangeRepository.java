@@ -176,7 +176,7 @@ public final class JdbcDraftChangeRepository extends AbstractJdbcRepository
                                      String sortExpression, int limit, long offset) {
         DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT " + QUERY_COLUMNS + " FROM ")
-                .append(qualify(connection, "draft_change")).append(" WHERE deleted_at IS NULL");
+                .append(qualify(connection, "draft_change")).append(" WHERE 1 = 1");
         appendFilter(d, filter, sql);
         sql.append(" ORDER BY ").append(sortExpression).append(" LIMIT ? OFFSET ?");
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
@@ -199,7 +199,7 @@ public final class JdbcDraftChangeRepository extends AbstractJdbcRepository
     public long count(Connection connection, DraftChangeFilter filter) {
         DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT count(*) FROM ")
-                .append(qualify(connection, "draft_change")).append(" WHERE deleted_at IS NULL");
+                .append(qualify(connection, "draft_change")).append(" WHERE 1 = 1");
         appendFilter(d, filter, sql);
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
             bindFilter(d, statement, filter);
@@ -215,7 +215,7 @@ public final class JdbcDraftChangeRepository extends AbstractJdbcRepository
     @Override
     public DraftChangeSummaryCounts summary(Connection connection) {
         String sql = "SELECT change_type, count(*) FROM " + qualify(connection, "draft_change")
-                + " WHERE deleted_at IS NULL GROUP BY change_type";
+                + " WHERE 1 = 1 GROUP BY change_type";
         try (PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet rs = statement.executeQuery()) {
             long create = 0;
@@ -245,7 +245,7 @@ public final class JdbcDraftChangeRepository extends AbstractJdbcRepository
     @Override
     public java.util.Map<String, Long> countByEntityType(Connection connection) {
         String sql = "SELECT entity_type, count(*) FROM " + qualify(connection, "draft_change")
-                + " WHERE deleted_at IS NULL GROUP BY entity_type";
+                + " WHERE 1 = 1 GROUP BY entity_type";
         try (PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet rs = statement.executeQuery()) {
             java.util.Map<String, Long> counts = new java.util.LinkedHashMap<>();
@@ -262,7 +262,7 @@ public final class JdbcDraftChangeRepository extends AbstractJdbcRepository
     public java.util.Map<String, java.util.Map<String, Long>> countByEntityTypeAndChangeType(
             Connection connection) {
         String sql = "SELECT entity_type, change_type, count(*) FROM " + qualify(connection, "draft_change")
-                + " WHERE deleted_at IS NULL GROUP BY entity_type, change_type";
+                    + " WHERE 1 = 1 GROUP BY entity_type, change_type";
         try (PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet rs = statement.executeQuery()) {
             java.util.Map<String, java.util.Map<String, Long>> counts = new java.util.LinkedHashMap<>();
@@ -280,7 +280,7 @@ public final class JdbcDraftChangeRepository extends AbstractJdbcRepository
     public Optional<ModifiedRange> modifiedRange(Connection connection) {
         DatabaseDialect d = dialect(connection);
         String sql = "SELECT min(updated_at), max(updated_at) FROM " + qualify(connection, "draft_change")
-                + " WHERE deleted_at IS NULL";
+                + " WHERE 1 = 1";
         try (PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet rs = statement.executeQuery()) {
             if (!rs.next()) {
@@ -301,7 +301,7 @@ public final class JdbcDraftChangeRepository extends AbstractJdbcRepository
     public Optional<DraftChangeRow> find(Connection connection, String entityType, UUID entityId) {
         DatabaseDialect d = dialect(connection);
         String sql = "SELECT " + QUERY_COLUMNS + " FROM " + qualify(connection, "draft_change")
-                + " WHERE deleted_at IS NULL AND entity_type = ? AND entity_id = ?";
+                + " WHERE entity_type = ? AND entity_id = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, entityType);
             statement.setObject(2, entityId);
@@ -328,7 +328,7 @@ public final class JdbcDraftChangeRepository extends AbstractJdbcRepository
 
     @Override
     public long deleteAll(Connection connection) {
-        String sql = "DELETE FROM " + qualify(connection, "draft_change") + " WHERE deleted_at IS NULL";
+        String sql = "DELETE FROM " + qualify(connection, "draft_change");
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             return statement.executeUpdate();
         } catch (SQLException e) {

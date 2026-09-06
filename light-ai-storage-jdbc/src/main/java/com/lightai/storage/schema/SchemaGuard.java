@@ -61,7 +61,11 @@ public class SchemaGuard {
     Set<String> readExistingTables(Connection connection) throws SQLException {
         DatabaseMetaData metaData = connection.getMetaData();
         Set<String> tables = new HashSet<>();
-        try (ResultSet rs = metaData.getTables(null, schemaName, "%", new String[] {"TABLE"})) {
+        String productName = metaData != null ? metaData.getDatabaseProductName() : null;
+        boolean isMySql = productName != null && (productName.toLowerCase().contains("mysql") || productName.toLowerCase().contains("mariadb"));
+        String catalog = isMySql ? connection.getCatalog() : null;
+        String schema = isMySql ? null : schemaName;
+        try (ResultSet rs = metaData.getTables(catalog, schema, "%", new String[] {"TABLE"})) {
             while (rs.next()) {
                 tables.add(rs.getString("TABLE_NAME").toLowerCase());
             }

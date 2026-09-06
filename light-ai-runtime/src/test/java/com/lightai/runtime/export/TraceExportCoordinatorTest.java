@@ -94,6 +94,10 @@ class TraceExportCoordinatorTest {
         boolean finished = latch.await(3, TimeUnit.SECONDS);
         assertThat(finished).isTrue();
         assertThat(attempts.get()).isEqualTo(3);
+        long deadline = System.currentTimeMillis() + 1000;
+        while (coordinator.exporterSuccesses() < 1 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10);
+        }
         assertThat(coordinator.exporterSuccesses()).isEqualTo(1);
         coordinator.close();
     }
@@ -120,6 +124,10 @@ class TraceExportCoordinatorTest {
         boolean finished = latch.await(3, TimeUnit.SECONDS);
         assertThat(finished).isTrue();
         assertThat(attempts.get()).isEqualTo(4);
+        long deadline = System.currentTimeMillis() + 1000;
+        while (coordinator.exporterFailures() < 1 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10);
+        }
         assertThat(coordinator.exporterFailures()).isEqualTo(1);
         assertThat(coordinator.exporterSuccesses()).isEqualTo(0);
         coordinator.close();

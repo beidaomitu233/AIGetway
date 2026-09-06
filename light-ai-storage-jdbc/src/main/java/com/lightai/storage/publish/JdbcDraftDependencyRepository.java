@@ -45,7 +45,7 @@ public final class JdbcDraftDependencyRepository extends AbstractJdbcRepository 
             }
             String sql = "SELECT dc.entity_type, dc.entity_id, dc.entity_name FROM "
                     + qualify(connection, "draft_change")
-                    + " dc WHERE dc.deleted_at IS NULL AND dc.change_type = 'CREATE' "
+                    + " dc WHERE dc.change_type = 'CREATE' "
                     + "AND dc.entity_type = ? AND EXISTS (SELECT 1 FROM "
                     + qualify(connection, relation.referencingTable())
                     + " t WHERE t.id = dc.entity_id AND t."

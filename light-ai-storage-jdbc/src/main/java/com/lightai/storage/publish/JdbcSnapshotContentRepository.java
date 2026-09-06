@@ -88,11 +88,97 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
             counts.put(entity.jsonKey(), (long) rows.size());
             content.put(entity.jsonKey(), rows);
         }
-        Map<String, Object> runtimeConfig = new LinkedHashMap<>();
-        runtimeConfig.put("timezone", timezone);
+        Map<String, Object> runtimeConfig = readRuntimeConfig(connection, timezone);
         content.put("runtime_config", runtimeConfig);
         content.put("content_summary", counts);
         return content;
+    }
+
+    private Map<String, Object> readRuntimeConfig(Connection connection, String timezone) {
+        Map<String, Object> rc = new LinkedHashMap<>();
+        rc.put("timezone", timezone);
+        String sql = "SELECT timezone, timezone_locked, trace_retention_days, usage_retention_days, audit_retention_days, "
+                + "dashboard_refresh_seconds, max_message_chars, max_request_chars, "
+                + "diagnostic_sampling_enabled, diagnostic_sample_rate, "
+                + "diagnostic_sample_retention_days, diagnostic_sample_max_chars, "
+                + "client_ip_recording_enabled, trusted_proxy_cidrs, "
+                + "publish_instance_timeout_seconds, instance_stale_seconds, default_alias_id "
+                + "FROM " + qualify(connection, "runtime_config") + " WHERE singleton_key = 1";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            try (ResultSet rs = statement.executeQuery()) {
+                if (rs.next()) {
+                    String tz = rs.getString("timezone");
+                    if (tz != null && !tz.isBlank()) {
+                        rc.put("timezone", tz);
+                    }
+                    rc.put("timezone_locked", rs.getBoolean("timezone_locked"));
+                    rc.put("trace_retention_days", rs.getInt("trace_retention_days"));
+                    rc.put("usage_retention_days", rs.getInt("usage_retention_days"));
+                    rc.put("audit_retention_days", rs.getInt("audit_retention_days"));
+                    rc.put("dashboard_refresh_seconds", rs.getInt("dashboard_refresh_seconds"));
+                    rc.put("max_message_chars", rs.getInt("max_message_chars"));
+                    rc.put("max_request_chars", rs.getInt("max_request_chars"));
+                    rc.put("diagnostic_sampling_enabled", rs.getBoolean("diagnostic_sampling_enabled"));
+                    java.math.BigDecimal rate = rs.getBigDecimal("diagnostic_sample_rate");
+                    rc.put("diagnostic_sample_rate", rate != null ? rate : java.math.BigDecimal.ZERO);
+                    rc.put("diagnostic_sample_retention_days", rs.getInt("diagnostic_sample_retention_days"));
+                    rc.put("diagnostic_sample_max_chars", rs.getInt("diagnostic_sample_max_chars"));
+                    rc.put("client_ip_recording_enabled", rs.getBoolean("client_ip_recording_enabled"));
+                    rc.put("publish_instance_timeout_seconds", rs.getInt("publish_instance_timeout_seconds"));
+                    rc.put("instance_stale_seconds", rs.getInt("instance_stale_seconds"));
+                    Object aliasId = rs.getObject("default_alias_id");
+                    rc.put("default_alias_id", aliasId != null ? aliasId.toString() : null);
+                }
+            }
+        } catch (Exception ignored) {
+            // runtime_config table not present or query failed
+        }
+        return rc;
+    }
+
+    private void restoreRuntimeConfig(Connection connection, Map<String, Object> rc) {
+        String sql = "UPDATE " + qualify(connection, "runtime_config") + " SET "
+                + "trace_retention_days = COALESCE(?, trace_retention_days), "
+                + "usage_retention_days = COALESCE(?, usage_retention_days), "
+                + "audit_retention_days = COALESCE(?, audit_retention_days), "
+                + "dashboard_refresh_seconds = COALESCE(?, dashboard_refresh_seconds), "
+                + "max_message_chars = COALESCE(?, max_message_chars), "
+                + "max_request_chars = COALESCE(?, max_request_chars), "
+                + "diagnostic_sampling_enabled = COALESCE(?, diagnostic_sampling_enabled), "
+                + "diagnostic_sample_retention_days = COALESCE(?, diagnostic_sample_retention_days), "
+                + "diagnostic_sample_max_chars = COALESCE(?, diagnostic_sample_max_chars), "
+                + "client_ip_recording_enabled = COALESCE(?, client_ip_recording_enabled), "
+                + "publish_instance_timeout_seconds = COALESCE(?, publish_instance_timeout_seconds), "
+                + "instance_stale_seconds = COALESCE(?, instance_stale_seconds), "
+                + "version = version + 1 "
+                + "WHERE singleton_key = 1";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            setNullableInt(stmt, 1, (Integer) rc.get("trace_retention_days"));
+            setNullableInt(stmt, 2, (Integer) rc.get("usage_retention_days"));
+            setNullableInt(stmt, 3, (Integer) rc.get("audit_retention_days"));
+            setNullableInt(stmt, 4, (Integer) rc.get("dashboard_refresh_seconds"));
+            setNullableInt(stmt, 5, (Integer) rc.get("max_message_chars"));
+            setNullableInt(stmt, 6, (Integer) rc.get("max_request_chars"));
+            Boolean diag = (Boolean) rc.get("diagnostic_sampling_enabled");
+            if (diag != null) stmt.setBoolean(7, diag); else stmt.setNull(7, java.sql.Types.BOOLEAN);
+            setNullableInt(stmt, 8, (Integer) rc.get("diagnostic_sample_retention_days"));
+            setNullableInt(stmt, 9, (Integer) rc.get("diagnostic_sample_max_chars"));
+            Boolean ipRec = (Boolean) rc.get("client_ip_recording_enabled");
+            if (ipRec != null) stmt.setBoolean(10, ipRec); else stmt.setNull(10, java.sql.Types.BOOLEAN);
+            setNullableInt(stmt, 11, (Integer) rc.get("publish_instance_timeout_seconds"));
+            setNullableInt(stmt, 12, (Integer) rc.get("instance_stale_seconds"));
+            stmt.executeUpdate();
+        } catch (SQLException ignored) {
+            // Ignore if table cannot be updated
+        }
+    }
+
+    private static void setNullableInt(PreparedStatement stmt, int idx, Integer val) throws SQLException {
+        if (val != null) {
+            stmt.setInt(idx, val);
+        } else {
+            stmt.setNull(idx, java.sql.Types.INTEGER);
+        }
     }
 
     /** 数量安全摘要（config_snapshot.content_summary）。 */
@@ -134,6 +220,12 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
                             String.valueOf(typed.get("id"))));
                 }
             }
+        }
+        Object rcObj = content.get("runtime_config");
+        if (rcObj instanceof Map<?, ?> rcMap) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> typedRc = (Map<String, Object>) rcMap;
+            restoreRuntimeConfig(connection, typedRc);
         }
         return restored;
     }

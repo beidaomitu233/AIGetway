@@ -33,6 +33,7 @@ public class ServerLifecycleService implements SmartLifecycle {
     private final int shutdownTimeoutSeconds;
     private final CapacityPort capacityPort;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public ServerLifecycleService(
             @Value("${light-ai.server.shutdown-timeout-seconds:30}") int shutdownTimeoutSeconds,
             ObjectProvider<CapacityPort> capacityPortProvider) {

@@ -53,13 +53,18 @@ public final class JdbcRuntimeConfigAdminRepository extends AbstractJdbcReposito
 
     @Override
     public void update(Connection connection, RuntimeConfigRow row) {
+        updateIfVersionMatches(connection, row, row.version() - 1);
+    }
+
+    @Override
+    public boolean updateIfVersionMatches(Connection connection, RuntimeConfigRow row, long expectedVersion) {
         DatabaseDialect d = dialect(connection);
         String sql = "UPDATE " + qualify(connection, "runtime_config") + " SET timezone=?, timezone_locked=?, trace_retention_days=?, usage_retention_days=?, "
                 + "audit_retention_days=?, dashboard_refresh_seconds=?, max_message_chars=?, max_request_chars=?, "
                 + "diagnostic_sampling_enabled=?, diagnostic_sample_rate=?, diagnostic_sample_retention_days=?, "
                 + "diagnostic_sample_max_chars=?, client_ip_recording_enabled=?, trusted_proxy_cidrs=" + d.jsonPlaceholder() + ", "
                 + "publish_instance_timeout_seconds=?, instance_stale_seconds=?, default_alias_id=?, version=?, "
-                + "updated_at=? WHERE singleton_key=1";
+                + "updated_at=? WHERE singleton_key=1 AND version=?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             int i = 1;
             statement.setString(i++, row.timezone());
@@ -80,8 +85,9 @@ public final class JdbcRuntimeConfigAdminRepository extends AbstractJdbcReposito
             statement.setInt(i++, row.instanceStaleSeconds());
             d.bindUuid(statement, i++, row.defaultAliasId());
             statement.setLong(i++, row.version());
-            statement.setTimestamp(i, Timestamp.from(row.updatedAt().toInstant()));
-            statement.executeUpdate();
+            statement.setTimestamp(i++, Timestamp.from(row.updatedAt().toInstant()));
+            statement.setLong(i, expectedVersion);
+            return statement.executeUpdate() == 1;
         } catch (SQLException e) {
             throw new IllegalStateException("runtime_config 更新失败：" + e.getClass().getSimpleName(), e);
         }

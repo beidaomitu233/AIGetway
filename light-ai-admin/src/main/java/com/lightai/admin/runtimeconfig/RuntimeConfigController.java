@@ -3,6 +3,7 @@ package com.lightai.admin.runtimeconfig;
 import com.lightai.admin.web.CommandBodies;
 import com.lightai.admin.web.ManagementResponses;
 import com.lightai.admin.web.RequestContext;
+import com.lightai.client.security.RetentionImpactCommand;
 import com.lightai.client.security.RetentionImpactResult;
 import com.lightai.client.security.RuntimeConfigUpdateCommand;
 import jakarta.servlet.http.HttpServletRequest;
@@ -36,7 +37,7 @@ public class RuntimeConfigController {
 
     @PostMapping("/admin/runtime-config/retention-impact")
     public ResponseEntity<String> retentionImpact(@RequestBody String body, HttpServletRequest request) {
-        RuntimeConfigUpdateCommand command = CommandBodies.parse(body, RuntimeConfigUpdateCommand.class);
+        RetentionImpactCommand command = CommandBodies.parse(body, RetentionImpactCommand.class);
         RetentionImpactResult result = service.retentionImpact(context(request), command);
         return ResponseEntity.accepted()
                 .header("Content-Type", ManagementResponses.APPLICATION_JSON)

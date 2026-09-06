@@ -13,6 +13,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import com.lightai.client.StreamEvent;
+import com.lightai.client.StreamEventType;
+import com.lightai.client.chat.UnifiedChatChunk;
+import com.lightai.client.json.ProtocolJson;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 开发接入接口（BE-046/047，4.6.5）：context/code-sample 与在线测试。
@@ -58,13 +66,26 @@ public class DeveloperAccessController {
         ApiTestCommand command = CommandBodies.parse(body, ApiTestCommand.class);
         SseEmitter emitter = new SseEmitter(0L);
         RequestContext context = context(request);
+        AtomicBoolean failed = new AtomicBoolean(false);
+        AtomicBoolean started = new AtomicBoolean(false);
+        AtomicBoolean completed = new AtomicBoolean(false);
+        AtomicReference<String> traceId = new AtomicReference<>();
+        AtomicReference<String> model = new AtomicReference<>(command.model());
+        AtomicReference<String> provider = new AtomicReference<>();
+        AtomicReference<String> providerModel = new AtomicReference<>();
+        AtomicLong sequence = new AtomicLong();
         try {
-            service.testChatStream(context, withStream(command), streamBridge(emitter));
-            emitter.send(SseEncoder.done());
+            service.testChatStream(context, withStream(command), streamBridge(emitter, failed, started,
+                    traceId, model, provider, providerModel, sequence));
+            if (!failed.get() && completed.compareAndSet(false, true)) {
+                emitter.send(SseEmitter.event().data(json(StreamEvent.done(traceId.get(), sequence.get() + 1,
+                        model.get(), provider.get(), providerModel.get(), "stop", null))));
+            }
             emitter.complete();
         } catch (com.lightai.client.error.LightAiException e) {
+            failed.set(true);
             try {
-                emitter.send(SseEncoder.error(e.toError()));
+                emitter.send(SseEmitter.event().data(json(Map.of("error", e.toError()))));
             } catch (Exception ignored) {
                 // 客户端已断开
             }
@@ -78,7 +99,11 @@ public class DeveloperAccessController {
                 command.temperature(), command.topP(), command.maxTokens());
     }
 
-    private static com.lightai.runtime.chat.ChatPipeline.StreamListener streamBridge(SseEmitter emitter) {
+    private static com.lightai.runtime.chat.ChatPipeline.StreamListener streamBridge(
+            SseEmitter emitter, AtomicBoolean failed, AtomicBoolean started,
+            AtomicReference<String> traceIdRef, AtomicReference<String> modelRef,
+            AtomicReference<String> providerRef, AtomicReference<String> providerModelRef,
+            AtomicLong sequenceRef) {
         return new com.lightai.runtime.chat.ChatPipeline.StreamListener() {
             @Override
             public void onCommit() {
@@ -86,10 +111,34 @@ public class DeveloperAccessController {
             }
 
             @Override
-            public void onChunk(com.lightai.client.chat.UnifiedChatChunk chunk) {
+            public void onChunk(UnifiedChatChunk chunk) {
                 try {
-                    emitter.send(SseEncoder.chunk(chunk));
+                    String traceId = chunk.lightAi() == null ? null : chunk.lightAi().traceId();
+                    String model = chunk.model();
+                    String provider = chunk.lightAi() == null ? null : chunk.lightAi().provider();
+                    String providerModel = chunk.lightAi() == null ? null : chunk.lightAi().providerModel();
+                    long sequence = chunk.lightAi() == null ? 0 : chunk.lightAi().sequence();
+                    traceIdRef.set(traceId);
+                    modelRef.set(model);
+                    providerRef.set(provider);
+                    providerModelRef.set(providerModel);
+                    sequenceRef.set(Math.max(sequenceRef.get(), sequence));
+                    if (started.compareAndSet(false, true)) {
+                        emitter.send(SseEmitter.event().data(json(StreamEvent.start(traceId, model, provider, providerModel))));
+                    }
+                    if (chunk.usage() != null) {
+                        emitter.send(SseEmitter.event().data(json(StreamEvent.usage(traceId, sequence, model, provider,
+                                providerModel, chunk.usage(), chunk.lightAi() == null ? null : chunk.lightAi().cost()))));
+                    }
+                    for (UnifiedChatChunk.ChunkChoice choice : chunk.choices()) {
+                        String delta = choice.delta() == null ? null : choice.delta().content();
+                        if (delta != null && !delta.isEmpty()) {
+                            emitter.send(SseEmitter.event().data(json(StreamEvent.delta(traceId, sequence, model, provider,
+                                    providerModel, delta))));
+                        }
+                    }
                 } catch (Exception e) {
+                    failed.set(true);
                     throw new com.lightai.client.error.LightAiException(
                             com.lightai.client.error.ErrorCode.CLIENT_CANCELLED, "客户端断开");
                 }
@@ -97,13 +146,22 @@ public class DeveloperAccessController {
 
             @Override
             public void onError(com.lightai.client.error.UnifiedError error) {
+                failed.set(true);
                 try {
-                    emitter.send(SseEncoder.error(error));
+                    emitter.send(SseEmitter.event().data(json(Map.of("error", error))));
                 } catch (Exception ignored) {
                     // 客户端已断开
                 }
             }
         };
+    }
+
+    private static String json(Object value) {
+        try {
+            return ProtocolJson.protocol().writeValueAsString(value);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("流式事件编码失败", e);
+        }
     }
 
     private static RequestContext context(HttpServletRequest request) {
