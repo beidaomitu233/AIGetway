@@ -35,8 +35,9 @@ public class AdminErrorHandler {
                     .currentStateVersion(e.currentStateVersion())
                     .build();
         }
-        log.info("管理请求失败 request_id={} code={} 耗时ms={}",
-                error.requestId(), error.code(), elapsed(request));
+        log.info("管理请求失败 request_id={} code={} message={} cause={} 耗时ms={}",
+                error.requestId(), error.code(), e.getMessage(),
+                e.getCause() != null ? e.getCause().getMessage() : null, elapsed(request));
         return ResponseEntity.status(httpStatus(e.code()))
                 .header("Content-Type", ManagementResponses.APPLICATION_JSON)
                 .body(ManagementResponses.error(error));

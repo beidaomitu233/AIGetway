@@ -88,9 +88,19 @@ public final class ListQuerySupport {
             issues.add(new FieldIssue("sort", "REQUIRED", "未提供排序且无默认排序"));
             return null;
         }
-        String[] parts = candidate.split("\\s+");
-        String column = parts[0].toLowerCase();
-        String direction = parts.length > 1 ? parts[1].toLowerCase() : "asc";
+        String column;
+        String direction;
+        if (candidate.startsWith("-")) {
+            column = candidate.substring(1).trim().toLowerCase();
+            direction = "desc";
+        } else if (candidate.startsWith("+")) {
+            column = candidate.substring(1).trim().toLowerCase();
+            direction = "asc";
+        } else {
+            String[] parts = candidate.split("\\s+");
+            column = parts[0].toLowerCase();
+            direction = parts.length > 1 ? parts[1].toLowerCase() : "asc";
+        }
         if (!allowedColumns.contains(column)) {
             issues.add(new FieldIssue("sort", "INVALID", "排序列不在白名单: " + column));
             return null;

@@ -231,9 +231,12 @@ public class JdbcProviderModelRepository extends AbstractJdbcRepository {
                                                     int limit, int offset) {
         DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT ").append(COLUMNS).append(" FROM ")
-                .append(qualify(connection, "provider_model")).append(" WHERE provider_id = ? AND deleted_at IS NULL");
+                .append(qualify(connection, "provider_model")).append(" WHERE deleted_at IS NULL");
         List<Object> params = new ArrayList<>();
-        params.add(providerId);
+        if (providerId != null) {
+            sql.append(" AND provider_id = ?");
+            params.add(providerId);
+        }
         if (keyword != null && !keyword.isBlank()) {
             sql.append(" AND (").append(d.ilikeClause("model_id"))
                     .append(" OR ").append(d.ilikeClause("display_name")).append(")");
@@ -269,9 +272,12 @@ public class JdbcProviderModelRepository extends AbstractJdbcRepository {
                                 Boolean supportStream, Boolean enabled) {
         DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT count(*) FROM ")
-                .append(qualify(connection, "provider_model")).append(" WHERE provider_id = ? AND deleted_at IS NULL");
+                .append(qualify(connection, "provider_model")).append(" WHERE deleted_at IS NULL");
         List<Object> params = new ArrayList<>();
-        params.add(providerId);
+        if (providerId != null) {
+            sql.append(" AND provider_id = ?");
+            params.add(providerId);
+        }
         if (keyword != null && !keyword.isBlank()) {
             sql.append(" AND (").append(d.ilikeClause("model_id"))
                     .append(" OR ").append(d.ilikeClause("display_name")).append(")");
@@ -289,8 +295,7 @@ public class JdbcProviderModelRepository extends AbstractJdbcRepository {
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
             bindParameters(statement, params, d);
             try (ResultSet rs = statement.executeQuery()) {
-                rs.next();
-                return rs.getLong(1);
+                return rs.next() ? rs.getLong(1) : 0L;
             }
         } catch (SQLException e) {
             throw translate("模型计数失败", e);

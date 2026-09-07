@@ -72,7 +72,7 @@ public abstract class AbstractJdbcRepository {
         if ("23505".equals(state) || "23000".equals(state) || e.getErrorCode() == 1062) {
             return new IllegalStateException("UNIQUE_VIOLATION: " + message, e);
         }
-        return new IllegalStateException(message + "：" + e.getClass().getSimpleName(), e);
+        return new IllegalStateException(message + "：" + e.getMessage(), e);
     }
 }
 

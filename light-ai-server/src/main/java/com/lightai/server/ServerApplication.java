@@ -196,7 +196,28 @@ public class ServerApplication {
         @Override
         public void addResourceHandlers(org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry registry) {
             registry.addResourceHandler("/ui/**")
-                    .addResourceLocations("classpath:/static/ui/");
+                    .addResourceLocations("classpath:/static/ui/")
+                    .resourceChain(true)
+                    .addResolver(new org.springframework.web.servlet.resource.PathResourceResolver() {
+                        @Override
+                        protected org.springframework.core.io.Resource getResource(String resourcePath, org.springframework.core.io.Resource location) throws java.io.IOException {
+                            org.springframework.core.io.Resource requestedResource = location.createRelative(resourcePath);
+                            if (requestedResource.exists() && requestedResource.isReadable()) {
+                                return requestedResource;
+                            }
+                            if (resourcePath.contains("assets/")) {
+                                String subPath = resourcePath.substring(resourcePath.indexOf("assets/"));
+                                org.springframework.core.io.Resource assetResource = location.createRelative(subPath);
+                                if (assetResource.exists() && assetResource.isReadable()) {
+                                    return assetResource;
+                                }
+                            }
+                            if (!resourcePath.startsWith("assets/") && !resourcePath.contains(".")) {
+                                return location.createRelative("index.html");
+                            }
+                            return null;
+                        }
+                    });
             registry.addResourceHandler("/assets/**")
                     .addResourceLocations("classpath:/static/ui/assets/");
         }
@@ -214,7 +235,7 @@ public class ServerApplication {
                 if (status == org.springframework.http.HttpStatus.NOT_FOUND) {
                     Object origUri = request.getAttribute("jakarta.servlet.error.request_uri");
                     String uri = origUri != null ? origUri.toString() : request.getRequestURI();
-                    if (uri != null && uri.startsWith("/ui") && !uri.startsWith("/ui/assets/")) {
+                    if (uri != null && uri.startsWith("/ui") && !uri.contains("/assets/")) {
                         org.springframework.web.servlet.ModelAndView mav = new org.springframework.web.servlet.ModelAndView("forward:/ui/index.html");
                         mav.setStatus(org.springframework.http.HttpStatus.OK);
                         return mav;

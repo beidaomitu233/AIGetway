@@ -165,7 +165,7 @@ public class OverviewService {
             throw e;
         } catch (Exception e) {
             throw new LightAiException(ErrorCode.OBSERVATION_DATA_UNAVAILABLE,
-                    "概览趋势当前无法读取");
+                    "概览趋势当前无法读取: " + e.getMessage(), e);
         }
     }
 

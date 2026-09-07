@@ -40,6 +40,29 @@ public class ProviderModelController {
         this.importService = importService;
     }
 
+    @GetMapping("/admin/provider-models")
+    public ResponseEntity<String> listAll(HttpServletRequest request) {
+        PageResult<ProviderModelDetail> page = modelService.listAll(context(request), queryParams(request));
+        return json(ManagementResponses.ok(page));
+    }
+
+    @PostMapping("/admin/provider-models")
+    public ResponseEntity<String> createTopLevel(@RequestBody String body, HttpServletRequest request) {
+        ProviderModelSaveCommand command = CommandBodies.parse(body, ProviderModelSaveCommand.class);
+        String pid = command.providerId();
+        if (pid == null || pid.isBlank()) {
+            pid = request.getParameter("provider_id");
+        }
+        if (pid == null || pid.isBlank()) {
+            throw new com.lightai.client.error.LightAiException(
+                    com.lightai.client.error.ErrorCode.FIELD_VALIDATION_FAILED,
+                    "provider_id 为必填项", "provider_id");
+        }
+        ManagementOperationResult<ProviderModelDetail> result = modelService.create(
+                context(request), java.util.UUID.fromString(pid), command);
+        return json(ManagementResponses.ok(result));
+    }
+
     @GetMapping("/admin/providers/{providerId}/models")
     public ResponseEntity<String> listByProvider(@PathVariable String providerId,
                                                  HttpServletRequest request) {

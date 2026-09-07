@@ -94,7 +94,7 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
     private String summaryColumns(DatabaseDialect d) {
         String p95Expr = (d.databaseType() == DatabaseType.POSTGRESQL)
                 ? "percentile_disc(0.95) WITHIN GROUP (ORDER BY first_token_ms) FILTER (WHERE first_token_ms IS NOT NULL) AS p95_first_token_ms, "
-                : "CAST(NULL AS SIGNED) AS p95_first_token_ms, ";
+                : "NULL AS p95_first_token_ms, ";
 
         return "count(*) AS request_count, "
                 + "COUNT(CASE WHEN status = 'SUCCEEDED' THEN 1 END) AS success_count, "
@@ -235,6 +235,16 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
             params.add(timezone);
             return "(date_trunc('" + bucketPrecision + "', started_at AT TIME ZONE ?) AT TIME ZONE ?)";
         }
+        boolean isH2 = false;
+        try {
+            isH2 = connection.getMetaData().getDatabaseProductName().toLowerCase().contains("h2");
+        } catch (Exception ignored) {
+        }
+        if (isH2) {
+            String pattern = "hour".equalsIgnoreCase(bucketPrecision) ? "yyyy-MM-dd HH:00:00" : "yyyy-MM-dd 00:00:00";
+            return "FORMATDATETIME(started_at, '" + pattern + "')";
+        }
+        String pattern = "hour".equalsIgnoreCase(bucketPrecision) ? "%Y-%m-%d %H:00:00" : "%Y-%m-%d 00:00:00";
         String offsetStr;
         try {
             java.time.ZoneId zone = java.time.ZoneId.of(timezone);
@@ -245,7 +255,6 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
         } catch (Exception e) {
             offsetStr = "+00:00";
         }
-        String pattern = "hour".equalsIgnoreCase(bucketPrecision) ? "%Y-%m-%d %H:00:00" : "%Y-%m-%d 00:00:00";
         params.add(offsetStr);
         params.add(offsetStr);
         return "CONVERT_TZ(DATE_FORMAT(CONVERT_TZ(started_at, '+00:00', ?), '" + pattern + "'), ?, '+00:00')";

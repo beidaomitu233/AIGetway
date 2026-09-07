@@ -20,6 +20,17 @@ public class LightAiException extends RuntimeException {
         this(code, message, (String) null);
     }
 
+    public LightAiException(ErrorCode code, String message, Throwable cause) {
+        super(message, cause);
+        this.code = code;
+        this.param = null;
+        this.requestId = null;
+        this.retryAfterMs = null;
+        this.currentVersion = null;
+        this.currentStateVersion = null;
+        this.issues = null;
+    }
+
     public LightAiException(ErrorCode code, String message, String param) {
         this(code, message, param, null, null, null, null, null);
     }

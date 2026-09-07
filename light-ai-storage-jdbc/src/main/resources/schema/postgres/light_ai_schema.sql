@@ -488,43 +488,49 @@ CREATE TABLE IF NOT EXISTS light_ai.recovery_decision (
 -- 23. circuit_state
 CREATE TABLE IF NOT EXISTS light_ai.circuit_state (
     id UUID PRIMARY KEY,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
-    scope_key VARCHAR(128) NOT NULL UNIQUE,
+    provider_model_id UUID NOT NULL,
+    credential_id UUID NOT NULL,
     state VARCHAR(16) NOT NULL DEFAULT 'CLOSED',
     state_version BIGINT NOT NULL DEFAULT 1,
-    opened_at TIMESTAMPTZ,
-    expires_at TIMESTAMPTZ,
-    probe_count INTEGER NOT NULL DEFAULT 0,
-    probe_success_count INTEGER NOT NULL DEFAULT 0,
-    policy_snapshot JSONB NOT NULL,
-    last_event_id UUID
+    policy_snapshot JSONB,
+    open_source VARCHAR(32),
+    last_reason VARCHAR(500),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_circuit_state_pm_cred UNIQUE (provider_model_id, credential_id)
 );
 
 -- 24. circuit_event
 CREATE TABLE IF NOT EXISTS light_ai.circuit_event (
     id UUID PRIMARY KEY,
-    created_at TIMESTAMPTZ NOT NULL,
-    scope_key VARCHAR(128) NOT NULL,
-    event_type VARCHAR(32) NOT NULL,
+    event_key VARCHAR(128) NOT NULL UNIQUE,
+    circuit_id UUID NOT NULL,
     from_state VARCHAR(16) NOT NULL,
     to_state VARCHAR(16) NOT NULL,
-    trigger_reason VARCHAR(64) NOT NULL,
-    metrics_snapshot JSONB NOT NULL DEFAULT '{}'
+    trigger_type VARCHAR(32) NOT NULL,
+    command_id UUID,
+    error_code VARCHAR(64),
+    reason VARCHAR(500),
+    occurred_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- 25. circuit_command
 CREATE TABLE IF NOT EXISTS light_ai.circuit_command (
     id UUID PRIMARY KEY,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
-    scope_key VARCHAR(128) NOT NULL,
-    command_type VARCHAR(32) NOT NULL,
-    expected_version BIGINT NOT NULL,
-    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    request_id VARCHAR(64) NOT NULL,
+    circuit_id UUID NOT NULL,
+    action VARCHAR(32) NOT NULL,
+    expected_state_version BIGINT NOT NULL,
+    reason VARCHAR(500),
+    open_seconds INTEGER,
     operator_id VARCHAR(128) NOT NULL,
-    executed_at TIMESTAMPTZ,
-    error_summary VARCHAR(1000)
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    error_code VARCHAR(64),
+    applied_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- 26. usage_aggregation_event

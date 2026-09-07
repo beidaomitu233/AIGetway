@@ -596,3 +596,27 @@
    - **前端质量门禁**：Vitest 22 个测试套件 160 个用例 100% 通过；`vue-tsc` 严格类型检查 0 错误；生产环境构建打包成功。
    - **端到端实机验证**：直接启动 Standalone Server JAR，验证 `/health/live`、`/health/ready`、`/admin/bootstrap`、`/admin/runtime-instances`、`/ui/` 均为 200 OK。
 
+
+## 9. 管理端（Admin UI）静态资源、SPA深链与接口异常修复交付（2026-09-07）
+
+针对用户浏览 Embedded Admin UI 页面出现的 404 资源未找到、503 服务不可用、500 内部错误及 400 参数校验异常，进行了全链路修复与加固：
+
+1. **SPA 静态资源与深链接路由**：
+   - **静态 `<base href="/ui/">`**：在 `light-ai-admin-ui/index.html` 的 `<head>` 顶层声明静态 `<base href="/ui/" id="light-ai-base" />`，避免现代浏览器 Preload Scanner 在页面处于深链（如 `/ui/providers`）时将相对静态资源解析为 `/ui/providers/assets/xxx.js` 导致 404，同时保留内联脚本动态重写能力。
+   - **`PathResourceResolver` 深度回退**：在 `ServerApplication` 中装配 Spring 资源解析器，将所有非静态资源请求（无文件扩展名）直接回退映射至 `index.html` 并保证 HTTP 200 OK，解决非 `text/html` Accept 头或直接刷新导致的 404；对含有 `assets/` 的多级相对路径自动提取映射至静态资源根目录。
+
+2. **管理端核心 REST 接口修复与多数据库方言兼容**：
+   - **`/admin/overview/trends`（原 503）**：修复 `JdbcOverviewStatsRepository` 中非 Postgres 方言使用 MySQL 专用 `CAST(NULL AS SIGNED)` 在 H2 等方言报错的问题，改为兼容的 `NULL AS p95_first_token_ms`，并为 H2 模式提供 `FORMATDATETIME` 聚合表达式。
+   - **`/admin/provider-models`（原 404）**：在 `ProviderModelService` 补充 `listAll` 方法，在 `ProviderModelController` 开放全局模型列表接口，同时兼容 `providerId` 可空查询与保存逻辑。
+   - **`/admin/circuits`（原 400/503）**：白名单扩充 `state_priority` 排序字段；同步修正 `light_ai_schema.sql`（MySQL/PostgreSQL）中 `circuit_state`、`circuit_event`、`circuit_command` 表字段定义，使其与 `JdbcCircuitRepository` 实体列定义严格一致。
+   - **`/admin/traces` 与统一排序支持（原 400）**：在 `ListQuerySupport` 中规范化支持 REST 标准前缀 `-column`（降序）与 `+column`（升序）；针对缺少起止时间的 Trace 列表查询默认回落至最近 1 小时窗口（PRD 4.4.1.1）。
+   - **`/admin/usage` 指标排序对齐（原 400）**：规范化处理 `group_sort` 的 `-` 前缀，并将前端 `UsagePage.vue` 默认排序字段调整为 `-REQUEST_COUNT`，避免因无有效汇率引发 C-009 跨币种总费用排序校验失败。
+   - **`/admin/config/publish-records`（原 400）**：在发布记录查询白名单中补充 `published_at` 排序字段。
+   - **`/admin/developer-access/context`（原 500）**：修复 `JdbcConfigSnapshotPortAdapter` 中对双重转义 JSON 字符串节点的反序列化防御解包。
+   - **全局异常增强**：补全 `LightAiException` 构造器，并在 `AdminErrorHandler` 与 `AbstractJdbcRepository` 中输出精确的底层 cause，消除异常掩盖。
+
+3. **验收证据**：
+   - **端到端检查点**：34 个端到端测试用例（18 个 SPA 路由深链页面 + 2 个静态资源路径 + 14 个管理端 API 接口）自动化测试 100% 成功（34/34 SUCCESS，0 FAILED）。
+   - **后端测试门禁**：Maven 13 个子模块全部构建并通过所有测试（BUILD SUCCESS，0 失败）。
+   - **前端测试门禁**：Vitest 22 个测试套件 160 个用例全部通过，构建打包正常。
+

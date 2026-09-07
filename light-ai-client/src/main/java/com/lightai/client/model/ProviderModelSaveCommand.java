@@ -11,6 +11,8 @@ import java.util.List;
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record ProviderModelSaveCommand(
+        @JsonProperty("provider_id") String providerId,
+        @JsonProperty("model_id") String modelId,
         String displayName,
         String tokenizerFamily,
         Long contextWindow,
@@ -39,5 +41,38 @@ public record ProviderModelSaveCommand(
 
     public ProviderModelSaveCommand {
         defaultStop = defaultStop == null ? List.of() : List.copyOf(defaultStop);
+    }
+
+    public ProviderModelSaveCommand(
+            String displayName,
+            String tokenizerFamily,
+            Long contextWindow,
+            Long maxOutputTokens,
+            Boolean supportStream,
+            Boolean supportSystemMessage,
+            Boolean supportTemperature,
+            Boolean supportTopP,
+            Boolean supportStop,
+            BigDecimal temperatureMin,
+            BigDecimal temperatureMax,
+            BigDecimal topPMin,
+            BigDecimal topPMax,
+            Integer maxStopSequences,
+            Integer maxStopLength,
+            BigDecimal defaultTemperature,
+            BigDecimal defaultTopP,
+            Long defaultMaxTokens,
+            List<String> defaultStop,
+            BigDecimal inputPrice,
+            BigDecimal outputPrice,
+            Integer priceUnit,
+            String currency,
+            boolean enabled,
+            Long version) {
+        this(null, null, displayName, tokenizerFamily, contextWindow, maxOutputTokens,
+                supportStream, supportSystemMessage, supportTemperature, supportTopP, supportStop,
+                temperatureMin, temperatureMax, topPMin, topPMax, maxStopSequences, maxStopLength,
+                defaultTemperature, defaultTopP, defaultMaxTokens, defaultStop, inputPrice, outputPrice,
+                priceUnit, currency, enabled, version);
     }
 }

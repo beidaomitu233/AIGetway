@@ -61,7 +61,7 @@ public class ConfigPublishController {
         var query = com.lightai.admin.query.ListQuerySupport.parse(
                 request.getParameter("page"), request.getParameter("page_size"),
                 request.getParameter("sort"),
-                java.util.Set.of("created_at", "target_snapshot_no", "status"),
+                java.util.Set.of("created_at", "target_snapshot_no", "status", "published_at"),
                 "created_at desc");
         return json(ManagementResponses.ok(publishService.records(
                 request.getParameter("status"), request.getParameter("published_by"),

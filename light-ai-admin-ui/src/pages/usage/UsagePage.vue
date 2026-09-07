@@ -38,7 +38,7 @@ const query = reactive<UsageQuery>({
   end_at: '',
   granularity: 'DAY',
   group_by: 'ALIAS',
-  group_sort: '-TOTAL_COST',
+  group_sort: '-REQUEST_COUNT',
   group_page: 1,
   group_page_size: 20,
   trend_metric: 'REQUEST_COUNT',
@@ -260,6 +260,9 @@ function groupSortValue(column: string): string {
 }
 
 function applyGroupSort(column: string): void {
+  if (column === 'TOTAL_COST' && !query.currency && !route.query.currency) {
+    return
+  }
   query.group_sort = groupSortValue(column)
   query.group_page = 1
   void loadAll()

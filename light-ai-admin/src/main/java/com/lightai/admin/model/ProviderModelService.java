@@ -134,6 +134,35 @@ public class ProviderModelService {
         }
     }
 
+    public PageResult<ProviderModelDetail> listAll(RequestContext context, Map<String, String> params) {
+        RequestPermissions.require(context, Permissions.MODEL_VIEW);
+        ListQuerySupport.ListQuery query = ListQuerySupport.parse(
+                params.get("page"), params.get("page_size"), params.get("sort"),
+                SORTABLE, "updated_at desc");
+        UUID providerId = null;
+        if (params.get("provider_id") != null && !params.get("provider_id").isBlank()) {
+            providerId = ProviderService.parseId(params.get("provider_id"));
+        }
+        try (Connection connection = dataSource.getConnection()) {
+            List<ProviderModelRecord> records = modelRepository.listByProvider(connection, providerId,
+                    params.get("keyword"), parseBoolean(params.get("support_stream")),
+                    parseBoolean(params.get("enabled")), query.sort(), query.limit(),
+                    (int) query.offset());
+            long total = modelRepository.countByProvider(connection, providerId,
+                    params.get("keyword"), parseBoolean(params.get("support_stream")),
+                    parseBoolean(params.get("enabled")));
+            List<ProviderModelDetail> items = new ArrayList<>(records.size());
+            for (ProviderModelRecord record : records) {
+                items.add(toDetail(connection, record));
+            }
+            return pageResultFactory.create(items, total, query, null);
+        } catch (LightAiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "模型列表当前无法读取");
+        }
+    }
+
     public ProviderModelDetail detail(RequestContext context, String rawId) {
         RequestPermissions.require(context, Permissions.MODEL_VIEW);
         UUID id = ProviderService.parseId(rawId);
@@ -156,6 +185,8 @@ public class ProviderModelService {
         UUID id = UUID.randomUUID();
         String requestId = context.requestId();
         validateCommand(command, true);
+        String actualModelId = (command.modelId() != null && !command.modelId().isBlank())
+                ? command.modelId().strip() : id.toString();
 
         DraftWriteResult result = draftWriteService.execute(new DraftWriteCommand(
                 requestId, context.authContext().userId(), sourceMode, context.sourceIpMasked(),
@@ -163,7 +194,7 @@ public class ProviderModelService {
                 connection -> {
                     ProviderRecord provider = requireProviderLive(connection, providerId);
                     ProviderModelRecord record = new ProviderModelRecord(id, providerId,
-                            id.toString(), command.displayName().strip(), "CHAT_TEXT",
+                            actualModelId, command.displayName().strip(), "CHAT_TEXT",
                             command.tokenizerFamily(), command.contextWindow(), command.maxOutputTokens(),
                             command.supportStream(), command.supportSystemMessage(),
                             command.supportTemperature(), command.supportTopP(), command.supportStop(),

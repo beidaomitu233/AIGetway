@@ -138,7 +138,11 @@ public final class JdbcConfigSnapshotPortAdapter extends AbstractJdbcRepository 
             return Map.of();
         }
         try {
-            return mapper.readValue(json, new TypeReference<Map<String, Object>>() { });
+            com.fasterxml.jackson.databind.JsonNode tree = mapper.readTree(json);
+            if (tree.isTextual()) {
+                tree = mapper.readTree(tree.asText());
+            }
+            return mapper.convertValue(tree, new TypeReference<Map<String, Object>>() { });
         } catch (Exception e) {
             throw new IllegalStateException("config_snapshot.content 反序列化失败", e);
         }

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="same-origin" />
     <title>轻享 AI 管理端</title>
+    <base href="/ui/" id="light-ai-base" />
     <script>
       (function () {
         var injected = window.__LIGHT_AI_CONFIG__ && window.__LIGHT_AI_CONFIG__.ui_base_path;
@@ -14,7 +15,7 @@
           root = injected.replace(/\/+$/, '');
           uiPrefix = (root || '') + '/ui/';
         } else {
-          var m = location.pathname.match(/^(.*\/)ui(\/|$)/);
+          var m = location.pathname.match(/^(.*\/)ui(?:\/.*|$)/);
           if (m) {
             root = m[1].replace(/\/+$/, '');
             uiPrefix = (root || '') + '/ui/';
@@ -22,9 +23,10 @@
             uiPrefix = '/';
           }
         }
-        var base = document.createElement('base');
-        base.href = uiPrefix;
-        document.head.appendChild(base);
+        var base = document.getElementById('light-ai-base') || document.querySelector('base');
+        if (base) {
+          base.href = uiPrefix;
+        }
         window.__LIGHT_AI_UI_ROOT__ = root;
       })();
     </script>

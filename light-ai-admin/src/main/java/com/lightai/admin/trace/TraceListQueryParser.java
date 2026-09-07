@@ -88,7 +88,10 @@ public final class TraceListQueryParser {
         OffsetDateTime startAt = parseTime(params, "start_at", issues);
         OffsetDateTime endAt = parseTime(params, "end_at", issues);
         if (!exact) {
-            if (startAt == null || endAt == null) {
+            if (startAt == null && endAt == null) {
+                endAt = OffsetDateTime.now();
+                startAt = endAt.minusHours(1);
+            } else if (startAt == null || endAt == null) {
                 issues.add(new FieldIssue("start_at", "REQUIRED", "普通组合查询必须提供时间范围"));
             } else {
                 if (!startAt.isBefore(endAt)) {

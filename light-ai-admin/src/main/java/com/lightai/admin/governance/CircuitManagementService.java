@@ -35,7 +35,7 @@ import javax.sql.DataSource;
  */
 public class CircuitManagementService {
 
-    private static final Set<String> SORTABLE = Set.of("state", "updated_at");
+    private static final Set<String> SORTABLE = Set.of("state", "updated_at", "state_priority");
 
     private final DataSource dataSource;
     private final JdbcCircuitRepository circuitRepository;
@@ -76,7 +76,7 @@ public class CircuitManagementService {
         } catch (LightAiException e) {
             throw e;
         } catch (Exception e) {
-            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "熔断状态读取失败");
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "熔断状态读取失败: " + e.getMessage(), e);
         }
     }
 
