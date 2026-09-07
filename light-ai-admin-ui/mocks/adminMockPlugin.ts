@@ -99,9 +99,19 @@ function serveIndex(root: string, res: ServerResponse): void {
 function handlePreviewAsset(req: Connect.IncomingMessage, res: ServerResponse, distDir: string, next: () => void): void {
   const url = new URL(req.url ?? '/', 'http://localhost')
   const pathname = url.pathname
-  // 嵌入根 /light-ai 下的静态资源改写到 dist 实际路径。
+  // 静态资源改写到 dist 实际路径。
   if (pathname.startsWith('/light-ai/assets/')) {
     req.url = req.url?.replace('/light-ai/assets/', '/assets/')
+    next()
+    return
+  }
+  if (pathname.startsWith('/ui/assets/')) {
+    req.url = req.url?.replace('/ui/assets/', '/assets/')
+    next()
+    return
+  }
+  if (pathname.startsWith('/light-ai/ui/assets/')) {
+    req.url = req.url?.replace('/light-ai/ui/assets/', '/assets/')
     next()
     return
   }

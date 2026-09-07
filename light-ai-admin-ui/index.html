@@ -9,14 +9,21 @@
       (function () {
         var injected = window.__LIGHT_AI_CONFIG__ && window.__LIGHT_AI_CONFIG__.ui_base_path;
         var root = '';
+        var uiPrefix = '/ui/';
         if (typeof injected === 'string') {
           root = injected.replace(/\/+$/, '');
+          uiPrefix = (root || '') + '/ui/';
         } else {
           var m = location.pathname.match(/^(.*\/)ui(\/|$)/);
-          if (m) root = m[1].replace(/\/+$/, '');
+          if (m) {
+            root = m[1].replace(/\/+$/, '');
+            uiPrefix = (root || '') + '/ui/';
+          } else {
+            uiPrefix = '/';
+          }
         }
         var base = document.createElement('base');
-        base.href = (root || '') + '/';
+        base.href = uiPrefix;
         document.head.appendChild(base);
         window.__LIGHT_AI_UI_ROOT__ = root;
       })();

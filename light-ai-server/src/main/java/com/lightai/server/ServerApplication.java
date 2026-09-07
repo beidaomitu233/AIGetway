@@ -197,6 +197,8 @@ public class ServerApplication {
         public void addResourceHandlers(org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry registry) {
             registry.addResourceHandler("/ui/**")
                     .addResourceLocations("classpath:/static/ui/");
+            registry.addResourceHandler("/assets/**")
+                    .addResourceLocations("classpath:/static/ui/assets/");
         }
 
         @Override
@@ -212,7 +214,7 @@ public class ServerApplication {
                 if (status == org.springframework.http.HttpStatus.NOT_FOUND) {
                     Object origUri = request.getAttribute("jakarta.servlet.error.request_uri");
                     String uri = origUri != null ? origUri.toString() : request.getRequestURI();
-                    if (uri != null && uri.startsWith("/ui")) {
+                    if (uri != null && uri.startsWith("/ui") && !uri.startsWith("/ui/assets/")) {
                         org.springframework.web.servlet.ModelAndView mav = new org.springframework.web.servlet.ModelAndView("forward:/ui/index.html");
                         mav.setStatus(org.springframework.http.HttpStatus.OK);
                         return mav;
