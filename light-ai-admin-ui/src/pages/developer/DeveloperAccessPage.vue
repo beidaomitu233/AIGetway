@@ -8,7 +8,13 @@ import CodeSamplePanel from './CodeSamplePanel.vue'
 import ChatTestPanel from './ChatTestPanel.vue'
 import { useBootstrapStore } from '@/stores/bootstrap'
 import { Permission } from '@/app/permissions'
-import { fetchDeveloperContext, type AccessMode, type AuthenticationType, type DeveloperAccessContext } from '@/api/developerAccess'
+import {
+  fetchDeveloperContext,
+  type AccessMode,
+  type AuthenticationType,
+  type DeveloperAccessContext,
+  type DeveloperAliasSummary,
+} from '@/api/developerAccess'
 import { isAbortError } from '@/api/errors'
 
 const route = useRoute()
@@ -60,7 +66,8 @@ async function loadContext(aliasId?: string): Promise<void> {
     } else {
       aliasHint.value = ''
     }
-    selectedAliasId.value = data.selected_alias_id
+    const models = data.available_models ?? (data as unknown as { published_aliases?: DeveloperAliasSummary[] }).published_aliases ?? []
+    selectedAliasId.value = data.selected_alias_id ?? (models.length > 0 ? models[0]!.alias_id : null)
   } catch (e) {
     if (current !== seq || isAbortError(e)) return
     loadError.value = e
@@ -80,8 +87,16 @@ watch(selectedAliasId, (value, previous) => {
   }
 })
 
+const availableModels = computed<DeveloperAliasSummary[]>(() => {
+  const ctx = context.value as unknown as {
+    available_models?: DeveloperAliasSummary[]
+    published_aliases?: DeveloperAliasSummary[]
+  } | null
+  return ctx?.available_models ?? ctx?.published_aliases ?? []
+})
+
 const selectedAlias = computed(
-  () => context.value?.available_models.find((item) => item.alias_id === selectedAliasId.value) ?? null,
+  () => availableModels.value.find((item) => item.alias_id === selectedAliasId.value) ?? null,
 )
 
 const accessMode = computed<AccessMode | null>(() => {
@@ -134,7 +149,7 @@ async function copyBaseUrl(): Promise<void> {
       @retry="loadContext()"
     />
     <PageState
-      v-else-if="!context || context.available_models.length === 0"
+      v-else-if="!context || availableModels.length === 0"
       status="empty"
       message="当前身份没有可用的已发布模型别名"
     />
@@ -197,7 +212,7 @@ async function copyBaseUrl(): Promise<void> {
             aria-label="选择 Model Alias"
           >
             <option
-              v-for="item in context.available_models"
+              v-for="item in availableModels"
               :key="item.alias_id"
               :value="item.alias_id"
             >

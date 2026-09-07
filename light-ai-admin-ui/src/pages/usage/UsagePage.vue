@@ -225,13 +225,15 @@ const trendSeries = computed(() => {
     case 'COST': {
       const currencies = new Set<string>()
       for (const point of points) {
-        for (const cost of point.costs) currencies.add(cost.currency)
+        if (point.costs) {
+          for (const cost of point.costs) currencies.add(cost.currency)
+        }
       }
       return [...currencies].map((currency, index) => ({
         label: `费用 ${currency}`,
         color: ['#00b42a', '#ff7d00', '#9f9ff0'][index % 3]!,
         values: pick((p) => {
-          const amount = p.costs.find((c) => c.currency === currency)?.total_cost
+          const amount = p.costs?.find((c) => c.currency === currency)?.total_cost
           return amount === undefined || amount === null ? null : Number(amount)
         }),
         unit: 'cost' as const,
@@ -278,6 +280,11 @@ function applyGroupPageSize(size: number): void {
   query.group_page = 1
   void loadAll()
 }
+
+const groupRows = computed<UsageGroupRow[]>(() => {
+  const g = groups.value as unknown as { rows?: UsageGroupRow[]; groups?: UsageGroupRow[] } | null
+  return g?.rows ?? g?.groups ?? []
+})
 
 function groupRowTarget(row: UsageGroupRow): { name: string; query: Record<string, string> } | null {
   const base = {
@@ -631,7 +638,7 @@ const costDelayActive = computed(() => {
             </thead>
             <tbody>
               <tr
-                v-for="row in groups.rows"
+                v-for="row in groupRows"
                 :key="`${row.dimension_type}-${row.dimension_id}-${row.currency}`"
               >
                 <td>{{ row.dimension_name }}</td>
@@ -657,7 +664,7 @@ const costDelayActive = computed(() => {
                   </template>
                 </td>
               </tr>
-              <tr v-if="groups.rows.length === 0">
+              <tr v-if="groupRows.length === 0">
                 <td
                   colspan="11"
                   class="lai-table-empty"

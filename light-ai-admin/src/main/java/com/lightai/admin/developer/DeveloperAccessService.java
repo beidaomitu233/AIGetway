@@ -65,7 +65,9 @@ public class DeveloperAccessService {
                 continue;
             }
             options.add(new DeveloperAccessContext.AliasOption(alias.aliasId(), alias.alias(),
-                    alias.displayName(), alias.supportsStream()));
+                    alias.displayName(), alias.supportsStream(), alias.supportsSystem(),
+                    alias.contextWindow() != null ? alias.contextWindow().intValue() : 128000,
+                    alias.maxOutputTokens() != null ? alias.maxOutputTokens().intValue() : 16384));
         }
         String defaultAlias = runtimeConfigPort.defaultAliasId()
                 .map(aliasId -> findAliasName(snapshot, aliasId))

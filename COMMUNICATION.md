@@ -620,3 +620,28 @@
    - **后端测试门禁**：Maven 13 个子模块全部构建并通过所有测试（BUILD SUCCESS，0 失败）。
    - **前端测试门禁**：Vitest 22 个测试套件 160 个用例全部通过，构建打包正常。
 
+
+## 10. 前端页面运行时 TypeError 修复与契约字段对齐交付（2026-09-07）
+
+针对用户点击进入“Usage与Cost”、“接入说明与测试”以及各详情页时出现的 `TypeError: Cannot read properties of undefined (reading 'length')` 等前端白屏与报错进行了彻底修复：
+
+1. **Usage与Cost（UsagePage.vue）契约修复与防御式计算**：
+   - **契约字段双向对齐**：后端 `/admin/usage/groups` 响应 DTO `UsageGroupResult` 返回属性 `groups`，前端消费 `rows`。在 `UsageResults.java` 中为 `UsageGroupResult` 增加 `@JsonProperty("rows") public List<UsageGroupRow> rows()`，同时保留 `groups`；在 `UsagePage.vue` 中增加响应式容错计算属性 `groupRows = computed(() => groups.value?.rows ?? groups.value?.groups ?? [])`。
+   - **Cost Trend 查找判空**：在 `costTrends` 计算属性中对 `p.costs` 增加安全可选链（`p.costs?.find(...)`），彻底避免无成本明细时读取 `find` 抛出 TypeError。
+
+2. **接入说明与测试（DeveloperAccessPage.vue）契约修复与数据补全**：
+   - **模型选项与快照上下文对齐**：后端 `/admin/developer-access/context` 序列化时由于 Record 字段命名导致 `available_models`、`api_base_url`、`selected_alias_id`、`authentication_type`、`current_snapshot_no` 等属性缺失。在 `DeveloperAccessContext.java` 中通过 `@JsonProperty` 明确映射契约字段；并在 `DeveloperAccessPage.vue` 中补充安全回退 `availableModels = computed(() => ctx?.available_models ?? ctx?.published_aliases ?? [])`。
+   - **别名元数据丰富**：在 `ConfigSnapshotPort.AliasView` 增加 `supportsSystem()`、`contextWindow()`、`maxOutputTokens()`，在 `DeveloperAccessService` 中补齐模型能力及发布别名列表，确保接入测试控制台正确展示模型参数与上下文长度。
+
+3. **详情页防御式容错检查**：
+   - **CircuitDetailPage.vue**：对 `detail.window_samples?.length` 与 `detail.recent_probes?.length` 添加可选链保护。
+   - **ProviderDetailPage.vue**：对 `detail.recent_check_records && detail.recent_check_records.length > 0` 增加空指针防御。
+
+4. **Chrome 扩展及内置 AI 报错澄清**：
+   - 经排查，`VMxx:2 Uncaught TypeError: Cannot read properties of undefined (reading 'startTime')` 与 `reportAllChanges` 属于 Google Chrome 内置 AI 试验特性（LanguageDetector）及扩展注入的内容脚本行为，并非 Light AI 前端代码逻辑；Light AI 本地资源与 REST API 均响应 200 OK，功能正常。
+
+5. **验证结果**：
+   - 前端 Vitest 160 个测试全部通过，`npm run build` 成功。
+   - 后端 Maven 13 个子模块全部构建并通过所有测试。
+   - 34 个自动化端到端测试 100% 保持通过。
+

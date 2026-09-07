@@ -136,5 +136,10 @@ public final class UsageResults {
             OffsetDateTime dataUpdatedAt,
             String queryFingerprint,
             List<UsageGroupRow> groups) {
+
+        @com.fasterxml.jackson.annotation.JsonProperty("rows")
+        public List<UsageGroupRow> rows() {
+            return groups == null ? List.of() : groups;
+        }
     }
 }

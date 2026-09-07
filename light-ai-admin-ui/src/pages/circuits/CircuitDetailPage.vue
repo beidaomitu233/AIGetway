@@ -329,7 +329,7 @@ const thresholdRows = computed(() => {
             当前窗口失败样本
           </h2>
           <PageState
-            v-if="detail.window_samples.length === 0"
+            v-if="!detail.window_samples || detail.window_samples.length === 0"
             status="empty"
             message="当前窗口无失败样本"
           />
@@ -373,7 +373,7 @@ const thresholdRows = computed(() => {
             近期探测
           </h2>
           <PageState
-            v-if="detail.recent_probes.length === 0 && !probeResult"
+            v-if="(!detail.recent_probes || detail.recent_probes.length === 0) && !probeResult"
             status="empty"
             message="暂无探测记录"
           />
@@ -396,7 +396,7 @@ const thresholdRows = computed(() => {
             </tbody>
           </table>
           <table
-            v-else-if="detail.recent_probes.length > 0"
+            v-else-if="detail.recent_probes && detail.recent_probes.length > 0"
             class="lai-table"
           >
             <thead>

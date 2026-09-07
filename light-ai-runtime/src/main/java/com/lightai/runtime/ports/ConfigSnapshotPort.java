@@ -51,6 +51,26 @@ public interface ConfigSnapshotPort {
         public boolean supportsStream() {
             return enabledCandidates().stream().anyMatch(candidate -> Boolean.TRUE.equals(candidate.supportStream()));
         }
+
+        public boolean supportsSystem() {
+            return enabledCandidates().stream().anyMatch(candidate -> Boolean.TRUE.equals(candidate.supportSystem()));
+        }
+
+        public Long contextWindow() {
+            return enabledCandidates().stream()
+                    .map(CandidateView::contextWindow)
+                    .filter(java.util.Objects::nonNull)
+                    .max(Long::compare)
+                    .orElse(128000L);
+        }
+
+        public Long maxOutputTokens() {
+            return enabledCandidates().stream()
+                    .map(CandidateView::maxOutputTokens)
+                    .filter(java.util.Objects::nonNull)
+                    .max(Long::compare)
+                    .orElse(16384L);
+        }
     }
 
     /** 候选运行视图：模型能力、默认值、价格与 Provider 连接信息一并装配（BE-030 价格快照来源）。 */

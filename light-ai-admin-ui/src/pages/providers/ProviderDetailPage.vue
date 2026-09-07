@@ -352,7 +352,7 @@ const headerRows = computed(() => Object.entries(detail.value?.default_headers ?
           检测记录
         </h2>
         <table
-          v-if="detail.recent_check_records.length > 0"
+          v-if="detail.recent_check_records && detail.recent_check_records.length > 0"
           class="lai-table"
         >
           <thead>
