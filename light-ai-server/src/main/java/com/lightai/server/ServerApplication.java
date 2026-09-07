@@ -60,7 +60,10 @@ public class ServerApplication {
     /** 部署身份适配：覆盖自动装配的默认拒绝实现（C-001 Standalone 扩展点）。 */
     @Bean
     public com.lightai.spi.auth.AuthContextProvider deploymentAuthContextProvider(
-            ServerAuthProperties authProperties) {
+            ServerAuthProperties authProperties, com.lightai.admin.AdminProperties adminProperties) {
+        // Provider 连接边界的内网校验与管理面 TargetUrlPolicy 使用同一部署开关
+        com.lightai.spi.provider.ProviderNetworkPolicies.configure(
+                adminProperties.isAllowedProviderInternalNetworks());
         return new com.lightai.server.runtime.DeploymentAuthContextProvider(
                 authProperties.getAdminToken(), authProperties.isTrustedLocal());
     }

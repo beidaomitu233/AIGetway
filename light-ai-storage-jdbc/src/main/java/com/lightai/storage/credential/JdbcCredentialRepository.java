@@ -23,6 +23,11 @@ public class JdbcCredentialRepository extends AbstractJdbcRepository {
             "id, pool_id, name, secret_source, weight, rpm_limit, tpm_limit, concurrent_limit, "
                     + "enabled, version, created_at, updated_at";
 
+    /** JOIN 场景（可调度凭证查询）下的带前缀列清单，避免与 object_runtime_state 的 id 歧义。 */
+    private static final String PREFIXED_COLUMNS =
+            "c.id, c.pool_id, c.name, c.secret_source, c.weight, c.rpm_limit, c.tpm_limit, c.concurrent_limit, "
+                    + "c.enabled, c.version, c.created_at, c.updated_at";
+
     public JdbcCredentialRepository(String schemaName, DatabaseDialect explicitDialect) {
         super(schemaName, explicitDialect);
     }
@@ -211,7 +216,7 @@ public class JdbcCredentialRepository extends AbstractJdbcRepository {
     public List<CredentialRecord> listSelectableByPool(Connection connection, UUID poolId,
                                                        String sortExpression, int limit, int offset) {
         DatabaseDialect d = dialect(connection);
-        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "credential") + " c "
+        String sql = "SELECT " + PREFIXED_COLUMNS + " FROM " + qualify(connection, "credential") + " c "
                 + "LEFT JOIN " + qualify(connection, "object_runtime_state") + " s "
                 + "ON s.entity_type = 'CREDENTIAL' AND s.entity_id = c.id "
                 + "WHERE c.pool_id = ? AND c.deleted_at IS NULL AND c.enabled = ? "

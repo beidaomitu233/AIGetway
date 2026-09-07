@@ -43,6 +43,8 @@ import java.util.Optional;
  */
 public class ChatPipeline {
 
+    private static final System.Logger log = System.getLogger(ChatPipeline.class.getName());
+
     private final ConfigSnapshotPort snapshotPort;
     private final AccessTokenPort.RuntimeConfigPort runtimeConfigPort;
     private final RoutingPort routingPort;
@@ -158,6 +160,13 @@ public class ChatPipeline {
                 if (reservation != null) {
                     capacityPort.release(reservation.reservationId());
                 }
+                log.log(System.Logger.Level.INFO,
+                        "尝试失败 trace_id={0} attempt_id={1} code={2} candidate={3} credential_index={4}"
+                                + " 预算 retries={5}/{6} failovers={7}/{8} fallbacks={9}/{10}",
+                        traceId(handle), attemptId, e.code().name(), candidate.candidateId(),
+                        credentialIndex, retries, budgets.maxRetries(),
+                        failovers, budgets.maxCredentialFailovers(),
+                        fallbacks, budgets.maxFallbacks());
                 lastError = e.code().name();
                 RecoveryAction action = decide(e.code().name(), budgets, retries, failovers, fallbacks);
                 switch (action) {

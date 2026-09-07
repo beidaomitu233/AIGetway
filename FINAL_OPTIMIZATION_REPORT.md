@@ -138,3 +138,53 @@ java -jar light-ai-server/target/light-ai-server-0.1.0-SNAPSHOT.jar
 4. **门禁全绿**：全工程 13 模块 338 项测试及前端 160 项测试 100% 通过。
 
 项目已达到生产级交付要求。
+
+---
+
+## 6. 真实数据库端到端联调与剩余断点修复（2026-09-08 追加）
+
+前述交付后，以本机真实 MySQL 5.7.44（`lightai` 库）+ 本地 Stub OpenAI 兼容 Provider 为验收环境复测，发现并修复了在"真实数据库 + 真实 HTTP 外呼"下才暴露的系统性断点（单元测试使用替身连接无法发现）。台账登记于 [COMMUNICATION.md 第 11 节](COMMUNICATION.md)（JT-001~JT-010）。
+
+### 6.1 关键根因与修复
+
+| 编号 | 层 | 根因 | 修复 |
+|---|---|---|---|
+| JT-001 | 运行端口 | ConfigSnapshotPort 仅有 empty() 实现，发布快照从未进入 Runtime | 新增 `JdbcConfigSnapshotPortAdapter`（config_snapshot.content → ActiveSnapshot，发布激活后失效），自动装配注册 |
+| JT-002 | 运行管道 | ChatPipeline 将 baseUrl 硬编码为 adapter.invalid | CandidateView 扩展 baseUrl/proxy/timeout/headers 五连接字段并真实使用；缺 base_url 拒绝外呼 |
+| JT-003 | 数据库 | audit_log 等 8 仓储 INSERT 缺 created_at/updated_at（无默认值） | 全部补齐事务 now()；MySQL/PG 上管理写操作恢复可用 |
+| JT-004 | 数据库 | setObject(UUID) 与手写 schema 限定名在 MySQL 失效 | 方言 bindUuid 化；新增 `SqlNames.table()` 与 `DatabaseDialect.quoteColumn`（usage 保留字） |
+| JT-005 | schema | 6 表 DDL 与 DATABASE_PLAN/仓储列名错配（object_runtime_state、provider_check_record、publish_record、publish_instance_result、limit_policy、reliability_policy） | 按 DATABASE_PLAN 重写双方言 DDL |
+| JT-006 | DTO | Jackson snake_case 陷阱：topPMin → top_pmin ≠ 前端/快照的 top_p_min | 四个 DTO 显式 `@JsonProperty("top_p_min"/"top_p_max")` |
+| JT-007 | Server | Standalone 未装配管理面/DB/适配器/真实运行链路 | ServerApplication 装配 AdapterRegistry/容量/凭证/路由/TraceStore/部署身份适配（默认拒绝） |
+| JT-008 | 可靠性 | 事务外 DataSourceUtils.getConnection 不释放 → 连接池耗尽 | 发布/草稿读路径 try/finally 释放；leak-detection 复核 |
+| JT-009 | 可靠性 | 可调度凭证 JOIN 列 id 歧义（translate 误报 UNIQUE_VIOLATION） | PREFIXED_COLUMNS + 凭证/管道失败根因日志（System.Logger，runtime 零依赖） |
+| JT-010 | 安全一致性 | AdapterHttp 连接时内网复核与管理面内网许可开关不同源 | checkedUri 统一走 SPI `ProviderNetworkPolicies`，Server 按同一配置 configure |
+
+### 6.2 端到端验收证据（真实 MySQL 5.7.44）
+
+`scripts/e2e-smoke.sh` 13 步全部通过：
+
+1. Provider / 凭证池 / 凭证（AES-GCM 加密）/ 模型 / Alias / 候选 创建全部成功，草稿 revision 递增；
+2. `POST /admin/config/validate` PASSED（含 CONNECTION_CHECK_STALE 警告确认）→ `POST /admin/config/publish` PREPARING → 实例协议 prepare → READY → activate → LOADED → 发布 SUCCEEDED，ACTIVE 快照生效；
+3. `/health/ready` 200 UP；签发业务 Access Token（一次显示）；
+4. `GET /v1/models` 200 返回已发布别名 `chat-demo`；
+5. `POST /v1/chat/completions` 200：内容来自真实外呼 Stub Provider，`usage{12,9,21,source=ACTUAL}`、`cost{0.00000003 USD, estimated=false}`、`trace_id` 均由统一结算与观测链路产生。
+
+### 6.3 本轮测试结果
+
+| 门禁 | 结果 |
+|---|---|
+| `mvn -B test`（13 模块） | BUILD SUCCESS，0 失败（含 server 28、admin 169） |
+| `npm test` / `lint` / `typecheck` / `build` | 160 用例通过 / 0 error / 通过 / 成功 |
+| MIGRATE 空库启动 | 约 2.5s，39 表迁移 + SchemaGuard 通过 |
+
+### 6.4 遗留事项（进入最终验收前建议完成）
+
+1. **熔断 attempt 级接线**（P1）：CircuitStateStore.recordResult 未接入 ChatPipeline；预路由过滤受 C-008 键（model+credential）路由期无凭证的约束，需专项设计。
+2. **真实 Provider 与流式联调**：本地 Stub 非流式，SSE 端到端需真实流式模型复核（管理流协议已有单测）。
+3. **集群形态**（P2 部署项）：Redis 共享容量与双实例演练按 CR-016 由部署环境执行。
+4. **Embedded 形态**：宿主需提供的最小 Bean 清单应在 Starter 文档中明确。
+
+### 6.5 验收结论（更新）
+
+在第 5 节结论基础上收窄为：**单实例 Standalone（MySQL 5.7/8.0、PostgreSQL）已达到真实可用与可交付标准（有条件通过）**；上述遗留项完成后即可关闭最终验收。

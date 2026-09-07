@@ -645,3 +645,35 @@
    - 后端 Maven 13 个子模块全部构建并通过所有测试。
    - 34 个自动化端到端测试 100% 保持通过。
 
+
+## 11. Standalone 全链路真实数据库联调与剩余断点修复（2026-09-08）
+
+本节由全栈优化模型登记。前几轮交付后，用户实测确认"仅可作为页面演示、实际功能未联通"。本轮以本机真实 MySQL 5.7.44（lightai 库）为验收环境，将 Standalone Server 从"可启动"推进到"端到端真实调用通过"，并修复了联调中暴露的系统性断点。
+
+### 11.1 根因与修复清单
+
+| 编号 | 层 | 根因 | 修复 | 验证 |
+|---|---|---|---|---|
+| JT-001 | 运行端口 | ConfigSnapshotPort 全系统仅有 empty() 实现，发布快照从未进入 Runtime（/v1/models 恒空、调用无候选） | 新增 JdbcConfigSnapshotPortAdapter（admin.publish）：从 config_snapshot.content 反序列化 ActiveSnapshot（含 provider 连接信息），发布激活后 invalidate；LightAiAdminAutoConfiguration 注册并注入 ConfigPublishService | 发布 SUCCEEDED 后 /health/ready=200、/v1/models 返回已发布别名 |
+| JT-002 | 运行管道 | ChatPipeline.callContext 将 baseUrl 硬编码为 https://adapter.invalid/，快照内 Provider 地址从未到达 Adapter | CandidateView 扩展 baseUrl/proxyUrl/connectTimeoutMs/readTimeoutMs/defaultHeaders 五个连接字段；callContext 使用真实地址，缺失 base_url 时 FIELD_VALIDATION_FAILED 拒绝外呼 | 端到端调用真实到达本地 Stub Provider |
+| JT-003 | 数据库 | audit_log 等 6 表 INSERT 缺 created_at/updated_at，而 schema 无默认值 → MySQL/PG 上全部管理写操作 500 | JdbcAuditRepository、JdbcDraftChangeRepository、JdbcCredentialSecretRepository、JdbcConfigValidationRepository、JdbcPublishInstanceResultRepository、JdbcRuntimeStateWriter、JdbcRetentionImpactRepository、JdbcConfigSnapshotRepository 补齐 now() 列 | Provider→Alias 全部创建链路在 MySQL 5.7 真实提交 |
+| JT-004 | 数据库 | MySQL Connector/J 不支持 setObject(UUID)；draft_change、PoolService.providerExists 等直接使用 → 所有走该路径的写/读失败 | 全部改为方言 bindUuid/setString；新增 SqlNames.table() 统一管理面手写 SQL 的 schema 修饰（与 MySqlDialect.qualify 同口径）；DatabaseDialect 新增 quoteColumn（usage 为 MySQL 保留字） | 凭证/池/模型/Alias/候选创建与详情读回全部成功 |
+| JT-005 | schema | CR-015 交付的 schema SQL 与 DATABASE_PLAN 及仓储实现列名大面积错配（object_runtime_state、provider_check_record、publish_record、publish_instance_result、limit_policy、reliability_policy），SchemaGuard 仅核表名无法发现 | 按 DATABASE_PLAN 重写上述 6 表 DDL（MySQL+PostgreSQL 双方言） | MIGRATE 空库建 39 表后全链路可用 |
+| JT-006 | DTO | Jackson snake_case 将 topPMin 序列化为 top_pmin，前端与快照层均为 top_p_min → 模型创建被 strict mapper 拒绝 | ProviderModelSaveCommand/ProviderModelDetail/ModelInfo/UnifiedModelList 的 topPMin/topPMax 显式 @JsonProperty("top_p_min"/"top_p_max") | 模型创建与 /v1/models 能力字段对齐 |
+| JT-007 | Server | Server 未装配管理面/数据源/Provider 适配器/真实运行链路 | ServerApplication @ImportAutoConfiguration(LightAiAdminAutoConfiguration)；注册 4 内置 Adapter 的 AdapterRegistryPort、StoreBackedCapacityPort、JdbcCredentialSecretPort、SnapshotRoutingPort、RuntimeConfigPort、JdbcTraceStore；ServerAuthProperties（C-001 部署身份适配：部署令牌/本机信任，默认拒绝） | java -jar 一键启动完整产品 |
+| JT-008 | 可靠性 | DataSourceUtils.getConnection 在事务外使用且不释放（ConfigPublishService.records/snapshotSummary/runtimeInstances、DraftStateQueryService 等）→ 连接池耗尽，长期运行后全面 503 | 全部读路径补 try/finally releaseConnection；Hikari leak-detection 复核无泄漏告警 | 压测式重复查询后服务保持可用 |
+| JT-009 | 可靠性 | listSelectableByPool 的 JOIN 列 id 未加前缀 → Column 'id' is ambiguous（translate 误报为 UNIQUE_VIOLATION），凭证解析永远失败 | 新增 PREFIXED_COLUMNS；CredentialSecretPort/ChatPipeline 增加失败根因日志（System.Logger，runtime 保持零依赖） | 调用链凭证解析成功，attempt 进入 Provider 调用 |
+| JT-010 | 安全一致性 | AdapterHttp 连接时内网复核与管理面 allowed-provider-internal-networks 开关不同源 → 显式许可内网的部署无法调用内网自建模型服务 | AdapterHttp.checkedUri 改用 SPI ProviderNetworkPolicies；ServerApplication 按同一配置 configure() | 内网 Stub Provider 调用通过；默认（未许可）仍拒绝 |
+
+### 11.2 端到端验收证据（本机 MySQL 5.7.44 + Stub Provider）
+
+- 配置链：Provider→凭证池→凭证（AES-GCM 加密落库）→模型→Alias→候选→启用 全部 201/200；
+- 发布链：validate（含 CONNECTION_CHECK_STALE 警告确认）→ publish PREPARING → 实例协议 prepare→READY→activate→LOADED → publish SUCCEEDED、ACTIVE 快照生效、draft 清空；
+- 调用链：/health/ready 200 UP → 签发 Access Token（一次显示 lai_*）→ GET /v1/models 200 返回 chat-demo → POST /v1/chat/completions 200，返回内容、usage(source=ACTUAL, 12/9/21)、cost(0.00000003 USD, estimated=false)、trace_id；
+- 测试门禁：mvn -B test 全仓 13 模块 BUILD SUCCESS（server 28、admin 169 等）；前端 vitest 22 套件 160 用例通过，lint 0 error（37 条历史格式 warning）、typecheck 通过、build 成功。
+
+### 11.3 遗留与说明
+
+- 端到端流式（SSE）未用真实 SSE Provider 验证（本地 Stub 仅非流式）；管理流协议 CR-011/012 已有单测与契约覆盖，待接入真实流式模型后由执行方复核；
+- 熔断 CircuitStateStore 的 attempt 级 recordResult 接线与预路由过滤（C-008 键 model+credential 需凭证先确定）本轮未接入管道，OPEN 熔断的影响暂由恢复预算承担，已登记为后续 P1；
+- Trace/Attempt 持久化已由 JdbcTraceStore 承接（server 模块），Usage 聚合事件轮询在真实库运行中出现退避重试日志，其幂等与收敛依赖 BE-P06 既有逻辑，未在本轮重复验收。
