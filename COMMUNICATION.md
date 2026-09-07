@@ -677,3 +677,9 @@
 - 端到端流式（SSE）未用真实 SSE Provider 验证（本地 Stub 仅非流式）；管理流协议 CR-011/012 已有单测与契约覆盖，待接入真实流式模型后由执行方复核；
 - 熔断 CircuitStateStore 的 attempt 级 recordResult 接线与预路由过滤（C-008 键 model+credential 需凭证先确定）本轮未接入管道，OPEN 熔断的影响暂由恢复预算承担，已登记为后续 P1；
 - Trace/Attempt 持久化已由 JdbcTraceStore 承接（server 模块），Usage 聚合事件轮询在真实库运行中出现退避重试日志，其幂等与收敛依赖 BE-P06 既有逻辑，未在本轮重复验收。
+
+## CR-007 复核修复（2026-09-08）
+
+历史实现允许持有共享口令者同时伪造实例头和正文，本轮重新修复身份根因。部署配置 `light-ai.admin.internal-instance-credentials.<UUID>` 为每个实例提供独立口令；认证身份从服务端配置取得，请求头/正文只能与之匹配。禁止重复口令，未配置默认拒绝。旧 `internal-instance-token` 属性与 String 构造器保留绑定兼容，但共享口令不再获得内部接口访问权；部署需迁移为逐实例凭证。进程内 ServerInstanceCoordinator 直接调用服务不受影响。
+
+涉及后端：InternalInstanceAuth、AdminProperties、LightAiAdminAutoConfiguration、Server application.properties；前端与数据库：无。验收：InternalInstanceAuthTest 与 PublishWebTest 共14例通过（0失败/错误/跳过），覆盖独立凭证成功、伪造头、拼接口令、重复配置、正文不匹配及默认拒绝。CR-007 本轮状态：已完成；其他 CR 仍需复核，历史“已修复”不代表本轮验收。

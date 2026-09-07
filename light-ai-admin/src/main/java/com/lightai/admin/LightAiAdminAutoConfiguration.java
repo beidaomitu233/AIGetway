@@ -908,7 +908,7 @@ public class LightAiAdminAutoConfiguration {
         public com.lightai.admin.publish.InternalInstanceAuth lightAiInternalInstanceAuth(
                 AdminProperties properties) {
             return new com.lightai.admin.publish.InternalInstanceAuth(
-                    properties.getInternalInstanceToken());
+                    properties.getInternalInstanceCredentials());
         }
 
         @Bean

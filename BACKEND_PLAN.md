@@ -1978,3 +1978,7 @@ Bootstrap追加adapters数组：provider_type、adapter_version、default_base_u
 
 
 人工熔断未收敛响应data为CircuitStateDetail，增加pending_command={id,status,error_code可空}，HTTP202；已完成返回HTTP200且pending_command=null。客户端通过既有GET /admin/circuits/{id}读取最新命令和状态，避免新增任务查询系统。状态FAILED必须给安全错误码且不报人工操作成功。
+
+### BE-041 审查修复补充（2026-09-08）
+
+内部实例认证使用 `light-ai.admin.internal-instance-credentials.<UUID>` 的逐实例独立部署口令；共享口令及调用方自报身份不能完成认证。请求头、路径及正文必须匹配认证所得 UUID。配置重复口令启动失败，未配置拒绝内部访问。InternalInstanceAuthTest/PublishWebTest 14例通过；双实例发布收敛仍需独立集成验收。

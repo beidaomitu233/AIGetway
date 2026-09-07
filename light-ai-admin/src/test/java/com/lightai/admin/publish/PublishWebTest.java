@@ -36,6 +36,7 @@ class PublishWebTest {
     private static final String ROLE_HEADER = "X-Test-Roles";
     private static final String USER_HEADER = "X-Test-User";
 
+    private final UUID registeredInstanceId = UUID.randomUUID();
     private MockMvc mockMvc;
     private PublishTestSupport.FakeValidationRepository validations;
     private PublishTestSupport.FakeSnapshotContentRepository content;
@@ -80,7 +81,7 @@ class PublishWebTest {
                 validations, publishes, instanceResults, instances, auditService, webProperties,
                 com.lightai.runtime.ports.ConfigSnapshotPort.empty());
 
-        var internalAuth = new InternalInstanceAuth("deploy-secret");
+        var internalAuth = new InternalInstanceAuth(java.util.Map.of(registeredInstanceId, "deploy-secret"));
         mockMvc = MockMvcBuilders.standaloneSetup(
                         new ConfigDraftController(queryService, revertService),
                         new ConfigPublishController(validationService, publishService),
@@ -191,7 +192,7 @@ class PublishWebTest {
 
     @Test
     void internalHeartbeatWithTokenUpsertsInstanceAndReturnsCommands() throws Exception {
-        UUID instanceId = UUID.randomUUID();
+        UUID instanceId = registeredInstanceId;
         MvcResult result = mockMvc.perform(post("/internal/runtime-instances/heartbeat")
                         .header("X-Light-AI-Instance-Token", "deploy-secret")
                         .header("X-Light-AI-Instance-Id", instanceId.toString())
@@ -214,7 +215,7 @@ class PublishWebTest {
 
     @Test
     void internalEndpointsRejectForgedInstanceId() throws Exception {
-        UUID authenticatedInstanceId = UUID.randomUUID();
+        UUID authenticatedInstanceId = registeredInstanceId;
         UUID forgedInstanceId = UUID.randomUUID();
         MvcResult result = mockMvc.perform(post("/internal/runtime-instances/heartbeat")
                         .header("X-Light-AI-Instance-Token", "deploy-secret")

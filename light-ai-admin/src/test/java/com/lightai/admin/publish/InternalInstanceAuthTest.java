@@ -2,100 +2,57 @@ package com.lightai.admin.publish;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
-import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
-import java.util.Optional;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 
-/**
- * BE-041 内部实例认证单元测试：默认拒绝、常量时间口令比较、身份一致性。
- * 部署共享口令方式为 C-001 相关补充假设，mTLS 身份绑定由部署侧提供后替换。
- */
 class InternalInstanceAuthTest {
+    private final UUID first = UUID.randomUUID();
+    private final UUID second = UUID.randomUUID();
+    private final InternalInstanceAuth auth = new InternalInstanceAuth(Map.of(first, "first-secret", second, "second-secret"));
 
-    @Test
-    void unconfiguredTokenDeniesAllRequests() {
-        InternalInstanceAuth auth = new InternalInstanceAuth(null);
-        MockHttpServletRequest request = new MockHttpServletRequest();
-
-        assertThatThrownBy(() -> auth.authenticate(request))
-                .isInstanceOf(LightAiException.class)
-                .extracting(e -> ((LightAiException) e).code())
-                .isEqualTo(ErrorCode.INSTANCE_AUTH_FAILED);
+    @Test void bindsIdentityFromDeploymentCredentialWithoutTrustingHeaders() {
+        assertThat(auth.authenticate(request("first-secret", null))).contains(first);
+        assertThat(auth.authenticate(request("second-secret", second.toString()))).contains(second);
     }
-
-    @Test
-    void wrongOrMissingTokenIsRejected() {
-        InternalInstanceAuth auth = new InternalInstanceAuth("deploy-secret");
-        MockHttpServletRequest missing = new MockHttpServletRequest();
-        assertThatThrownBy(() -> auth.authenticate(missing))
+    @Test void rejectsForgedHeaderEvenWhenBodyWouldMatchIt() {
+        assertThatThrownBy(() -> auth.authenticate(request("first-secret", second.toString())))
                 .isInstanceOf(LightAiException.class);
-
-        MockHttpServletRequest wrong = new MockHttpServletRequest();
-        wrong.addHeader("X-Light-AI-Instance-Token", "guess");
-        assertThatThrownBy(() -> auth.authenticate(wrong))
-                .isInstanceOf(LightAiException.class)
-                .extracting(e -> ((LightAiException) e).code())
-                .isEqualTo(ErrorCode.INSTANCE_AUTH_FAILED);
     }
-
-    @Test
-    void correctTokenAuthenticatesWithoutBoundIdentity() {
-        InternalInstanceAuth auth = new InternalInstanceAuth("deploy-secret");
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("X-Light-AI-Instance-Token", "deploy-secret");
-
-        Optional<UUID> identity = auth.authenticate(request);
-        assertThat(identity).isEmpty();
+    @Test void rejectsCallerConstructedTokenAndSharedToken() {
+        assertThatThrownBy(() -> auth.authenticate(request("first-secret:" + second, second.toString())))
+                .isInstanceOf(LightAiException.class);
+        assertThatThrownBy(() -> new InternalInstanceAuth("shared").authenticate(request("shared", first.toString())))
+                .isInstanceOf(LightAiException.class);
     }
-
-    @Test
-    void correctTokenWithInstanceIdHeaderBindsIdentity() {
-        InternalInstanceAuth auth = new InternalInstanceAuth("deploy-secret");
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("X-Light-AI-Instance-Token", "deploy-secret");
-        UUID expectedId = UUID.randomUUID();
-        request.addHeader("X-Light-AI-Instance-Id", expectedId.toString());
-
-        Optional<UUID> identity = auth.authenticate(request);
-        assertThat(identity).contains(expectedId);
+    @Test void rejectsMissingUnknownAndMalformedCredentials() {
+        for (String value : new String[]{null, "wrong", ""}) {
+            assertThatThrownBy(() -> auth.authenticate(request(value, null))).isInstanceOf(LightAiException.class);
+        }
+        assertThatThrownBy(() -> auth.authenticate(request("first-secret", "not-a-uuid")))
+                .isInstanceOf(LightAiException.class);
     }
-
-    @Test
-    void structuredTokenBindsIdentity() {
-        InternalInstanceAuth auth = new InternalInstanceAuth("deploy-secret");
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        UUID expectedId = UUID.randomUUID();
-        request.addHeader("X-Light-AI-Instance-Token", "deploy-secret:" + expectedId);
-
-        Optional<UUID> identity = auth.authenticate(request);
-        assertThat(identity).contains(expectedId);
+    @Test void rejectsUnconfiguredAndReusedCredentials() {
+        assertThatThrownBy(() -> new InternalInstanceAuth(Map.of()).authenticate(request("first-secret", null)))
+                .isInstanceOf(LightAiException.class);
+        assertThatThrownBy(() -> new InternalInstanceAuth(Map.of(first, "same", second, "same")))
+                .isInstanceOf(IllegalArgumentException.class);
     }
-
-    @Test
-    void requireIdentityRejectsMismatchAndInvalidIds() {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        UUID bound = UUID.randomUUID();
-        request.setAttribute(InternalInstanceAuth.ATTRIBUTE, bound);
-
-        assertThat(InternalInstanceAuth.requireIdentity(request, bound.toString())).isEqualTo(bound);
-        assertThatThrownBy(() -> InternalInstanceAuth.requireIdentity(request, UUID.randomUUID().toString()))
-                .isInstanceOf(LightAiException.class)
-                .extracting(e -> ((LightAiException) e).code())
-                .isEqualTo(ErrorCode.INSTANCE_AUTH_FAILED);
-
-        MockHttpServletRequest unbound = new MockHttpServletRequest();
-        assertThatThrownBy(() -> InternalInstanceAuth.requireIdentity(unbound, UUID.randomUUID().toString()))
-                .isInstanceOf(LightAiException.class)
-                .extracting(e -> ((LightAiException) e).code())
-                .isEqualTo(ErrorCode.INSTANCE_AUTH_FAILED);
-
-        assertThatThrownBy(() -> InternalInstanceAuth.requireIdentity(unbound, "not-a-uuid"))
-                .isInstanceOf(LightAiException.class)
-                .extracting(e -> ((LightAiException) e).code())
-                .isEqualTo(ErrorCode.INSTANCE_AUTH_FAILED);
+    @Test void requiresAuthenticatedIdentityToMatchBody() {
+        var request = request("first-secret", null);
+        assertThatThrownBy(() -> InternalInstanceAuth.requireIdentity(request, first.toString()))
+                .isInstanceOf(LightAiException.class);
+        request.setAttribute(InternalInstanceAuth.ATTRIBUTE, auth.authenticate(request).orElseThrow());
+        assertThat(InternalInstanceAuth.requireIdentity(request, first.toString())).isEqualTo(first);
+        assertThatThrownBy(() -> InternalInstanceAuth.requireIdentity(request, second.toString()))
+                .isInstanceOf(LightAiException.class);
+    }
+    private MockHttpServletRequest request(String token, String id) {
+        var request = new MockHttpServletRequest();
+        if (token != null) request.addHeader(InternalInstanceAuth.TOKEN_HEADER, token);
+        if (id != null) request.addHeader(InternalInstanceAuth.INSTANCE_ID_HEADER, id);
+        return request;
     }
 }
