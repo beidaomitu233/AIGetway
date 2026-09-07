@@ -47,12 +47,18 @@ public class AuditService {
             independentTransaction.executeWithoutResult(status ->
                     auditRepository.insert(DataSourceUtils.getConnection(dataSource), record));
         } catch (Exception cause) {
-            // 失败审计也不可用：只能告警，不得伪造任何审计结果
+            // 失败审计也不可用：只能告警，不得伪造任何审计结果；
+            // 记录异常类型与消息（不含正文/秘密）以便诊断存储故障
+            Throwable root = cause;
+            while (root.getCause() != null && root.getCause() != root) {
+                root = root.getCause();
+            }
             if (failureListener != null) {
                 failureListener.onAuditWriteFailure(record, cause);
             } else {
-                log.error("审计写入失败且无告警通道 request_id={} action={}",
-                        record.requestId(), record.action());
+                log.error("审计写入失败且无告警通道 request_id={} action={} cause={}: {}",
+                        record.requestId(), record.action(),
+                        root.getClass().getSimpleName(), root.getMessage());
             }
         }
     }

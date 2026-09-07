@@ -32,6 +32,11 @@ public final class MySqlDialect implements DatabaseDialect {
     }
 
     @Override
+    public String quoteColumn(String name) {
+        return "`" + name + "`";
+    }
+
+    @Override
     public String jsonPlaceholder() {
         return "?";
     }
@@ -75,7 +80,7 @@ public final class MySqlDialect implements DatabaseDialect {
 
     @Override
     public String intervalSecondsBeforeNow(int seconds) {
-        return "DATE_SUB(now(6), INTERVAL " + seconds + " SECOND)";
+        return "TIMESTAMPADD(SECOND, -" + seconds + ", now(6))";
     }
 
     @Override

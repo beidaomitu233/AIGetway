@@ -4,6 +4,7 @@ import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -13,6 +14,15 @@ import java.util.Optional;
 public interface ConfigSnapshotPort {
 
     ActiveSnapshot active();
+
+    /**
+     * 是否存在可用的 ACTIVE 快照（PRD 4.6.4.3）。
+     * 首次安装使用 snapshot_no=0 的初始快照，因此不能用快照号是否大于 0 判断就绪。
+     */
+    default boolean hasActiveSnapshot() {
+        ActiveSnapshot snapshot = active();
+        return snapshot != null;
+    }
 
     /** 当前活动快照的 Alias 与候选装配视图。 */
     record ActiveSnapshot(long snapshotNo, List<AliasView> aliases) {
@@ -43,7 +53,7 @@ public interface ConfigSnapshotPort {
         }
     }
 
-    /** 候选运行视图：模型能力、默认值与价格快照一并装配（BE-030 价格快照来源）。 */
+    /** 候选运行视图：模型能力、默认值、价格与 Provider 连接信息一并装配（BE-030 价格快照来源）。 */
     record CandidateView(
             String candidateId,
             String providerId,
@@ -73,7 +83,16 @@ public interface ConfigSnapshotPort {
             String inputPrice,
             String outputPrice,
             int priceUnit,
-            String currency) {
+            String currency,
+            String baseUrl,
+            String proxyUrl,
+            int connectTimeoutMs,
+            int readTimeoutMs,
+            Map<String, String> defaultHeaders) {
+
+        public CandidateView {
+            defaultHeaders = defaultHeaders == null ? Map.of() : Map.copyOf(defaultHeaders);
+        }
 
         public boolean supportsStreamModel() {
             return Boolean.TRUE.equals(supportStream);
@@ -81,7 +100,17 @@ public interface ConfigSnapshotPort {
     }
 
     static ConfigSnapshotPort empty() {
-        return () -> new ActiveSnapshot(0, List.of());
+        return new ConfigSnapshotPort() {
+            @Override
+            public ActiveSnapshot active() {
+                return new ActiveSnapshot(0, List.of());
+            }
+
+            @Override
+            public boolean hasActiveSnapshot() {
+                return false;
+            }
+        };
     }
 
     /** Alias 不存在或未发布。 */

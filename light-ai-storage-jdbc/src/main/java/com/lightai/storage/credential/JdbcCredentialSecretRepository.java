@@ -36,7 +36,8 @@ public class JdbcCredentialSecretRepository extends AbstractJdbcRepository {
         DatabaseDialect d = dialect(connection);
         String sql = "INSERT INTO " + qualify(connection, "credential_secret")
                 + " (id, credential_id, secret_ciphertext, secret_ref_ciphertext, encryption_key_id, "
-                + "masked_value, secret_version, rotated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                + "masked_value, secret_version, rotated_at, created_at, updated_at) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, " + d.nowFunction() + ", " + d.nowFunction() + ")";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, row.id());
             d.bindUuid(statement, 2, row.credentialId());

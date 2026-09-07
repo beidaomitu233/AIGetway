@@ -42,8 +42,8 @@ public final class JdbcDraftChangeRepository extends AbstractJdbcRepository
             String sql = """
                     INSERT INTO %s
                       (id, entity_type, entity_id, entity_name, change_type, changed_fields,
-                       modified_by, entity_version, draft_revision)
-                    VALUES (?, ?, ?, ?, ?, %s, ?, ?, ?)
+                       modified_by, entity_version, draft_revision, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, %s, ?, ?, ?, %s, %s)
                     ON CONFLICT (entity_type, entity_id) DO UPDATE SET
                       entity_name = EXCLUDED.entity_name,
                       change_type = EXCLUDED.change_type,
@@ -53,11 +53,11 @@ public final class JdbcDraftChangeRepository extends AbstractJdbcRepository
                       draft_revision = EXCLUDED.draft_revision,
                       updated_at = now()
                     RETURNING (xmax = 0) AS inserted
-                    """.formatted(table, jsonPh).strip();
+                    """.formatted(table, jsonPh, d.nowFunction(), d.nowFunction()).strip();
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setObject(1, record.id());
+                d.bindUuid(statement, 1, record.id());
                 statement.setString(2, record.entityType());
-                statement.setObject(3, record.entityId());
+                d.bindUuid(statement, 3, record.entityId());
                 statement.setString(4, record.entityName());
                 statement.setString(5, record.changeType());
                 statement.setString(6, toJson(record.changedFields()));
@@ -75,8 +75,8 @@ public final class JdbcDraftChangeRepository extends AbstractJdbcRepository
             String sql = """
                     INSERT INTO %s
                       (id, entity_type, entity_id, entity_name, change_type, changed_fields,
-                       modified_by, entity_version, draft_revision)
-                    VALUES (?, ?, ?, ?, ?, %s, ?, ?, ?)
+                       modified_by, entity_version, draft_revision, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, %s, ?, ?, ?, %s, %s)
                     ON DUPLICATE KEY UPDATE
                       entity_name = VALUES(entity_name),
                       change_type = VALUES(change_type),
@@ -84,12 +84,12 @@ public final class JdbcDraftChangeRepository extends AbstractJdbcRepository
                       modified_by = VALUES(modified_by),
                       entity_version = VALUES(entity_version),
                       draft_revision = VALUES(draft_revision),
-                      updated_at = CURRENT_TIMESTAMP
-                    """.formatted(table, jsonPh).strip();
+                      updated_at = %s
+                    """.formatted(table, jsonPh, d.nowFunction(), d.nowFunction(), d.nowFunction()).strip();
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setObject(1, record.id());
+                d.bindUuid(statement, 1, record.id());
                 statement.setString(2, record.entityType());
-                statement.setObject(3, record.entityId());
+                d.bindUuid(statement, 3, record.entityId());
                 statement.setString(4, record.entityName());
                 statement.setString(5, record.changeType());
                 statement.setString(6, toJson(record.changedFields()));
@@ -135,7 +135,7 @@ public final class JdbcDraftChangeRepository extends AbstractJdbcRepository
                 statement.setArray(2, connection.createArrayOf("uuid", idList.toArray(UUID[]::new)));
             } else {
                 for (int i = 0; i < idList.size(); i++) {
-                    statement.setObject(2 + i, idList.get(i));
+                    d.bindUuid(statement, 2 + i, idList.get(i));
                 }
             }
             try (var rs = statement.executeQuery()) {
@@ -154,9 +154,10 @@ public final class JdbcDraftChangeRepository extends AbstractJdbcRepository
     public Optional<String> findLatestModifier(Connection connection, String entityType, UUID entityId) {
         String sql = "SELECT modified_by FROM " + qualify(connection, "draft_change")
                 + " WHERE entity_type = ? AND entity_id = ? ORDER BY updated_at DESC LIMIT 1";
+        DatabaseDialect d = dialect(connection);
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, entityType);
-            statement.setObject(2, entityId);
+            d.bindUuid(statement, 2, entityId);
             try (var rs = statement.executeQuery()) {
                 return rs.next() ? Optional.of(rs.getString(1)) : Optional.empty();
             }
@@ -304,7 +305,7 @@ public final class JdbcDraftChangeRepository extends AbstractJdbcRepository
                 + " WHERE entity_type = ? AND entity_id = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, entityType);
-            statement.setObject(2, entityId);
+            d.bindUuid(statement, 2, entityId);
             try (ResultSet rs = statement.executeQuery()) {
                 return rs.next() ? Optional.of(mapRow(d, rs)) : Optional.empty();
             }
@@ -317,9 +318,10 @@ public final class JdbcDraftChangeRepository extends AbstractJdbcRepository
     public int delete(Connection connection, String entityType, UUID entityId) {
         String sql = "DELETE FROM " + qualify(connection, "draft_change")
                 + " WHERE entity_type = ? AND entity_id = ?";
+        DatabaseDialect d = dialect(connection);
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, entityType);
-            statement.setObject(2, entityId);
+            d.bindUuid(statement, 2, entityId);
             return statement.executeUpdate();
         } catch (SQLException e) {
             throw translate("草稿差异删除失败", e);

@@ -120,7 +120,7 @@ public final class JdbcPublishRecordRepository extends AbstractJdbcRepository im
                                           String sortExpression, int limit, long offset) {
         DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT " + COLUMNS + " FROM ")
-                .append(qualify(connection, "publish_record")).append(" WHERE deleted_at IS NULL");
+                .append(qualify(connection, "publish_record")).append(" WHERE 1 = 1");
         appendFilter(d, filter, sql);
         sql.append(" ORDER BY ").append(sortExpression).append(" LIMIT ? OFFSET ?");
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
@@ -143,7 +143,7 @@ public final class JdbcPublishRecordRepository extends AbstractJdbcRepository im
     public long count(Connection connection, PublishRecordFilter filter) {
         DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT count(*) FROM ")
-                .append(qualify(connection, "publish_record")).append(" WHERE deleted_at IS NULL");
+                .append(qualify(connection, "publish_record")).append(" WHERE 1 = 1");
         appendFilter(d, filter, sql);
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
             bindFilter(d, statement, filter);

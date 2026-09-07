@@ -55,7 +55,8 @@ public class PrdScenarioMatrixRegressionTest {
                 true, true, true, true, true,
                 BigDecimal.ZERO, BigDecimal.valueOf(2), BigDecimal.ZERO, BigDecimal.ONE, 4,
                 BigDecimal.ONE, BigDecimal.ONE, 1024L,
-                "0.000001", "0.000002", 1000, "USD");
+                "0.000001", "0.000002", 1000, "USD",
+                "https://provider.test/v1", null, 3000, 120000, java.util.Map.of());
     }
 
     @BeforeEach

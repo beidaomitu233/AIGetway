@@ -32,8 +32,9 @@ public final class JdbcPublishInstanceResultRepository extends AbstractJdbcRepos
                               long targetSnapshotNo, List<UUID> instanceIds) {
         DatabaseDialect d = dialect(connection);
         String sql = "INSERT INTO " + qualify(connection, "publish_instance_result")
-                + " (id, publish_id, instance_id, from_snapshot_no, target_snapshot_no, status, retry_count) "
-                + "VALUES (?, ?, ?, ?, ?, 'PENDING', 0)";
+                + " (id, publish_id, instance_id, from_snapshot_no, target_snapshot_no, status, retry_count, "
+                + "created_at, updated_at) "
+                + "VALUES (?, ?, ?, ?, ?, 'PENDING', 0, " + d.nowFunction() + ", " + d.nowFunction() + ")";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             for (UUID instanceId : instanceIds) {
                 d.bindUuid(statement, 1, UUID.randomUUID());

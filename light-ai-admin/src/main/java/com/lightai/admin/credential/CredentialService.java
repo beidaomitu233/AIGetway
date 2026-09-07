@@ -444,7 +444,7 @@ public class CredentialService {
         String sql = "SELECT count(*) FROM " + schemaName()
                 + ".capacity_reservation_item WHERE credential_id = ? AND released_at IS NULL";
         try (var statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, credentialId);
+            statement.setString(1, credentialId.toString());
             try (var rs = statement.executeQuery()) {
                 rs.next();
                 return rs.getLong(1);

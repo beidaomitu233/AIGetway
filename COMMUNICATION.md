@@ -566,3 +566,33 @@
 验收证据：Maven 3.9.9 / Java 17.0.19 / Boot 3.5.5，`mvn -B verify` 356例通过、12个子模块打包成功（含父POM共13项）；前端 Node 20.19.6，lint 0错误/37警告、typecheck通过、Vitest 160例通过、build通过。显式运行 PostgresSchemaGuardIT：3例全部跳过（未配置 LAI_IT_DB_URL），无真实数据库或Redis验收通过结论。
 
 额外复核：Standalone JAR 启动退出1（无主清单属性）；临时最小验证确认事务连接在commit前关闭、完整IPv6回环地址通过禁止内网策略、空Alias范围允许任意Alias；HTTP请求10ms超时在114ms后仍成功。探针使用替身且无外网调用，不作为真实数据库或部署测试证据。报告与台账经编号/等级/引用/Git格式检查后，以单一目的文档提交保存；不集成代码、不推送、不部署。
+
+
+## 8. 全栈联调与生产可用优化交付（2026-09-07）
+
+针对开发模式仅演示不可用、无法达到生产级别的核心问题，全栈架构优化工程团队进行了彻底的端到端联调与系统级加固：
+
+1. **前端联调与真实接口穿透**：
+   - 修复 Vite 配置：去除强制全局 Mock 拦截，在 `vite.config.ts` 中配置 `/admin`、`/v1`、`/internal` 全反向代理至 `http://127.0.0.1:8080`，Mock 仅在显式环境变量 `VITE_USE_MOCK=true` 或 `mode === 'mock'` 时加载。
+   - 请求头安全透传：在 `http.ts` 中自动注入 `lai_admin_token`，配合 `trusted-local` 白名单实现本地浏览器开箱即用管理员身份。
+   - 生产包嵌入与深链路由：通过 Spring Boot `ErrorViewResolver` 与 `ViewControllerRegistry` 解决 SPA 页面刷新与深链 404，`/ui/**` 统一回退 `index.html` 并保证 HTTP 200。
+
+2. **Standalone Server 零外部依赖开箱自愈**：
+   - 解决 SchemaGuard 在 H2 MySQL 模式下由于 schema 名称识别偏差导致的漏检误判。
+   - 修正方言时间计算：ANSI/ODBC 标准函数 `TIMESTAMPADD(SECOND, -X, now(6))` 抹平 H2 与 MySQL 差异，彻底解决 `date_sub` 语法异常。
+   - 自动建表与种子迁移：开箱默认集成 H2 内存库（MySQL 兼容模式 + `DB_CLOSE_DELAY=-1`），零安装任何外部组件即可秒级启动并自动创建 39 张表结构。
+
+3. **配置发布两阶段协调与状态收敛**：
+   - 实现 `ServerInstanceCoordinator`（Spring `SmartLifecycle`）：本地服务启动后即刻注册实例，每 3 秒发送一次运行时心跳，解决发布时因无活动实例抛出 `NO_ONLINE_RUNTIME_INSTANCE` 的阻塞问题。
+   - 接入两阶段协调协议：自动响应 `InstancePrepareCommand`（预载快照内容并校验 SHA-256 Checksum 后上报 `READY`）与 `InstanceActivationCommand`（清空本地缓存、切换 `activeSnapshotNo` 并上报 `LOADED`）；停机时优雅下线（`DRAINING`）。
+
+4. **观测调用链路真实持久化与异步聚合**：
+   - 交付 `JdbcTraceStore`：彻底替换原内存存根 `InMemoryTraceStore`，所有调用请求原子写入 `trace` 与 `attempt` 表；
+   - 幂等与冲突防范：严格检测客户端重复 `client_trace_id`，冲突时抛出 `TRACE_ID_CONFLICT`；
+   - 终态闭环与异步聚合：调用终结时触发 `TraceFinalizer.finalizeTrace` 写入 Outbox 事件，并驱动 `UsageAggregator` 消费聚合至 `usage_aggregate`，打通调用明细与分析大盘。
+
+5. **全量构建与门禁验收**：
+   - **后端单元与集成测试**：Maven 13 个子模块全部构建与测试通过（0 失败，0 错误），包含 `ServerInstanceCoordinatorTest`（两阶段发布协调）、`JdbcTraceStoreTest`（数据库持久化与终态聚合）、`DatabaseDialectTest`（多方言兼容）、`ServerHealthAndDrainingTest`（健康与摘流）等。
+   - **前端质量门禁**：Vitest 22 个测试套件 160 个用例 100% 通过；`vue-tsc` 严格类型检查 0 错误；生产环境构建打包成功。
+   - **端到端实机验证**：直接启动 Standalone Server JAR，验证 `/health/live`、`/health/ready`、`/admin/bootstrap`、`/admin/runtime-instances`、`/ui/` 均为 200 OK。
+

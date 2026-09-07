@@ -33,9 +33,10 @@ public final class JdbcAuditRepository extends AbstractJdbcRepository implements
     public void insert(Connection connection, AuditRecord record) {
         DatabaseDialect d = dialect(connection);
         String sql = "INSERT INTO " + qualify(connection, "audit_log")
-                + " (id, request_id, operator_id, action, entity_type, entity_id, "
+                + " (id, created_at, request_id, operator_id, action, entity_type, entity_id, "
                 + "result, changes, error_code, error_summary, source_mode, source_ip_masked) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, " + d.jsonPlaceholder() + ", ?, ?, ?, ?)";
+                + "VALUES (?, " + d.nowFunction() + ", ?, ?, ?, ?, ?, ?, " + d.jsonPlaceholder()
+                + ", ?, ?, ?, ?)";
         String changesJson = toJson(record.changes());
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, record.id());

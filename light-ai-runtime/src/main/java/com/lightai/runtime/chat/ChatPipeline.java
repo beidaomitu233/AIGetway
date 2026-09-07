@@ -456,9 +456,17 @@ public class ChatPipeline {
 
     private ProviderCallContext callContext(CandidateView candidate, ProviderChatRequest request,
                                             CredentialSecretPort.ResolvedCredential credential, long started) {
+        String baseUrl = candidate.baseUrl();
+        if (baseUrl == null || baseUrl.isBlank()) {
+            throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
+                    "候选 " + candidate.candidateId() + " 的 Provider 未配置 base_url，拒绝外呼");
+        }
         return new ProviderCallContext(
                 new com.lightai.spi.provider.ProviderConfigView(candidate.providerType(),
-                        "https://adapter.invalid/", null, 3000, 120000, Map.of()),
+                        baseUrl, candidate.proxyUrl(),
+                        candidate.connectTimeoutMs() > 0 ? candidate.connectTimeoutMs() : 3000,
+                        candidate.readTimeoutMs() > 0 ? candidate.readTimeoutMs() : 120000,
+                        candidate.defaultHeaders()),
                 request, credential.secretHandle(),
                 Instant.now().plusMillis(Math.max(1, totalTimeoutMs)));
     }

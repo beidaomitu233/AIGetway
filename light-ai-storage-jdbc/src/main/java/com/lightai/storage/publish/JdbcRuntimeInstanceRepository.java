@@ -100,26 +100,30 @@ public final class JdbcRuntimeInstanceRepository extends AbstractJdbcRepository 
     public int sweepStale(Connection connection, int staleSeconds) {
         DatabaseDialect d = dialect(connection);
         String table = qualify(connection, "runtime_instance");
-        String sql;
         if (d.databaseType() == DatabaseType.POSTGRESQL) {
-            sql = "UPDATE " + table + " SET status = CASE "
+            String sql = "UPDATE " + table + " SET status = CASE "
                     + "WHEN last_heartbeat_at < now() - make_interval(secs => ?::int * 3) THEN 'OFFLINE' "
                     + "WHEN last_heartbeat_at < now() - make_interval(secs => ?::int) THEN 'STALE' "
                     + "ELSE status END, updated_at = now() "
                     + "WHERE status IN ('ONLINE', 'DRAINING') AND last_heartbeat_at IS NOT NULL";
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setInt(1, staleSeconds * 3);
+                statement.setInt(2, staleSeconds);
+                return statement.executeUpdate();
+            } catch (SQLException e) {
+                throw translate("实例失联落定失败", e);
+            }
         } else {
-            sql = "UPDATE " + table + " SET status = CASE "
-                    + "WHEN last_heartbeat_at < DATE_SUB(" + d.nowFunction() + ", INTERVAL (? * 3) SECOND) THEN 'OFFLINE' "
-                    + "WHEN last_heartbeat_at < DATE_SUB(" + d.nowFunction() + ", INTERVAL ? SECOND) THEN 'STALE' "
+            String sql = "UPDATE " + table + " SET status = CASE "
+                    + "WHEN last_heartbeat_at < " + d.intervalSecondsBeforeNow(staleSeconds * 3) + " THEN 'OFFLINE' "
+                    + "WHEN last_heartbeat_at < " + d.intervalSecondsBeforeNow(staleSeconds) + " THEN 'STALE' "
                     + "ELSE status END, updated_at = " + d.nowFunction() + " "
                     + "WHERE status IN ('ONLINE', 'DRAINING') AND last_heartbeat_at IS NOT NULL";
-        }
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setInt(1, staleSeconds);
-            statement.setInt(2, staleSeconds);
-            return statement.executeUpdate();
-        } catch (SQLException e) {
-            throw translate("实例失联落定失败", e);
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                return statement.executeUpdate();
+            } catch (SQLException e) {
+                throw translate("实例失联落定失败", e);
+            }
         }
     }
 

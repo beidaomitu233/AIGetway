@@ -1,5 +1,6 @@
 package com.lightai.client.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.math.BigDecimal;
 import java.util.List;
@@ -21,8 +22,8 @@ public record ProviderModelSaveCommand(
         Boolean supportStop,
         BigDecimal temperatureMin,
         BigDecimal temperatureMax,
-        BigDecimal topPMin,
-        BigDecimal topPMax,
+        @JsonProperty("top_p_min") BigDecimal topPMin,
+        @JsonProperty("top_p_max") BigDecimal topPMax,
         Integer maxStopSequences,
         Integer maxStopLength,
         BigDecimal defaultTemperature,

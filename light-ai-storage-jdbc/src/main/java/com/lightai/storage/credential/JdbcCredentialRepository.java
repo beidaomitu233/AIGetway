@@ -203,6 +203,40 @@ public class JdbcCredentialRepository extends AbstractJdbcRepository {
         }
     }
 
+    /**
+     * 池内可参与调度的凭证（PRD 4.3.4 / 9：UNKNOWN 可参与选择但优先级低于 HEALTHY，
+     * RATE_LIMITED 在复位时间前不参与，DISABLED/INVALID/UNAVAILABLE 不参与）。
+     * 无 object_runtime_state 记录的凭证按 UNKNOWN 处理，避免新建凭证无法参与调度。
+     */
+    public List<CredentialRecord> listSelectableByPool(Connection connection, UUID poolId,
+                                                       String sortExpression, int limit, int offset) {
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "credential") + " c "
+                + "LEFT JOIN " + qualify(connection, "object_runtime_state") + " s "
+                + "ON s.entity_type = 'CREDENTIAL' AND s.entity_id = c.id "
+                + "WHERE c.pool_id = ? AND c.deleted_at IS NULL AND c.enabled = ? "
+                + "AND COALESCE(s.health_status, 'UNKNOWN') NOT IN ('DISABLED', 'INVALID', 'UNAVAILABLE') "
+                + "AND NOT (COALESCE(s.health_status, 'UNKNOWN') = 'RATE_LIMITED' "
+                + "AND (s.reset_at IS NULL OR s.reset_at > " + d.nowFunction() + ")) "
+                + "ORDER BY CASE COALESCE(s.health_status, 'UNKNOWN') WHEN 'HEALTHY' THEN 0 ELSE 1 END, c."
+                + sortExpression + ", c.id ASC LIMIT ? OFFSET ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            bindParameters(statement, List.of(poolId), d);
+            statement.setBoolean(2, true);
+            statement.setInt(3, limit);
+            statement.setInt(4, offset);
+            try (ResultSet rs = statement.executeQuery()) {
+                List<CredentialRecord> records = new ArrayList<>();
+                while (rs.next()) {
+                    records.add(mapRow(rs, d));
+                }
+                return List.copyOf(records);
+            }
+        } catch (SQLException e) {
+            throw translate("可调度凭证查询失败", e);
+        }
+    }
+
     public long countByPool(Connection connection, UUID poolId, String healthStatus, Boolean enabled) {
         DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT count(*) FROM ").append(qualify(connection, "credential"))

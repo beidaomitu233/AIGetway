@@ -63,8 +63,9 @@ public class SchemaGuard {
         Set<String> tables = new HashSet<>();
         String productName = metaData != null ? metaData.getDatabaseProductName() : null;
         boolean isMySql = productName != null && (productName.toLowerCase().contains("mysql") || productName.toLowerCase().contains("mariadb"));
+        boolean isH2 = productName != null && productName.toLowerCase().contains("h2");
         String catalog = isMySql ? connection.getCatalog() : null;
-        String schema = isMySql ? null : schemaName;
+        String schema = (isMySql || isH2) ? null : schemaName;
         try (ResultSet rs = metaData.getTables(catalog, schema, "%", new String[] {"TABLE"})) {
             while (rs.next()) {
                 tables.add(rs.getString("TABLE_NAME").toLowerCase());

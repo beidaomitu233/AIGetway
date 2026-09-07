@@ -17,7 +17,7 @@ import java.util.Optional;
 public final class JdbcConfigSnapshotRepository extends AbstractJdbcRepository implements ConfigSnapshotRepository {
 
     private static final String COLUMNS =
-            "snapshot_no, schema_version, status, content, content_checksum, content_summary, "
+            "id, snapshot_no, schema_version, status, content, content_checksum, content_summary, "
                     + "activated_at, created_by, created_at, updated_at";
 
     public JdbcConfigSnapshotRepository(String schemaName) {
@@ -45,16 +45,17 @@ public final class JdbcConfigSnapshotRepository extends AbstractJdbcRepository i
     public void insert(Connection connection, ConfigSnapshotRecord record) {
         DatabaseDialect d = dialect(connection);
         String sql = "INSERT INTO " + qualify(connection, "config_snapshot") + " (" + COLUMNS + ") "
-                + "VALUES (?, ?, ?, " + d.jsonPlaceholder() + ", ?, " + d.jsonPlaceholder() + ", ?, ?, " + d.nowFunction() + ", " + d.nowFunction() + ")";
+                + "VALUES (?, ?, ?, ?, " + d.jsonPlaceholder() + ", ?, " + d.jsonPlaceholder() + ", ?, ?, " + d.nowFunction() + ", " + d.nowFunction() + ")";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, record.snapshotNo());
-            statement.setInt(2, record.schemaVersion());
-            statement.setString(3, record.status());
-            d.bindJson(statement, 4, record.contentJson());
-            statement.setString(5, record.contentChecksum());
-            d.bindJson(statement, 6, record.contentSummaryJson());
-            statement.setObject(7, record.activatedAt());
-            statement.setString(8, record.createdBy());
+            d.bindUuid(statement, 1, java.util.UUID.randomUUID());
+            statement.setLong(2, record.snapshotNo());
+            statement.setInt(3, record.schemaVersion());
+            statement.setString(4, record.status());
+            d.bindJson(statement, 5, record.contentJson());
+            statement.setString(6, record.contentChecksum());
+            d.bindJson(statement, 7, record.contentSummaryJson());
+            statement.setObject(8, record.activatedAt());
+            statement.setString(9, record.createdBy());
             statement.executeUpdate();
         } catch (SQLException e) {
             throw translate("快照写入失败", e);

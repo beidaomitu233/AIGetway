@@ -359,9 +359,10 @@ public class PoolService {
     }
 
     private boolean providerExists(Connection connection, UUID providerId) {
-        String sql = "SELECT 1 FROM " + schemaName + ".provider WHERE id = ? AND deleted_at IS NULL";
+        String sql = "SELECT 1 FROM " + com.lightai.storage.dialect.SqlNames.table(schemaName, "provider")
+                + " WHERE id = ? AND deleted_at IS NULL";
         try (var statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, providerId);
+            statement.setString(1, providerId.toString());
             try (var rs = statement.executeQuery()) {
                 return rs.next();
             }
@@ -407,10 +408,10 @@ public class PoolService {
     }
 
     private String providerName(Connection connection, UUID providerId) {
-        String sql = "SELECT name FROM " + schemaName
-                + ".provider WHERE id = ? AND deleted_at IS NULL";
+        String sql = "SELECT name FROM " + com.lightai.storage.dialect.SqlNames.table(schemaName, "provider")
+                + " WHERE id = ? AND deleted_at IS NULL";
         try (var statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, providerId);
+            statement.setString(1, providerId.toString());
             try (var rs = statement.executeQuery()) {
                 return rs.next() ? rs.getString(1) : "";
             }

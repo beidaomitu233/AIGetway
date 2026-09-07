@@ -25,15 +25,18 @@ public class AccessTokenAuthService implements AccessTokenPort {
 
     private final DataSource dataSource;
     private final AccessCredentialRepository repository;
+    private final com.lightai.storage.alias.JdbcAliasRepository aliasRepository;
     private final com.lightai.admin.security.AccessTokenService tokenService;
     private final java.time.Clock clock;
     private final boolean recordClientIp;
 
     public AccessTokenAuthService(DataSource dataSource, AccessCredentialRepository repository,
+                                  com.lightai.storage.alias.JdbcAliasRepository aliasRepository,
                                   com.lightai.admin.security.AccessTokenService tokenService,
                                   java.time.Clock clock, boolean recordClientIp) {
         this.dataSource = dataSource;
         this.repository = repository;
+        this.aliasRepository = aliasRepository;
         this.tokenService = tokenService;
         this.clock = clock;
         this.recordClientIp = recordClientIp;
@@ -66,15 +69,29 @@ public class AccessTokenAuthService implements AccessTokenPort {
             if (!isAllowedSource(record.ipAllowlist(), sourceIp)) {
                 throw new LightAiException(ErrorCode.ACCESS_IP_DENIED, "请求来源不在业务访问凭证允许的 IP 范围");
             }
-            List<String> allowedAliasIds = repository.aliasIdsOf(connection, record.id()).stream()
-                    .map(java.util.Objects::toString).toList();
+            List<String> allowedAliasNames = resolveAliasNames(connection, record.id());
             recordClientIp(connection, record, now);
-            return new AccessTokenPort.Principal(record.application(), allowedAliasIds);
+            return new AccessTokenPort.Principal(record.application(), allowedAliasNames);
         } catch (LightAiException e) {
             throw e;
         } catch (Exception e) {
             throw new LightAiException(ErrorCode.ACCESS_TOKEN_INVALID, "业务访问凭证无效");
         }
+    }
+
+    /** access_credential_alias 存储授权 Alias 的 UUID；运行端口按 alias 名称做范围判定，这里完成翻译。 */
+    private List<String> resolveAliasNames(Connection connection, UUID credentialId) {
+        List<java.util.UUID> aliasIds = repository.aliasIdsOf(connection, credentialId);
+        if (aliasIds.isEmpty()) {
+            return List.of();
+        }
+        List<String> names = new ArrayList<>();
+        for (java.util.UUID aliasId : aliasIds) {
+            names.add(aliasRepository.findLiveById(connection, aliasId)
+                    .map(record -> record.alias())
+                    .orElse(aliasId.toString()));
+        }
+        return List.copyOf(names);
     }
 
     private static boolean isAllowedSource(List<String> allowlist, String sourceIp) {

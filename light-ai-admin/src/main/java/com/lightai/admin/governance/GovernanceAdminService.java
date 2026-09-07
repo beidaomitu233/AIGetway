@@ -451,7 +451,7 @@ public class GovernanceAdminService {
                 + ".draft_change WHERE entity_type = ? AND entity_id = ?";
         try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, entityType);
-            statement.setObject(2, entityId);
+            statement.setString(2, entityId.toString());
             try (var rs = statement.executeQuery()) {
                 return rs.next();
             }

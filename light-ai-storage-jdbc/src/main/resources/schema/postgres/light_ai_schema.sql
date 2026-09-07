@@ -133,46 +133,55 @@ CREATE TABLE IF NOT EXISTS light_ai.route_candidate (
 
 -- 8. limit_policy
 CREATE TABLE IF NOT EXISTS light_ai.limit_policy (
-    id UUID PRIMARY KEY,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
+    id VARCHAR(36) PRIMARY KEY,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
     version BIGINT NOT NULL DEFAULT 1,
-    deleted_at TIMESTAMPTZ,
+    deleted_at DATETIME(6),
+    name VARCHAR(64) NOT NULL,
     scope_type VARCHAR(24) NOT NULL,
-    scope_id UUID NOT NULL,
+    scope_id VARCHAR(36) NOT NULL,
     rpm_limit BIGINT,
     tpm_limit BIGINT,
-    concurrent_limit INTEGER,
-    queue_timeout_ms INTEGER,
+    concurrent_limit INT,
     overflow_strategy VARCHAR(24) NOT NULL,
-    enabled BOOLEAN NOT NULL DEFAULT TRUE
+    queue_timeout_ms INT,
+    queue_max_size INT,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    UNIQUE KEY uk_limit_policy_name (name),
+    KEY idx_limit_policy_scope (scope_id)
 );
 
 -- 9. reliability_policy
 CREATE TABLE IF NOT EXISTS light_ai.reliability_policy (
-    id UUID PRIMARY KEY,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
+    id VARCHAR(36) PRIMARY KEY,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
     version BIGINT NOT NULL DEFAULT 1,
-    deleted_at TIMESTAMPTZ,
-    alias_id UUID NOT NULL,
-    retry_max_attempts INTEGER NOT NULL DEFAULT 2,
-    retry_backoff_base_ms INTEGER NOT NULL DEFAULT 200,
-    retry_backoff_max_ms INTEGER NOT NULL DEFAULT 2000,
-    retry_backoff_multiplier NUMERIC(4,2) NOT NULL DEFAULT 2.0,
-    retryable_error_categories JSONB NOT NULL DEFAULT '[]',
-    credential_failover_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    credential_failover_max_attempts INTEGER NOT NULL DEFAULT 2,
-    fallback_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    fallback_max_attempts INTEGER NOT NULL DEFAULT 1,
-    circuit_breaker_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    circuit_failure_rate_threshold NUMERIC(5,2) NOT NULL DEFAULT 0.5,
-    circuit_minimum_requests INTEGER NOT NULL DEFAULT 10,
-    circuit_sliding_window_seconds INTEGER NOT NULL DEFAULT 60,
-    circuit_open_duration_seconds INTEGER NOT NULL DEFAULT 30,
-    circuit_half_open_probes INTEGER NOT NULL DEFAULT 3,
-    circuit_half_open_success_threshold INTEGER NOT NULL DEFAULT 2,
-    enabled BOOLEAN NOT NULL DEFAULT TRUE
+    deleted_at DATETIME(6),
+    name VARCHAR(64) NOT NULL,
+    alias_id VARCHAR(36) NOT NULL,
+    connect_timeout_ms INT NOT NULL DEFAULT 3000,
+    first_token_timeout_ms INT NOT NULL DEFAULT 30000,
+    total_timeout_ms INT NOT NULL DEFAULT 120000,
+    max_retries INT NOT NULL DEFAULT 1,
+    max_credential_failovers INT NOT NULL DEFAULT 1,
+    initial_backoff_ms INT NOT NULL DEFAULT 200,
+    backoff_multiplier DECIMAL(5,2) NOT NULL DEFAULT 2.0,
+    jitter_percent INT NOT NULL DEFAULT 20,
+    respect_retry_after BOOLEAN NOT NULL DEFAULT 1,
+    max_retry_after_ms INT NOT NULL DEFAULT 5000,
+    fallback_enabled BOOLEAN NOT NULL DEFAULT 1,
+    max_fallbacks INT NOT NULL DEFAULT 2,
+    circuit_window_seconds INT NOT NULL DEFAULT 60,
+    circuit_min_requests INT NOT NULL DEFAULT 20,
+    circuit_failure_rate DECIMAL(9,4) NOT NULL DEFAULT 0.5,
+    circuit_open_seconds INT NOT NULL DEFAULT 30,
+    circuit_half_open_probes INT NOT NULL DEFAULT 3,
+    circuit_half_open_successes INT NOT NULL DEFAULT 2,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    UNIQUE KEY uk_reliability_policy_name (name),
+    KEY idx_reliability_policy_alias (alias_id)
 );
 
 -- 10. runtime_config
@@ -208,32 +217,41 @@ CREATE TABLE IF NOT EXISTS light_ai.object_runtime_state (
     id UUID PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
-    object_type VARCHAR(32) NOT NULL,
-    object_id UUID NOT NULL,
-    health_status VARCHAR(24) NOT NULL DEFAULT 'UNKNOWN',
-    consecutive_failures INTEGER NOT NULL DEFAULT 0,
-    last_check_at TIMESTAMPTZ,
+    entity_type VARCHAR(24) NOT NULL,
+    entity_id UUID NOT NULL,
+    connection_status VARCHAR(16),
+    health_status VARCHAR(24),
+    reset_at TIMESTAMPTZ,
     last_success_at TIMESTAMPTZ,
-    last_failure_at TIMESTAMPTZ,
+    last_checked_at TIMESTAMPTZ,
+    last_failed_at TIMESTAMPTZ,
     last_error_code VARCHAR(64),
-    last_error_summary VARCHAR(1000)
+    last_error_summary VARCHAR(1000),
+    state_version BIGINT NOT NULL,
+    CONSTRAINT uk_object_runtime_state_entity UNIQUE (entity_type, entity_id)
 );
+CREATE INDEX IF NOT EXISTS idx_object_runtime_state_health ON light_ai.object_runtime_state (health_status, reset_at);
 
 -- 12. provider_check_record
 CREATE TABLE IF NOT EXISTS light_ai.provider_check_record (
     id UUID PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL,
-    check_type VARCHAR(32) NOT NULL,
-    provider_id UUID,
-    credential_id UUID,
-    provider_model_id UUID,
-    status VARCHAR(24) NOT NULL,
-    latency_ms INTEGER,
-    error_code VARCHAR(64),
-    error_summary VARCHAR(1000),
+    target_type VARCHAR(32) NOT NULL,
+    target_id UUID NOT NULL,
+    mode VARCHAR(24) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    operator_id VARCHAR(128) NOT NULL,
+    trace_id VARCHAR(128),
+    attempt_id UUID,
+    started_at TIMESTAMPTZ NOT NULL,
+    ended_at TIMESTAMPTZ NOT NULL,
+    total_ms INTEGER NOT NULL,
     usage JSONB,
-    checked_by VARCHAR(128) NOT NULL
+    provider_request_id VARCHAR(256),
+    error_code VARCHAR(64),
+    error_summary VARCHAR(1000)
 );
+CREATE INDEX IF NOT EXISTS idx_provider_check_record_target ON light_ai.provider_check_record (target_type, target_id, created_at DESC);
 
 -- 13. batch_check_job
 CREATE TABLE IF NOT EXISTS light_ai.batch_check_job (
@@ -668,21 +686,22 @@ CREATE TABLE IF NOT EXISTS light_ai.publish_record (
     id UUID PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
-    publish_id UUID NOT NULL UNIQUE,
-    validation_id UUID NOT NULL,
-    base_snapshot_no BIGINT NOT NULL,
+    validation_id UUID NOT NULL UNIQUE,
+    from_snapshot_no BIGINT NOT NULL,
     target_snapshot_no BIGINT NOT NULL,
     draft_revision BIGINT NOT NULL,
-    phase VARCHAR(24) NOT NULL DEFAULT 'PREPARING',
-    status VARCHAR(16) NOT NULL DEFAULT 'RUNNING',
-    initiated_by VARCHAR(128) NOT NULL,
-    timeout_at TIMESTAMPTZ NOT NULL,
-    total_instances INTEGER NOT NULL DEFAULT 0,
-    ready_instances INTEGER NOT NULL DEFAULT 0,
-    failed_instances INTEGER NOT NULL DEFAULT 0,
-    timeout_instances INTEGER NOT NULL DEFAULT 0,
+    status VARCHAR(24) NOT NULL DEFAULT 'PREPARING',
+    published_by VARCHAR(128) NOT NULL,
+    publish_note VARCHAR(500),
+    acknowledged_warning_ids JSONB NOT NULL,
+    target_instance_ids JSONB NOT NULL,
+    completed_at TIMESTAMPTZ,
+    converged_at TIMESTAMPTZ,
+    duration_ms BIGINT,
+    error_code VARCHAR(64),
     error_summary VARCHAR(1000)
 );
+CREATE INDEX IF NOT EXISTS idx_publish_record_created ON light_ai.publish_record (created_at, status);
 
 -- 34. publish_instance_result
 CREATE TABLE IF NOT EXISTS light_ai.publish_instance_result (
@@ -691,12 +710,15 @@ CREATE TABLE IF NOT EXISTS light_ai.publish_instance_result (
     updated_at TIMESTAMPTZ NOT NULL,
     publish_id UUID NOT NULL,
     instance_id UUID NOT NULL,
-    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    from_snapshot_no BIGINT NOT NULL,
     target_snapshot_no BIGINT NOT NULL,
-    acked_snapshot_no BIGINT,
-    latency_ms INTEGER,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    load_duration_ms BIGINT,
+    reported_at TIMESTAMPTZ,
     error_code VARCHAR(64),
-    error_summary VARCHAR(1000)
+    error_summary VARCHAR(1000),
+    CONSTRAINT uk_publish_instance_result UNIQUE (publish_id, instance_id)
 );
 
 -- 35. runtime_instance

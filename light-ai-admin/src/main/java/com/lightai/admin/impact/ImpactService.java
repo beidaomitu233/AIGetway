@@ -111,10 +111,10 @@ public class ImpactService {
 
     private List<UUID> aliasIdsOfPool(Connection connection, UUID poolId) {
         // 池关联的 Alias 集合：候选关系去重
-        String sql = "SELECT DISTINCT alias_id FROM " + schemaQualifier()
-                + ".route_candidate WHERE credential_pool_id = ? AND deleted_at IS NULL";
+        String sql = "SELECT DISTINCT alias_id FROM " + com.lightai.storage.dialect.SqlNames.table(schemaQualifier(), "route_candidate")
+                + " WHERE credential_pool_id = ? AND deleted_at IS NULL";
         try (var statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, poolId);
+            statement.setString(1, poolId.toString());
             try (var rs = statement.executeQuery()) {
                 List<UUID> aliasIds = new ArrayList<>();
                 while (rs.next()) {

@@ -136,14 +136,18 @@ CREATE TABLE IF NOT EXISTS limit_policy (
     updated_at DATETIME(6) NOT NULL,
     version BIGINT NOT NULL DEFAULT 1,
     deleted_at DATETIME(6),
+    name VARCHAR(64) NOT NULL,
     scope_type VARCHAR(24) NOT NULL,
     scope_id VARCHAR(36) NOT NULL,
     rpm_limit BIGINT,
     tpm_limit BIGINT,
     concurrent_limit INT,
-    queue_timeout_ms INT,
     overflow_strategy VARCHAR(24) NOT NULL,
-    enabled TINYINT(1) NOT NULL DEFAULT 1
+    queue_timeout_ms INT,
+    queue_max_size INT,
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    UNIQUE KEY uk_limit_policy_name (name),
+    KEY idx_limit_policy_scope (scope_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 9. reliability_policy
@@ -153,24 +157,29 @@ CREATE TABLE IF NOT EXISTS reliability_policy (
     updated_at DATETIME(6) NOT NULL,
     version BIGINT NOT NULL DEFAULT 1,
     deleted_at DATETIME(6),
+    name VARCHAR(64) NOT NULL,
     alias_id VARCHAR(36) NOT NULL,
-    retry_max_attempts INT NOT NULL DEFAULT 2,
-    retry_backoff_base_ms INT NOT NULL DEFAULT 200,
-    retry_backoff_max_ms INT NOT NULL DEFAULT 2000,
-    retry_backoff_multiplier DECIMAL(4,2) NOT NULL DEFAULT 2.0,
-    retryable_error_categories JSON,
-    credential_failover_enabled TINYINT(1) NOT NULL DEFAULT 1,
-    credential_failover_max_attempts INT NOT NULL DEFAULT 2,
+    connect_timeout_ms INT NOT NULL DEFAULT 3000,
+    first_token_timeout_ms INT NOT NULL DEFAULT 30000,
+    total_timeout_ms INT NOT NULL DEFAULT 120000,
+    max_retries INT NOT NULL DEFAULT 1,
+    max_credential_failovers INT NOT NULL DEFAULT 1,
+    initial_backoff_ms INT NOT NULL DEFAULT 200,
+    backoff_multiplier DECIMAL(5,2) NOT NULL DEFAULT 2.0,
+    jitter_percent INT NOT NULL DEFAULT 20,
+    respect_retry_after TINYINT(1) NOT NULL DEFAULT 1,
+    max_retry_after_ms INT NOT NULL DEFAULT 5000,
     fallback_enabled TINYINT(1) NOT NULL DEFAULT 1,
-    fallback_max_attempts INT NOT NULL DEFAULT 1,
-    circuit_breaker_enabled TINYINT(1) NOT NULL DEFAULT 1,
-    circuit_failure_rate_threshold DECIMAL(5,2) NOT NULL DEFAULT 0.5,
-    circuit_minimum_requests INT NOT NULL DEFAULT 10,
-    circuit_sliding_window_seconds INT NOT NULL DEFAULT 60,
-    circuit_open_duration_seconds INT NOT NULL DEFAULT 30,
+    max_fallbacks INT NOT NULL DEFAULT 2,
+    circuit_window_seconds INT NOT NULL DEFAULT 60,
+    circuit_min_requests INT NOT NULL DEFAULT 20,
+    circuit_failure_rate DECIMAL(9,4) NOT NULL DEFAULT 0.5,
+    circuit_open_seconds INT NOT NULL DEFAULT 30,
     circuit_half_open_probes INT NOT NULL DEFAULT 3,
-    circuit_half_open_success_threshold INT NOT NULL DEFAULT 2,
-    enabled TINYINT(1) NOT NULL DEFAULT 1
+    circuit_half_open_successes INT NOT NULL DEFAULT 2,
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    UNIQUE KEY uk_reliability_policy_name (name),
+    KEY idx_reliability_policy_alias (alias_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 10. runtime_config
@@ -206,31 +215,40 @@ CREATE TABLE IF NOT EXISTS object_runtime_state (
     id VARCHAR(36) PRIMARY KEY,
     created_at DATETIME(6) NOT NULL,
     updated_at DATETIME(6) NOT NULL,
-    object_type VARCHAR(32) NOT NULL,
-    object_id VARCHAR(36) NOT NULL,
-    health_status VARCHAR(24) NOT NULL DEFAULT 'UNKNOWN',
-    consecutive_failures INT NOT NULL DEFAULT 0,
-    last_check_at DATETIME(6),
+    entity_type VARCHAR(24) NOT NULL,
+    entity_id VARCHAR(36) NOT NULL,
+    connection_status VARCHAR(16),
+    health_status VARCHAR(24),
+    reset_at DATETIME(6),
     last_success_at DATETIME(6),
-    last_failure_at DATETIME(6),
+    last_checked_at DATETIME(6),
+    last_failed_at DATETIME(6),
     last_error_code VARCHAR(64),
-    last_error_summary VARCHAR(1000)
+    last_error_summary VARCHAR(1000),
+    state_version BIGINT NOT NULL,
+    UNIQUE KEY uk_object_runtime_state_entity (entity_type, entity_id),
+    KEY idx_object_runtime_state_health (health_status, reset_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 12. provider_check_record
 CREATE TABLE IF NOT EXISTS provider_check_record (
     id VARCHAR(36) PRIMARY KEY,
     created_at DATETIME(6) NOT NULL,
-    check_type VARCHAR(32) NOT NULL,
-    provider_id VARCHAR(36),
-    credential_id VARCHAR(36),
-    provider_model_id VARCHAR(36),
-    status VARCHAR(24) NOT NULL,
-    latency_ms INT,
+    target_type VARCHAR(32) NOT NULL,
+    target_id VARCHAR(36) NOT NULL,
+    mode VARCHAR(24) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    operator_id VARCHAR(128) NOT NULL,
+    trace_id VARCHAR(128),
+    attempt_id VARCHAR(36),
+    started_at DATETIME(6) NOT NULL,
+    ended_at DATETIME(6) NOT NULL,
+    total_ms INT NOT NULL,
+    `usage` JSON,
+    provider_request_id VARCHAR(256),
     error_code VARCHAR(64),
     error_summary VARCHAR(1000),
-    `usage` JSON,
-    checked_by VARCHAR(128) NOT NULL
+    KEY idx_provider_check_record_target (target_type, target_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 13. batch_check_job
@@ -666,20 +684,21 @@ CREATE TABLE IF NOT EXISTS publish_record (
     id VARCHAR(36) PRIMARY KEY,
     created_at DATETIME(6) NOT NULL,
     updated_at DATETIME(6) NOT NULL,
-    publish_id VARCHAR(36) NOT NULL UNIQUE,
-    validation_id VARCHAR(36) NOT NULL,
-    base_snapshot_no BIGINT NOT NULL,
+    validation_id VARCHAR(36) NOT NULL UNIQUE,
+    from_snapshot_no BIGINT NOT NULL,
     target_snapshot_no BIGINT NOT NULL,
     draft_revision BIGINT NOT NULL,
-    phase VARCHAR(24) NOT NULL DEFAULT 'PREPARING',
-    status VARCHAR(16) NOT NULL DEFAULT 'RUNNING',
-    initiated_by VARCHAR(128) NOT NULL,
-    timeout_at DATETIME(6) NOT NULL,
-    total_instances INT NOT NULL DEFAULT 0,
-    ready_instances INT NOT NULL DEFAULT 0,
-    failed_instances INT NOT NULL DEFAULT 0,
-    timeout_instances INT NOT NULL DEFAULT 0,
-    error_summary VARCHAR(1000)
+    status VARCHAR(24) NOT NULL DEFAULT 'PREPARING',
+    published_by VARCHAR(128) NOT NULL,
+    publish_note VARCHAR(500),
+    acknowledged_warning_ids JSON NOT NULL,
+    target_instance_ids JSON NOT NULL,
+    completed_at DATETIME(6),
+    converged_at DATETIME(6),
+    duration_ms BIGINT,
+    error_code VARCHAR(64),
+    error_summary VARCHAR(1000),
+    KEY idx_publish_record_created (created_at, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 34. publish_instance_result
@@ -689,12 +708,15 @@ CREATE TABLE IF NOT EXISTS publish_instance_result (
     updated_at DATETIME(6) NOT NULL,
     publish_id VARCHAR(36) NOT NULL,
     instance_id VARCHAR(36) NOT NULL,
-    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    from_snapshot_no BIGINT NOT NULL,
     target_snapshot_no BIGINT NOT NULL,
-    acked_snapshot_no BIGINT,
-    latency_ms INT,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    retry_count INT NOT NULL DEFAULT 0,
+    load_duration_ms BIGINT,
+    reported_at DATETIME(6),
     error_code VARCHAR(64),
-    error_summary VARCHAR(1000)
+    error_summary VARCHAR(1000),
+    UNIQUE KEY uk_publish_instance_result (publish_id, instance_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 35. runtime_instance

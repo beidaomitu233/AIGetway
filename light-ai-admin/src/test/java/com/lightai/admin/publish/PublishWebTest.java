@@ -77,7 +77,8 @@ class PublishWebTest {
         webProperties.setRuntimeMode("STANDALONE_SERVER");
         publishService = new ConfigPublishService(recording.dataSource(), transactionManager,
                 java.time.Clock.systemUTC(), draftState, draftState, changes, snapshots, content,
-                validations, publishes, instanceResults, instances, auditService, webProperties);
+                validations, publishes, instanceResults, instances, auditService, webProperties,
+                com.lightai.runtime.ports.ConfigSnapshotPort.empty());
 
         var internalAuth = new InternalInstanceAuth("deploy-secret");
         mockMvc = MockMvcBuilders.standaloneSetup(
