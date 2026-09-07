@@ -38,6 +38,7 @@ import com.lightai.storage.publish.SnapshotContentRepository;
 import com.lightai.storage.publish.PublishInstanceResultRecord;
 import com.lightai.storage.publish.PublishRecordRecord;
 import com.lightai.storage.publish.RuntimeInstanceRecord;
+import com.lightai.runtime.ports.ConfigSnapshotPort;
 import java.sql.Connection;
 import java.time.Clock;
 import java.time.Duration;
@@ -78,6 +79,7 @@ public class ConfigPublishService {
     private final RuntimeInstanceRepository runtimeInstanceRepository;
     private final AuditService auditService;
     private final AdminProperties properties;
+    private final ConfigSnapshotPort snapshotPort;
 
     public ConfigPublishService(DataSource dataSource, PlatformTransactionManager transactionManager,
                                 Clock clock, DraftStateRepository draftStateRepository,
@@ -89,7 +91,8 @@ public class ConfigPublishService {
                                 PublishRecordRepository publishRecordRepository,
                                 PublishInstanceResultRepository instanceResultRepository,
                                 RuntimeInstanceRepository runtimeInstanceRepository,
-                                AuditService auditService, AdminProperties properties) {
+                                AuditService auditService, AdminProperties properties,
+                                ConfigSnapshotPort snapshotPort) {
         this.dataSource = dataSource;
         this.transaction = new TransactionTemplate(transactionManager);
         this.clock = clock;
@@ -104,6 +107,7 @@ public class ConfigPublishService {
         this.runtimeInstanceRepository = runtimeInstanceRepository;
         this.auditService = auditService;
         this.properties = properties;
+        this.snapshotPort = snapshotPort;
     }
 
     // ---------- 发布提交（BE-040） ----------
@@ -190,46 +194,62 @@ public class ConfigPublishService {
                                                          OffsetDateTime startFrom,
                                                          OffsetDateTime startTo,
                                                          int page, int pageSize) {
-        Connection connection = DataSourceUtils.getConnection(dataSource);
         var filter = new PublishRecordRepository.PublishRecordFilter(
                 status == null || status.isBlank() ? Set.of() : Set.of(status),
                 blankToNull(publishedBy), snapshotNo, startFrom, startTo, blankToNull(keyword));
-        long total = publishRecordRepository.count(connection, filter);
-        List<PublishRecordRecord> rows = publishRecordRepository.list(connection, filter,
-                "created_at desc", pageSize, (long) (page - 1) * pageSize);
-        List<PublishRecordListItemView> items = rows.stream().map(ConfigPublishService::toListItem).toList();
-        return PageResult.of(items, total, page, pageSize, "created_at desc",
-                OffsetDateTime.now(clock), OffsetDateTime.now(clock));
+        Connection connection = DataSourceUtils.getConnection(dataSource);
+        try {
+            long total = publishRecordRepository.count(connection, filter);
+            List<PublishRecordRecord> rows = publishRecordRepository.list(connection, filter,
+                    "created_at desc", pageSize, (long) (page - 1) * pageSize);
+            List<PublishRecordListItemView> items = rows.stream().map(ConfigPublishService::toListItem).toList();
+            return PageResult.of(items, total, page, pageSize, "created_at desc",
+                    OffsetDateTime.now(clock), OffsetDateTime.now(clock));
+        } finally {
+            DataSourceUtils.releaseConnection(connection, dataSource);
+        }
     }
 
     public PublishRecordDetailView recordDetail(UUID id) {
         Connection connection = DataSourceUtils.getConnection(dataSource);
-        PublishRecordRecord record = publishRecordRepository.find(connection, id)
-                .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "发布记录不存在"));
-        return toDetail(connection, record);
+        try {
+            PublishRecordRecord record = publishRecordRepository.find(connection, id)
+                    .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "发布记录不存在"));
+            return toDetail(connection, record);
+        } finally {
+            DataSourceUtils.releaseConnection(connection, dataSource);
+        }
     }
 
     public ConfigSnapshotSummaryView snapshotSummary(long snapshotNo) {
         Connection connection = DataSourceUtils.getConnection(dataSource);
-        ConfigSnapshotRecord snapshot = snapshotRepository.find(connection, snapshotNo)
-                .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "快照不存在"));
-        Map<String, Long> counts = parseCounts(snapshot.contentSummaryJson());
-        return new ConfigSnapshotSummaryView(snapshot.snapshotNo(), snapshot.status(),
-                snapshot.createdAt(), snapshot.activatedAt(), snapshot.contentChecksum(), counts);
+        try {
+            ConfigSnapshotRecord snapshot = snapshotRepository.find(connection, snapshotNo)
+                    .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "快照不存在"));
+            Map<String, Long> counts = parseCounts(snapshot.contentSummaryJson());
+            return new ConfigSnapshotSummaryView(snapshot.snapshotNo(), snapshot.status(),
+                    snapshot.createdAt(), snapshot.activatedAt(), snapshot.contentChecksum(), counts);
+        } finally {
+            DataSourceUtils.releaseConnection(connection, dataSource);
+        }
     }
 
     public PageResult<RuntimeInstanceView> runtimeInstances(String status, String runtimeMode,
                                                             String application, int page, int pageSize) {
         Connection connection = DataSourceUtils.getConnection(dataSource);
-        var filter = new RuntimeInstanceRepository.RuntimeInstanceFilter(
-                status == null || status.isBlank() ? Set.of() : Set.of(status),
-                blankToNull(runtimeMode), blankToNull(application));
-        long total = runtimeInstanceRepository.count(connection, filter);
-        List<RuntimeInstanceRecord> rows = runtimeInstanceRepository.list(connection, filter,
-                "last_heartbeat_at desc", pageSize, (long) (page - 1) * pageSize);
-        List<RuntimeInstanceView> items = rows.stream().map(ConfigPublishService::toInstanceView).toList();
-        return PageResult.of(items, total, page, pageSize, "last_heartbeat_at desc",
-                OffsetDateTime.now(clock), OffsetDateTime.now(clock));
+        try {
+            var filter = new RuntimeInstanceRepository.RuntimeInstanceFilter(
+                    status == null || status.isBlank() ? Set.of() : Set.of(status),
+                    blankToNull(runtimeMode), blankToNull(application));
+            long total = runtimeInstanceRepository.count(connection, filter);
+            List<RuntimeInstanceRecord> rows = runtimeInstanceRepository.list(connection, filter,
+                    "last_heartbeat_at desc", pageSize, (long) (page - 1) * pageSize);
+            List<RuntimeInstanceView> items = rows.stream().map(ConfigPublishService::toInstanceView).toList();
+            return PageResult.of(items, total, page, pageSize, "last_heartbeat_at desc",
+                    OffsetDateTime.now(clock), OffsetDateTime.now(clock));
+        } finally {
+            DataSourceUtils.releaseConnection(connection, dataSource);
+        }
     }
 
     // ---------- 内部实例接口（BE-041） ----------
@@ -384,6 +404,16 @@ public class ConfigPublishService {
         draftChangeQueryRepository.deleteAll(connection);
         instanceResultRepository.markAllStatus(connection, publishId,
                 PublishInstanceResultRecord.STATUS_ACTIVATING);
+        invalidateSnapshotCache();
+    }
+
+    private void invalidateSnapshotCache() {
+        if (snapshotPort instanceof com.lightai.admin.publish.JdbcConfigSnapshotPortAdapter adapter) {
+            adapter.invalidate();
+        } else if (snapshotPort != null) {
+            // 兜底：调用 active() 一次以触发其他实现的内部失效
+            snapshotPort.active();
+        }
     }
 
     /** 心跳命令装配：优先准备（PREPARING 且实例未 READY），激活需发布处于 ACTIVATING。 */

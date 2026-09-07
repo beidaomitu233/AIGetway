@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:mock": "vite --mode mock",
     "dev:embedded": "vite --mode embedded",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
+    "preview:mock": "vite preview --mode mock",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",

@@ -32,8 +32,8 @@ public final class JdbcRetentionImpactRepository extends AbstractJdbcRepository 
     @Override
     public void insert(Connection connection, RetentionImpactRecord record) {
         DatabaseDialect d = dialect(connection);
-        String sql = "INSERT INTO " + qualify(connection, "retention_impact") + " (" + COLUMNS + ") VALUES (?,?,?,"
-                + d.jsonPlaceholder() + "," + d.jsonPlaceholder() + ",?,?,?)";
+        String sql = "INSERT INTO " + qualify(connection, "retention_impact") + " (" + COLUMNS + ", created_at) VALUES (?,?,?,"
+                + d.jsonPlaceholder() + "," + d.jsonPlaceholder() + ",?,?,?," + d.nowFunction() + ")";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, record.id());
             d.bindUuid(statement, 2, record.impactVersion());

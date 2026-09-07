@@ -152,18 +152,21 @@ public class AdapterHttp {
         return baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
     }
 
-    /** 在每次实际连接前解析全部地址，阻断 loopback、私网、链路本地和 DNS 重绑定目标。 */
+    /**
+     * 在每次实际连接前解析全部地址，按部署级网络策略复核目标（DNS 重绑定防护）。
+     * 策略与管理端保存校验同源：默认拒绝内部网段，部署显式许可内部网段时放行。
+     */
     private static URI checkedUri(String baseUrl, String path) {
         URI uri = URI.create(stripTrailingSlash(baseUrl) + path);
         String host = uri.getHost();
         if (host == null || host.isBlank()) {
             throw new IllegalArgumentException("Provider URL 缺少主机名");
         }
+        com.lightai.spi.provider.ProviderNetworkPolicy policy =
+                com.lightai.spi.provider.ProviderNetworkPolicies.current();
         try {
             for (InetAddress address : InetAddress.getAllByName(host)) {
-                if (address.isAnyLocalAddress() || address.isLoopbackAddress()
-                        || address.isLinkLocalAddress() || address.isSiteLocalAddress()
-                        || address.isMulticastAddress()) {
+                if (!policy.allow(address)) {
                     throw new IllegalArgumentException("Provider URL 指向受限制的内部地址");
                 }
             }

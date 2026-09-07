@@ -28,6 +28,16 @@ export function protectedRequestHeaders(method: string, requestId = newRequestId
   if (method.toUpperCase() !== 'GET' && csrfToken) {
     headers['X-CSRF-Token'] = csrfToken
   }
+  try {
+    const adminToken = typeof localStorage !== 'undefined'
+      ? (localStorage.getItem('lai_admin_token') || sessionStorage.getItem('lai_admin_token'))
+      : null
+    if (adminToken && adminToken.trim() !== '') {
+      headers['X-Admin-Token'] = adminToken.trim()
+    }
+  } catch {
+    // 忽略非浏览器或沙箱受限环境
+  }
   return headers
 }
 

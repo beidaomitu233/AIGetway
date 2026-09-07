@@ -45,12 +45,12 @@ public class AdminErrorHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<String> handleUnexpected(Exception e, HttpServletRequest request) {
         String requestId = RequestIdFilter.requestIdOf(request);
-        // 未分类错误不向客户端回传 e.getMessage()，避免泄漏内部细节
+        // 未分类错误不向客户端回传 e.getMessage()，避免泄漏内部细节；服务端记录完整堆栈供诊断
         UnifiedError error = UnifiedError.builder(ErrorCode.INTERNAL_ERROR, "内部错误，请提供 request_id 联系管理员")
                 .requestId(requestId)
                 .build();
         log.error("管理请求未分类异常 request_id={} 耗时ms={} exception={}",
-                requestId, elapsed(request), e.getClass().getSimpleName());
+                requestId, elapsed(request), e.getClass().getSimpleName(), e);
         return ResponseEntity.status(ErrorCode.INTERNAL_ERROR.httpStatus())
                 .header("Content-Type", ManagementResponses.APPLICATION_JSON)
                 .body(ManagementResponses.error(error));

@@ -10,6 +10,11 @@ import java.util.UUID;
  */
 public interface DatabaseDialect {
 
+    /** 列名引用：MySQL 需对保留字（如 usage）加反引号，PostgreSQL 原样。 */
+    default String quoteColumn(String name) {
+        return name;
+    }
+
     /** 获取方言类型枚举。 */
     DatabaseType databaseType();
 

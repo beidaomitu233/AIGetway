@@ -46,7 +46,7 @@ public final class DialectResolver {
             return PostgresDialect.INSTANCE;
         }
         String lower = productName.toLowerCase();
-        if (lower.contains("mysql") || lower.contains("mariadb")) {
+        if (lower.contains("mysql") || lower.contains("mariadb") || lower.contains("h2")) {
             return MySqlDialect.INSTANCE;
         }
         return PostgresDialect.INSTANCE;

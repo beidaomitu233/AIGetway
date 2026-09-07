@@ -101,8 +101,8 @@ public class ReadinessService {
             return false;
         }
         try {
-            ConfigSnapshotPort.ActiveSnapshot snapshot = configSnapshotPort.active();
-            return snapshot != null && snapshot.snapshotNo() > 0;
+            // 首次安装使用 snapshot_no=0 的初始快照，就绪只要求存在 ACTIVE 快照。
+            return configSnapshotPort.hasActiveSnapshot();
         } catch (Exception e) {
             log.warn("Config snapshot check failed: {}", e.getMessage());
             return false;

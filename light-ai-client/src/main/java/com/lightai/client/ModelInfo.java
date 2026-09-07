@@ -1,5 +1,6 @@
 package com.lightai.client;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
@@ -15,8 +16,8 @@ public record ModelInfo(
         Long maxOutputTokens,
         BigDecimal temperatureMin,
         BigDecimal temperatureMax,
-        BigDecimal topPMin,
-        BigDecimal topPMax,
+        @JsonProperty("top_p_min") BigDecimal topPMin,
+        @JsonProperty("top_p_max") BigDecimal topPMax,
         Integer stopMax,
         OffsetDateTime updatedAt) {
 }

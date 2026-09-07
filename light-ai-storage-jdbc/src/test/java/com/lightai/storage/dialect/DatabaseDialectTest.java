@@ -43,7 +43,7 @@ class DatabaseDialectTest {
         assertThat(dialect.qualify(null, "provider")).isEqualTo("`provider`");
         assertThat(dialect.jsonPlaceholder()).isEqualTo("?");
         assertThat(dialect.nowFunction()).isEqualTo("now(6)");
-        assertThat(dialect.intervalSecondsBeforeNow(120)).isEqualTo("DATE_SUB(now(6), INTERVAL 120 SECOND)");
+        assertThat(dialect.intervalSecondsBeforeNow(120)).isEqualTo("TIMESTAMPADD(SECOND, -120, now(6))");
         assertThat(dialect.supportsReturning()).isFalse();
         assertThat(dialect.isUpsertInserted(1, null)).isTrue();
         assertThat(dialect.isUpsertInserted(2, null)).isFalse();
@@ -51,6 +51,19 @@ class DatabaseDialectTest {
         assertThat(dialect.forUpdateSkipLockedClause()).isEqualTo("FOR UPDATE"); // 兼容 5.7
         assertThat(dialect.ilikeClause("name")).isEqualTo("LOWER(name) LIKE LOWER(?)");
         assertThat(dialect.limitOffsetClause(10, 20)).isEqualTo("LIMIT 10 OFFSET 20");
+    }
+
+    @Test
+    @DisplayName("MySQL 方言时间差函数与 H2 MySQL 模式兼容性验证")
+    void testH2CompatibilityWithMySqlDialect() throws Exception {
+        try (Connection conn = java.sql.DriverManager.getConnection("jdbc:h2:mem:dialect_test;MODE=MySQL;DB_CLOSE_DELAY=-1")) {
+            try (java.sql.Statement stmt = conn.createStatement()) {
+                try (java.sql.ResultSet rs = stmt.executeQuery("SELECT " + MySqlDialect.INSTANCE.intervalSecondsBeforeNow(120))) {
+                    assertThat(rs.next()).isTrue();
+                    assertThat(rs.getTimestamp(1)).isNotNull();
+                }
+            }
+        }
     }
 
 

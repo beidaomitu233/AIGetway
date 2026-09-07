@@ -1,5 +1,6 @@
 package com.lightai.client.chat;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.math.BigDecimal;
@@ -28,8 +29,8 @@ public record UnifiedModelList(String object, List<ModelSummary> data) {
             Boolean supportSystem,
             BigDecimal temperatureMin,
             BigDecimal temperatureMax,
-            BigDecimal topPMin,
-            BigDecimal topPMax,
+            @JsonProperty("top_p_min") BigDecimal topPMin,
+            @JsonProperty("top_p_max") BigDecimal topPMax,
             Integer stopMax,
             Long contextWindow,
             Long maxOutputTokens,

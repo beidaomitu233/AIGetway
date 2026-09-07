@@ -76,7 +76,8 @@ class ConfigPublishServiceTest {
                 transactionManager, new PublishTestSupport.FailureCollector());
         service = new ConfigPublishService(recording.dataSource(), transactionManager, CLOCK,
                 draftState, draftState, changes, snapshots, content, validations, publishes,
-                instanceResults, instances, auditService, properties);
+                instanceResults, instances, auditService, properties,
+                com.lightai.runtime.ports.ConfigSnapshotPort.empty());
         recording.onCommit = draftState::commit;
         recording.onRollback = draftState::rollback;
         instanceId = UUID.randomUUID();

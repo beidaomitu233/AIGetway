@@ -350,7 +350,7 @@ public class RouteCandidateService {
         try (var statement = connection.prepareStatement("SELECT 1 FROM "
                 + com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME
                 + ".draft_change WHERE entity_type = 'route_candidate' AND entity_id = ?")) {
-            statement.setObject(1, id);
+            statement.setString(1, id.toString());
             try (var rs = statement.executeQuery()) {
                 return rs.next();
             }

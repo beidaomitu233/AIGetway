@@ -95,6 +95,13 @@ public class LightAiAdminAutoConfiguration {
         return new AdminAuthInterceptor(authContextProvider);
     }
 
+    /** 管理面统一错误映射：未注册为 Bean 时宿主应用收到的是容器原始错误页。 */
+    @Bean
+    @ConditionalOnMissingBean
+    public com.lightai.admin.web.AdminErrorHandler lightAiAdminErrorHandler() {
+        return new com.lightai.admin.web.AdminErrorHandler();
+    }
+
     @Bean
     public WebMvcConfigurer lightAiAdminWebMvcConfigurer(AdminAuthInterceptor adminAuthInterceptor) {
         return new AdminWebMvcConfigurer(adminAuthInterceptor);
@@ -159,13 +166,13 @@ public class LightAiAdminAutoConfiguration {
 
         @Bean
         @ConditionalOnMissingBean
-        public DraftStateRepository lightAiDraftStateRepository(StorageProperties properties) {
+        public JdbcDraftStateRepository lightAiDraftStateRepository(StorageProperties properties) {
             return new JdbcDraftStateRepository(properties.getSchemaName());
         }
 
         @Bean
         @ConditionalOnMissingBean
-        public DraftChangeRepository lightAiDraftChangeRepository(StorageProperties properties) {
+        public JdbcDraftChangeRepository lightAiDraftChangeRepository(StorageProperties properties) {
             return new JdbcDraftChangeRepository(properties.getSchemaName());
         }
 
@@ -872,13 +879,29 @@ public class LightAiAdminAutoConfiguration {
                 com.lightai.storage.publish.PublishRecordRepository publishRecordRepository,
                 com.lightai.storage.publish.PublishInstanceResultRepository instanceResultRepository,
                 com.lightai.storage.publish.RuntimeInstanceRepository runtimeInstanceRepository,
-                com.lightai.admin.audit.AuditService auditService, AdminProperties properties) {
+                com.lightai.admin.audit.AuditService auditService, AdminProperties properties,
+                com.lightai.runtime.ports.ConfigSnapshotPort snapshotPort) {
             return new com.lightai.admin.publish.ConfigPublishService(dataSource, transactionManager,
                     clock, draftStateRepository, draftStateRepository,
                     draftChangeRepository,
                     snapshotRepository, snapshotContentRepository, validationRepository,
                     publishRecordRepository, instanceResultRepository, runtimeInstanceRepository,
-                    auditService, properties);
+                    auditService, properties, snapshotPort);
+        }
+
+        @Bean
+        public com.lightai.admin.publish.JdbcConfigSnapshotPortAdapter lightAiJdbcConfigSnapshotPortAdapter(
+                DataSource dataSource) {
+            return new com.lightai.admin.publish.JdbcConfigSnapshotPortAdapter(
+                    com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME, dataSource);
+        }
+
+        @Bean
+        @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(
+                com.lightai.runtime.ports.ConfigSnapshotPort.class)
+        public com.lightai.runtime.ports.ConfigSnapshotPort lightAiConfigSnapshotPort(
+                com.lightai.admin.publish.JdbcConfigSnapshotPortAdapter adapter) {
+            return adapter;
         }
 
         @Bean
@@ -984,10 +1007,11 @@ public class LightAiAdminAutoConfiguration {
         public com.lightai.runtime.ports.AccessTokenPort lightAiAccessTokenPort(
                 DataSource dataSource,
                 com.lightai.storage.access.AccessCredentialRepository repository,
+                com.lightai.storage.alias.JdbcAliasRepository aliasRepository,
                 com.lightai.admin.security.AccessTokenService tokenService,
                 Clock clock, AdminProperties properties) {
             return new com.lightai.admin.accesscred.AccessTokenAuthService(
-                    dataSource, repository, tokenService, clock, false);
+                    dataSource, repository, aliasRepository, tokenService, clock, false);
         }
 
         // ---------- 审计查询与导出（BE-045 / CR-003） ----------

@@ -396,7 +396,8 @@ class ChatPipelineTest {
         return new CandidateView(id, "provider-1", providerType, "pk-" + id, modelId, "pool-1",
                 priority, 1, true, "FAKE", 8000L, 512L, true, true, true, true, true,
                 null, null, null, null, 4, null, null, null,
-                inputPrice, outputPrice, 1000, "USD");
+                inputPrice, outputPrice, 1000, "USD",
+                "https://provider.test/v1", null, 3000, 120000, java.util.Map.of());
     }
 
 }

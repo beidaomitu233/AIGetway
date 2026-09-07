@@ -22,9 +22,11 @@ import java.util.UUID;
  */
 public class JdbcProviderCheckRecordRepository extends AbstractJdbcRepository {
 
-    private static final String COLUMNS =
-            "id, target_type, target_id, mode, status, operator_id, trace_id, attempt_id, "
-                    + "started_at, ended_at, total_ms, usage, provider_request_id, error_code, error_summary";
+    private static String columns(com.lightai.storage.dialect.DatabaseDialect d) {
+        return "id, target_type, target_id, mode, status, operator_id, trace_id, attempt_id, "
+                + "started_at, ended_at, total_ms, " + d.quoteColumn("usage")
+                + ", provider_request_id, error_code, error_summary";
+    }
 
     public JdbcProviderCheckRecordRepository(String schemaName, DatabaseDialect explicitDialect) {
         super(schemaName, explicitDialect);
@@ -40,7 +42,7 @@ public class JdbcProviderCheckRecordRepository extends AbstractJdbcRepository {
 
     public void insert(Connection connection, CheckRecordRow row) {
         DatabaseDialect d = dialect(connection);
-        String sql = "INSERT INTO " + qualify(connection, "provider_check_record") + " (" + COLUMNS + ") VALUES "
+        String sql = "INSERT INTO " + qualify(connection, "provider_check_record") + " (" + columns(d) + ") VALUES "
                 + "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " + d.jsonPlaceholder() + ", ?, ?, ?)";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, row.id());
@@ -71,7 +73,7 @@ public class JdbcProviderCheckRecordRepository extends AbstractJdbcRepository {
     public List<CheckRecordRow> findLatestByTarget(Connection connection, String targetType,
                                                    UUID targetId, int limit) {
         DatabaseDialect d = dialect(connection);
-        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "provider_check_record")
+        String sql = "SELECT " + columns(d) + " FROM " + qualify(connection, "provider_check_record")
                 + " WHERE target_type = ? AND target_id = ? ORDER BY created_at DESC, id DESC LIMIT ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, targetType);
@@ -97,7 +99,7 @@ public class JdbcProviderCheckRecordRepository extends AbstractJdbcRepository {
         }
         DatabaseDialect d = dialect(connection);
         if (d.supportsArrayType()) {
-            String sql = "SELECT DISTINCT ON (target_id) " + COLUMNS + " FROM " + qualify(connection, "provider_check_record")
+            String sql = "SELECT DISTINCT ON (target_id) " + columns(d) + " FROM " + qualify(connection, "provider_check_record")
                     + " WHERE target_type = ? AND target_id = ANY(?) ORDER BY target_id, created_at DESC, id DESC";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, targetType);
@@ -114,7 +116,7 @@ public class JdbcProviderCheckRecordRepository extends AbstractJdbcRepository {
             }
         } else {
             String placeholders = inPlaceholders(targetIds.size());
-            String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "provider_check_record")
+            String sql = "SELECT " + columns(d) + " FROM " + qualify(connection, "provider_check_record")
                     + " WHERE target_type = ? AND target_id IN (" + placeholders + ")"
                     + " ORDER BY created_at DESC, id DESC";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {

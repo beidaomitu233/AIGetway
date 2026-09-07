@@ -44,6 +44,7 @@ public class DraftStateQueryService {
 
     public ConfigDraftState state(RequestContext context) {
         Connection connection = DataSourceUtils.getConnection(dataSource);
+        try {
         Optional<DraftStateSnapshot> draft = draftStateRepository.find(connection);
         Optional<DraftChangeQueryRepository.ModifiedRange> range =
                 draftChangeQueryRepository.modifiedRange(connection);
@@ -54,35 +55,46 @@ public class DraftStateQueryService {
                 draft.map(DraftStateSnapshot::status).orElse(DraftStatus.EDITABLE).name(),
                 range.map(DraftChangeQueryRepository.ModifiedRange::firstModifiedAt).orElse(null),
                 range.map(DraftChangeQueryRepository.ModifiedRange::lastModifiedAt).orElse(null));
+        } finally {
+            DataSourceUtils.releaseConnection(connection, dataSource);
+        }
     }
 
     public DraftChangeSummary summary(RequestContext context) {
         Connection connection = DataSourceUtils.getConnection(dataSource);
-        DraftChangeQueryRepository.DraftChangeSummaryCounts counts =
-                draftChangeQueryRepository.summary(connection);
-        Map<String, Long> byEntityType =
-                new LinkedHashMap<>(draftChangeQueryRepository.countByEntityType(connection));
-        return new DraftChangeSummary(counts.total(), counts.create(), counts.update(),
-                counts.enable(), counts.disable(), counts.delete(), byEntityType);
+        try {
+            DraftChangeQueryRepository.DraftChangeSummaryCounts counts =
+                    draftChangeQueryRepository.summary(connection);
+            Map<String, Long> byEntityType =
+                    new LinkedHashMap<>(draftChangeQueryRepository.countByEntityType(connection));
+            return new DraftChangeSummary(counts.total(), counts.create(), counts.update(),
+                    counts.enable(), counts.disable(), counts.delete(), byEntityType);
+        } finally {
+            DataSourceUtils.releaseConnection(connection, dataSource);
+        }
     }
 
     public com.lightai.client.paging.PageResult<DraftChangeItem> draftChanges(
             RequestContext context, String keyword, List<String> entityTypes,
             List<String> changeTypes, List<String> modifiedBy, int page, int pageSize) {
         Connection connection = DataSourceUtils.getConnection(dataSource);
-        DraftChangeQueryRepository.DraftChangeFilter filter = new DraftChangeQueryRepository.DraftChangeFilter(
-                blankToNull(keyword),
-                entityTypes == null ? Set.of() : Set.copyOf(entityTypes),
-                changeTypes == null ? Set.of() : Set.copyOf(changeTypes),
-                modifiedBy == null ? Set.of() : Set.copyOf(modifiedBy),
-                null, null);
-        long total = draftChangeQueryRepository.count(connection, filter);
-        List<DraftChangeItem> items = draftChangeQueryRepository.list(
-                        connection, filter, "updated_at desc", pageSize, (long) (page - 1) * pageSize)
-                .stream().map(row -> toItem(connection, row)).toList();
-        return com.lightai.client.paging.PageResult.of(items, total, page, pageSize,
-                "updated_at desc", java.time.OffsetDateTime.now(),
-                java.time.OffsetDateTime.now());
+        try {
+            DraftChangeQueryRepository.DraftChangeFilter filter = new DraftChangeQueryRepository.DraftChangeFilter(
+                    blankToNull(keyword),
+                    entityTypes == null ? Set.of() : Set.copyOf(entityTypes),
+                    changeTypes == null ? Set.of() : Set.copyOf(changeTypes),
+                    modifiedBy == null ? Set.of() : Set.copyOf(modifiedBy),
+                    null, null);
+            long total = draftChangeQueryRepository.count(connection, filter);
+            List<DraftChangeItem> items = draftChangeQueryRepository.list(
+                            connection, filter, "updated_at desc", pageSize, (long) (page - 1) * pageSize)
+                    .stream().map(row -> toItem(connection, row)).toList();
+            return com.lightai.client.paging.PageResult.of(items, total, page, pageSize,
+                    "updated_at desc", java.time.OffsetDateTime.now(),
+                    java.time.OffsetDateTime.now());
+        } finally {
+            DataSourceUtils.releaseConnection(connection, dataSource);
+        }
     }
 
     private DraftChangeItem toItem(Connection connection, DraftChangeRow row) {

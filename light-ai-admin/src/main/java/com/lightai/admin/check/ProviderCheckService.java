@@ -164,11 +164,11 @@ public class ProviderCheckService {
     }
 
     private boolean modelBelongsToProvider(Connection connection, UUID modelId, UUID providerId) {
-        String sql = "SELECT 1 FROM " + schemaName()
-                + ".provider_model WHERE id = ? AND provider_id = ? AND deleted_at IS NULL";
+        String sql = "SELECT 1 FROM " + com.lightai.storage.dialect.SqlNames.table(schemaName(), "provider_model")
+                + " WHERE id = ? AND provider_id = ? AND deleted_at IS NULL";
         try (var statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, modelId);
-            statement.setObject(2, providerId);
+            statement.setString(1, modelId.toString());
+            statement.setString(2, providerId.toString());
             try (var rs = statement.executeQuery()) {
                 return rs.next();
             }

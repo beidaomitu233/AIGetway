@@ -148,7 +148,7 @@ public class JdbcUsageAggregateRepository extends AbstractJdbcRepository {
         if (d.databaseType() == DatabaseType.POSTGRESQL) {
             String sql = PG_UPSERT_SQL.formatted(schemaName);
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setObject(1, UUID.randomUUID());
+                statement.setString(1, UUID.randomUUID().toString());
                 statement.setString(2, c.granularity());
                 statement.setObject(3, c.bucketStart());
                 statement.setObject(4, c.bucketEnd());

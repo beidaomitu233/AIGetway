@@ -203,7 +203,12 @@ public final class LocalLightAiClientFactory {
                         model.inputPrice(),
                         model.outputPrice(),
                         model.priceUnit(),
-                        model.currency()
+                        model.currency(),
+                        prov.baseUrl(),
+                        null,
+                        3000,
+                        120000,
+                        java.util.Map.of()
                 ));
             }
 

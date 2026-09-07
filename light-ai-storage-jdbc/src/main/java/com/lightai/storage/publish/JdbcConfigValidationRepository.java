@@ -18,9 +18,10 @@ import java.util.UUID;
 public final class JdbcConfigValidationRepository extends AbstractJdbcRepository implements ConfigValidationRepository {
 
     private static final String COLUMNS =
-            "validation_id, base_snapshot_no, target_snapshot_no, draft_revision, content_checksum, "
+            "id, validation_id, base_snapshot_no, target_snapshot_no, draft_revision, content_checksum, "
                     + "status, error_count, warning_count, validated_at, expires_at, validated_by, "
-                    + "used_by_publish_id, change_summary, affected_alias_ids, target_instances";
+                    + "used_by_publish_id, change_summary, affected_alias_ids, target_instances, "
+                    + "created_at, updated_at";
 
     public JdbcConfigValidationRepository(String schemaName) {
         super(schemaName);
@@ -35,24 +36,26 @@ public final class JdbcConfigValidationRepository extends AbstractJdbcRepository
                        List<ConfigValidationIssueRecord> issues) {
         DatabaseDialect d = dialect(connection);
         String insertSql = "INSERT INTO " + qualify(connection, "config_validation") + " (" + COLUMNS + ") "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                + d.jsonPlaceholder() + ", " + d.jsonPlaceholder() + ", " + d.jsonPlaceholder() + ")";
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                + d.jsonPlaceholder() + ", " + d.jsonPlaceholder() + ", " + d.jsonPlaceholder() + ", "
+                + d.nowFunction() + ", " + d.nowFunction() + ")";
         try (PreparedStatement statement = connection.prepareStatement(insertSql)) {
-            d.bindUuid(statement, 1, record.validationId());
-            statement.setLong(2, record.baseSnapshotNo());
-            statement.setLong(3, record.targetSnapshotNo());
-            statement.setLong(4, record.draftRevision());
-            statement.setString(5, record.contentChecksum());
-            statement.setString(6, record.status());
-            statement.setInt(7, record.errorCount());
-            statement.setInt(8, record.warningCount());
-            statement.setObject(9, record.validatedAt());
-            statement.setObject(10, record.expiresAt());
-            statement.setString(11, record.validatedBy());
-            d.bindUuid(statement, 12, record.usedByPublishId());
-            d.bindJson(statement, 13, record.changeSummaryJson());
-            d.bindJson(statement, 14, toJsonArray(record.affectedAliasIds()));
-            d.bindJson(statement, 15, record.targetInstancesJson());
+            d.bindUuid(statement, 1, UUID.randomUUID());
+            d.bindUuid(statement, 2, record.validationId());
+            statement.setLong(3, record.baseSnapshotNo());
+            statement.setLong(4, record.targetSnapshotNo());
+            statement.setLong(5, record.draftRevision());
+            statement.setString(6, record.contentChecksum());
+            statement.setString(7, record.status());
+            statement.setInt(8, record.errorCount());
+            statement.setInt(9, record.warningCount());
+            statement.setObject(10, record.validatedAt());
+            statement.setObject(11, record.expiresAt());
+            statement.setString(12, record.validatedBy());
+            d.bindUuid(statement, 13, record.usedByPublishId());
+            d.bindJson(statement, 14, record.changeSummaryJson());
+            d.bindJson(statement, 15, toJsonArray(record.affectedAliasIds()));
+            d.bindJson(statement, 16, record.targetInstancesJson());
             statement.executeUpdate();
         } catch (SQLException e) {
             throw translate("校验写入失败", e);
@@ -66,8 +69,8 @@ public final class JdbcConfigValidationRepository extends AbstractJdbcRepository
         DatabaseDialect d = dialect(connection);
         String sql = "INSERT INTO " + qualify(connection, "config_validation_issue")
                 + " (id, validation_id, severity, code, entity_type, entity_id, entity_name, "
-                + "field_path, message, suggestion, related_entity_ids) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " + d.jsonPlaceholder() + ")";
+                + "field_path, message, suggestion, related_entity_ids, created_at) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " + d.jsonPlaceholder() + ", " + d.nowFunction() + ")";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, UUID.randomUUID());
             d.bindUuid(statement, 2, issue.validationId());

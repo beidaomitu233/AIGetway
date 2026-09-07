@@ -41,8 +41,8 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
             sql = """
                     INSERT INTO %s
                       (id, entity_type, entity_id, connection_status, last_checked_at,
-                       last_error_code, last_error_summary, state_version)
-                    VALUES (?, 'PROVIDER', ?, ?, ?, ?, ?, 1)
+                       last_error_code, last_error_summary, state_version, created_at, updated_at)
+                    VALUES (?, 'PROVIDER', ?, ?, ?, ?, ?, 1, %s, %s)
                     ON CONFLICT (entity_type, entity_id) DO UPDATE SET
                       connection_status = EXCLUDED.connection_status,
                       last_checked_at = EXCLUDED.last_checked_at,
@@ -51,14 +51,16 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
                       state_version = %s.state_version + 1,
                       updated_at = %s
                     """.strip().formatted(qualify(connection, "object_runtime_state"),
+                            d.nowFunction(),
+                            d.nowFunction(),
                             qualify(connection, "object_runtime_state"),
                             d.nowFunction());
         } else {
             sql = """
                     INSERT INTO %s
                       (id, entity_type, entity_id, connection_status, last_checked_at,
-                       last_error_code, last_error_summary, state_version)
-                    VALUES (?, 'PROVIDER', ?, ?, ?, ?, ?, 1)
+                       last_error_code, last_error_summary, state_version, created_at, updated_at)
+                    VALUES (?, 'PROVIDER', ?, ?, ?, ?, ?, 1, %s, %s)
                     ON DUPLICATE KEY UPDATE
                       connection_status = VALUES(connection_status),
                       last_checked_at = VALUES(last_checked_at),
@@ -67,6 +69,8 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
                       state_version = state_version + 1,
                       updated_at = %s
                     """.strip().formatted(qualify(connection, "object_runtime_state"),
+                            d.nowFunction(),
+                            d.nowFunction(),
                             d.nowFunction());
         }
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -91,8 +95,8 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
             sql = """
                     INSERT INTO %s
                       (id, entity_type, entity_id, health_status, last_checked_at,
-                       last_error_code, last_error_summary, state_version)
-                    VALUES (?, 'CREDENTIAL', ?, ?, ?, ?, ?, 1)
+                       last_error_code, last_error_summary, state_version, created_at, updated_at)
+                    VALUES (?, 'CREDENTIAL', ?, ?, ?, ?, ?, 1, %s, %s)
                     ON CONFLICT (entity_type, entity_id) DO UPDATE SET
                       health_status = EXCLUDED.health_status,
                       last_checked_at = EXCLUDED.last_checked_at,
@@ -101,14 +105,16 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
                       state_version = %s.state_version + 1,
                       updated_at = %s
                     """.strip().formatted(qualify(connection, "object_runtime_state"),
+                            d.nowFunction(),
+                            d.nowFunction(),
                             qualify(connection, "object_runtime_state"),
                             d.nowFunction());
         } else {
             sql = """
                     INSERT INTO %s
                       (id, entity_type, entity_id, health_status, last_checked_at,
-                       last_error_code, last_error_summary, state_version)
-                    VALUES (?, 'CREDENTIAL', ?, ?, ?, ?, ?, 1)
+                       last_error_code, last_error_summary, state_version, created_at, updated_at)
+                    VALUES (?, 'CREDENTIAL', ?, ?, ?, ?, ?, 1, %s, %s)
                     ON DUPLICATE KEY UPDATE
                       health_status = VALUES(health_status),
                       last_checked_at = VALUES(last_checked_at),
@@ -117,6 +123,8 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
                       state_version = state_version + 1,
                       updated_at = %s
                     """.strip().formatted(qualify(connection, "object_runtime_state"),
+                            d.nowFunction(),
+                            d.nowFunction(),
                             d.nowFunction());
         }
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
