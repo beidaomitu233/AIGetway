@@ -39,6 +39,8 @@ function moduleRoute(
 /** 全部页面路由按 FRONTEND_PLAN 第 2 节注册；未实现模块由 ModulePlaceholder 承接，随任务包替换。 */
 export const routes: RouteRecordRaw[] = [
   { path: '/', redirect: '/ui/overview' },
+  { path: '/ui', redirect: '/ui/overview' },
+  { path: '/ui/', redirect: '/ui/overview' },
   moduleRoute('overview', '/ui/overview', '运行概览', Permission.overviewView, pages.overview),
 
   moduleRoute('provider-list', '/ui/providers', 'Provider', Permission.providerView, pages.providerList),
