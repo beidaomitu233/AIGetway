@@ -36,6 +36,9 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
             DatabaseDialect dialect = DialectResolver.resolve(connection);
             String scriptPath = dialect.databaseType() == DatabaseType.MYSQL ? MYSQL_SCRIPT : POSTGRES_SCRIPT;
             String script = loadScript(scriptPath);
+            if (isH2(connection)) {
+                script = adaptMySqlScriptForH2(script);
+            }
             List<String> statements = splitStatements(script);
             for (String sql : statements) {
                 try (Statement stmt = connection.createStatement()) {
@@ -69,6 +72,17 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
         } catch (Exception e) {
             throw new IllegalStateException("读取迁移脚本失败: " + path, e);
         }
+    }
+
+    static String adaptMySqlScriptForH2(String script) {
+        // H2 将通过 setString 写入 JSON 列的对象再次编码为 JSON 字符串；
+        // 默认 Standalone 存储使用文本列保持与 MySQL JDBC JSON 读写语义一致。
+        return script.replaceAll("(?i)\\bJSON\\b", "LONGTEXT");
+    }
+
+    private static boolean isH2(Connection connection) throws SQLException {
+        String productName = connection.getMetaData().getDatabaseProductName();
+        return productName != null && productName.toLowerCase().contains("h2");
     }
 
     static List<String> splitStatements(String script) {

@@ -77,6 +77,10 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
                     Set.of(),
                     Set.of("alias_id")));
 
+    private static final Set<String> BOOLEAN_COLUMNS = Set.of(
+            "enabled", "support_stream", "support_system_message", "support_temperature",
+            "support_top_p", "support_stop", "respect_retry_after", "fallback_enabled");
+
     /** 当前全部活行配置的规范化快照树（固定键序，数组按 id asc）。 */
     @Override
     public Map<String, Object> assemble(Connection connection, String timezone) {
@@ -302,6 +306,10 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
     }
 
     private Object readValue(ResultSet rs, String column, EntityColumns entity) throws SQLException {
+        if (BOOLEAN_COLUMNS.contains(column)) {
+            boolean value = rs.getBoolean(column);
+            return rs.wasNull() ? null : value;
+        }
         if (entity.jsonbColumns().contains(column)) {
             String raw = rs.getString(column);
             if (raw == null) {

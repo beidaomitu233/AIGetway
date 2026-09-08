@@ -183,7 +183,7 @@ public final class JdbcConfigSnapshotPortAdapter extends AbstractJdbcRepository 
             String aliasId = toString(row.get("id"));
             String aliasName = toString(row.get("alias"));
             String displayName = toString(row.get("display_name"));
-            boolean enabled = Boolean.TRUE.equals(row.get("enabled"));
+            boolean enabled = Boolean.TRUE.equals(toBoolOrNull(row.get("enabled")));
             List<CandidateView> candidates = candidatesByAlias.getOrDefault(aliasId, List.of());
             result.add(new AliasView(aliasId, aliasName, displayName, enabled, candidates));
         }
@@ -235,7 +235,7 @@ public final class JdbcConfigSnapshotPortAdapter extends AbstractJdbcRepository 
                 toString(candidate.get("credential_pool_id")),
                 toLong(candidate.get("priority")),
                 toInt(candidate.get("weight")),
-                Boolean.TRUE.equals(candidate.get("enabled")),
+                Boolean.TRUE.equals(toBoolOrNull(candidate.get("enabled"))),
                 toString(model.get("tokenizer_family")),
                 toLongOrNull(model.get("context_window")),
                 toLongOrNull(model.get("max_output_tokens")),

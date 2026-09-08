@@ -312,11 +312,11 @@ public class JdbcProviderModelRepository extends AbstractJdbcRepository {
                 rs.getString("tokenizer_family"),
                 getLongOrNull(rs, "context_window"),
                 getLongOrNull(rs, "max_output_tokens"),
-                (Boolean) rs.getObject("support_stream"),
-                (Boolean) rs.getObject("support_system_message"),
-                (Boolean) rs.getObject("support_temperature"),
-                (Boolean) rs.getObject("support_top_p"),
-                (Boolean) rs.getObject("support_stop"),
+                getBooleanOrNull(rs, "support_stream"),
+                getBooleanOrNull(rs, "support_system_message"),
+                getBooleanOrNull(rs, "support_temperature"),
+                getBooleanOrNull(rs, "support_top_p"),
+                getBooleanOrNull(rs, "support_stop"),
                 rs.getObject("temperature_min") == null ? null : rs.getBigDecimal("temperature_min"),
                 rs.getObject("temperature_max") == null ? null : rs.getBigDecimal("temperature_max"),
                 rs.getObject("top_p_min") == null ? null : rs.getBigDecimal("top_p_min"),
@@ -337,6 +337,20 @@ public class JdbcProviderModelRepository extends AbstractJdbcRepository {
                 rs.getLong("version"),
                 d.readOffsetDateTime(rs, "created_at"),
                 d.readOffsetDateTime(rs, "updated_at"));
+    }
+
+    private static Boolean getBooleanOrNull(ResultSet rs, String column) throws SQLException {
+        Object value = rs.getObject(column);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        if (value instanceof Number numberValue) {
+            return numberValue.intValue() != 0;
+        }
+        return "1".equals(value.toString()) || Boolean.parseBoolean(value.toString());
     }
 
     private static String toJson(List<String> stops) {

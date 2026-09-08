@@ -394,7 +394,13 @@ public class ConfigValidationService {
     }
 
     private static boolean truthy(Object value) {
-        return Boolean.TRUE.equals(value);
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        if (value instanceof Number numberValue) {
+            return numberValue.intValue() != 0;
+        }
+        return value != null && ("true".equalsIgnoreCase(value.toString()) || "1".equals(value.toString()));
     }
 
     private static UUID uuid(Object value) {

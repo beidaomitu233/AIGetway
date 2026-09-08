@@ -167,6 +167,22 @@ class ConfigValidationServiceTest {
     }
 
     @Test
+    void numericJdbcFlagsAreAcceptedAsEnabled() {
+        Map<String, Object> numeric = validContent();
+        for (String key : List.of("providers", "credential_pools", "credentials",
+                "provider_models", "model_aliases", "route_candidates")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> row = (Map<String, Object>) ((List<?>) numeric.get(key)).get(0);
+            row.put("enabled", 1);
+        }
+        content.content = numeric;
+
+        ConfigValidationResultView view = service.validate("req-numeric", "admin", "203.0.113.*",
+                new ConfigValidateCommand(5));
+
+        assertThat(view.status()).isEqualTo("PASSED");
+    }
+    @Test
     void unregisteredAdapterTypeBlocksValidation() {
         Map<String, Object> invalid = validContent();
         @SuppressWarnings("unchecked")
