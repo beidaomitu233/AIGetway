@@ -1482,6 +1482,6 @@ Provider/模型/凭证可以在Alias与候选建立前检测。CONNECTION_ONLY�
 
 ## 审查修复数据库同步（2026-09-08）
 
-本轮未修改已发布 PostgreSQL/MySQL DDL。Standalone 的 H2 自动初始化在执行 MySQL schema 时仅将 JSON 列转换为 LONGTEXT，避免 H2 JSON 驱动对字符串二次编码；JDBC Provider Model 与 Snapshot 读取统一规范化 nullable TINYINT/BOOLEAN。新增真实 H2 仓储回归覆盖 Provider JSON 往返、模型可空能力字段、快照布尔值和 Usage 聚合 upsert。
+生产 DDL 已迁入 `db/migration/mysql/V1__baseline.sql` 与 `db/migration/postgres/V1__baseline.sql`。`DefaultSchemaMigrator` 建立迁移历史表，校验版本与 SHA-256 checksum，并使用全局迁移锁和数据库事务串行执行；`SchemaGuard` 同时验证迁移历史、全部必需列和索引。Standalone 的 H2 自动初始化继续将 MySQL JSON 列转换为 LONGTEXT，并规范化 nullable TINYINT/BOOLEAN。H2 已验证空库安装、重复迁移幂等和 checksum 篡改拒绝。
 
-当前 PostgreSQL 集成测试 3 例因未配置 `LAI_IT_DB_URL` 跳过；未形成版本化迁移历史，也未完成空库到升级版本、失败恢复和回滚演练。DB-001～DB-030 保持未勾选，待真实 PostgreSQL、MySQL 5.7/8.0 验收后逐项关闭。代码回滚可撤销 `81cc236`；生产 DDL 无本轮回滚操作。
+当前机器没有 PostgreSQL、MySQL 5.7 或 MySQL 8.0 服务，相关 5 个实库用例按环境条件跳过，未形成真实数据库升级、失败恢复、回滚和全仓 SQL 证据。DB-001～DB-030 保持未勾选，待各数据库环境按任务验收后逐项关闭。迁移系统与守卫可回退提交 `f39a521`；本轮没有执行生产数据删除或逆向 DDL，回退前需先确认目标环境尚未依赖迁移历史表。

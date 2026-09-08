@@ -739,7 +739,7 @@ Redis与数据库采用不同权威：容量实时真相在CapacityStore，SQL�
   业务流程：普通Java无Spring依赖，客户端同主版本忽略响应新增字段。
   异常处理：主版本差异告警、不静默改请求。
   数据表与协作依赖：无新增表；BE-049/055。
-  验收标准：同步/异步/流式样例可编译运行，模式隔离；保留为部署前矩阵验证项（当前已完成本工程 Java17/Boot3.5.5 打包验证）。
+  验收标准：同步/异步/流式样例可编译运行，模式隔离；Java 17/21 × Boot 3.3.8/3.4.13/3.5.5 的全模块打包已通过，Java 17/21 × Boot 3.5.5 完整测试已通过；Reactive Web 装配仍待实现和验证，因此任务保持未勾选。
   测试要求：两Java×三Boot×两Web类型关键组合；业务事务增加失败回滚断言，读取增加权限断言。
 
 - [ ] 任务编号：BE-060
@@ -1992,6 +1992,6 @@ Runtime 在 Attempt 与 Trace 成功最终化后调用 StreamListener.onComplete
 
 ## 审查修复最终验证（2026-09-08）
 
-审查修复补齐逐实例内部凭证、applicationScope/aliasScope 隔离、运行参数草稿与 CAS 并发、流完成回调、观测聚合、Standalone/H2 快照兼容和 Provider Publisher 终态。`mvn -B verify` 成功，79 份 Surefire 报告合计 379 例，0 failure、0 error、0 skipped；可执行 JAR 的 15 步真实 HTTP 冒烟覆盖发布收敛、同步 Chat、业务 SSE 和管理 SSE。
+审查修复补齐逐实例内部凭证、applicationScope/aliasScope 隔离、运行参数草稿与 CAS 并发、流完成回调、观测聚合、Standalone/H2 快照兼容和 Provider Publisher 终态。当前基线在 Java 17 与 Java 21 下执行完整 `mvn verify` 均成功：14 个 Reactor 模块、404 项总计，399 项执行、5 个外部数据库用例跳过，0 failure、0 error；其中 Redis 集成测试 11 例使用两个独立客户端连接真实 Redis。可执行 JAR 启动后 `/health/live`、`/health/ready`、`/ui/` 与 `/ui/index.html` 返回 200，未认证 `/v1/models` 返回 401。
 
-CR-004、CR-015、CR-016 尚未达到生产验收：仓库缺少 Redis 共享原子状态实现；版本化数据库升级/回滚和 PostgreSQL/MySQL 8.0 实库矩阵未完成；物理双实例、200 HTTP 流连接、长稳态、故障恢复及 Java/Boot/Servlet/Reactive 矩阵未执行。因此 BE-059、BE-060 及相应集群/性能验收项保持未勾选，不能用当前单机结果替代生产门禁。
+CR-004 已完成代码交付与当前环境验证：`light-ai-storage-redis` 提供原子容量、共享熔断和全局 FIFO 队列，Standalone 显式装配并 fail-closed，租约回收与两连接竞争测试通过。CR-015 已交付版本化迁移历史、校验和、全局迁移锁、事务与字段/索引守卫，H2 空库、重复迁移和校验和篡改测试通过；当前环境没有 PostgreSQL/MySQL 服务，5 个实库用例跳过。CR-016 已完成 Java 17/21 × Boot 3.3.8/3.4.13/3.5.5 构建矩阵和 Java 17/21 当前基线完整测试，仍缺 Reactive Web、物理双实例、200 条业务 HTTP 流、10 分钟稳态及真实 DB/Redis 故障演练。因此 BE-059、BE-060 保持未勾选。

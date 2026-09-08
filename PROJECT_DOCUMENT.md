@@ -208,6 +208,6 @@ Runtime Instance 正常心跳且 accepting_requests=true 时为 ONLINE，关闭�
 
 内部实例接口使用 `light-ai.admin.internal-instance-credentials.<UUID>` 配置逐实例独立口令。服务端由口令映射确定实例身份，并要求认证身份与请求头、路径及正文 UUID 一致；共享口令不能作为部署方案。管理身份的 `applicationScope` 约束应用数据归属与查询，`aliasScope` 单独约束开发人员可查看和在线测试的已发布 Alias，空 Alias 范围默认拒绝。
 
-H2 仅用于单实例本地验证，执行 MySQL schema 时由 migrator 做 JSON 到 LONGTEXT 的兼容转换。生产集群必须使用共享原子容量、队列和熔断状态；共享状态不可用时拒绝新预占。当前仓库尚未交付 Redis 共享实现，因此只能进行单实例 Standalone 功能验收。
+H2 仅用于单实例本地验证，执行 MySQL schema 时由 migrator 做 JSON 到 LONGTEXT 的兼容转换。生产集群使用 `light-ai-storage-redis` 提供的共享原子容量、FIFO 队列和熔断状态；共享状态不可用时拒绝新预占。Redis Lua 脚本在一次原子操作中校验 Alias、Provider Model、Credential 的 RPM、TPM 与并发，并通过租约和幂等结算回收失联预占。
 
-最终生产验收还要求版本化数据库升级/回滚、真实 PostgreSQL/MySQL 8.0 仓储矩阵、物理双实例与 Redis 故障恢复，以及约定的性能和 Java/Boot/Servlet/Reactive 兼容矩阵。完成这些门禁前不得把当前单机验证描述为可上线结论。
+最终生产验收还要求真实 PostgreSQL/MySQL 5.7/8.0 的版本化数据库升级、失败恢复与仓储矩阵，物理双实例与 Redis 故障恢复，以及 200 条业务 HTTP 流、10 分钟稳态和 Reactive Web 兼容验证。Java 17/21 × Spring Boot 3.3.8/3.4.13/3.5.5 的 14 模块构建矩阵已通过，Java 17 与 Java 21 当前基线的完整测试已通过；这些证据不能替代尚未执行的外部环境门禁。
