@@ -97,7 +97,7 @@ public class ServerInstanceCoordinator implements SmartLifecycle {
                     OffsetDateTime.now()
             ));
         } catch (Exception e) {
-            log.debug("实例下线心跳上报已忽略: {}", e.getMessage());
+            log.debug("实例下线心跳上报已忽略 exception={}", e.getClass().getSimpleName());
         }
         if (executor != null) {
             executor.shutdownNow();
@@ -141,7 +141,7 @@ public class ServerInstanceCoordinator implements SmartLifecycle {
             ));
             handleHeartbeatResponse(response);
         } catch (Exception e) {
-            log.warn("运行时实例心跳异常: {}", e.getMessage(), e);
+            log.warn("运行时实例心跳异常 exception={}", e.getClass().getSimpleName());
         }
     }
 
@@ -166,13 +166,14 @@ public class ServerInstanceCoordinator implements SmartLifecycle {
                     executor.submit(this::heartbeatCycle);
                 }
             } catch (Exception e) {
-                log.error("发布准备失败: publishId={}, error={}", prepare.publishId(), e.getMessage());
+                log.error("发布准备失败: publishId={}, exception={}",
+                        prepare.publishId(), e.getClass().getSimpleName());
                 try {
                     publishService.applyReport(UUID.fromString(prepare.publishId()), instanceId,
                             new InstanceLoadReport(prepare.snapshotNo(), "FAILED", OffsetDateTime.now(),
-                                    0, 10L, "PREPARE_FAILED", e.getMessage()));
+                                    0, 10L, "PREPARE_FAILED", e.getClass().getSimpleName()));
                 } catch (Exception ex) {
-                    log.error("上报准备失败异常: {}", ex.getMessage());
+                    log.error("上报准备失败异常 exception={}", ex.getClass().getSimpleName());
                 }
             }
             return;
@@ -197,13 +198,14 @@ public class ServerInstanceCoordinator implements SmartLifecycle {
                 log.info("已完成快照激活并上报 LOADED: publishId={}, snapshotNo={}",
                         activation.publishId(), activeSnapshotNo);
             } catch (Exception e) {
-                log.error("发布激活失败: publishId={}, error={}", activation.publishId(), e.getMessage());
+                log.error("发布激活失败: publishId={}, exception={}",
+                        activation.publishId(), e.getClass().getSimpleName());
                 try {
                     publishService.applyReport(UUID.fromString(activation.publishId()), instanceId,
                             new InstanceLoadReport(activation.snapshotNo(), "FAILED", OffsetDateTime.now(),
-                                    0, 10L, "ACTIVATION_FAILED", e.getMessage()));
+                                    0, 10L, "ACTIVATION_FAILED", e.getClass().getSimpleName()));
                 } catch (Exception ex) {
-                    log.error("上报激活失败异常: {}", ex.getMessage());
+                    log.error("上报激活失败异常 exception={}", ex.getClass().getSimpleName());
                 }
             }
         }

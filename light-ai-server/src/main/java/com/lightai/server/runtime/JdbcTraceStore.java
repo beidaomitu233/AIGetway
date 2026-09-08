@@ -290,7 +290,8 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
-            log.warn("标记 Trace 已提交失败: traceId={}, error={}", traceId, e.getMessage());
+            log.warn("标记 Trace 已提交失败: traceId={}, exception={}",
+                    traceId, e.getClass().getSimpleName());
         }
     }
 
@@ -314,7 +315,7 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
                 }
             }
         } catch (SQLException e) {
-            log.debug("读取 response_committed 异常: {}", e.getMessage());
+            log.debug("读取 response_committed 异常 exception={}", e.getClass().getSimpleName());
         }
         return false;
     }
@@ -459,14 +460,16 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
             try {
                 traceFinalizer.finalizeTrace(traceId);
             } catch (Exception e) {
-                log.warn("TraceFinalizer 最终化异常: traceId={}, error={}", traceId, e.getMessage());
+                log.warn("TraceFinalizer 最终化异常: traceId={}, exception={}",
+                        traceId, e.getClass().getSimpleName());
             }
         }
         if (usageAggregator != null) {
             try {
                 usageAggregator.processPending(50);
             } catch (Exception e) {
-                log.warn("UsageAggregator 聚合异常: traceId={}, error={}", traceId, e.getMessage());
+                log.warn("UsageAggregator 聚合异常: traceId={}, exception={}",
+                        traceId, e.getClass().getSimpleName());
             }
         }
     }
@@ -496,7 +499,7 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
                 }
             }
         } catch (SQLException e) {
-            log.debug("读取 attempts 列表异常: {}", e.getMessage());
+            log.debug("读取 attempts 列表异常 exception={}", e.getClass().getSimpleName());
         }
         return List.copyOf(list);
     }

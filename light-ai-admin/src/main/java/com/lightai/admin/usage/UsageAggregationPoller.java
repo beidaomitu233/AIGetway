@@ -44,7 +44,8 @@ public class UsageAggregationPoller implements SmartLifecycle {
         try {
             aggregator.processPending(BATCH_SIZE);
         } catch (Exception e) {
-            log.warn("Usage聚合轮询异常，等待下一轮重试: {}", e.getMessage(), e);
+            log.warn("Usage聚合轮询异常，等待下一轮重试 exception={}",
+                    e.getClass().getSimpleName());
         }
     }
 

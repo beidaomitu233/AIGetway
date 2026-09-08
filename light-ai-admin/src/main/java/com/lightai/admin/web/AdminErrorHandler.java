@@ -35,9 +35,9 @@ public class AdminErrorHandler {
                     .currentStateVersion(e.currentStateVersion())
                     .build();
         }
-        log.info("管理请求失败 request_id={} code={} message={} cause={} 耗时ms={}",
-                error.requestId(), error.code(), e.getMessage(),
-                e.getCause() != null ? e.getCause().getMessage() : null, elapsed(request));
+        log.info("管理请求失败 request_id={} code={} param={} exception={} 耗时ms={}",
+                error.requestId(), error.code(), error.param(),
+                e.getClass().getSimpleName(), elapsed(request));
         return ResponseEntity.status(httpStatus(e.code()))
                 .header("Content-Type", ManagementResponses.APPLICATION_JSON)
                 .body(ManagementResponses.error(error));
@@ -46,12 +46,12 @@ public class AdminErrorHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<String> handleUnexpected(Exception e, HttpServletRequest request) {
         String requestId = RequestIdFilter.requestIdOf(request);
-        // 未分类错误不向客户端回传 e.getMessage()，避免泄漏内部细节；服务端记录完整堆栈供诊断
+        // 未分类错误的消息与堆栈都可能携带凭证、认证头或连接串，只记录异常类型。
         UnifiedError error = UnifiedError.builder(ErrorCode.INTERNAL_ERROR, "内部错误，请提供 request_id 联系管理员")
                 .requestId(requestId)
                 .build();
         log.error("管理请求未分类异常 request_id={} 耗时ms={} exception={}",
-                requestId, elapsed(request), e.getClass().getSimpleName(), e);
+                requestId, elapsed(request), e.getClass().getSimpleName());
         return ResponseEntity.status(ErrorCode.INTERNAL_ERROR.httpStatus())
                 .header("Content-Type", ManagementResponses.APPLICATION_JSON)
                 .body(ManagementResponses.error(error));

@@ -114,13 +114,15 @@ public class ServerLifecycleService implements SmartLifecycle {
             try {
                 handle.cancel();
             } catch (Exception e) {
-                log.error("Failed to cancel active request {}: {}", entry.getKey(), e.getMessage());
+                log.error("Failed to cancel active request {} exception={}",
+                        entry.getKey(), e.getClass().getSimpleName());
             }
             if (handle.reservation() != null && capacityPort != null) {
                 try {
                     capacityPort.release(handle.reservation().reservationId());
                 } catch (Exception e) {
-                    log.error("Failed to release reservation for request {}: {}", entry.getKey(), e.getMessage());
+                    log.error("Failed to release reservation for request {} exception={}",
+                            entry.getKey(), e.getClass().getSimpleName());
                 }
             }
         }

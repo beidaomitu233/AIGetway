@@ -2,6 +2,9 @@ package com.lightai.admin.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
 import com.lightai.spi.auth.AuthContext;
@@ -9,6 +12,7 @@ import com.lightai.spi.auth.AuthContextProvider;
 import com.lightai.spi.auth.AuthRequest;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
@@ -61,12 +65,28 @@ class AdminErrorHandlerTest {
 
     @Test
     void unexpectedExceptionIsGenericInternalError() {
-        var response = handler.handleUnexpected(new IllegalStateException("jdbc password=secret123"), request());
-        assertThat(response.getStatusCode().value()).isEqualTo(500);
-        assertThat(response.getBody()).contains("\"code\":\"INTERNAL_ERROR\"");
-        // 内部细节不得回传客户端
-        assertThat(response.getBody()).doesNotContain("secret123");
-        assertThat(response.getBody()).doesNotContain("jdbc");
+        Logger logger = (Logger) LoggerFactory.getLogger(AdminErrorHandler.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            var response = handler.handleUnexpected(
+                    new IllegalStateException("jdbc password=secret123"), request());
+            assertThat(response.getStatusCode().value()).isEqualTo(500);
+            assertThat(response.getBody()).contains("\"code\":\"INTERNAL_ERROR\"");
+            assertThat(response.getBody()).doesNotContain("secret123");
+            assertThat(response.getBody()).doesNotContain("jdbc");
+            assertThat(appender.list).extracting(ILoggingEvent::getFormattedMessage)
+                    .allSatisfy(message -> {
+                        assertThat(message).doesNotContain("secret123");
+                        assertThat(message).doesNotContain("password=");
+                    });
+            assertThat(appender.list).allSatisfy(event ->
+                    assertThat(event.getThrowableProxy()).isNull());
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
     }
 
     @Test

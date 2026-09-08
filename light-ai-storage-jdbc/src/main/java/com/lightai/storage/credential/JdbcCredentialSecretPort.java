@@ -52,12 +52,12 @@ public final class JdbcCredentialSecretPort implements CredentialSecretPort {
                             "Credential 秘密解密失败"));
             return new ResolvedCredential(chosen.id().toString(), () -> secret);
         } catch (LightAiException e) {
-            log.log(System.Logger.Level.WARNING, "凭证解析被拒绝 pool_id={0} reason={1}",
-                    poolId, e.getMessage());
+            log.log(System.Logger.Level.WARNING, "凭证解析被拒绝 pool_id={0} code={1}",
+                    poolId, e.code().name());
             throw e;
         } catch (Exception e) {
-            log.log(System.Logger.Level.WARNING, "凭证解析失败 pool_id={0} exception={1}: {2}",
-                    poolId, e.getClass().getSimpleName(), e.getMessage());
+            log.log(System.Logger.Level.WARNING, "凭证解析失败 pool_id={0} exception={1}",
+                    poolId, e.getClass().getSimpleName());
             throw new LightAiException(ErrorCode.CREDENTIAL_NOT_AVAILABLE,
                     "凭证解析失败: " + e.getClass().getSimpleName());
         }
