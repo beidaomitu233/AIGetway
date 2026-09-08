@@ -22,7 +22,11 @@ public class FlowStreamPublisher implements Flow.Publisher<StreamEvent> {
 
     private final AtomicBoolean subscribed = new AtomicBoolean(false);
     private final Runnable cancelCallback;
+    private final Object lifecycleLock = new Object();
+    private final Queue<StreamEvent> preSubscriptionBuffer = new ArrayDeque<>(BUFFER_CAPACITY);
     private volatile StreamSubscription subscription;
+    private Throwable preSubscriptionError;
+    private boolean preSubscriptionCompleted;
 
     public FlowStreamPublisher() {
         this(null);
@@ -44,26 +48,55 @@ public class FlowStreamPublisher implements Flow.Publisher<StreamEvent> {
             return;
         }
 
-        this.subscription = new StreamSubscription(subscriber, cancelCallback);
-        subscriber.onSubscribe(subscription);
+        StreamSubscription created = new StreamSubscription(subscriber, cancelCallback);
+        synchronized (lifecycleLock) {
+            this.subscription = created;
+            subscriber.onSubscribe(created);
+            while (!preSubscriptionBuffer.isEmpty()) {
+                created.submit(preSubscriptionBuffer.poll());
+            }
+            if (preSubscriptionError != null) {
+                created.error(preSubscriptionError);
+            } else if (preSubscriptionCompleted) {
+                created.complete();
+            }
+        }
     }
 
     public boolean submit(StreamEvent event) {
-        if (subscription == null) {
-            return false;
+        Objects.requireNonNull(event, "event 不能为空");
+        synchronized (lifecycleLock) {
+            if (subscription != null) {
+                return subscription.submit(event);
+            }
+            if (preSubscriptionCompleted || preSubscriptionError != null
+                    || preSubscriptionBuffer.size() >= BUFFER_CAPACITY) {
+                return false;
+            }
+            preSubscriptionBuffer.offer(event);
+            return true;
         }
-        return subscription.submit(event);
     }
 
     public void complete() {
-        if (subscription != null) {
-            subscription.complete();
+        synchronized (lifecycleLock) {
+            if (subscription != null) {
+                subscription.complete();
+            } else if (preSubscriptionError == null) {
+                preSubscriptionCompleted = true;
+            }
         }
     }
 
     public void error(Throwable throwable) {
-        if (subscription != null) {
-            subscription.error(throwable);
+        Objects.requireNonNull(throwable, "throwable 不能为空");
+        synchronized (lifecycleLock) {
+            if (subscription != null) {
+                subscription.error(throwable);
+            } else if (!preSubscriptionCompleted && preSubscriptionError == null) {
+                preSubscriptionBuffer.clear();
+                preSubscriptionError = throwable;
+            }
         }
     }
 

@@ -15,6 +15,29 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FlowStreamPublisherTest {
 
     @Test
+    void shouldDeliverBufferedEventsAndCompletionWhenSourceFinishesBeforeSubscribe() {
+        FlowStreamPublisher publisher = new FlowStreamPublisher();
+        StreamEvent start = StreamEvent.start("trace-before-subscribe");
+        StreamEvent delta = StreamEvent.delta("trace-before-subscribe", "ready");
+
+        assertThat(publisher.submit(start)).isTrue();
+        assertThat(publisher.submit(delta)).isTrue();
+        publisher.complete();
+
+        List<StreamEvent> received = new ArrayList<>();
+        AtomicBoolean completed = new AtomicBoolean(false);
+        publisher.subscribe(new Flow.Subscriber<>() {
+            @Override public void onSubscribe(Flow.Subscription subscription) { subscription.request(10); }
+            @Override public void onNext(StreamEvent item) { received.add(item); }
+            @Override public void onError(Throwable throwable) {}
+            @Override public void onComplete() { completed.set(true); }
+        });
+
+        assertThat(received).containsExactly(start, delta);
+        assertThat(completed).isTrue();
+    }
+
+    @Test
     void shouldEnforceSingleSubscriber() {
         FlowStreamPublisher publisher = new FlowStreamPublisher();
 
