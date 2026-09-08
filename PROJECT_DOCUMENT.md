@@ -210,4 +210,4 @@ Runtime Instance 正常心跳且 accepting_requests=true 时为 ONLINE，关闭�
 
 H2 仅用于单实例本地验证，执行 MySQL schema 时由 migrator 做 JSON 到 LONGTEXT 的兼容转换。生产集群使用 `light-ai-storage-redis` 提供的共享原子容量、FIFO 队列和熔断状态；共享状态不可用时拒绝新预占。Redis Lua 脚本在一次原子操作中校验 Alias、Provider Model、Credential 的 RPM、TPM 与并发，并通过租约和幂等结算回收失联预占。
 
-最终生产验收还要求真实 PostgreSQL/MySQL 5.7/8.0 的版本化数据库升级、失败恢复与仓储矩阵，物理双实例与 Redis 故障恢复，以及 200 条业务 HTTP 流、10 分钟稳态和 Reactive Web 兼容验证。Java 17/21 × Spring Boot 3.3.8/3.4.13/3.5.5 的 14 模块构建矩阵已通过，Java 17 与 Java 21 当前基线的完整测试已通过；这些证据不能替代尚未执行的外部环境门禁。
+最终生产验收还要求真实 PostgreSQL/MySQL 5.7/8.0 的版本化数据库升级、失败恢复与仓储矩阵，物理双实例与 Redis 故障恢复，以及 200 条业务 HTTP 流、10 分钟稳态和 WebFlux 管理 API/Admin UI 与原生存储端到端验证。Java 17/21 × Spring Boot 3.3.8/3.4.13/3.5.5 的 14 模块构建矩阵已通过，Reactive Standalone Client、宿主端口驱动的 Embedded Chat 及无 Web 空快照运行内核已验证；这些证据不能替代尚未执行的外部环境门禁。
