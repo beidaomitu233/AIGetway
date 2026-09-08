@@ -2,6 +2,7 @@ package com.lightai.runtime.capacity;
 
 import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -25,8 +26,30 @@ public interface CapacityStore {
     /** 作用对象当前窗口用量快照（管理查询只读）。 */
     UsageSnapshot usage(String scopeType, UUID scopeId);
 
+    /** 共享状态健康探针；连接失败时返回 false，不向外暴露连接细节。 */
+    default boolean health() {
+        return true;
+    }
+
+    /** 回收超时且未结算的预占，返回本次首次回收数。 */
+    default int reclaimExpired(Instant now) {
+        return 0;
+    }
+
     record ReserveRequest(UUID aliasId, UUID providerModelId, UUID credentialId,
-                          long estimatedTokens, long maxTokens) {
+                          long estimatedTokens, long maxTokens,
+                          ScopeLimit aliasLimit, ScopeLimit providerModelLimit,
+                          ScopeLimit credentialLimit) {
+
+        public ReserveRequest(UUID aliasId, UUID providerModelId, UUID credentialId,
+                              long estimatedTokens, long maxTokens) {
+            this(aliasId, providerModelId, credentialId, estimatedTokens, maxTokens,
+                    null, null, null);
+        }
+    }
+
+    /** 单层容量上限，null 表示该指标不限制。 */
+    record ScopeLimit(Long rpmLimit, Long tpmLimit, Integer concurrentLimit) {
     }
 
     /** 预占句柄：reservation_id 为重复释放/结算幂等键。 */
@@ -46,8 +69,29 @@ public interface CapacityStore {
     }
 
     class CapacityLimitedException extends LightAiException {
+        private final String scopeType;
+        private final String metric;
+
         public CapacityLimitedException(String message) {
+            this(null, null, message);
+        }
+
+        public CapacityLimitedException(String scopeType, String metric) {
+            this(scopeType, metric, metric + " 容量不足：" + scopeType);
+        }
+
+        private CapacityLimitedException(String scopeType, String metric, String message) {
             super(ErrorCode.CAPACITY_LIMITED, message);
+            this.scopeType = scopeType;
+            this.metric = metric;
+        }
+
+        public String scopeType() {
+            return scopeType;
+        }
+
+        public String metric() {
+            return metric;
         }
     }
 }

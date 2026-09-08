@@ -89,9 +89,7 @@ public class ReadinessService {
         }
         if (capacityStoreProvider != null) {
             com.lightai.runtime.capacity.CapacityStore store = capacityStoreProvider.getIfAvailable();
-            if (store instanceof com.lightai.runtime.capacity.InMemoryCapacityStore imc) {
-                return imc.isAvailable();
-            }
+            return store != null && store.health();
         }
         return true;
     }

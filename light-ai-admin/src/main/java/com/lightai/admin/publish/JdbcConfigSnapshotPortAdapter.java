@@ -3,6 +3,8 @@ package com.lightai.admin.publish;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.lightai.client.json.ProtocolJson;
 import com.lightai.runtime.ports.ConfigSnapshotPort;
+import com.lightai.runtime.capacity.CapacityStore;
+import com.lightai.runtime.circuit.CircuitPolicy;
 import com.lightai.storage.dialect.AbstractJdbcRepository;
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -118,7 +120,102 @@ public final class JdbcConfigSnapshotPortAdapter extends AbstractJdbcRepository 
         RawSnapshot raw = latest.get();
         Map<String, Object> content = parseContent(raw.contentJson);
         List<AliasView> aliases = parseAliases(content);
-        return new ActiveSnapshot(raw.snapshotNo, aliases);
+        return new ActiveSnapshot(raw.snapshotNo, aliases, parseCapacityLimits(content),
+                parseCircuitPolicies(content, raw.snapshotNo), parseQueuePolicies(content));
+    }
+
+    Map<String, ConfigSnapshotPort.QueuePolicy> parseQueuePolicies(Map<String, Object> content) {
+        Map<String, ConfigSnapshotPort.QueuePolicy> result = new LinkedHashMap<>();
+        Object policiesObj = content.get("limit_policies");
+        if (!(policiesObj instanceof List<?> policies)) return Map.of();
+        for (Object item : policies) {
+            if (!(item instanceof Map<?, ?> raw)) continue;
+            @SuppressWarnings("unchecked") Map<String, Object> policy = (Map<String, Object>) raw;
+            if (!Boolean.TRUE.equals(toBoolOrNull(policy.get("enabled")))) continue;
+            String scopeType = toString(policy.get("scope_type"));
+            String scopeId = toString(policy.get("scope_id"));
+            if (scopeType == null || scopeId == null) continue;
+            String overflow = toString(policy.get("overflow_strategy"));
+            result.put(scopeType.toUpperCase(java.util.Locale.ROOT) + ":" + scopeId,
+                    new ConfigSnapshotPort.QueuePolicy(overflow,
+                            Math.max(0, toLong(policy.get("queue_timeout_ms"))),
+                            Math.max(0, toInt(policy.get("queue_max_size")))));
+        }
+        return Map.copyOf(result);
+    }
+
+    Map<String, CircuitPolicy> parseCircuitPolicies(Map<String, Object> content, long snapshotNo) {
+        Map<String, CircuitPolicy> result = new LinkedHashMap<>();
+        Object policiesObj = content.get("reliability_policies");
+        if (!(policiesObj instanceof List<?> policies)) return Map.of();
+        for (Object item : policies) {
+            if (!(item instanceof Map<?, ?> raw)) continue;
+            @SuppressWarnings("unchecked") Map<String, Object> policy = (Map<String, Object>) raw;
+            if (!Boolean.TRUE.equals(toBoolOrNull(policy.get("enabled")))) continue;
+            String aliasId = toString(policy.get("alias_id"));
+            if (aliasId == null) continue;
+            result.put(aliasId, new CircuitPolicy(
+                    toUuidOrNull(policy.get("id")), snapshotNo,
+                    positiveOrDefault(toIntOrNull(policy.get("circuit_window_seconds")), 60),
+                    positiveOrDefault(toIntOrNull(policy.get("circuit_min_requests")), 20),
+                    decimalOrDefault(policy.get("circuit_failure_rate"), 0.5),
+                    positiveOrDefault(toIntOrNull(policy.get("circuit_open_seconds")), 30),
+                    positiveOrDefault(toIntOrNull(policy.get("circuit_half_open_probes")), 3),
+                    positiveOrDefault(toIntOrNull(policy.get("circuit_half_open_successes")), 2)));
+        }
+        return Map.copyOf(result);
+    }
+
+    Map<String, CapacityStore.ScopeLimit> parseCapacityLimits(Map<String, Object> content) {
+        Map<String, CapacityStore.ScopeLimit> result = new LinkedHashMap<>();
+        Object policiesObj = content.get("limit_policies");
+        if (policiesObj instanceof List<?> policies) {
+            for (Object item : policies) {
+                if (!(item instanceof Map<?, ?> raw)) continue;
+                @SuppressWarnings("unchecked") Map<String, Object> policy = (Map<String, Object>) raw;
+                if (!Boolean.TRUE.equals(toBoolOrNull(policy.get("enabled")))) continue;
+                String scopeType = toString(policy.get("scope_type"));
+                String scopeId = toString(policy.get("scope_id"));
+                if (scopeType == null || scopeId == null) continue;
+                result.put(scopeType.toUpperCase(java.util.Locale.ROOT) + ":" + scopeId,
+                        readLimit(policy));
+            }
+        }
+
+        Object credentialsObj = content.get("credentials");
+        if (credentialsObj instanceof List<?> credentials) {
+            for (Object item : credentials) {
+                if (!(item instanceof Map<?, ?> raw)) continue;
+                @SuppressWarnings("unchecked") Map<String, Object> credential = (Map<String, Object>) raw;
+                String credentialId = toString(credential.get("id"));
+                if (credentialId == null) continue;
+                String key = "CREDENTIAL:" + credentialId;
+                result.put(key, stricter(result.get(key), readLimit(credential)));
+            }
+        }
+        return Map.copyOf(result);
+    }
+
+    private static CapacityStore.ScopeLimit readLimit(Map<String, Object> row) {
+        return new CapacityStore.ScopeLimit(
+                toLongOrNull(row.get("rpm_limit")),
+                toLongOrNull(row.get("tpm_limit")),
+                toIntOrNull(row.get("concurrent_limit")));
+    }
+
+    private static CapacityStore.ScopeLimit stricter(CapacityStore.ScopeLimit left,
+                                                      CapacityStore.ScopeLimit right) {
+        if (left == null) return right;
+        return new CapacityStore.ScopeLimit(
+                min(left.rpmLimit(), right.rpmLimit()),
+                min(left.tpmLimit(), right.tpmLimit()),
+                min(left.concurrentLimit(), right.concurrentLimit()));
+    }
+
+    private static <T extends Number & Comparable<T>> T min(T left, T right) {
+        if (left == null) return right;
+        if (right == null) return left;
+        return left.compareTo(right) <= 0 ? left : right;
     }
 
     private Optional<RawSnapshot> loadLatestActive(Connection connection) throws SQLException {
@@ -296,6 +393,21 @@ public final class JdbcConfigSnapshotPortAdapter extends AbstractJdbcRepository 
         if (value == null) return null;
         if (value instanceof UUID uuid) return uuid.toString();
         return value.toString();
+    }
+
+    private static UUID toUuidOrNull(Object value) {
+        String text = toString(value);
+        if (text == null || text.isBlank()) return null;
+        try { return UUID.fromString(text); } catch (IllegalArgumentException ignored) { return null; }
+    }
+
+    private static int positiveOrDefault(Integer value, int fallback) {
+        return value != null && value > 0 ? value : fallback;
+    }
+
+    private static double decimalOrDefault(Object value, double fallback) {
+        BigDecimal decimal = toBigDecimalOrZero(value);
+        return decimal.signum() > 0 ? decimal.doubleValue() : fallback;
     }
 
     private static long toLong(Object value) {

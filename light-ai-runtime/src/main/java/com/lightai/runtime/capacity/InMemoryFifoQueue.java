@@ -20,7 +20,6 @@ public class InMemoryFifoQueue implements QueueService {
 
     /** 入队上限（部署/策略合成，最小允许值）。 */
     private final int maxQueueSize;
-    private final CapacityStore capacityStore;
     private final Map<UUID, Deque<Waiting>> queues = new ConcurrentHashMap<>();
     private final Map<UUID, Waiting> byTicket = new ConcurrentHashMap<>();
 
@@ -30,7 +29,6 @@ public class InMemoryFifoQueue implements QueueService {
 
     public InMemoryFifoQueue(int maxQueueSize, CapacityStore capacityStore) {
         this.maxQueueSize = maxQueueSize;
-        this.capacityStore = capacityStore;
     }
 
     public void registerReserveFactory(UUID aliasId,
@@ -64,7 +62,7 @@ public class InMemoryFifoQueue implements QueueService {
         }
         synchronized (queue) {
             // 先清理超时与取消项
-            queue.removeIf(waiting -> waiting.timedOut(now) || waiting.cancelled);
+            cleanup(queue, now);
             Waiting head = queue.peekFirst();
             if (head == null) {
                 return new AcquireResult(null, null);
@@ -81,6 +79,7 @@ public class InMemoryFifoQueue implements QueueService {
             try {
                 CapacityStore.ReservationHandle handle = factory.get();
                 queue.pollFirst();
+                byTicket.remove(head.ticketId, head);
                 return new AcquireResult(head.ticketId, handle);
             } catch (LightAiException e) {
                 // 仍无容量：保持队首等待
@@ -96,6 +95,12 @@ public class InMemoryFifoQueue implements QueueService {
             return false;
         }
         waiting.cancelled = true;
+        Deque<Waiting> queue = queues.get(waiting.aliasId);
+        if (queue != null) {
+            synchronized (queue) {
+                queue.remove(waiting);
+            }
+        }
         return true;
     }
 
@@ -103,6 +108,37 @@ public class InMemoryFifoQueue implements QueueService {
     public long queueLength(UUID aliasId) {
         Deque<Waiting> queue = queues.get(aliasId);
         return queue == null ? 0 : queue.size();
+    }
+
+    @Override
+    public boolean isHead(UUID ticketId, Instant now) {
+        Waiting waiting = byTicket.get(ticketId);
+        if (waiting == null || waiting.cancelled || waiting.timedOut(now)) return false;
+        Deque<Waiting> queue = queues.get(waiting.aliasId);
+        if (queue == null) return false;
+        synchronized (queue) {
+            cleanup(queue, now);
+            return queue.peekFirst() == waiting;
+        }
+    }
+
+    @Override
+    public boolean complete(UUID ticketId) {
+        Waiting waiting = byTicket.remove(ticketId);
+        if (waiting == null) return false;
+        Deque<Waiting> queue = queues.get(waiting.aliasId);
+        if (queue == null) return false;
+        synchronized (queue) {
+            return queue.remove(waiting);
+        }
+    }
+
+    private void cleanup(Deque<Waiting> queue, Instant now) {
+        queue.removeIf(item -> {
+            boolean remove = item.cancelled || item.timedOut(now);
+            if (remove) byTicket.remove(item.ticketId, item);
+            return remove;
+        });
     }
 
     /** 等待项：deadline 由读取时判定（TIMEOUT 状态在查询时收敛）。 */
@@ -124,7 +160,7 @@ public class InMemoryFifoQueue implements QueueService {
         }
 
         boolean timedOut(Instant now) {
-            return now.toEpochMilli() > deadlineEpochMilli;
+            return now.toEpochMilli() >= deadlineEpochMilli;
         }
     }
 }

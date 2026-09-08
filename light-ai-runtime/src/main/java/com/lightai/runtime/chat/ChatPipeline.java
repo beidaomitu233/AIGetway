@@ -16,6 +16,12 @@ import com.lightai.runtime.ports.ConfigSnapshotPort.AliasView;
 import com.lightai.runtime.ports.ConfigSnapshotPort.CandidateView;
 import com.lightai.runtime.ports.CredentialSecretPort;
 import com.lightai.runtime.ports.RoutingPort;
+import com.lightai.runtime.capacity.CapacityStore.CapacityLimitedException;
+import com.lightai.runtime.capacity.QueueService;
+import com.lightai.runtime.circuit.CircuitKey;
+import com.lightai.runtime.circuit.CircuitPolicy;
+import com.lightai.runtime.circuit.CircuitSnapshot;
+import com.lightai.runtime.circuit.CircuitStateStore;
 import com.lightai.runtime.settlement.PriceSnapshot;
 import com.lightai.runtime.settlement.UsageSettlement;
 import com.lightai.runtime.trace.TraceStore;
@@ -26,6 +32,7 @@ import com.lightai.spi.provider.ProviderChatResponse;
 import com.lightai.spi.provider.ProviderStreamChunk;
 import com.lightai.spi.provider.ProviderTransportException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -33,6 +40,10 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
 
 /**
  * 统一调用管线（BE-027/028/029，4.7.1.3/4.7.1.4/4.7.1.5）：
@@ -49,6 +60,8 @@ public class ChatPipeline {
     private final AccessTokenPort.RuntimeConfigPort runtimeConfigPort;
     private final RoutingPort routingPort;
     private final CapacityPort capacityPort;
+    private final CircuitStateStore circuitStateStore;
+    private final QueueService queueService;
     private final CredentialSecretPort credentialPort;
     private final AdapterRegistryPort adapterRegistry;
     private final TraceStore traceStore;
@@ -59,10 +72,31 @@ public class ChatPipeline {
                         RoutingPort routingPort, CapacityPort capacityPort, CredentialSecretPort credentialPort,
                         AdapterRegistryPort adapterRegistry, TraceStore traceStore,
                         ReliabilityBudgets.Port reliabilityPort, long totalTimeoutMs) {
+        this(snapshotPort, runtimeConfigPort, routingPort, capacityPort, null, credentialPort,
+                null, adapterRegistry, traceStore, reliabilityPort, totalTimeoutMs);
+    }
+
+    public ChatPipeline(ConfigSnapshotPort snapshotPort, AccessTokenPort.RuntimeConfigPort runtimeConfigPort,
+                        RoutingPort routingPort, CapacityPort capacityPort,
+                        CircuitStateStore circuitStateStore, CredentialSecretPort credentialPort,
+                        AdapterRegistryPort adapterRegistry, TraceStore traceStore,
+                        ReliabilityBudgets.Port reliabilityPort, long totalTimeoutMs) {
+        this(snapshotPort, runtimeConfigPort, routingPort, capacityPort, circuitStateStore,
+                credentialPort, null, adapterRegistry, traceStore, reliabilityPort, totalTimeoutMs);
+    }
+
+    public ChatPipeline(ConfigSnapshotPort snapshotPort, AccessTokenPort.RuntimeConfigPort runtimeConfigPort,
+                        RoutingPort routingPort, CapacityPort capacityPort,
+                        CircuitStateStore circuitStateStore, CredentialSecretPort credentialPort,
+                        QueueService queueService, AdapterRegistryPort adapterRegistry,
+                        TraceStore traceStore, ReliabilityBudgets.Port reliabilityPort,
+                        long totalTimeoutMs) {
         this.snapshotPort = snapshotPort;
         this.runtimeConfigPort = runtimeConfigPort;
         this.routingPort = routingPort;
         this.capacityPort = capacityPort;
+        this.circuitStateStore = circuitStateStore;
+        this.queueService = queueService;
         this.credentialPort = credentialPort;
         this.adapterRegistry = adapterRegistry;
         this.traceStore = traceStore;
@@ -116,13 +150,15 @@ public class ChatPipeline {
             }
             CandidateView candidate = candidates.get(Math.min(candidateIndex, candidates.size() - 1));
             CapacityPort.Reservation reservation = null;
+            CircuitAttempt circuitAttempt = null;
             String attemptId = null;
             try {
                 CredentialSecretPort.ResolvedCredential credential =
                         credentialPort.resolve(candidate.poolId(), credentialIndex);
                 long estimatedInput = estimatedInput(requestChars(parsed.request()));
-                reservation = capacityPort.reserve(parsed.alias(), candidate.modelId(),
-                        credential.credentialId(), estimatedInput);
+                reservation = reserveCapacity(parsed, candidate, credential, estimatedInput,
+                        traceId(handle), signal, started);
+                circuitAttempt = acquireCircuit(parsed, candidate, credential);
                 attemptId = traceStore.startAttempt(traceId(handle), candidate.candidateId(),
                         candidate.providerType(), candidate.modelId());
                 ProviderAdapter adapter = requireAdapter(candidate);
@@ -132,8 +168,11 @@ public class ChatPipeline {
                 try {
                     response = adapter.chat(callContext);
                 } catch (ProviderTransportException te) {
+                    completeCircuit(circuitAttempt, false,
+                            te.failure().httpStatus() != null && te.failure().httpStatus() == 429);
                     throw asLightAi(te, adapter);
                 }
+                completeCircuit(circuitAttempt, true, false);
 
                 long estimatedOut = estimatedOutput(candidate);
                 UsageSettlement.AttemptSettlement settlement = UsageSettlement.settle(
@@ -164,6 +203,7 @@ public class ChatPipeline {
                 if (reservation != null) {
                     capacityPort.release(reservation.reservationId());
                 }
+                abandonCircuit(circuitAttempt);
                 log.log(System.Logger.Level.INFO,
                         "尝试失败 trace_id={0} attempt_id={1} code={2} candidate={3} credential_index={4}"
                                 + " 预算 retries={5}/{6} failovers={7}/{8} fallbacks={9}/{10}",
@@ -221,13 +261,15 @@ public class ChatPipeline {
             }
             CandidateView candidate = candidates.get(Math.min(candidateIndex, candidates.size() - 1));
             CapacityPort.Reservation reservation = null;
+            CircuitAttempt circuitAttempt = null;
             String attemptId = null;
             try {
                 CredentialSecretPort.ResolvedCredential credential =
                         credentialPort.resolve(candidate.poolId(), credentialIndex);
                 long estimatedInput = estimatedInput(requestChars(parsed.request()));
-                reservation = capacityPort.reserve(parsed.alias(), candidate.modelId(),
-                        credential.credentialId(), estimatedInput);
+                reservation = reserveCapacity(parsed, candidate, credential, estimatedInput,
+                        traceId(handle), signal, started);
+                circuitAttempt = acquireCircuit(parsed, candidate, credential);
                 attemptId = traceStore.startAttempt(traceId(handle), candidate.candidateId(),
                         candidate.providerType(), candidate.modelId());
                 ProviderAdapter adapter = requireAdapter(candidate);
@@ -239,7 +281,7 @@ public class ChatPipeline {
                         && parsed.request().streamOptions().includeUsage();
                 StreamAccumulator accumulator = new StreamAccumulator(handle, parsed.alias(), candidate,
                         adapterRequest, includeUsage, listener, sequence, signal, reservation, attemptId,
-                        estimatedInput, estimatedOutput(candidate));
+                        estimatedInput, estimatedOutput(candidate), circuitAttempt);
                 adapter.streamChat(callContext).subscribe(accumulator.subscriber(adapter));
                 return;
             } catch (LightAiException e) {
@@ -250,6 +292,7 @@ public class ChatPipeline {
                 if (reservation != null) {
                     capacityPort.release(reservation.reservationId());
                 }
+                abandonCircuit(circuitAttempt);
                 if (traceStore.committed(traceId(handle))) {
                     throw e;
                 }
@@ -294,14 +337,16 @@ public class ChatPipeline {
         private boolean finishEmitted;
         private final long estimatedInputTokens;
         private final long estimatedOutputTokens;
+        private final CircuitAttempt circuitAttempt;
         private Long capturedInputTokens;
         private Long capturedOutputTokens;
 
         private StreamAccumulator(TraceStore.TraceHandle handle, String alias, CandidateView candidate,
                                   ProviderChatRequest adapterRequest, boolean includeUsage,
-                                  StreamListener listener, AtomicSequencer sequence, CancellationSignal signal,
-                                  CapacityPort.Reservation reservation, String attemptId,
-                                  long estimatedInputTokens, long estimatedOutputTokens) {
+                                   StreamListener listener, AtomicSequencer sequence, CancellationSignal signal,
+                                   CapacityPort.Reservation reservation, String attemptId,
+                                   long estimatedInputTokens, long estimatedOutputTokens,
+                                   CircuitAttempt circuitAttempt) {
             this.handle = handle;
             this.alias = alias;
             this.candidate = candidate;
@@ -314,6 +359,7 @@ public class ChatPipeline {
             this.attemptId = attemptId;
             this.estimatedInputTokens = estimatedInputTokens;
             this.estimatedOutputTokens = estimatedOutputTokens;
+            this.circuitAttempt = circuitAttempt;
         }
 
         java.util.concurrent.Flow.Subscriber<ProviderStreamChunk> subscriber(ProviderAdapter adapter) {
@@ -351,6 +397,8 @@ public class ChatPipeline {
                     if (traceStore.committed(traceId(handle))) {
                         // 提交后失败：STREAM_INTERRUPTED，错误事件后关闭，无 finish 无 DONE
                         LightAiException error = asLightAi(throwable, adapter);
+                        completeCircuit(circuitAttempt, false,
+                                error.code() == ErrorCode.PROVIDER_RATE_LIMITED);
                         traceStore.finishAttempt(traceId(handle), attemptId, "FAILED",
                                 error.code().name(), 0, 0, "ESTIMATED", null, null, false);
                         signal.releaseOnce(() -> capacityPort.release(reservation.reservationId()));
@@ -360,7 +408,10 @@ public class ChatPipeline {
                         return;
                     }
                     // 提交前失败：抛回管线恢复循环
-                    throw asLightAi(throwable, adapter);
+                    LightAiException error = asLightAi(throwable, adapter);
+                    completeCircuit(circuitAttempt, false,
+                            error.code() == ErrorCode.PROVIDER_RATE_LIMITED);
+                    throw error;
                 }
 
                 @Override
@@ -386,6 +437,7 @@ public class ChatPipeline {
                             settlement.cost().currency(), settlement.cost().estimated());
                     signal.releaseOnce(() -> capacityPort.settle(reservation.reservationId(),
                             settlement.usage().promptTokens(), settlement.usage().completionTokens()));
+                    completeCircuit(circuitAttempt, true, false);
                     traceStore.finalizeTrace(traceId(handle), "SUCCEEDED");
                     listener.onComplete();
                 }
@@ -466,16 +518,18 @@ public class ChatPipeline {
                     .orElseThrow(() -> new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
                             "model 缺省且未配置默认 Alias", "model"));
         }
-        return new ParsedRequest(alias, context.request());
+        String resolvedAlias = alias;
+        ConfigSnapshotPort.ActiveSnapshot snapshot = snapshotPort.active();
+        AliasView aliasView = snapshot.alias(resolvedAlias)
+                .orElseThrow(() -> ConfigSnapshotPort.aliasNotFound(resolvedAlias));
+        if (!aliasView.enabled()) {
+            throw ConfigSnapshotPort.aliasDisabled(resolvedAlias);
+        }
+        return new ParsedRequest(resolvedAlias, context.request(), snapshot, aliasView);
     }
 
     private List<CandidateView> route(ParsedRequest parsed) {
-        ConfigSnapshotPort.ActiveSnapshot snapshot = snapshotPort.active();
-        AliasView aliasView = snapshot.alias(parsed.alias())
-                .orElseThrow(() -> ConfigSnapshotPort.aliasNotFound(parsed.alias()));
-        if (!aliasView.enabled()) {
-            throw ConfigSnapshotPort.aliasDisabled(parsed.alias());
-        }
+        AliasView aliasView = parsed.aliasView();
         if (aliasView.enabledCandidates().isEmpty()) {
             throw new LightAiException(ErrorCode.MODEL_CAPABILITY_NOT_SUPPORTED, "Alias 没有启用候选");
         }
@@ -485,6 +539,138 @@ public class ChatPipeline {
             throw result.rejection();
         }
         return result.candidates();
+    }
+
+    private CapacityPort.Reservation reserveCapacity(
+            ParsedRequest parsed, CandidateView candidate,
+            CredentialSecretPort.ResolvedCredential credential, long estimatedInput,
+            String traceId, CancellationSignal signal, long started) {
+        long maxTokens = resolveMaxTokens(candidate, parsed.request(), estimatedInput);
+        try {
+            return reserveOnce(parsed, candidate, credential, estimatedInput, maxTokens);
+        } catch (CapacityLimitedException limited) {
+            String scopeId = capacityScopeId(limited.scopeType(), parsed, candidate, credential);
+            ConfigSnapshotPort.QueuePolicy policy = parsed.snapshot()
+                    .queuePolicy(limited.scopeType(), scopeId);
+            if (queueService == null || !policy.queues()) throw limited;
+            return awaitCapacity(parsed, candidate, credential, estimatedInput, maxTokens,
+                    traceId, signal, started, policy);
+        }
+    }
+
+    private CapacityPort.Reservation reserveOnce(
+            ParsedRequest parsed, CandidateView candidate,
+            CredentialSecretPort.ResolvedCredential credential, long estimatedInput, long maxTokens) {
+        return capacityPort.reserve(parsed.aliasView().aliasId(), candidate.modelPk(),
+                credential.credentialId(), estimatedInput, maxTokens,
+                parsed.snapshot().capacityLimit("MODEL_ALIAS", parsed.aliasView().aliasId()),
+                parsed.snapshot().capacityLimit("PROVIDER_MODEL", candidate.modelPk()),
+                parsed.snapshot().capacityLimit("CREDENTIAL", credential.credentialId()));
+    }
+
+    private CapacityPort.Reservation awaitCapacity(
+            ParsedRequest parsed, CandidateView candidate,
+            CredentialSecretPort.ResolvedCredential credential, long estimatedInput, long maxTokens,
+            String traceId, CancellationSignal signal, long started,
+            ConfigSnapshotPort.QueuePolicy policy) {
+        UUID aliasId = uuid(parsed.aliasView().aliasId());
+        if (aliasId == null) {
+            throw new LightAiException(ErrorCode.CAPACITY_LIMITED,
+                    "Alias 标识无效，无法进入共享队列");
+        }
+        long deadline = Math.min(started + totalTimeoutMs,
+                System.currentTimeMillis() + policy.timeoutMs());
+        UUID traceUuid = uuid(traceId);
+        if (traceUuid == null) {
+            traceUuid = UUID.nameUUIDFromBytes(traceId.getBytes(StandardCharsets.UTF_8));
+        }
+        QueueService.QueueTicket ticket = queueService.enqueue(
+                aliasId, traceUuid, deadline, Instant.now(), policy.maxSize());
+        boolean completed = false;
+        try {
+            while (System.currentTimeMillis() < deadline) {
+                if (signal.cancelled()) {
+                    throw new LightAiException(ErrorCode.CLIENT_CANCELLED, "排队等待已取消");
+                }
+                if (Thread.currentThread().isInterrupted()) {
+                    Thread.currentThread().interrupt();
+                    throw new LightAiException(ErrorCode.CLIENT_CANCELLED, "排队等待线程已中断");
+                }
+                if (queueService.isHead(ticket.ticketId(), Instant.now())) {
+                    try {
+                        CapacityPort.Reservation reservation = reserveOnce(
+                                parsed, candidate, credential, estimatedInput, maxTokens);
+                        queueService.complete(ticket.ticketId());
+                        completed = true;
+                        return reservation;
+                    } catch (CapacityLimitedException stillLimited) {
+                        // 容量仍不足，保持队首并短暂退避。
+                    }
+                }
+                LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));
+            }
+            throw new LightAiException(ErrorCode.QUEUE_TIMEOUT, "容量排队等待超时");
+        } finally {
+            if (!completed) queueService.cancel(ticket.ticketId());
+        }
+    }
+
+    private static String capacityScopeId(
+            String scopeType, ParsedRequest parsed, CandidateView candidate,
+            CredentialSecretPort.ResolvedCredential credential) {
+        if (scopeType == null) return null;
+        return switch (scopeType.toUpperCase(java.util.Locale.ROOT)) {
+            case "ALIAS", "MODEL_ALIAS" -> parsed.aliasView().aliasId();
+            case "PROVIDER_MODEL" -> candidate.modelPk();
+            case "CREDENTIAL" -> credential.credentialId();
+            default -> null;
+        };
+    }
+
+    private CircuitAttempt acquireCircuit(ParsedRequest parsed, CandidateView candidate,
+                                          CredentialSecretPort.ResolvedCredential credential) {
+        if (circuitStateStore == null) return null;
+        CircuitKey key = new CircuitKey(uuid(candidate.modelPk()), uuid(credential.credentialId()));
+        if (key.providerModelId() == null || key.credentialId() == null) return null;
+        CircuitPolicy policy = parsed.snapshot().circuitPolicy(parsed.aliasView().aliasId());
+        CircuitSnapshot snapshot = circuitStateStore.snapshot(key, policy, Instant.now());
+        if (CircuitSnapshot.STATE_OPEN.equals(snapshot.state())) {
+            throw new LightAiException(ErrorCode.CIRCUIT_OPEN,
+                    "当前 Provider Model 与 Credential 路径已熔断");
+        }
+        CircuitStateStore.ProbeSlot slot = null;
+        if (CircuitSnapshot.STATE_HALF_OPEN.equals(snapshot.state())) {
+            slot = circuitStateStore.tryAcquireProbe(key, policy, Instant.now())
+                    .orElseThrow(() -> new LightAiException(
+                            ErrorCode.CIRCUIT_OPEN, "熔断探测名额已用完"));
+        }
+        return new CircuitAttempt(key, policy, slot, new AtomicBoolean());
+    }
+
+    private void completeCircuit(CircuitAttempt attempt, boolean success, boolean throttled) {
+        if (attempt == null || !attempt.completed().compareAndSet(false, true)) return;
+        try {
+            circuitStateStore.recordResult(attempt.key(), attempt.policy(), success, throttled, Instant.now());
+        } finally {
+            if (attempt.slot() != null) {
+                circuitStateStore.releaseProbe(attempt.slot(), attempt.key(), success, Instant.now());
+            }
+        }
+    }
+
+    private void abandonCircuit(CircuitAttempt attempt) {
+        if (attempt == null || !attempt.completed().compareAndSet(false, true)) return;
+        if (attempt.slot() != null) {
+            circuitStateStore.releaseProbe(attempt.slot(), attempt.key(), false, Instant.now());
+        }
+    }
+
+    private static UUID uuid(String value) {
+        try {
+            return value == null ? null : UUID.fromString(value);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 
     private ProviderAdapter requireAdapter(CandidateView candidate) {
@@ -664,7 +850,13 @@ public class ChatPipeline {
         FAIL
     }
 
-    private record ParsedRequest(String alias, UnifiedChatRequest request) {
+    private record ParsedRequest(String alias, UnifiedChatRequest request,
+                                 ConfigSnapshotPort.ActiveSnapshot snapshot,
+                                 AliasView aliasView) {
+    }
+
+    private record CircuitAttempt(CircuitKey key, CircuitPolicy policy,
+                                  CircuitStateStore.ProbeSlot slot, AtomicBoolean completed) {
     }
 
     /** sequence 计数器：role 块 0 起连续递增。 */

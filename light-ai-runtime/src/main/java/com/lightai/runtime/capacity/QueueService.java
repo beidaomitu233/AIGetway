@@ -14,6 +14,11 @@ public interface QueueService {
     /** 容量不足时入队；队列满抛 QUEUE_FULL。 */
     QueueTicket enqueue(UUID aliasId, UUID traceId, long deadlineEpochMilli, Instant now);
 
+    default QueueTicket enqueue(UUID aliasId, UUID traceId, long deadlineEpochMilli,
+                                Instant now, int maxQueueSize) {
+        return enqueue(aliasId, traceId, deadlineEpochMilli, now);
+    }
+
     /** 取得队首容量；到达 deadline 未取得返回 empty（调用方映射 QUEUE_TIMEOUT）。 */
     AcquireResult tryAcquire(UUID aliasId, Instant now);
 
@@ -22,6 +27,16 @@ public interface QueueService {
 
     /** 队列长度（管理查询只读）。 */
     long queueLength(UUID aliasId);
+
+    /** 当前 ticket 是否为该 Alias 有效队首。 */
+    default boolean isHead(UUID ticketId, Instant now) {
+        return false;
+    }
+
+    /** 预占成功后移除队首 ticket，重复调用幂等。 */
+    default boolean complete(UUID ticketId) {
+        return cancel(ticketId);
+    }
 
     record QueueTicket(UUID ticketId, UUID aliasId, UUID traceId,
                        Instant enqueuedAt, long deadlineEpochMilli) {

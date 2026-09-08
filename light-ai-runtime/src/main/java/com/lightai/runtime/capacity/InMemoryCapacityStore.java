@@ -19,11 +19,14 @@ public class InMemoryCapacityStore implements CapacityStore {
 
     /** 每层限制（null 表示不限），来自快照策略与 Credential 限额的最小值合成。 */
     public record ScopeLimit(Long rpmLimit, Long tpmLimit, Integer concurrentLimit) {
+        CapacityStore.ScopeLimit shared() {
+            return new CapacityStore.ScopeLimit(rpmLimit, tpmLimit, concurrentLimit);
+        }
     }
 
     private static final long WINDOW_SECONDS = 60;
 
-    private final Map<String, ScopeLimit> limits = new ConcurrentHashMap<>();
+    private final Map<String, CapacityStore.ScopeLimit> limits = new ConcurrentHashMap<>();
     // key: scopeType:scopeId:windowStart:metric → counter
     private final Map<String, AtomicLong> counters = new ConcurrentHashMap<>();
     private final Map<UUID, Reservation> reservations = new ConcurrentHashMap<>();
@@ -45,7 +48,7 @@ public class InMemoryCapacityStore implements CapacityStore {
     }
 
     public void registerLimit(String scopeType, UUID scopeId, ScopeLimit limit) {
-        limits.put(scopeType + ":" + scopeId, limit);
+        limits.put(scopeType + ":" + scopeId, limit.shared());
     }
 
     public void clearLimits() {
@@ -72,13 +75,16 @@ public class InMemoryCapacityStore implements CapacityStore {
     }
 
     @Override
-    public ReservationHandle reserve(ReserveRequest request) {
+    public synchronized ReservationHandle reserve(ReserveRequest request) {
         checkAvailable();
         long window = windowStart(Instant.now());
         UUID reservationId = UUID.randomUUID();
         String[] scopeTypes = {"alias", "provider_model", "credential"};
         UUID[] scopeIds = {request.aliasId(), request.providerModelId(), request.credentialId()};
-        long tokens = Math.max(request.estimatedTokens(), 0);
+        CapacityStore.ScopeLimit[] requestLimits = {
+                request.aliasLimit(), request.providerModelLimit(), request.credentialLimit()
+        };
+        long tokens = Math.max(request.estimatedTokens(), 0) + Math.max(request.maxTokens(), 0);
 
         List<CounterDelta> applied = new ArrayList<>();
         List<CounterDelta> rpmDeltas = new ArrayList<>();
@@ -86,7 +92,8 @@ public class InMemoryCapacityStore implements CapacityStore {
         List<CounterDelta> concurrentDeltas = new ArrayList<>();
         try {
             for (int i = 0; i < scopeTypes.length; i++) {
-                ScopeLimit limit = limits.get(scopeTypes[i] + ":" + scopeIds[i]);
+                CapacityStore.ScopeLimit limit = requestLimits[i] != null
+                        ? requestLimits[i] : limits.get(scopeTypes[i] + ":" + scopeIds[i]);
                 if (limit == null) {
                     continue;
                 }
@@ -96,7 +103,7 @@ public class InMemoryCapacityStore implements CapacityStore {
                     applied.add(new CounterDelta(counter, -1));
                     rpmDeltas.add(new CounterDelta(counter, -1));
                     if (updated > limit.rpmLimit()) {
-                        throw new CapacityLimitedException("RPM 不足：" + scopeTypes[i]);
+                        throw new CapacityLimitedException(scopeTypes[i], "RPM");
                     }
                 }
                 if (limit.tpmLimit() != null) {
@@ -105,7 +112,7 @@ public class InMemoryCapacityStore implements CapacityStore {
                     applied.add(new CounterDelta(counter, -tokens));
                     tpmDeltas.add(new CounterDelta(counter, -tokens));
                     if (updated > limit.tpmLimit()) {
-                        throw new CapacityLimitedException("TPM 不足：" + scopeTypes[i]);
+                        throw new CapacityLimitedException(scopeTypes[i], "TPM");
                     }
                 }
                 if (limit.concurrentLimit() != null) {
@@ -114,7 +121,7 @@ public class InMemoryCapacityStore implements CapacityStore {
                     applied.add(new CounterDelta(counter, -1));
                     concurrentDeltas.add(new CounterDelta(counter, -1));
                     if (updated > limit.concurrentLimit()) {
-                        throw new CapacityLimitedException("并发不足：" + scopeTypes[i]);
+                        throw new CapacityLimitedException(scopeTypes[i], "CONCURRENT");
                     }
                 }
             }
@@ -129,7 +136,7 @@ public class InMemoryCapacityStore implements CapacityStore {
     }
 
     @Override
-    public void settle(UUID reservationId, long actualTokens, boolean requestSent) {
+    public synchronized void settle(UUID reservationId, long actualTokens, boolean requestSent) {
         checkAvailable();
         Reservation reservation = reservations.get(reservationId);
         if (reservation == null || !reservation.markTerminal()) {
@@ -152,7 +159,7 @@ public class InMemoryCapacityStore implements CapacityStore {
     }
 
     @Override
-    public void release(UUID reservationId) {
+    public synchronized void release(UUID reservationId) {
         checkAvailable();
         Reservation reservation = reservations.get(reservationId);
         if (reservation == null || !reservation.markTerminal()) {
@@ -169,7 +176,7 @@ public class InMemoryCapacityStore implements CapacityStore {
     }
 
     @Override
-    public UsageSnapshot usage(String scopeType, UUID scopeId) {
+    public synchronized UsageSnapshot usage(String scopeType, UUID scopeId) {
         checkAvailable();
         long window = windowStart(Instant.now());
         return new UsageSnapshot(window,
@@ -177,6 +184,11 @@ public class InMemoryCapacityStore implements CapacityStore {
                 counter(scopeType, scopeId, window, "tpm").get(),
                 0,
                 counter(scopeType, scopeId, window, "concurrent").get());
+    }
+
+    @Override
+    public boolean health() {
+        return isAvailable();
     }
 
     private void undoConcurrent(Reservation reservation) {

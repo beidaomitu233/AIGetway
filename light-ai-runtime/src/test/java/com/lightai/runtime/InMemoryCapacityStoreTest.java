@@ -31,7 +31,7 @@ class InMemoryCapacityStoreTest {
     }
 
     private CapacityStore.ReserveRequest request(long tokens) {
-        return new CapacityStore.ReserveRequest(aliasId, modelId, credentialId, tokens, tokens);
+        return new CapacityStore.ReserveRequest(aliasId, modelId, credentialId, tokens, 0);
     }
 
     @Test
@@ -41,6 +41,14 @@ class InMemoryCapacityStoreTest {
         assertThat(store.usage("alias", aliasId).rpmReserved()).isEqualTo(1);
         assertThat(store.usage("provider_model", modelId).tpmReserved()).isEqualTo(100);
         assertThat(store.usage("credential", credentialId).concurrentActive()).isEqualTo(1);
+    }
+
+    @Test
+    void tpmReservationIncludesEffectiveMaxTokens() {
+        var handle = store.reserve(new CapacityStore.ReserveRequest(
+                aliasId, modelId, credentialId, 100, 50));
+        assertThat(handle.reservedTokens()).isEqualTo(150);
+        assertThat(store.usage("alias", aliasId).tpmReserved()).isEqualTo(150);
     }
 
     @Test

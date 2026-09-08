@@ -15,6 +15,7 @@
     <module>light-ai-client</module>
     <module>light-ai-spi</module>
     <module>light-ai-storage-jdbc</module>
+    <module>light-ai-storage-redis</module>
     <module>light-ai-runtime</module>
     <module>light-ai-provider-common</module>
     <module>light-ai-provider-openai</module>
@@ -57,6 +58,11 @@
       <dependency>
         <groupId>com.lightai</groupId>
         <artifactId>light-ai-storage-jdbc</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.lightai</groupId>
+        <artifactId>light-ai-storage-redis</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>

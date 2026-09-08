@@ -33,6 +33,10 @@
     </dependency>
     <dependency>
       <groupId>com.lightai</groupId>
+      <artifactId>light-ai-storage-redis</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.lightai</groupId>
       <artifactId>light-ai-admin</artifactId>
     </dependency>
     <dependency>

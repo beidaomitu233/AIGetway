@@ -2,6 +2,7 @@ package com.lightai.runtime.ports;
 
 import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
+import com.lightai.runtime.capacity.CapacityStore;
 
 /**
  * 容量端口（BE-P04 CapacityStore 交付后为共享原子实现）：三层预占的运行侧抽象。
@@ -11,6 +12,15 @@ public interface CapacityPort {
 
     /** Alias/Model/Credential 同维度预占；部分失败全不计数。 */
     Reservation reserve(String aliasId, String modelId, String credentialId, long estimatedTokens);
+
+    /** 使用当前 Trace 已固定快照中的三层限额预占。 */
+    default Reservation reserve(String aliasId, String modelId, String credentialId,
+                                long estimatedTokens, long maxTokens,
+                                CapacityStore.ScopeLimit aliasLimit,
+                                CapacityStore.ScopeLimit modelLimit,
+                                CapacityStore.ScopeLimit credentialLimit) {
+        return reserve(aliasId, modelId, credentialId, estimatedTokens);
+    }
 
     /** 结算在原预占窗口；调用结束（成功/失败按实际或估算用量）。 */
     void settle(String reservationId, long inputTokens, long outputTokens);

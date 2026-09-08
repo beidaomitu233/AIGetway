@@ -5,11 +5,10 @@ import com.lightai.provider.anthropic.AnthropicAdapter;
 import com.lightai.provider.deepseek.DeepSeekAdapter;
 import com.lightai.provider.gemini.GeminiAdapter;
 import com.lightai.provider.openai.OpenAiAdapter;
-import com.lightai.runtime.capacity.InMemoryCapacityStore;
+import com.lightai.runtime.capacity.CapacityStore;
 import com.lightai.runtime.chat.ChatPipeline;
 import com.lightai.runtime.chat.ModelsService;
 import com.lightai.runtime.chat.ReliabilityBudgets;
-import com.lightai.runtime.circuit.InMemoryCircuitStore;
 import com.lightai.runtime.route.RouteService;
 import com.lightai.runtime.trace.InMemoryTraceStore;
 import com.lightai.runtime.trace.TraceStore;
@@ -31,6 +30,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -38,11 +38,12 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * Standalone Server 可执行入口（BE-056/BE-055 生产装配）：
  * 引入管理端自动装配（DataSource + 管理面 + SchemaGuard），
  * 装配真实运行链路：发布快照 → 路由 → 容量 → 凭证 → Adapter → Trace。
- * 容量共享状态为进程内原子实现（单实例语义）；集群共享存储按部署替换 CapacityStore Bean。
+ * 容量、熔断与 FIFO 队列统一使用 Redis 共享状态，支持 Standalone 多实例一致性。
  */
 @SpringBootApplication
 @ImportAutoConfiguration(LightAiAdminAutoConfiguration.class)
 @EnableConfigurationProperties(ServerAuthProperties.class)
+@EnableScheduling
 public class ServerApplication {
 
     public static void main(String[] args) {
@@ -96,20 +97,41 @@ public class ServerApplication {
         return type -> Optional.ofNullable(byType.get(type == null ? null : type.toUpperCase()));
     }
 
-    /** 容量共享状态：进程内原子实现；集群部署替换为共享存储实现并保持 fail-closed 语义。 */
-    @Bean
-    public InMemoryCapacityStore capacityStore() {
-        return new InMemoryCapacityStore();
+    /** Standalone 强制使用 Redis 共享容量状态，连接不可用时启动或预占 fail-closed。 */
+    @Bean(destroyMethod = "close")
+    public com.lightai.storage.redis.RedisCapacityStore capacityStore(
+            @org.springframework.beans.factory.annotation.Value("${light-ai.redis.uri:redis://127.0.0.1:6379/0}")
+            String redisUri,
+            @org.springframework.beans.factory.annotation.Value("${light-ai.redis.namespace:light-ai}")
+            String namespace,
+            @org.springframework.beans.factory.annotation.Value("${light-ai.redis.capacity-lease-ms:150000}")
+            long leaseMillis) {
+        return new com.lightai.storage.redis.RedisCapacityStore(redisUri, namespace, leaseMillis);
     }
 
     @Bean
-    public com.lightai.runtime.ports.CapacityPort capacityPort(InMemoryCapacityStore store) {
+    public com.lightai.runtime.ports.CapacityPort capacityPort(CapacityStore store) {
         return new StoreBackedCapacityPort(store);
     }
 
-    @Bean
-    public InMemoryCircuitStore circuitStore() {
-        return new InMemoryCircuitStore();
+    @Bean(destroyMethod = "close")
+    public com.lightai.storage.redis.RedisCircuitStateStore circuitStore(
+            @org.springframework.beans.factory.annotation.Value("${light-ai.redis.uri:redis://127.0.0.1:6379/0}")
+            String redisUri,
+            @org.springframework.beans.factory.annotation.Value("${light-ai.redis.namespace:light-ai}")
+            String namespace) {
+        return new com.lightai.storage.redis.RedisCircuitStateStore(redisUri, namespace);
+    }
+
+    @Bean(destroyMethod = "close")
+    public com.lightai.storage.redis.RedisFifoQueue queueService(
+            @org.springframework.beans.factory.annotation.Value("${light-ai.redis.uri:redis://127.0.0.1:6379/0}")
+            String redisUri,
+            @org.springframework.beans.factory.annotation.Value("${light-ai.redis.namespace:light-ai}")
+            String namespace,
+            @org.springframework.beans.factory.annotation.Value("${light-ai.redis.queue-default-max-size:1000}")
+            int defaultMaxSize) {
+        return new com.lightai.storage.redis.RedisFifoQueue(redisUri, namespace, defaultMaxSize);
     }
 
     @Bean
@@ -184,11 +206,14 @@ public class ServerApplication {
                                      com.lightai.runtime.ports.AccessTokenPort.RuntimeConfigPort runtimeConfigPort,
                                      com.lightai.runtime.ports.RoutingPort routingPort,
                                      com.lightai.runtime.ports.CapacityPort capacityPort,
+                                     com.lightai.runtime.circuit.CircuitStateStore circuitStateStore,
+                                     com.lightai.runtime.capacity.QueueService queueService,
                                      com.lightai.runtime.ports.CredentialSecretPort credentialPort,
                                      com.lightai.runtime.ports.AdapterRegistryPort adapterRegistry,
                                      TraceStore traceStore) {
         return new ChatPipeline(snapshotPort, runtimeConfigPort::defaultAliasId, routingPort, capacityPort,
-                credentialPort, adapterRegistry, traceStore, () -> ReliabilityBudgets.DEFAULT, 120_000L);
+                circuitStateStore, credentialPort, queueService, adapterRegistry, traceStore,
+                () -> ReliabilityBudgets.DEFAULT, 120_000L);
     }
 
     // ---------------- Admin UI 静态资源（/ui/** → classpath:/static/ui/，深链回落 index.html） ----------------

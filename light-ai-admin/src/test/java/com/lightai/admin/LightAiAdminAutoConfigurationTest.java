@@ -59,7 +59,8 @@ class LightAiAdminAutoConfigurationTest {
                 .withPropertyValues(
                         // 32 字节全零 Base64，仅用于装配测试
                         "light-ai.admin.secret-master-key-base64=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-                        "light-ai.admin.secret-master-key-id=test-key");
+                        "light-ai.admin.secret-master-key-id=test-key",
+                        "light-ai.storage.schema-mode=MIGRATE");
         withDataSource.run(context -> {
             assertThat(context).hasBean("lightAiDraftStateRepository");
             assertThat(context).hasBean("lightAiAuditRepository");
@@ -83,41 +84,12 @@ class LightAiAdminAutoConfigurationTest {
                 });
     }
 
-    /** 伪造 report 全部产品表的 DataSource，使 SchemaGuard 启动检查通过。 */
+    /** 独立 H2 空库，由真实迁移初始化后通过 SchemaGuard 完整检查。 */
     private static DataSource fullSchemaDataSource() {
-        java.util.Iterator<String> iterator =
-                com.lightai.storage.schema.ExpectedSchema.TABLES.iterator();
-        class Rows {
-            String current;
-            boolean next() {
-                if (iterator.hasNext()) {
-                    current = iterator.next();
-                    return true;
-                }
-                return false;
-            }
-        }
-        Rows rows = new Rows();
-        java.sql.ResultSet resultSet = (java.sql.ResultSet) java.lang.reflect.Proxy.newProxyInstance(
-                LightAiAdminAutoConfigurationTest.class.getClassLoader(),
-                new Class<?>[] {java.sql.ResultSet.class},
-                (proxy, method, args) -> switch (method.getName()) {
-                    case "next" -> rows.next();
-                    case "getString" -> rows.current;
-                    default -> null;
-                });
-        java.sql.DatabaseMetaData metaData =
-                (java.sql.DatabaseMetaData) java.lang.reflect.Proxy.newProxyInstance(
-                        LightAiAdminAutoConfigurationTest.class.getClassLoader(),
-                        new Class<?>[] {java.sql.DatabaseMetaData.class},
-                        (proxy, method, args) -> "getTables".equals(method.getName()) ? resultSet : null);
-        java.sql.Connection connection = (java.sql.Connection) java.lang.reflect.Proxy.newProxyInstance(
-                LightAiAdminAutoConfigurationTest.class.getClassLoader(),
-                new Class<?>[] {java.sql.Connection.class},
-                (proxy, method, args) -> "getMetaData".equals(method.getName()) ? metaData : null);
-        return (DataSource) java.lang.reflect.Proxy.newProxyInstance(
-                LightAiAdminAutoConfigurationTest.class.getClassLoader(),
-                new Class<?>[] {DataSource.class},
-                (proxy, method, args) -> "getConnection".equals(method.getName()) ? connection : null);
+        org.h2.jdbcx.JdbcDataSource dataSource = new org.h2.jdbcx.JdbcDataSource();
+        dataSource.setURL("jdbc:h2:mem:admin_autoconfig_" + java.util.UUID.randomUUID()
+                + ";MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE");
+        dataSource.setUser("sa");
+        return dataSource;
     }
 }

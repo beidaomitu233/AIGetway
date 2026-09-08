@@ -2,6 +2,8 @@ package com.lightai.runtime.ports;
 
 import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
+import com.lightai.runtime.capacity.CapacityStore;
+import com.lightai.runtime.circuit.CircuitPolicy;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -25,10 +27,63 @@ public interface ConfigSnapshotPort {
     }
 
     /** 当前活动快照的 Alias 与候选装配视图。 */
-    record ActiveSnapshot(long snapshotNo, List<AliasView> aliases) {
+    record ActiveSnapshot(long snapshotNo, List<AliasView> aliases,
+                          Map<String, CapacityStore.ScopeLimit> capacityLimits,
+                          Map<String, CircuitPolicy> circuitPolicies,
+                          Map<String, QueuePolicy> queuePolicies) {
+
+        public ActiveSnapshot(long snapshotNo, List<AliasView> aliases) {
+            this(snapshotNo, aliases, Map.of(), Map.of(), Map.of());
+        }
+
+        public ActiveSnapshot(long snapshotNo, List<AliasView> aliases,
+                              Map<String, CapacityStore.ScopeLimit> capacityLimits) {
+            this(snapshotNo, aliases, capacityLimits, Map.of(), Map.of());
+        }
+
+        public ActiveSnapshot(long snapshotNo, List<AliasView> aliases,
+                              Map<String, CapacityStore.ScopeLimit> capacityLimits,
+                              Map<String, CircuitPolicy> circuitPolicies) {
+            this(snapshotNo, aliases, capacityLimits, circuitPolicies, Map.of());
+        }
+
+        public ActiveSnapshot {
+            aliases = aliases == null ? List.of() : List.copyOf(aliases);
+            capacityLimits = capacityLimits == null ? Map.of() : Map.copyOf(capacityLimits);
+            circuitPolicies = circuitPolicies == null ? Map.of() : Map.copyOf(circuitPolicies);
+            queuePolicies = queuePolicies == null ? Map.of() : Map.copyOf(queuePolicies);
+        }
 
         public Optional<AliasView> alias(String alias) {
             return aliases.stream().filter(view -> view.alias().equals(alias)).findFirst();
+        }
+
+        public CapacityStore.ScopeLimit capacityLimit(String scopeType, String scopeId) {
+            if (scopeType == null || scopeId == null) {
+                return null;
+            }
+            return capacityLimits.get(scopeType.toUpperCase(java.util.Locale.ROOT) + ":" + scopeId);
+        }
+
+        public CircuitPolicy circuitPolicy(String aliasId) {
+            return circuitPolicies.getOrDefault(aliasId,
+                    new CircuitPolicy(null, snapshotNo, 60, 20, 0.5, 30, 3, 2));
+        }
+
+        public QueuePolicy queuePolicy(String scopeType, String scopeId) {
+            if (scopeType == null || scopeId == null) return QueuePolicy.REJECT;
+            String normalized = "ALIAS".equalsIgnoreCase(scopeType) ? "MODEL_ALIAS" : scopeType;
+            return queuePolicies.getOrDefault(
+                    normalized.toUpperCase(java.util.Locale.ROOT) + ":" + scopeId,
+                    QueuePolicy.REJECT);
+        }
+    }
+
+    record QueuePolicy(String overflowStrategy, long timeoutMs, int maxSize) {
+        public static final QueuePolicy REJECT = new QueuePolicy("REJECT", 0, 0);
+
+        public boolean queues() {
+            return "QUEUE".equalsIgnoreCase(overflowStrategy) && timeoutMs > 0 && maxSize > 0;
         }
     }
 

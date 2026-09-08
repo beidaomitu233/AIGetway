@@ -138,6 +138,105 @@ class ChatPipelineTest {
     }
 
     @Test
+    void sharedCircuitOpensAfterProviderFailureAndRejectsNextExternalAttempt() {
+        String aliasId = java.util.UUID.randomUUID().toString();
+        String modelPk = java.util.UUID.randomUUID().toString();
+        String credentialId = java.util.UUID.randomUUID().toString();
+        CandidateView candidate = new CandidateView(
+                java.util.UUID.randomUUID().toString(), java.util.UUID.randomUUID().toString(),
+                "OPENAI", modelPk, "model-circuit", java.util.UUID.randomUUID().toString(),
+                1, 1, true, "FAKE", 8000L, 512L, true, true, true, true, true,
+                null, null, null, null, 4, null, null, 32L,
+                "0", "0", 1000, "USD", "https://provider.test/v1", null,
+                3000, 120000, Map.of());
+        var circuitPolicy = new com.lightai.runtime.circuit.CircuitPolicy(
+                null, 9, 60, 1, 1.0, 30, 1, 1);
+        ConfigSnapshotPort snapshots = () -> new ConfigSnapshotPort.ActiveSnapshot(
+                9, List.of(new AliasView(aliasId, "circuit-alias", "Circuit", true, List.of(candidate))),
+                Map.of(), Map.of(aliasId, circuitPolicy));
+        StubAdapter failingAdapter = new StubAdapter();
+        failingAdapter.error = ProviderFailure.http(500, null, "boom");
+        ChatPipeline circuitPipeline = new ChatPipeline(
+                snapshots, () -> Optional.empty(), routing(), new RecordingCapacity(),
+                new com.lightai.runtime.circuit.InMemoryCircuitStore(),
+                (poolId, index) -> new CredentialSecretPort.ResolvedCredential(
+                        credentialId, () -> "sk-test".toCharArray()),
+                type -> Optional.of(failingAdapter), new InMemoryTraceStore(),
+                () -> new ReliabilityBudgets(0, 0, 0), 30_000);
+
+        assertThatThrownBy(() -> circuitPipeline.chat(context(request("circuit-alias", false), null)))
+                .isInstanceOf(LightAiException.class);
+        assertThat(failingAdapter.invocations.get()).isEqualTo(1);
+
+        failingAdapter.error = null;
+        failingAdapter.response = new ProviderChatResponse("should-not-run", "stop",
+                1L, 1L, 2L, "ACTUAL", "blocked");
+        assertThatThrownBy(() -> circuitPipeline.chat(context(request("circuit-alias", false), null)))
+                .isInstanceOf(LightAiException.class);
+        assertThat(failingAdapter.invocations.get()).isEqualTo(1);
+    }
+
+    @Test
+    void capacityOverflowQueuesAndRetriesFromSharedFifoHead() {
+        String aliasId = java.util.UUID.randomUUID().toString();
+        String modelPk = java.util.UUID.randomUUID().toString();
+        String credentialId = java.util.UUID.randomUUID().toString();
+        CandidateView candidate = new CandidateView(
+                java.util.UUID.randomUUID().toString(), java.util.UUID.randomUUID().toString(),
+                "OPENAI", modelPk, "model-queued", java.util.UUID.randomUUID().toString(),
+                1, 1, true, "FAKE", 8000L, 512L, true, true, true, true, true,
+                null, null, null, null, 4, null, null, 32L,
+                "0", "0", 1000, "USD", "https://provider.test/v1", null,
+                3000, 120000, Map.of());
+        var queuePolicy = new ConfigSnapshotPort.QueuePolicy("QUEUE", 1_000, 10);
+        ConfigSnapshotPort snapshots = () -> new ConfigSnapshotPort.ActiveSnapshot(
+                10, List.of(new AliasView(aliasId, "queued-alias", "Queued", true, List.of(candidate))),
+                Map.of(), Map.of(), Map.of("MODEL_ALIAS:" + aliasId, queuePolicy));
+        AtomicInteger reservations = new AtomicInteger();
+        CapacityPort initiallyLimited = new CapacityPort() {
+            @Override
+            public Reservation reserve(String alias, String model, String credential, long estimatedTokens) {
+                return new Reservation("legacy", alias, model, credential);
+            }
+
+            @Override
+            public Reservation reserve(String alias, String model, String credential,
+                                       long estimatedTokens, long maxTokens,
+                                       com.lightai.runtime.capacity.CapacityStore.ScopeLimit aliasLimit,
+                                       com.lightai.runtime.capacity.CapacityStore.ScopeLimit modelLimit,
+                                       com.lightai.runtime.capacity.CapacityStore.ScopeLimit credentialLimit) {
+                if (reservations.incrementAndGet() == 1) {
+                    throw new com.lightai.runtime.capacity.CapacityStore.CapacityLimitedException(
+                            "alias", "CONCURRENT");
+                }
+                return new Reservation("queued-reservation", alias, model, credential);
+            }
+
+            @Override public void settle(String reservationId, long inputTokens, long outputTokens) { }
+            @Override public void release(String reservationId) { }
+        };
+        var queue = new com.lightai.runtime.capacity.InMemoryFifoQueue(
+                10, new com.lightai.runtime.capacity.InMemoryCapacityStore());
+        StubAdapter queuedAdapter = new StubAdapter();
+        queuedAdapter.response = new ProviderChatResponse("queued-ok", "stop",
+                1L, 1L, 2L, "ACTUAL", "queued-request");
+        ChatPipeline queuedPipeline = new ChatPipeline(
+                snapshots, () -> Optional.empty(), routing(), initiallyLimited, null,
+                (poolId, index) -> new CredentialSecretPort.ResolvedCredential(
+                        credentialId, () -> "sk-test".toCharArray()),
+                queue, type -> Optional.of(queuedAdapter), new InMemoryTraceStore(),
+                () -> new ReliabilityBudgets(0, 0, 0), 5_000);
+
+        UnifiedChatResponse response = queuedPipeline.chat(
+                context(request("queued-alias", false), null));
+
+        assertThat(response.choices().get(0).message().content()).isEqualTo("queued-ok");
+        assertThat(reservations).hasValue(2);
+        assertThat(queue.queueLength(java.util.UUID.fromString(aliasId))).isZero();
+        assertThat(queuedAdapter.invocations).hasValue(1);
+    }
+
+    @Test
     void streamCommitsOnlyOnFirstContentAndSequencesFromZero() {
         adapter.streamScript = List.of(
                 ProviderStreamChunk.content("你"),
