@@ -1,10 +1,16 @@
 package com.lightai.storage.schema;
 
+import com.lightai.storage.dialect.DatabaseType;
+import com.lightai.storage.dialect.DialectResolver;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import javax.sql.DataSource;
 
@@ -29,17 +35,113 @@ public class SchemaGuard {
     }
 
     public void validate() {
-        Set<String> existing;
         try (Connection connection = dataSource.getConnection()) {
-            existing = readExistingTables(connection);
+            Set<String> existing = readExistingTables(connection);
+            var missing = ExpectedSchema.missingTables(existing);
+            if (!missing.isEmpty()) {
+                throw new SchemaNotReadyException(
+                        "schema " + schemaName + " 缺少 " + missing.size() + " 张产品表，阻止就绪", missing);
+            }
+            if (connection.getMetaData() != null) {
+                validateMigrationVersion(connection);
+                validateColumnsAndIndexes(connection);
+            }
+        } catch (SchemaNotReadyException e) {
+            throw e;
         } catch (SQLException e) {
             throw new SchemaNotReadyException("数据库结构核对失败：" + safeMessage(e));
         }
-        var missing = ExpectedSchema.missingTables(existing);
-        if (!missing.isEmpty()) {
-            throw new SchemaNotReadyException(
-                    "schema " + schemaName + " 缺少 " + missing.size() + " 张产品表，阻止就绪", missing);
+    }
+
+    private void validateMigrationVersion(Connection connection) throws SQLException {
+        DatabaseType type = DialectResolver.resolve(connection).databaseType();
+        String history = type == DatabaseType.MYSQL
+                ? "light_ai_schema_history" : schemaName + ".light_ai_schema_history";
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT MAX(version) FROM " + history + " WHERE success = ?")) {
+            statement.setBoolean(1, true);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next() || resultSet.getInt(1) != DefaultSchemaMigrator.LATEST_VERSION) {
+                    throw new SchemaNotReadyException("数据库 schema 版本不匹配，期望 V"
+                            + DefaultSchemaMigrator.LATEST_VERSION);
+                }
+            }
+        } catch (SQLException e) {
+            throw new SchemaNotReadyException("数据库缺少有效迁移历史或版本不可读：" + safeMessage(e));
         }
+    }
+
+    private void validateColumnsAndIndexes(Connection connection) throws SQLException {
+        DatabaseMetaData metadata = connection.getMetaData();
+        DatabaseType type = DialectResolver.resolve(connection).databaseType();
+        SchemaContract.Definition expected = SchemaContract.load(type);
+        String productName = metadata.getDatabaseProductName();
+        boolean mysql = productName != null && (productName.toLowerCase(Locale.ROOT).contains("mysql")
+                || productName.toLowerCase(Locale.ROOT).contains("mariadb"));
+        boolean h2 = productName != null && productName.toLowerCase(Locale.ROOT).contains("h2");
+        String catalog = mysql ? connection.getCatalog() : null;
+        String schema = (mysql || h2) ? null : schemaName;
+        Map<String, Set<String>> actualColumns = readColumns(metadata, catalog, schema);
+        for (Map.Entry<String, Set<String>> entry : expected.columns().entrySet()) {
+            Set<String> actual = actualColumns.getOrDefault(entry.getKey(), Set.of());
+            Set<String> missing = new HashSet<>(entry.getValue());
+            missing.removeAll(actual);
+            if (!missing.isEmpty()) {
+                throw new SchemaNotReadyException("表 " + entry.getKey() + " 缺少列 "
+                        + missing.stream().sorted().toList());
+            }
+        }
+        for (Map.Entry<String, Set<String>> entry : expected.indexes().entrySet()) {
+            if (entry.getValue().isEmpty()) {
+                continue;
+            }
+            Set<String> actual = readIndexes(metadata, catalog, schema, entry.getKey());
+            Set<String> missing = new HashSet<>(entry.getValue());
+            missing.removeAll(actual);
+            if (!missing.isEmpty()) {
+                throw new SchemaNotReadyException("表 " + entry.getKey() + " 缺少索引 "
+                        + missing.stream().sorted().toList());
+            }
+        }
+    }
+
+    private static Map<String, Set<String>> readColumns(DatabaseMetaData metadata,
+                                                         String catalog, String schema)
+            throws SQLException {
+        Map<String, Set<String>> result = new HashMap<>();
+        try (ResultSet columns = metadata.getColumns(catalog, schema, "%", "%")) {
+            while (columns.next()) {
+                String table = columns.getString("TABLE_NAME").toLowerCase(Locale.ROOT);
+                String column = columns.getString("COLUMN_NAME").toLowerCase(Locale.ROOT);
+                result.computeIfAbsent(table, ignored -> new HashSet<>()).add(column);
+            }
+        }
+        return result;
+    }
+
+    private static Set<String> readIndexes(DatabaseMetaData metadata, String catalog,
+                                           String schema, String table) throws SQLException {
+        Set<String> result = new HashSet<>();
+        try (ResultSet indexes = metadata.getIndexInfo(catalog, schema, table, false, false)) {
+            while (indexes.next()) {
+                String name = indexes.getString("INDEX_NAME");
+                if (name != null) {
+                    result.add(name.toLowerCase(Locale.ROOT));
+                }
+            }
+        }
+        if (result.isEmpty()) {
+            try (ResultSet indexes = metadata.getIndexInfo(catalog, schema,
+                    table.toUpperCase(Locale.ROOT), false, false)) {
+                while (indexes.next()) {
+                    String name = indexes.getString("INDEX_NAME");
+                    if (name != null) {
+                        result.add(name.toLowerCase(Locale.ROOT));
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     public void migrateAndValidate(SchemaMigrator migrator) {

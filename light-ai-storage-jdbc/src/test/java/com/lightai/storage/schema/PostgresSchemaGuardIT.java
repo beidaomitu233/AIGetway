@@ -1,12 +1,10 @@
 package com.lightai.storage.schema;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.sql.Connection;
 import java.sql.Statement;
-import java.util.List;
-import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
@@ -27,15 +25,23 @@ class PostgresSchemaGuardIT {
     }
 
     @Test
-    void emptySchemaReportsAllMissingTables() throws Exception {
-        try (Connection connection = dataSource().getConnection(); Statement statement = connection.createStatement()) {
-            statement.execute("CREATE SCHEMA IF NOT EXISTS light_ai");
+    void emptyIsolatedSchemaReportsAllMissingTables() throws Exception {
+        String schema = "light_ai_empty_" + UUID.randomUUID().toString().replace("-", "");
+        try (Connection connection = dataSource().getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.execute("CREATE SCHEMA " + schema);
         }
-        SchemaGuard guard = new SchemaGuard(dataSource());
-        assertThatThrownBy(guard::validate)
-                .isInstanceOf(SchemaNotReadyException.class)
-                .extracting("missingTables")
-                .isEqualTo(ExpectedSchema.missingTables(Set.of()));
+        try {
+            SchemaGuard guard = new SchemaGuard(dataSource(), schema);
+            assertThatThrownBy(guard::validate)
+                    .isInstanceOf(SchemaNotReadyException.class)
+                    .hasMessageContaining("缺少 39 张产品表");
+        } finally {
+            try (Connection connection = dataSource().getConnection();
+                 Statement statement = connection.createStatement()) {
+                statement.execute("DROP SCHEMA " + schema);
+            }
+        }
     }
 
     @Test
@@ -49,8 +55,10 @@ class PostgresSchemaGuardIT {
     }
 
     @Test
-    void missingTablesDiffIsDeterministic() {
-        List<String> missing = ExpectedSchema.missingTables(Set.of("provider", "audit_log"));
-        assertThat(missing).hasSize(37).contains("draft_change", "trace").doesNotContain("provider");
+    void migrationIsRepeatableAndFullContractValidates() {
+        DefaultSchemaMigrator migrator = new DefaultSchemaMigrator(dataSource());
+        migrator.migrate();
+        migrator.migrate();
+        new SchemaGuard(dataSource()).validate();
     }
 }

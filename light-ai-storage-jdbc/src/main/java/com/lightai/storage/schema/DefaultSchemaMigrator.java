@@ -7,22 +7,33 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import javax.sql.DataSource;
 
 /**
- * 默认数据库迁移执行器（BE-003 / CR-015）：
- * 根据当前连接方言自动选择并执行版本化迁移脚本（PostgreSQL / MySQL 5.7 / MySQL 8.0）。
- * 初始化产品所需的全部 39 张表结构与初始种子数据。
+ * 产品数据库迁移执行器。
+ *
+ * <p>迁移在数据库级全局锁内顺序执行，并在 {@code light_ai_schema_history}
+ * 保存不可变版本与 SHA-256 校验值。PostgreSQL 的 DDL 与历史记录在同一事务提交；
+ * MySQL DDL 会隐式提交，因此迁移脚本必须可重复执行，只有全部语句成功后才写成功历史。
  */
 public class DefaultSchemaMigrator implements SchemaMigrator {
 
-    private static final String POSTGRES_SCRIPT = "schema/postgres/light_ai_schema.sql";
-    private static final String MYSQL_SCRIPT = "schema/mysql/light_ai_schema.sql";
+    static final int LATEST_VERSION = 1;
+    private static final long POSTGRES_LOCK_ID = 738_120_426L;
+    private static final String MYSQL_LOCK_NAME = "light_ai_schema_migration";
+    private static final Migration POSTGRES_BASELINE = new Migration(
+            1, "baseline", "db/migration/postgres/V1__baseline.sql");
+    private static final Migration MYSQL_BASELINE = new Migration(
+            1, "baseline", "db/migration/mysql/V1__baseline.sql");
 
     private final DataSource dataSource;
 
@@ -34,40 +45,180 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
     public void migrate() {
         try (Connection connection = dataSource.getConnection()) {
             DatabaseDialect dialect = DialectResolver.resolve(connection);
-            String scriptPath = dialect.databaseType() == DatabaseType.MYSQL ? MYSQL_SCRIPT : POSTGRES_SCRIPT;
-            String script = loadScript(scriptPath);
-            if (isH2(connection)) {
-                script = adaptMySqlScriptForH2(script);
+            boolean h2 = isH2(connection);
+            boolean originalAutoCommit = connection.getAutoCommit();
+            if (dialect.databaseType() == DatabaseType.POSTGRESQL) {
+                connection.setAutoCommit(false);
             }
-            List<String> statements = splitStatements(script);
-            for (String sql : statements) {
-                try (Statement stmt = connection.createStatement()) {
-                    stmt.execute(sql);
+            acquireLock(connection, dialect, h2);
+            try {
+                ensureHistoryTable(connection, dialect);
+                apply(connection, dialect.databaseType() == DatabaseType.MYSQL
+                        ? MYSQL_BASELINE : POSTGRES_BASELINE, h2);
+                if (dialect.databaseType() == DatabaseType.POSTGRESQL) {
+                    connection.commit();
+                }
+            } catch (Exception e) {
+                rollbackQuietly(connection, dialect);
+                throw e;
+            } finally {
+                releaseLock(connection, dialect, h2);
+                if (dialect.databaseType() == DatabaseType.POSTGRESQL) {
+                    connection.setAutoCommit(originalAutoCommit);
                 }
             }
+        } catch (SchemaNotReadyException e) {
+            throw e;
         } catch (SQLException e) {
             throw new SchemaNotReadyException("数据库结构迁移执行失败: " + safeMessage(e));
         } catch (Exception e) {
-            throw new SchemaNotReadyException("数据库结构迁移脚本加载或解析失败: " + e.getMessage());
+            throw new SchemaNotReadyException("数据库结构迁移脚本加载或解析失败: " + safeMessage(e));
+        }
+    }
+
+    private void apply(Connection connection, Migration migration, boolean h2) throws Exception {
+        String source = loadScript(migration.path());
+        String checksum = checksum(source);
+        AppliedMigration applied = findApplied(connection, migration.version());
+        if (applied != null) {
+            if (!applied.success() || !checksum.equals(applied.checksum())) {
+                throw new SchemaNotReadyException(
+                        "数据库迁移 V" + migration.version() + " 校验值不一致或历史状态失败，拒绝启动");
+            }
+            return;
+        }
+
+        String executable = h2 ? adaptMySqlScriptForH2(source) : source;
+        for (String sql : splitStatements(executable)) {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute(sql);
+            }
+        }
+        insertApplied(connection, migration, checksum);
+    }
+
+    private static void ensureHistoryTable(Connection connection, DatabaseDialect dialect)
+            throws SQLException {
+        String sql;
+        if (dialect.databaseType() == DatabaseType.MYSQL) {
+            sql = """
+                    CREATE TABLE IF NOT EXISTS light_ai_schema_history (
+                        version INT PRIMARY KEY,
+                        description VARCHAR(200) NOT NULL,
+                        checksum CHAR(64) NOT NULL,
+                        installed_on TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                        success BOOLEAN NOT NULL
+                    )
+                    """;
+        } else {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("CREATE SCHEMA IF NOT EXISTS light_ai");
+            }
+            sql = """
+                    CREATE TABLE IF NOT EXISTS light_ai.light_ai_schema_history (
+                        version INTEGER PRIMARY KEY,
+                        description VARCHAR(200) NOT NULL,
+                        checksum CHAR(64) NOT NULL,
+                        installed_on TIMESTAMPTZ NOT NULL DEFAULT now(),
+                        success BOOLEAN NOT NULL
+                    )
+                    """;
+        }
+        try (Statement statement = connection.createStatement()) {
+            statement.execute(sql);
+        }
+    }
+
+    private static AppliedMigration findApplied(Connection connection, int version)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT checksum, success FROM " + historyTable(connection) + " WHERE version = ?")) {
+            statement.setInt(1, version);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    return null;
+                }
+                return new AppliedMigration(resultSet.getString(1), resultSet.getBoolean(2));
+            }
+        }
+    }
+
+    private static void insertApplied(Connection connection, Migration migration, String checksum)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "INSERT INTO " + historyTable(connection)
+                        + " (version, description, checksum, success) VALUES (?, ?, ?, ?)")) {
+            statement.setInt(1, migration.version());
+            statement.setString(2, migration.description());
+            statement.setString(3, checksum);
+            statement.setBoolean(4, true);
+            statement.executeUpdate();
+        }
+    }
+
+    private static String historyTable(Connection connection) throws SQLException {
+        return DialectResolver.resolve(connection).databaseType() == DatabaseType.MYSQL
+                ? "light_ai_schema_history" : "light_ai.light_ai_schema_history";
+    }
+
+    private static void acquireLock(Connection connection, DatabaseDialect dialect, boolean h2)
+            throws SQLException {
+        if (h2) {
+            return;
+        }
+        String sql = dialect.databaseType() == DatabaseType.MYSQL
+                ? "SELECT GET_LOCK('" + MYSQL_LOCK_NAME + "', 60)"
+                : "SELECT pg_advisory_lock(" + POSTGRES_LOCK_ID + ")";
+        try (Statement statement = connection.createStatement(); ResultSet resultSet = statement.executeQuery(sql)) {
+            if (dialect.databaseType() == DatabaseType.MYSQL
+                    && (!resultSet.next() || resultSet.getInt(1) != 1)) {
+                throw new SchemaNotReadyException("等待数据库迁移全局锁超时");
+            }
+        }
+    }
+
+    private static void releaseLock(Connection connection, DatabaseDialect dialect, boolean h2) {
+        if (h2) {
+            return;
+        }
+        String sql = dialect.databaseType() == DatabaseType.MYSQL
+                ? "SELECT RELEASE_LOCK('" + MYSQL_LOCK_NAME + "')"
+                : "SELECT pg_advisory_unlock(" + POSTGRES_LOCK_ID + ")";
+        try (Statement statement = connection.createStatement()) {
+            statement.execute(sql);
+        } catch (SQLException ignored) {
+            // 连接关闭时数据库会自动释放会话锁；保留原始迁移异常。
+        }
+    }
+
+    private static void rollbackQuietly(Connection connection, DatabaseDialect dialect) {
+        if (dialect.databaseType() != DatabaseType.POSTGRESQL) {
+            return;
+        }
+        try {
+            connection.rollback();
+        } catch (SQLException ignored) {
+            // 保留原始迁移异常。
         }
     }
 
     static String loadScript(String path) {
-        ClassLoader cl = Thread.currentThread().getContextClassLoader();
-        if (cl == null) {
-            cl = DefaultSchemaMigrator.class.getClassLoader();
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        if (classLoader == null) {
+            classLoader = DefaultSchemaMigrator.class.getClassLoader();
         }
-        try (InputStream is = cl.getResourceAsStream(path)) {
-            if (is == null) {
+        try (InputStream input = classLoader.getResourceAsStream(path)) {
+            if (input == null) {
                 throw new IllegalStateException("未找到迁移脚本资源: " + path);
             }
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-                StringBuilder sb = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(input, StandardCharsets.UTF_8))) {
+                StringBuilder result = new StringBuilder();
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    sb.append(line).append("\n");
+                    result.append(line).append('\n');
                 }
-                return sb.toString();
+                return result.toString();
             }
         } catch (Exception e) {
             throw new IllegalStateException("读取迁移脚本失败: " + path, e);
@@ -75,8 +226,6 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
     }
 
     static String adaptMySqlScriptForH2(String script) {
-        // H2 将通过 setString 写入 JSON 列的对象再次编码为 JSON 字符串；
-        // 默认 Standalone 存储使用文本列保持与 MySQL JDBC JSON 读写语义一致。
         return script.replaceAll("(?i)\\bJSON\\b", "LONGTEXT");
     }
 
@@ -85,43 +234,53 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
         return productName != null && productName.toLowerCase().contains("h2");
     }
 
+    static String checksum(String script) {
+        try {
+            return HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(script.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException("无法计算迁移校验值", e);
+        }
+    }
+
     static List<String> splitStatements(String script) {
         List<String> statements = new ArrayList<>();
         StringBuilder current = new StringBuilder();
         boolean inSingleQuote = false;
         boolean inLineComment = false;
         for (int i = 0; i < script.length(); i++) {
-            char c = script.charAt(i);
+            char currentChar = script.charAt(i);
             if (inLineComment) {
-                if (c == '\n' || c == '\r') {
+                if (currentChar == '\n' || currentChar == '\r') {
                     inLineComment = false;
                 }
                 continue;
             }
-            if (!inSingleQuote && c == '-' && i + 1 < script.length() && script.charAt(i + 1) == '-') {
+            if (!inSingleQuote && currentChar == '-' && i + 1 < script.length()
+                    && script.charAt(i + 1) == '-') {
                 inLineComment = true;
                 i++;
                 continue;
             }
-            if (c == '\'') {
+            if (currentChar == '\'') {
                 if (inSingleQuote && i + 1 < script.length() && script.charAt(i + 1) == '\'') {
                     current.append("''");
                     i++;
                     continue;
                 }
                 inSingleQuote = !inSingleQuote;
-                current.append(c);
+                current.append(currentChar);
                 continue;
             }
-            if (c == ';' && !inSingleQuote) {
-                String stmt = current.toString().trim();
-                if (!stmt.isEmpty()) {
-                    statements.add(stmt);
+            if (currentChar == ';' && !inSingleQuote) {
+                String sql = current.toString().trim();
+                if (!sql.isEmpty()) {
+                    statements.add(sql);
                 }
                 current.setLength(0);
                 continue;
             }
-            current.append(c);
+            current.append(currentChar);
         }
         String remaining = current.toString().trim();
         if (!remaining.isEmpty()) {
@@ -130,7 +289,14 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
         return statements;
     }
 
-    private static String safeMessage(SQLException e) {
-        return e.getClass().getSimpleName() + (e.getMessage() == null ? "" : (": " + e.getMessage()));
+    private static String safeMessage(Exception exception) {
+        String message = exception.getMessage();
+        return exception.getClass().getSimpleName() + (message == null ? "" : ": " + message);
+    }
+
+    private record Migration(int version, String description, String path) {
+    }
+
+    private record AppliedMigration(String checksum, boolean success) {
     }
 }

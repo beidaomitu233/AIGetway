@@ -1,4 +1,4 @@
--- Light AI MySQL Schema Migration DDL (DATABASE_PLAN §2)
+-- Light AI MySQL Schema Migration DDL V1 (DATABASE_PLAN §2)
 -- 包含全部 39 张表定义与初始种子数据，兼容 MySQL 5.7 / 8.0
 
 -- 1. provider

@@ -1,4 +1,4 @@
--- Light AI PostgreSQL Schema Migration DDL (DATABASE_PLAN §2)
+-- Light AI PostgreSQL Schema Migration DDL V1 (DATABASE_PLAN §2)
 -- 包含全部 39 张表定义与初始种子数据
 
 CREATE SCHEMA IF NOT EXISTS light_ai;
@@ -133,56 +133,56 @@ CREATE TABLE IF NOT EXISTS light_ai.route_candidate (
 
 -- 8. limit_policy
 CREATE TABLE IF NOT EXISTS light_ai.limit_policy (
-    id VARCHAR(36) PRIMARY KEY,
-    created_at DATETIME(6) NOT NULL,
-    updated_at DATETIME(6) NOT NULL,
+    id UUID PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
     version BIGINT NOT NULL DEFAULT 1,
-    deleted_at DATETIME(6),
+    deleted_at TIMESTAMPTZ,
     name VARCHAR(64) NOT NULL,
     scope_type VARCHAR(24) NOT NULL,
-    scope_id VARCHAR(36) NOT NULL,
+    scope_id UUID NOT NULL,
     rpm_limit BIGINT,
     tpm_limit BIGINT,
-    concurrent_limit INT,
+    concurrent_limit INTEGER,
     overflow_strategy VARCHAR(24) NOT NULL,
-    queue_timeout_ms INT,
-    queue_max_size INT,
-    enabled BOOLEAN NOT NULL DEFAULT 1,
-    UNIQUE KEY uk_limit_policy_name (name),
-    KEY idx_limit_policy_scope (scope_id)
+    queue_timeout_ms INTEGER,
+    queue_max_size INTEGER,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    CONSTRAINT uk_limit_policy_name UNIQUE (name)
 );
+CREATE INDEX IF NOT EXISTS idx_limit_policy_scope ON light_ai.limit_policy (scope_id);
 
 -- 9. reliability_policy
 CREATE TABLE IF NOT EXISTS light_ai.reliability_policy (
-    id VARCHAR(36) PRIMARY KEY,
-    created_at DATETIME(6) NOT NULL,
-    updated_at DATETIME(6) NOT NULL,
+    id UUID PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
     version BIGINT NOT NULL DEFAULT 1,
-    deleted_at DATETIME(6),
+    deleted_at TIMESTAMPTZ,
     name VARCHAR(64) NOT NULL,
-    alias_id VARCHAR(36) NOT NULL,
-    connect_timeout_ms INT NOT NULL DEFAULT 3000,
-    first_token_timeout_ms INT NOT NULL DEFAULT 30000,
-    total_timeout_ms INT NOT NULL DEFAULT 120000,
-    max_retries INT NOT NULL DEFAULT 1,
-    max_credential_failovers INT NOT NULL DEFAULT 1,
-    initial_backoff_ms INT NOT NULL DEFAULT 200,
-    backoff_multiplier DECIMAL(5,2) NOT NULL DEFAULT 2.0,
-    jitter_percent INT NOT NULL DEFAULT 20,
-    respect_retry_after BOOLEAN NOT NULL DEFAULT 1,
-    max_retry_after_ms INT NOT NULL DEFAULT 5000,
-    fallback_enabled BOOLEAN NOT NULL DEFAULT 1,
-    max_fallbacks INT NOT NULL DEFAULT 2,
-    circuit_window_seconds INT NOT NULL DEFAULT 60,
-    circuit_min_requests INT NOT NULL DEFAULT 20,
-    circuit_failure_rate DECIMAL(9,4) NOT NULL DEFAULT 0.5,
-    circuit_open_seconds INT NOT NULL DEFAULT 30,
-    circuit_half_open_probes INT NOT NULL DEFAULT 3,
-    circuit_half_open_successes INT NOT NULL DEFAULT 2,
-    enabled BOOLEAN NOT NULL DEFAULT 1,
-    UNIQUE KEY uk_reliability_policy_name (name),
-    KEY idx_reliability_policy_alias (alias_id)
+    alias_id UUID NOT NULL,
+    connect_timeout_ms INTEGER NOT NULL DEFAULT 3000,
+    first_token_timeout_ms INTEGER NOT NULL DEFAULT 30000,
+    total_timeout_ms INTEGER NOT NULL DEFAULT 120000,
+    max_retries INTEGER NOT NULL DEFAULT 1,
+    max_credential_failovers INTEGER NOT NULL DEFAULT 1,
+    initial_backoff_ms INTEGER NOT NULL DEFAULT 200,
+    backoff_multiplier NUMERIC(5,2) NOT NULL DEFAULT 2.0,
+    jitter_percent INTEGER NOT NULL DEFAULT 20,
+    respect_retry_after BOOLEAN NOT NULL DEFAULT TRUE,
+    max_retry_after_ms INTEGER NOT NULL DEFAULT 5000,
+    fallback_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    max_fallbacks INTEGER NOT NULL DEFAULT 2,
+    circuit_window_seconds INTEGER NOT NULL DEFAULT 60,
+    circuit_min_requests INTEGER NOT NULL DEFAULT 20,
+    circuit_failure_rate NUMERIC(9,4) NOT NULL DEFAULT 0.5,
+    circuit_open_seconds INTEGER NOT NULL DEFAULT 30,
+    circuit_half_open_probes INTEGER NOT NULL DEFAULT 3,
+    circuit_half_open_successes INTEGER NOT NULL DEFAULT 2,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    CONSTRAINT uk_reliability_policy_name UNIQUE (name)
 );
+CREATE INDEX IF NOT EXISTS idx_reliability_policy_alias ON light_ai.reliability_policy (alias_id);
 
 -- 10. runtime_config
 CREATE TABLE IF NOT EXISTS light_ai.runtime_config (

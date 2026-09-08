@@ -1,8 +1,14 @@
 package com.lightai.storage.schema;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.List;
+import java.util.UUID;
+import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.Test;
 
 class DefaultSchemaMigratorTest {
@@ -28,15 +34,59 @@ class DefaultSchemaMigratorTest {
 
     @Test
     void loadScriptLoadsPostgresAndMysqlScripts() {
-        String pg = DefaultSchemaMigrator.loadScript("schema/postgres/light_ai_schema.sql");
+        String pg = DefaultSchemaMigrator.loadScript("db/migration/postgres/V1__baseline.sql");
         assertThat(pg).contains("CREATE SCHEMA IF NOT EXISTS light_ai");
         assertThat(pg).contains("CREATE TABLE IF NOT EXISTS light_ai.provider");
         List<String> pgStmts = DefaultSchemaMigrator.splitStatements(pg);
         assertThat(pgStmts.size()).isGreaterThanOrEqualTo(39);
 
-        String mysql = DefaultSchemaMigrator.loadScript("schema/mysql/light_ai_schema.sql");
+        String mysql = DefaultSchemaMigrator.loadScript("db/migration/mysql/V1__baseline.sql");
         assertThat(mysql).contains("CREATE TABLE IF NOT EXISTS provider");
         List<String> mysqlStmts = DefaultSchemaMigrator.splitStatements(mysql);
         assertThat(mysqlStmts.size()).isGreaterThanOrEqualTo(39);
+    }
+
+    @Test
+    void migrateCreatesVersionHistoryAndIsRepeatableOnEmptyDatabase() throws Exception {
+        JdbcDataSource dataSource = h2DataSource();
+        DefaultSchemaMigrator migrator = new DefaultSchemaMigrator(dataSource);
+
+        migrator.migrate();
+        migrator.migrate();
+
+        new SchemaGuard(dataSource).validate();
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(
+                     "SELECT version, description, checksum, success FROM light_ai_schema_history")) {
+            assertThat(resultSet.next()).isTrue();
+            assertThat(resultSet.getInt("version")).isEqualTo(DefaultSchemaMigrator.LATEST_VERSION);
+            assertThat(resultSet.getString("description")).isEqualTo("baseline");
+            assertThat(resultSet.getString("checksum")).hasSize(64);
+            assertThat(resultSet.getBoolean("success")).isTrue();
+            assertThat(resultSet.next()).isFalse();
+        }
+    }
+
+    @Test
+    void migrateRejectsChangedPublishedMigrationChecksum() throws Exception {
+        JdbcDataSource dataSource = h2DataSource();
+        DefaultSchemaMigrator migrator = new DefaultSchemaMigrator(dataSource);
+        migrator.migrate();
+        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
+            statement.executeUpdate("UPDATE light_ai_schema_history SET checksum = 'tampered' WHERE version = 1");
+        }
+
+        assertThatThrownBy(migrator::migrate)
+                .isInstanceOf(SchemaNotReadyException.class)
+                .hasMessageContaining("校验值不一致");
+    }
+
+    private static JdbcDataSource h2DataSource() {
+        JdbcDataSource dataSource = new JdbcDataSource();
+        dataSource.setURL("jdbc:h2:mem:migration_" + UUID.randomUUID()
+                + ";MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE");
+        dataSource.setUser("sa");
+        return dataSource;
     }
 }
