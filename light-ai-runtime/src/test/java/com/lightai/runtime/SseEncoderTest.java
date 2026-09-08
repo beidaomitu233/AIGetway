@@ -37,4 +37,14 @@ class SseEncoderTest {
         assertThat(encoded).contains("STREAM_INTERRUPTED");
         assertThat(encoded).doesNotContain("DONE");
     }
+
+    @Test
+    void frameworkPayloadDoesNotContainSecondSseFrame() {
+        UnifiedChatChunk chunk = new UnifiedChatChunk("t-3", "chat.completion.chunk", 100, "alias",
+                java.util.List.of(), null,
+                new UnifiedChatChunk.ChunkTraceInfo("t-3", 1, null, null, null));
+        assertThat(SseEncoder.chunkJson(chunk)).startsWith("{").doesNotContain("data:", "\n\n");
+        assertThat(SseEncoder.errorJson(UnifiedError.builder(ErrorCode.STREAM_INTERRUPTED, "断开").build()))
+                .startsWith("{").contains("\"error\"").doesNotContain("data:");
+    }
 }

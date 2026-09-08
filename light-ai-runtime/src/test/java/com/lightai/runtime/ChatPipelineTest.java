@@ -229,9 +229,56 @@ class ChatPipelineTest {
                 .isTrue();
     }
 
+
+    @Test
+    void streamCompletionWaitsForAsynchronousProviderTermination() throws Exception {
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var completed = new java.util.concurrent.CountDownLatch(1);
+        StubAdapter asyncAdapter = new StubAdapter() {
+            @Override
+            public Flow.Publisher<ProviderStreamChunk> streamChat(ProviderCallContext context) {
+                return subscriber -> subscriber.onSubscribe(new Flow.Subscription() {
+                    @Override public void request(long n) {
+                        Thread worker = new Thread(() -> {
+                            try {
+                                release.await();
+                                subscriber.onNext(ProviderStreamChunk.content("later"));
+                                subscriber.onNext(ProviderStreamChunk.finish("stop"));
+                                subscriber.onComplete();
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                subscriber.onError(e);
+                            }
+                        }, "async-provider-test");
+                        worker.start();
+                    }
+                    @Override public void cancel() { }
+                });
+            }
+        };
+        CredentialSecretPort credentials = (poolId, index) ->
+                new CredentialSecretPort.ResolvedCredential("cred-1", () -> "sk-test".toCharArray());
+        ChatPipeline asyncPipeline = new ChatPipeline(snapshot(), () -> Optional.empty(), routing(),
+                capacity, credentials, type -> Optional.of(asyncAdapter), traceStore,
+                () -> ReliabilityBudgets.DEFAULT, 30_000);
+        List<Object> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        asyncPipeline.chatStream(context(request("assistant", true), null), new RecordingListener(events) {
+            @Override public void onComplete() {
+                super.onComplete();
+                completed.countDown();
+            }
+        });
+
+        assertThat(completed.getCount()).isEqualTo(1);
+        assertThat(events).isEmpty();
+        release.countDown();
+        assertThat(completed.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        assertThat(events).contains("COMMIT", "DONE");
+    }
     // ---------------------------------------------------------------- 夹具
 
-    private static final class RecordingListener implements ChatPipeline.StreamListener {
+    private static class RecordingListener implements ChatPipeline.StreamListener {
         private final List<Object> events;
 
         RecordingListener(List<Object> events) {
@@ -252,6 +299,11 @@ class ChatPipelineTest {
         public void onError(UnifiedError error) {
             events.add("ERROR");
             events.add(error);
+        }
+
+        @Override
+        public void onComplete() {
+            events.add("DONE");
         }
     }
 
@@ -279,7 +331,7 @@ class ChatPipelineTest {
     }
 
     /** 可编程桩 Adapter：同步返回/失败、流式脚本、提交后中断。 */
-    static final class StubAdapter implements ProviderAdapter {
+    static class StubAdapter implements ProviderAdapter {
         ProviderChatResponse response;
         ProviderFailure error;
         int failFirstN;

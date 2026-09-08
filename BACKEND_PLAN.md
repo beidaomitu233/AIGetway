@@ -1986,3 +1986,6 @@ Bootstrap追加adapters数组：provider_type、adapter_version、default_base_u
 ### BE-047 审查修复补充（2026-09-08）
 
 管理身份分别携带 pplicationScope 与 liasScope。开发者在线测试只接受 liasScope 明确授权的已发布 Alias，空范围拒绝全部 Alias；应用范围只用于 Trace 数据范围和单应用归属。相关7例测试通过。
+### BE-028/047/049 流终态审查补充（2026-09-08）
+
+Runtime 在 Attempt 与 Trace 成功最终化后调用 StreamListener.onComplete。HTTP、管理测试、Local SDK 与 Embedded 均以该回调生成唯一 DONE；流错误关闭后不生成成功终态。框架 SSE 入口传入纯 JSON 数据，避免重复 data: 包装。新增异步 Publisher 与 MockMvc 回归测试，相关16例通过。

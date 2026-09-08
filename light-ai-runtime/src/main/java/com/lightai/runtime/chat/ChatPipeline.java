@@ -82,6 +82,10 @@ public class ChatPipeline {
         void onChunk(UnifiedChatChunk chunk);
 
         void onError(UnifiedError error);
+
+        /** 仅在 Attempt 和 Trace 已成功最终化后触发一次。 */
+        default void onComplete() {
+        }
     }
 
     // ---------------------------------------------------------------- 同步
@@ -234,7 +238,8 @@ public class ChatPipeline {
                 boolean includeUsage = parsed.request().streamOptions() != null
                         && parsed.request().streamOptions().includeUsage();
                 StreamAccumulator accumulator = new StreamAccumulator(handle, parsed.alias(), candidate,
-                        adapterRequest, includeUsage, listener, sequence, signal, reservation, attemptId);
+                        adapterRequest, includeUsage, listener, sequence, signal, reservation, attemptId,
+                        estimatedInput, estimatedOutput(candidate));
                 adapter.streamChat(callContext).subscribe(accumulator.subscriber(adapter));
                 return;
             } catch (LightAiException e) {
@@ -287,11 +292,16 @@ public class ChatPipeline {
         private final String attemptId;
         private final Deque<ProviderStreamChunk> pending = new ArrayDeque<>();
         private boolean finishEmitted;
+        private final long estimatedInputTokens;
+        private final long estimatedOutputTokens;
+        private Long capturedInputTokens;
+        private Long capturedOutputTokens;
 
         private StreamAccumulator(TraceStore.TraceHandle handle, String alias, CandidateView candidate,
                                   ProviderChatRequest adapterRequest, boolean includeUsage,
                                   StreamListener listener, AtomicSequencer sequence, CancellationSignal signal,
-                                  CapacityPort.Reservation reservation, String attemptId) {
+                                  CapacityPort.Reservation reservation, String attemptId,
+                                  long estimatedInputTokens, long estimatedOutputTokens) {
             this.handle = handle;
             this.alias = alias;
             this.candidate = candidate;
@@ -302,6 +312,8 @@ public class ChatPipeline {
             this.signal = signal;
             this.reservation = reservation;
             this.attemptId = attemptId;
+            this.estimatedInputTokens = estimatedInputTokens;
+            this.estimatedOutputTokens = estimatedOutputTokens;
         }
 
         java.util.concurrent.Flow.Subscriber<ProviderStreamChunk> subscriber(ProviderAdapter adapter) {
@@ -364,8 +376,18 @@ public class ChatPipeline {
                             emit(finishChunk(ProviderChatResponse.FINISH_STOP));
                         }
                     }
-                    signal.releaseOnce(() -> capacityPort.settle(reservation.reservationId(), 0, 0));
+                    // Attempt 终态与结算：Provider 流式 usage 缺失时按估算（4.7.1.4，Trace 仍记录用量与成本）
+                    UsageSettlement.AttemptSettlement settlement = UsageSettlement.settle(
+                            priceSnapshot(candidate), capturedInputTokens, capturedOutputTokens,
+                            estimatedInputTokens, estimatedOutputTokens);
+                    traceStore.finishAttempt(traceId(handle), attemptId, "SUCCEEDED", null,
+                            settlement.usage().promptTokens(), settlement.usage().completionTokens(),
+                            settlement.usage().source(), settlement.cost().amount().toPlainString(),
+                            settlement.cost().currency(), settlement.cost().estimated());
+                    signal.releaseOnce(() -> capacityPort.settle(reservation.reservationId(),
+                            settlement.usage().promptTokens(), settlement.usage().completionTokens()));
                     traceStore.finalizeTrace(traceId(handle), "SUCCEEDED");
+                    listener.onComplete();
                 }
 
                 private void flush() {
@@ -387,6 +409,13 @@ public class ChatPipeline {
                 }
 
                 private void emitUsage(ProviderStreamChunk chunk) {
+                    // 无论 includeUsage 均捕获真实用量供 Attempt 结算；外发仍按 includeUsage 决定
+                    if (chunk.inputTokens() != null) {
+                        capturedInputTokens = chunk.inputTokens();
+                    }
+                    if (chunk.outputTokens() != null) {
+                        capturedOutputTokens = chunk.outputTokens();
+                    }
                     if (!includeUsage) {
                         return;
                     }

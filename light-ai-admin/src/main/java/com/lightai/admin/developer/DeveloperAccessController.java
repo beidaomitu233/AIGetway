@@ -62,56 +62,48 @@ public class DeveloperAccessController {
     }
 
     @PostMapping("/admin/developer-access/test/chat/stream")
-    public SseEmitter testChatStream(@RequestBody String body, HttpServletRequest request) throws java.io.IOException {
+    public SseEmitter testChatStream(@RequestBody String body, HttpServletRequest request) {
         ApiTestCommand command = CommandBodies.parse(body, ApiTestCommand.class);
         SseEmitter emitter = new SseEmitter(0L);
         RequestContext context = context(request);
-        AtomicBoolean failed = new AtomicBoolean(false);
+        AtomicBoolean terminal = new AtomicBoolean(false);
         AtomicBoolean started = new AtomicBoolean(false);
-        AtomicBoolean completed = new AtomicBoolean(false);
         AtomicReference<String> traceId = new AtomicReference<>();
         AtomicReference<String> model = new AtomicReference<>(command.model());
         AtomicReference<String> provider = new AtomicReference<>();
         AtomicReference<String> providerModel = new AtomicReference<>();
         AtomicLong sequence = new AtomicLong();
         try {
-            service.testChatStream(context, withStream(command), streamBridge(emitter, failed, started,
+            service.testChatStream(context, withStream(command), streamBridge(emitter, terminal, started,
                     traceId, model, provider, providerModel, sequence));
-            if (!failed.get() && completed.compareAndSet(false, true)) {
-                emitter.send(SseEmitter.event().data(json(StreamEvent.done(traceId.get(), sequence.get() + 1,
-                        model.get(), provider.get(), providerModel.get(), "stop", null))));
-            }
-            emitter.complete();
         } catch (com.lightai.client.error.LightAiException e) {
-            failed.set(true);
-            try {
-                emitter.send(SseEmitter.event().data(json(Map.of("error", e.toError()))));
-            } catch (Exception ignored) {
-                // 客户端已断开
+            if (terminal.compareAndSet(false, true)) {
+                try {
+                    emitter.send(SseEmitter.event().data(json(Map.of("error", e.toError()))));
+                } catch (Exception ignored) {
+                    // 客户端已断开
+                }
+                emitter.complete();
             }
-            emitter.complete();
         }
         return emitter;
     }
-
     private static ApiTestCommand withStream(ApiTestCommand command) {
         return new ApiTestCommand(command.model(), command.systemMessage(), command.userMessage(), true,
                 command.temperature(), command.topP(), command.maxTokens());
     }
 
     private static com.lightai.runtime.chat.ChatPipeline.StreamListener streamBridge(
-            SseEmitter emitter, AtomicBoolean failed, AtomicBoolean started,
+            SseEmitter emitter, AtomicBoolean terminal, AtomicBoolean started,
             AtomicReference<String> traceIdRef, AtomicReference<String> modelRef,
             AtomicReference<String> providerRef, AtomicReference<String> providerModelRef,
             AtomicLong sequenceRef) {
         return new com.lightai.runtime.chat.ChatPipeline.StreamListener() {
-            @Override
-            public void onCommit() {
-                // SSE 头已由 emitter 提交
-            }
+            @Override public void onCommit() { }
 
             @Override
             public void onChunk(UnifiedChatChunk chunk) {
+                if (terminal.get()) return;
                 try {
                     String traceId = chunk.lightAi() == null ? null : chunk.lightAi().traceId();
                     String model = chunk.model();
@@ -138,7 +130,7 @@ public class DeveloperAccessController {
                         }
                     }
                 } catch (Exception e) {
-                    failed.set(true);
+                    terminal.set(true);
                     throw new com.lightai.client.error.LightAiException(
                             com.lightai.client.error.ErrorCode.CLIENT_CANCELLED, "客户端断开");
                 }
@@ -146,16 +138,28 @@ public class DeveloperAccessController {
 
             @Override
             public void onError(com.lightai.client.error.UnifiedError error) {
-                failed.set(true);
+                if (!terminal.compareAndSet(false, true)) return;
                 try {
                     emitter.send(SseEmitter.event().data(json(Map.of("error", error))));
                 } catch (Exception ignored) {
                     // 客户端已断开
                 }
+                emitter.complete();
+            }
+
+            @Override
+            public void onComplete() {
+                if (!terminal.compareAndSet(false, true)) return;
+                try {
+                    emitter.send(SseEmitter.event().data(json(StreamEvent.done(traceIdRef.get(), sequenceRef.get() + 1,
+                            modelRef.get(), providerRef.get(), providerModelRef.get(), "stop", null))));
+                } catch (Exception ignored) {
+                    // 客户端已断开
+                }
+                emitter.complete();
             }
         };
     }
-
     private static String json(Object value) {
         try {
             return ProtocolJson.protocol().writeValueAsString(value);

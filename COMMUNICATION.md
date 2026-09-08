@@ -687,3 +687,6 @@
 ## CR-006 复核修复（2026-09-08）
 
 历史修复错误地把 AuthContext.applicationScope 同时作为 Alias 授权范围，应用名碰巧等于 Alias 时仍可越权。本轮为部署身份增加独立 liasScope，保留五参数构造器源码兼容且默认不授予 Alias；开发人员的目录、代码示例和在线测试统一按该范围校验，系统管理员与运维按既有角色权限访问全部已发布 Alias。在线测试 Trace 的 application 仅在身份绑定单一应用时使用该应用，否则记录 ADMIN_CONSOLE。AuthContextTest 5例与 DeveloperAccessServiceScopeTest 2例通过，覆盖权限域隔离、显式 Alias 成功与跨 Alias 拒绝。CR-006 本轮状态：已完成。
+## CR-011 流终态复核修复（2026-09-08）
+
+历史管理端虽改为 StreamEvent，Controller 仍在 chatStream 返回后立即发送 DONE；SPI Publisher 异步执行时会先结束响应，后续分片被丢弃。Runtime 本轮增加 StreamListener.onComplete，只在 Attempt 结算和 Trace 成功最终化后触发。Standalone /v1、管理在线测试、Local SDK 与 Embedded 客户端均由该回调发送唯一成功终态；错误与成功通过原子标志互斥，客户端关闭/超时向取消信号传播。SseEmitter 使用纯 JSON 载荷，由框架添加一次 data:，避免双重编码。ChatPipelineTest 11例、SseEncoderTest 4例、V1ControllerStreamTest 1例通过，覆盖异步 Provider 返回前无 DONE、完成后 DONE、错误无 DONE及单层编码。CR-011 本轮状态：已完成。

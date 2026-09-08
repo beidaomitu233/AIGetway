@@ -227,15 +227,17 @@ public class LightAiEmbeddedConfiguration {
                         public void onError(com.lightai.client.error.UnifiedError error) {
                             publisher.error(new LightAiException(ErrorCode.valueOf(error.code()), error.message()));
                         }
-                    });
 
-                    if (!cancellation.cancelled()) {
-                        if (doneEmitted.compareAndSet(false, true)) {
-                            publisher.submit(com.lightai.client.StreamEvent.done(lastTraceId.get(), lastSequence.get() + 1,
-                                    lastModel.get(), lastProvider.get(), lastProviderModel.get(), "stop", null));
+                        @Override
+                        public void onComplete() {
+                            if (cancellation.cancelled()) return;
+                            if (doneEmitted.compareAndSet(false, true)) {
+                                publisher.submit(com.lightai.client.StreamEvent.done(lastTraceId.get(), lastSequence.get() + 1,
+                                        lastModel.get(), lastProvider.get(), lastProviderModel.get(), "stop", null));
+                            }
+                            publisher.complete();
                         }
-                        publisher.complete();
-                    }
+                    });
                 } catch (LightAiException e) {
                     if (!cancellation.cancelled()) {
                         publisher.error(e);

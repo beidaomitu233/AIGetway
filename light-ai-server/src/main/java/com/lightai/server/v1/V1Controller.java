@@ -70,14 +70,19 @@ public class V1Controller {
                 .body(json(modelsService.list(principal)));
     }
 
-    @PostMapping(value = "/v1/chat/completions", produces = "application/json")
-    public ResponseEntity<String> chat(
+    /**
+     * 统一入口：按请求体 stream 标志分流同步 JSON 与 SSE。
+     * 不能依赖 Accept 头做内容协商——OpenAI 兼容客户端（curl/SDK）常不带
+     * Accept: text/event-stream，只以 stream=true 表达流式意图。
+     */
+    @PostMapping(value = "/v1/chat/completions")
+    public Object completions(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestHeader(value = "Content-Type", required = false) String contentType,
             @RequestHeader(value = "Content-Encoding", required = false) String contentEncoding,
             @RequestHeader(value = "X-Trace-Id", required = false) String headerTraceId,
             @RequestBody String body,
-            HttpServletRequest servletRequest) {
+            HttpServletRequest servletRequest) throws IOException {
         checkAcceptingRequests();
         checkProtocol(contentType, contentEncoding);
         AccessTokenPort.Principal principal = authenticate(authorization, servletRequest);
@@ -89,6 +94,14 @@ public class V1Controller {
         if (headerTraceId != null && request.traceId() == null) {
             request = withTraceId(request, headerTraceId);
         }
+        if (request.stream()) {
+            return chatStreamInternal(principal, request);
+        }
+        return chatInternal(principal, request);
+    }
+
+    private ResponseEntity<String> chatInternal(AccessTokenPort.Principal principal,
+                                                UnifiedChatRequest request) {
         com.lightai.server.lifecycle.ServerLifecycleService.ActiveRequestHandle handle = null;
         if (lifecycleService != null) {
             handle = lifecycleService.trackRequestStart(request.traceId(), null, null);
@@ -107,80 +120,74 @@ public class V1Controller {
         }
     }
 
-    @PostMapping(value = "/v1/chat/completions", produces = "text/event-stream")
-    public SseEmitter chatStream(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
-            @RequestHeader(value = "Content-Type", required = false) String contentType,
-            @RequestHeader(value = "Content-Encoding", required = false) String contentEncoding,
-            @RequestHeader(value = "X-Trace-Id", required = false) String headerTraceId,
-            @RequestBody String body,
-            HttpServletRequest servletRequest) throws IOException {
-        checkAcceptingRequests();
-        checkProtocol(contentType, contentEncoding);
-        AccessTokenPort.Principal principal = authenticate(authorization, servletRequest);
-        UnifiedChatRequest request = parseRequest(body);
-        if (!request.stream()) {
-            throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
-                    "stream=true 才使用 SSE 响应", "stream");
-        }
-        if (headerTraceId != null && request.traceId() != null && !headerTraceId.equals(request.traceId())) {
-            throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
-                    "X-Trace-Id 与请求体 trace_id 不一致", "trace_id");
-        }
+    private SseEmitter chatStreamInternal(AccessTokenPort.Principal principal,
+                                          UnifiedChatRequest request) throws IOException {
         SseEmitter emitter = new SseEmitter(0L);
         emitter.send(SseEmitter.event().comment("light-ai stream open"));
-        com.lightai.server.lifecycle.ServerLifecycleService.ActiveRequestHandle handle = null;
-        if (lifecycleService != null) {
-            handle = lifecycleService.trackRequestStart(request.traceId(), null, () -> {
-                try {
-                    emitter.completeWithError(new LightAiException(ErrorCode.SERVER_DRAINING, "Server 停机中断连接"));
-                } catch (Exception ignored) {
+        com.lightai.server.lifecycle.ServerLifecycleService.ActiveRequestHandle trackedHandle =
+                lifecycleService == null ? null : lifecycleService.trackRequestStart(request.traceId(), null,
+                        () -> emitter.completeWithError(
+                                new LightAiException(ErrorCode.SERVER_DRAINING, "Server 停机中断连接")));
+        com.lightai.runtime.chat.CancellationSignal cancellation =
+                new com.lightai.runtime.chat.CancellationSignal("http-stream");
+        java.util.concurrent.atomic.AtomicBoolean terminal = new java.util.concurrent.atomic.AtomicBoolean(false);
+        emitter.onCompletion(() -> {
+            cancellation.cancel("http-stream-closed");
+            if (lifecycleService != null && trackedHandle != null) {
+                lifecycleService.trackRequestEnd(trackedHandle.requestId());
+            }
+        });
+        emitter.onTimeout(() -> {
+            cancellation.cancel("http-stream-timeout");
+            emitter.complete();
+        });
+        try {
+            ChatPipeline.ChatContext context = new ChatPipeline.ChatContext(principal, request, cancellation);
+            chatPipeline.chatStream(context, new ChatPipeline.StreamListener() {
+                @Override public void onCommit() { }
+
+                @Override
+                public void onChunk(UnifiedChatChunk chunk) {
+                    if (terminal.get()) return;
+                    try {
+                        emitter.send(SseEmitter.event().data(SseEncoder.chunkJson(chunk)));
+                    } catch (IOException e) {
+                        cancellation.cancel("client-disconnected");
+                        throw new LightAiException(ErrorCode.CLIENT_CANCELLED, "客户端断开");
+                    }
+                }
+
+                @Override
+                public void onError(UnifiedError error) {
+                    if (!terminal.compareAndSet(false, true)) return;
+                    try {
+                        emitter.send(SseEmitter.event().data(SseEncoder.errorJson(error)));
+                    } catch (IOException ignored) {
+                        cancellation.cancel("client-disconnected");
+                    }
+                    emitter.complete();
+                }
+
+                @Override
+                public void onComplete() {
+                    if (!terminal.compareAndSet(false, true)) return;
+                    try {
+                        emitter.send(SseEmitter.event().data("[DONE]"));
+                        emitter.complete();
+                    } catch (IOException e) {
+                        cancellation.cancel("client-disconnected");
+                        emitter.completeWithError(e);
+                    }
                 }
             });
-        }
-        try {
-            ChatPipeline.ChatContext context = new ChatPipeline.ChatContext(principal, request, null);
-            try {
-                chatPipeline.chatStream(context, new ChatPipeline.StreamListener() {
-                    @Override
-                    public void onCommit() {
-                        // 响应头由 SseEmitter 机制提交；此处为提交边界标记
-                    }
-
-                    @Override
-                    public void onChunk(UnifiedChatChunk chunk) {
-                        try {
-                            emitter.send(SseEmitter.event().data(SseEncoder.chunk(chunk)));
-                        } catch (IOException e) {
-                            throw new LightAiException(ErrorCode.CLIENT_CANCELLED, "客户端断开");
-                        }
-                    }
-
-                    @Override
-                    public void onError(UnifiedError error) {
-                        try {
-                            emitter.send(SseEmitter.event().data(SseEncoder.error(error)));
-                        } catch (IOException ignored) {
-                            // 客户端已断开
-                        }
-                        emitter.complete();
-                    }
-                });
-                emitter.send(SseEmitter.event().data(SseEncoder.done()));
+        } catch (LightAiException e) {
+            if (terminal.compareAndSet(false, true)) {
+                emitter.send(SseEmitter.event().data(SseEncoder.errorJson(e.toError())));
                 emitter.complete();
-            } catch (LightAiException e) {
-                // 提交前失败：发送错误事件并关闭（无 DONE）
-                emitter.send(SseEmitter.event().data(SseEncoder.error(e.toError())));
-                emitter.complete();
-            }
-        } finally {
-            if (lifecycleService != null && handle != null) {
-                lifecycleService.trackRequestEnd(handle.requestId());
             }
         }
         return emitter;
     }
-
     private void checkAcceptingRequests() {
         if (lifecycleService != null && !lifecycleService.isAcceptingRequests()) {
             throw new LightAiException(ErrorCode.SERVER_DRAINING, "Server 正在优雅停机摘流中，拒绝新请求");

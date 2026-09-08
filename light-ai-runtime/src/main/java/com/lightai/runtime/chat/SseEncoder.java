@@ -18,6 +18,15 @@ public final class SseEncoder {
         return "data: " + json(chunk) + "\n\n";
     }
 
+    /** 纯 JSON 载荷：交由 SseEmitter 等框架统一添加 data: 前缀，避免双重包装。 */
+    public static String chunkJson(UnifiedChatChunk chunk) {
+        return json(chunk);
+    }
+
+    public static String errorJson(UnifiedError error) {
+        return json(java.util.Map.of("error", error));
+    }
+
     public static String done() {
         return "data: [DONE]\n\n";
     }

@@ -210,15 +210,18 @@ public class LocalLightAiClient implements LightAiClient {
                     public void onError(UnifiedError error) {
                         publisher.error(new LightAiException(ErrorCode.valueOf(error.code()), error.message()));
                     }
-                });
 
-                if (!cancellation.cancelled()) {
-                    if (!doneEmitted.get() && started.get()) {
-                        publisher.submit(StreamEvent.done(lastTraceId.get(), lastSequence.get() + 1, lastModel.get(), lastProvider.get(), lastProviderModel.get(), "stop", null));
-                        doneEmitted.set(true);
+                    @Override
+                    public void onComplete() {
+                        if (cancellation.cancelled()) return;
+                        if (!doneEmitted.get() && started.get()) {
+                            publisher.submit(StreamEvent.done(lastTraceId.get(), lastSequence.get() + 1,
+                                    lastModel.get(), lastProvider.get(), lastProviderModel.get(), "stop", null));
+                            doneEmitted.set(true);
+                        }
+                        publisher.complete();
                     }
-                    publisher.complete();
-                }
+                });
             } catch (LightAiException e) {
                 if (!cancellation.cancelled()) {
                     publisher.error(e);
