@@ -4,6 +4,8 @@ import com.lightai.admin.web.CommandBodies;
 import com.lightai.admin.web.ManagementResponses;
 import com.lightai.admin.web.RequestContext;
 import com.lightai.client.application.ApplicationCreateCommand;
+import com.lightai.client.application.ApplicationModelsUpdateCommand;
+import com.lightai.client.application.ApplicationQuotaUpdateCommand;
 import com.lightai.client.application.ApplicationStatusCommand;
 import com.lightai.client.application.ApplicationUpdateCommand;
 import com.lightai.client.error.ErrorCode;
@@ -53,6 +55,24 @@ public final class ApplicationController {
                                          HttpServletRequest request) {
         ApplicationUpdateCommand command = CommandBodies.parse(body, ApplicationUpdateCommand.class);
         return json(ManagementResponses.ok(service.update(context(request), parseId(id), command)));
+    }
+
+    @PutMapping("/admin/applications/{id}/quota")
+    public ResponseEntity<String> updateQuota(@PathVariable String id, @RequestBody String body,
+                                              HttpServletRequest request) {
+        ApplicationQuotaUpdateCommand command = CommandBodies.parse(
+                body, ApplicationQuotaUpdateCommand.class);
+        return json(ManagementResponses.ok(
+                service.updateQuota(context(request), parseId(id), command)));
+    }
+
+    @PutMapping("/admin/applications/{id}/models")
+    public ResponseEntity<String> updateModels(@PathVariable String id, @RequestBody String body,
+                                               HttpServletRequest request) {
+        ApplicationModelsUpdateCommand command = CommandBodies.parse(
+                body, ApplicationModelsUpdateCommand.class);
+        return json(ManagementResponses.ok(
+                service.updateModels(context(request), parseId(id), command)));
     }
 
     @PostMapping("/admin/applications/{id}/status")

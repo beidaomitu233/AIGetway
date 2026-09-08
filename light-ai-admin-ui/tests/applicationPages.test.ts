@@ -124,4 +124,68 @@ describe('Application pages（V2 应用中心）', () => {
     expect(text).toContain('额度与速率')
     expect(wrapper.find('a[href*="application=customer-service-prod"]').exists()).toBe(true)
   })
+
+  it('在应用详情调整额度并替换模型授权', async () => {
+    stub = installJsonFetchStub(({ url, method }) => {
+      if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}`)) {
+        return dataEnvelope(application)
+      }
+      if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}/keys`)) {
+        return dataEnvelope([])
+      }
+      if (method === 'GET' && url.pathname.endsWith('/admin/model-aliases')) {
+        return pageEnvelope([
+          { id: 'alias-1', alias: 'chat-default', display_name: '默认对话', enabled: true },
+          { id: 'alias-2', alias: 'chat-backup', display_name: '备用对话', enabled: true },
+        ])
+      }
+      if (method === 'PUT' && url.pathname.endsWith(`/admin/applications/${application.id}/quota`)) {
+        return dataEnvelope({
+          id: application.id,
+          version: 2,
+          entity: { ...application, quota: { ...application.quota, token_limit: 2_000_000, version: 2 } },
+          draft_changed: false,
+          draft_revision: null,
+          request_id: 'req-quota',
+        })
+      }
+      if (method === 'PUT' && url.pathname.endsWith(`/admin/applications/${application.id}/models`)) {
+        return dataEnvelope({
+          id: application.id,
+          version: 3,
+          entity: { ...application, version: 3 },
+          draft_changed: false,
+          draft_revision: null,
+          request_id: 'req-model',
+        })
+      }
+      return undefined
+    })
+    const { wrapper } = await mountPage(`/ui/applications/${application.id}`)
+
+    const quotaButton = wrapper.findAll('button').find((button) => button.text() === '调整')!
+    await quotaButton.trigger('click')
+    const quotaDialog = wrapper.find('[aria-labelledby="application-quota-title"]')
+    await quotaDialog.find('input[type="number"]').setValue('2000000')
+    await quotaDialog.find('textarea').setValue('扩大生产额度')
+    await quotaDialog.findAll('button').find((button) => button.text() === '保存调整')!.trigger('click')
+    await flushPromises()
+    expect(stub.calls.find((call) => call.method === 'PUT' && call.url.endsWith('/quota'))?.body)
+      .toMatchObject({ token_limit: 2_000_000, version: 1, reason: '扩大生产额度' })
+
+    const modelButton = wrapper.findAll('button').find((button) => button.text() === '管理授权')!
+    await modelButton.trigger('click')
+    await flushPromises()
+    const modelDialog = wrapper.find('[aria-labelledby="application-model-title"]')
+    await modelDialog.find('input[type="checkbox"][value="alias-2"]').setValue(true)
+    await modelDialog.find('textarea').setValue('增加备用模型')
+    await modelDialog.findAll('button').find((button) => button.text() === '保存授权')!.trigger('click')
+    await flushPromises()
+    expect(stub.calls.find((call) => call.method === 'PUT' && call.url.endsWith('/models'))?.body)
+      .toMatchObject({
+        virtual_model_ids: ['alias-1', 'alias-2'],
+        application_version: 2,
+        reason: '增加备用模型',
+      })
+  })
 })

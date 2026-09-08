@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import FormField from '@/components/FormField.vue'
 import PageState from '@/components/PageState.vue'
 import ApplicationKeyPanel from './ApplicationKeyPanel.vue'
 import { formatDateTime } from '@/app/display'
@@ -10,9 +11,12 @@ import { useFormSubmit } from '@/composables/useFormSubmit'
 import {
   changeApplicationStatus,
   fetchApplication,
+  updateApplicationModels,
+  updateApplicationQuota,
   type ApplicationDetail,
   type ApplicationStatus,
 } from '@/api/applications'
+import { fetchModelAliases, type ModelAliasListItem } from '@/api/modelAliases'
 
 const route = useRoute()
 const store = useBootstrapStore()
@@ -24,7 +28,33 @@ const statusDialogOpen = ref(false)
 const targetStatus = ref<ApplicationStatus>('DISABLED')
 const statusReason = ref('')
 const canManage = computed(() => store.can(Permission.applicationManage))
-const { submitting, errorText, conflictError, submit } = useFormSubmit()
+const canManageQuota = computed(() => store.can(Permission.applicationQuotaManage))
+const canManageModels = computed(() => store.can(Permission.applicationModelManage))
+const statusSubmission = useFormSubmit()
+const quotaSubmission = useFormSubmit()
+const modelSubmission = useFormSubmit()
+const quotaDialogOpen = ref(false)
+const modelDialogOpen = ref(false)
+const availableModels = ref<ModelAliasListItem[]>([])
+const modelsLoading = ref(false)
+const modelsLoadError = ref<unknown>(null)
+const selectedModelIds = ref<string[]>([])
+const modelReason = ref('')
+const quotaForm = reactive({
+  token_limited: true,
+  token_limit: 1 as number | null,
+  amount_limited: true,
+  amount_limit: '1',
+  currency: 'CNY',
+  rpm_limited: true,
+  rpm: 1 as number | null,
+  tpm_limited: true,
+  tpm: 1 as number | null,
+  period_type: 'LIFECYCLE' as ApplicationDetail['quota']['period_type'],
+  period_start: '',
+  period_end: '',
+  reason: '',
+})
 
 const statusLabel: Record<ApplicationStatus, string> = {
   ACTIVE: '启用',
@@ -55,12 +85,13 @@ function amountText(): string {
 function openStatusDialog(status: ApplicationStatus): void {
   targetStatus.value = status
   statusReason.value = ''
+  statusSubmission.reset()
   statusDialogOpen.value = true
 }
 
 async function applyStatus(): Promise<void> {
   if (!detail.value || !statusReason.value.trim()) return
-  const result = await submit(async () => {
+  const result = await statusSubmission.submit(async () => {
     const response = await changeApplicationStatus(detail.value!.id, {
       status: targetStatus.value,
       version: detail.value!.version,
@@ -69,6 +100,105 @@ async function applyStatus(): Promise<void> {
     if (response.entity) detail.value = response.entity
   })
   if (result.ok) statusDialogOpen.value = false
+}
+
+function asLocalDateTime(value: string | null): string {
+  if (!value) return ''
+  const date = new Date(value)
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return local.toISOString().slice(0, 16)
+}
+
+function asOffsetDateTime(value: string): string | null {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+function openQuotaDialog(): void {
+  if (!detail.value) return
+  quotaSubmission.reset()
+  const quota = detail.value.quota
+  quotaForm.token_limited = quota.token_limit != null
+  quotaForm.token_limit = quota.token_limit ?? 1
+  quotaForm.amount_limited = quota.amount_limit != null
+  quotaForm.amount_limit = quota.amount_limit ?? '1'
+  quotaForm.currency = quota.currency
+  quotaForm.rpm_limited = quota.rpm != null
+  quotaForm.rpm = quota.rpm ?? 1
+  quotaForm.tpm_limited = quota.tpm != null
+  quotaForm.tpm = quota.tpm ?? 1
+  quotaForm.period_type = quota.period_type
+  quotaForm.period_start = asLocalDateTime(quota.period_start)
+  quotaForm.period_end = asLocalDateTime(quota.period_end)
+  quotaForm.reason = ''
+  quotaDialogOpen.value = true
+}
+
+const quotaInvalid = computed(() => Boolean(
+  !quotaForm.reason.trim()
+  || (quotaForm.token_limited && (!quotaForm.token_limit || quotaForm.token_limit <= 0))
+  || (quotaForm.amount_limited && (!quotaForm.amount_limit || Number(quotaForm.amount_limit) <= 0))
+  || !/^[A-Za-z]{3}$/.test(quotaForm.currency)
+  || (quotaForm.rpm_limited && (!quotaForm.rpm || quotaForm.rpm <= 0))
+  || (quotaForm.tpm_limited && (!quotaForm.tpm || quotaForm.tpm <= 0))
+  || (quotaForm.period_type === 'CUSTOM'
+    && (!quotaForm.period_start || !quotaForm.period_end
+      || quotaForm.period_start >= quotaForm.period_end)),
+))
+
+async function saveQuota(): Promise<void> {
+  if (!detail.value || quotaInvalid.value) return
+  const result = await quotaSubmission.submit(async () => {
+    const response = await updateApplicationQuota(detail.value!.id, {
+      token_limit: quotaForm.token_limited ? quotaForm.token_limit : null,
+      amount_limit: quotaForm.amount_limited ? quotaForm.amount_limit.trim() : null,
+      currency: quotaForm.currency.trim().toUpperCase(),
+      rpm: quotaForm.rpm_limited ? quotaForm.rpm : null,
+      tpm: quotaForm.tpm_limited ? quotaForm.tpm : null,
+      period_type: quotaForm.period_type,
+      period_start: quotaForm.period_type === 'CUSTOM' ? asOffsetDateTime(quotaForm.period_start) : null,
+      period_end: quotaForm.period_type === 'CUSTOM' ? asOffsetDateTime(quotaForm.period_end) : null,
+      version: detail.value!.quota.version,
+      reason: quotaForm.reason.trim(),
+    })
+    if (response.entity) detail.value = response.entity
+  })
+  if (result.ok) quotaDialogOpen.value = false
+}
+
+async function openModelDialog(): Promise<void> {
+  if (!detail.value) return
+  modelSubmission.reset()
+  selectedModelIds.value = detail.value.models
+    .filter((item) => item.enabled)
+    .map((item) => item.virtual_model_id)
+  modelReason.value = ''
+  modelDialogOpen.value = true
+  if (availableModels.value.length) return
+  modelsLoading.value = true
+  modelsLoadError.value = null
+  try {
+    const page = await fetchModelAliases({ enabled: true, page: 1, page_size: 100, sort: 'alias' })
+    availableModels.value = page.items
+  } catch (error) {
+    modelsLoadError.value = error
+  } finally {
+    modelsLoading.value = false
+  }
+}
+
+async function saveModels(): Promise<void> {
+  if (!detail.value || !modelReason.value.trim()) return
+  const result = await modelSubmission.submit(async () => {
+    const response = await updateApplicationModels(detail.value!.id, {
+      virtual_model_ids: selectedModelIds.value,
+      application_version: detail.value!.version,
+      reason: modelReason.value.trim(),
+    })
+    if (response.entity) detail.value = response.entity
+  })
+  if (result.ok) modelDialogOpen.value = false
 }
 
 async function load(): Promise<void> {
@@ -138,7 +268,11 @@ onMounted(load)
           />
 
           <div class="lai-card">
-            <div class="card-heading"><h2 class="lai-card-title">可用虚拟模型</h2><span>{{ detail.models.length }} 个</span></div>
+            <div class="card-heading">
+              <h2 class="lai-card-title">可用虚拟模型</h2>
+              <button v-if="canManageModels && detail.status !== 'ARCHIVED'" type="button" class="lai-btn lai-btn-small" @click="openModelDialog">管理授权</button>
+              <span v-else>{{ detail.models.filter((item) => item.enabled).length }} 个</span>
+            </div>
             <div v-if="detail.models.length" class="model-list">
               <div v-for="model in detail.models" :key="model.id" class="model-row">
                 <div><strong>{{ model.virtual_model_code || model.virtual_model_id }}</strong><small>请求 model 字段</small></div>
@@ -159,7 +293,10 @@ onMounted(load)
 
         <aside>
           <div class="lai-card">
-            <h2 class="lai-card-title">额度与速率</h2>
+            <div class="card-heading">
+              <h2 class="lai-card-title">额度与速率</h2>
+              <button v-if="canManageQuota && detail.status !== 'ARCHIVED'" type="button" class="lai-btn lai-btn-small" @click="openQuotaDialog">调整</button>
+            </div>
             <dl class="property-list">
               <div><dt>Token 额度</dt><dd>{{ usageText(detail.quota.tokens_used, detail.quota.tokens_reserved, detail.quota.token_limit) }}</dd></div>
               <div><dt>金额预算</dt><dd>{{ amountText() }}</dd></div>
@@ -182,16 +319,79 @@ onMounted(load)
       </div>
     </template>
 
+    <div v-if="quotaDialogOpen && detail" class="lai-dialog-overlay" @click.self="quotaDialogOpen = false">
+      <div class="lai-dialog governance-dialog" role="dialog" aria-modal="true" aria-labelledby="application-quota-title">
+        <h2 id="application-quota-title" class="lai-dialog-title">调整额度与速率</h2>
+        <p class="lai-dialog-message">新上限不能低于已用与预占；当前周期已有用量时不能直接修改币种或周期。</p>
+        <div class="governance-grid">
+          <FormField label="Token 额度" :error="quotaSubmission.fieldMessages.value.token_limit">
+            <div class="limit-control"><label><input v-model="quotaForm.token_limited" type="checkbox"> 限制</label><input v-model.number="quotaForm.token_limit" class="lai-input" type="number" min="1" :disabled="!quotaForm.token_limited"></div>
+          </FormField>
+          <FormField label="金额预算" :error="quotaSubmission.fieldMessages.value.amount_limit">
+            <div class="amount-control"><label><input v-model="quotaForm.amount_limited" type="checkbox"> 限制</label><input v-model="quotaForm.amount_limit" class="lai-input" inputmode="decimal" :disabled="!quotaForm.amount_limited"><input v-model="quotaForm.currency" class="lai-input currency" maxlength="3" aria-label="币种"></div>
+          </FormField>
+          <FormField label="RPM" hint="每分钟最大请求数" :error="quotaSubmission.fieldMessages.value.rpm">
+            <div class="limit-control"><label><input v-model="quotaForm.rpm_limited" type="checkbox"> 限制</label><input v-model.number="quotaForm.rpm" class="lai-input" type="number" min="1" :disabled="!quotaForm.rpm_limited"></div>
+          </FormField>
+          <FormField label="TPM" hint="每分钟最大 Token 数" :error="quotaSubmission.fieldMessages.value.tpm">
+            <div class="limit-control"><label><input v-model="quotaForm.tpm_limited" type="checkbox"> 限制</label><input v-model.number="quotaForm.tpm" class="lai-input" type="number" min="1" :disabled="!quotaForm.tpm_limited"></div>
+          </FormField>
+          <FormField label="额度周期" required :error="quotaSubmission.fieldMessages.value.period_type">
+            <select v-model="quotaForm.period_type" class="lai-select full-control">
+              <option value="LIFECYCLE">应用生命周期</option><option value="DAY">每日</option>
+              <option value="MONTH">每月</option><option value="CUSTOM">自定义</option>
+            </select>
+          </FormField>
+          <template v-if="quotaForm.period_type === 'CUSTOM'">
+            <FormField label="开始时间" required><input v-model="quotaForm.period_start" class="lai-input" type="datetime-local"></FormField>
+            <FormField label="结束时间" required :error="quotaSubmission.fieldMessages.value.period_end"><input v-model="quotaForm.period_end" class="lai-input" type="datetime-local"></FormField>
+          </template>
+          <FormField class="wide-field" label="调整原因" required :error="quotaSubmission.fieldMessages.value.reason">
+            <textarea v-model="quotaForm.reason" class="lai-input status-reason" maxlength="500" rows="3" placeholder="必填，将写入审计记录" />
+          </FormField>
+        </div>
+        <p v-if="quotaSubmission.conflictError.value" class="lai-form-message-error">额度策略已变化，请关闭弹窗并刷新后重试。</p>
+        <p v-else-if="quotaSubmission.errorText.value" class="lai-form-message-error">{{ quotaSubmission.errorText.value }}</p>
+        <div class="lai-dialog-actions">
+          <button type="button" class="lai-btn" :disabled="quotaSubmission.submitting.value" @click="quotaDialogOpen = false">取消</button>
+          <button type="button" class="lai-btn lai-btn-primary" :disabled="quotaSubmission.submitting.value || quotaInvalid" @click="saveQuota">{{ quotaSubmission.submitting.value ? '保存中…' : '保存调整' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="modelDialogOpen && detail" class="lai-dialog-overlay" @click.self="modelDialogOpen = false">
+      <div class="lai-dialog governance-dialog" role="dialog" aria-modal="true" aria-labelledby="application-model-title">
+        <h2 id="application-model-title" class="lai-dialog-title">管理模型授权</h2>
+        <p class="lai-dialog-message">未授权的模型会在调用进入路由前被拒绝。取消授权不会改写历史调用记录。</p>
+        <PageState v-if="modelsLoading" status="loading" />
+        <PageState v-else-if="modelsLoadError" status="error" :error="modelsLoadError" @retry="openModelDialog" />
+        <div v-else-if="availableModels.length" class="model-options">
+          <label v-for="model in availableModels" :key="model.id" class="model-option">
+            <input v-model="selectedModelIds" type="checkbox" :value="model.id">
+            <span><strong>{{ model.display_name }}</strong><small>{{ model.alias }}</small></span>
+          </label>
+        </div>
+        <p v-else class="empty-inline">当前没有已启用的虚拟模型。保存后应用将没有可调用模型。</p>
+        <label class="lai-dialog-field"><span>变更原因</span><textarea v-model="modelReason" class="lai-input status-reason" maxlength="500" rows="3" placeholder="必填，将写入审计记录" /></label>
+        <p v-if="modelSubmission.conflictError.value" class="lai-form-message-error">应用授权版本已变化，请关闭弹窗并刷新后重试。</p>
+        <p v-else-if="modelSubmission.errorText.value" class="lai-form-message-error">{{ modelSubmission.errorText.value }}</p>
+        <div class="lai-dialog-actions">
+          <button type="button" class="lai-btn" :disabled="modelSubmission.submitting.value" @click="modelDialogOpen = false">取消</button>
+          <button type="button" class="lai-btn lai-btn-primary" :disabled="modelSubmission.submitting.value || !modelReason.trim() || modelsLoading" @click="saveModels">{{ modelSubmission.submitting.value ? '保存中…' : '保存授权' }}</button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="statusDialogOpen && detail" class="lai-dialog-overlay" @click.self="statusDialogOpen = false">
       <div class="lai-dialog" role="dialog" aria-modal="true" aria-labelledby="application-status-title">
         <h2 id="application-status-title" class="lai-dialog-title">{{ statusLabel[targetStatus] }}应用</h2>
         <p class="lai-dialog-message">{{ targetStatus === 'DISABLED' ? '停用后应立即拒绝该应用的新调用。' : targetStatus === 'ARCHIVED' ? '归档是终态，必须先停用应用。' : '启用后应用可按密钥、模型权限与额度策略接入。' }}</p>
         <label class="lai-dialog-field"><span>变更原因</span><textarea v-model="statusReason" class="lai-input status-reason" maxlength="500" rows="3" placeholder="必填，将写入审计记录" /></label>
-        <p v-if="conflictError" class="lai-form-message-error">应用版本已变化，请刷新后再操作。</p>
-        <p v-else-if="errorText" class="lai-form-message-error">{{ errorText }}</p>
+        <p v-if="statusSubmission.conflictError.value" class="lai-form-message-error">应用版本已变化，请刷新后再操作。</p>
+        <p v-else-if="statusSubmission.errorText.value" class="lai-form-message-error">{{ statusSubmission.errorText.value }}</p>
         <div class="lai-dialog-actions">
-          <button type="button" class="lai-btn" :disabled="submitting" @click="statusDialogOpen = false">取消</button>
-          <button type="button" class="lai-btn lai-btn-primary" :disabled="submitting || !statusReason.trim()" @click="applyStatus">{{ submitting ? '处理中…' : '确认' }}</button>
+          <button type="button" class="lai-btn" :disabled="statusSubmission.submitting.value" @click="statusDialogOpen = false">取消</button>
+          <button type="button" class="lai-btn lai-btn-primary" :disabled="statusSubmission.submitting.value || !statusReason.trim()" @click="applyStatus">{{ statusSubmission.submitting.value ? '处理中…' : '确认' }}</button>
         </div>
       </div>
     </div>
@@ -218,6 +418,18 @@ onMounted(load)
 .shortcut-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }.shortcut { display: flex; flex-direction: column; gap: 6px; padding: 14px; color: #172033; border: 1px solid #e6eaf0; border-radius: 6px; }.shortcut:hover { border-color: #2563eb; }.shortcut span { color: #667085; font-size: 13px; }
 .property-list { margin: 0; }.property-list div { padding: 10px 0; border-bottom: 1px solid #e6eaf0; }.property-list div:last-child { border: 0; }.property-list dt { margin-bottom: 3px; color: #667085; font-size: 12px; }.property-list dd { margin: 0; overflow-wrap: anywhere; }
 .status-reason { width: 100%; max-width: none; height: auto; margin-top: 6px; padding: 8px 10px; resize: vertical; }
+.lai-btn-small { min-height: 30px; padding: 4px 10px; font-size: 12px; }
+.governance-dialog { width: min(720px, calc(100vw - 32px)); max-width: 720px; }
+.governance-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; margin-top: 12px; }
+.wide-field { grid-column: 1 / -1; }
+.full-control, .governance-grid .lai-input { width: 100%; max-width: none; }
+.limit-control, .amount-control { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; }
+.amount-control { grid-template-columns: 64px 1fr 68px; }
+.model-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 300px; margin: 14px 0; overflow: auto; border: 1px solid #e6eaf0; border-radius: 6px; }
+.model-option { display: flex; align-items: flex-start; gap: 9px; padding: 12px; border-bottom: 1px solid #e6eaf0; }
+.model-option:nth-child(odd) { border-right: 1px solid #e6eaf0; }
+.model-option span { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.model-option small { color: #667085; overflow-wrap: anywhere; }
 @media (max-width: 1100px) { .metric-grid { grid-template-columns: repeat(2, 1fr); } .workspace-grid { grid-template-columns: 1fr; } }
-@media (max-width: 700px) { .detail-header { align-items: flex-start; flex-direction: column; } .metric-grid, .shortcut-grid { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .detail-header { align-items: flex-start; flex-direction: column; } .metric-grid, .shortcut-grid, .governance-grid, .model-options { grid-template-columns: 1fr; } .model-option:nth-child(odd) { border-right: 0; } }
 </style>

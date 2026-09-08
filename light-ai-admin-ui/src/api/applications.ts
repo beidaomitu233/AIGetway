@@ -132,6 +132,19 @@ export interface ApplicationUpdatePayload {
   version: number
 }
 
+export interface ApplicationQuotaUpdatePayload {
+  token_limit: number | null
+  amount_limit: string | null
+  currency: string
+  rpm: number | null
+  tpm: number | null
+  period_type: ApplicationQuotaPolicy['period_type']
+  period_start: string | null
+  period_end: string | null
+  version: number
+  reason: string
+}
+
 export function fetchApplications(
   query: Record<string, QueryValue>,
   signal: AbortSignal,
@@ -161,6 +174,20 @@ export function changeApplicationStatus(
   payload: { status: ApplicationStatus; version: number; reason: string },
 ): Promise<ManagementOperationResult<ApplicationDetail>> {
   return request({ path: `/applications/${id}/status`, method: 'POST', body: payload })
+}
+
+export function updateApplicationQuota(
+  id: string,
+  payload: ApplicationQuotaUpdatePayload,
+): Promise<ManagementOperationResult<ApplicationDetail>> {
+  return request({ path: `/applications/${id}/quota`, method: 'PUT', body: payload })
+}
+
+export function updateApplicationModels(
+  id: string,
+  payload: { virtual_model_ids: string[]; application_version: number; reason: string },
+): Promise<ManagementOperationResult<ApplicationDetail>> {
+  return request({ path: `/applications/${id}/models`, method: 'PUT', body: payload })
 }
 
 export function fetchApplicationKeys(

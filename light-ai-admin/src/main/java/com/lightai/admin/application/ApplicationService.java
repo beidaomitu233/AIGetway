@@ -9,7 +9,9 @@ import com.lightai.client.application.ApplicationCreateCommand;
 import com.lightai.client.application.ApplicationDetail;
 import com.lightai.client.application.ApplicationListItem;
 import com.lightai.client.application.ApplicationModelPermissionView;
+import com.lightai.client.application.ApplicationModelsUpdateCommand;
 import com.lightai.client.application.ApplicationQuotaPolicyView;
+import com.lightai.client.application.ApplicationQuotaUpdateCommand;
 import com.lightai.client.application.ApplicationStatusCommand;
 import com.lightai.client.application.ApplicationUpdateCommand;
 import com.lightai.client.changes.FieldChange;
@@ -256,6 +258,110 @@ public final class ApplicationService {
         }
     }
 
+    public ManagementOperationResult<ApplicationDetail> updateQuota(
+            RequestContext context, UUID id, ApplicationQuotaUpdateCommand command) {
+        RequestPermissions.require(context, Permissions.APPLICATION_QUOTA_MANAGE);
+        ValidatedQuota value = validateQuota(command);
+        try {
+            transaction.executeWithoutResult(status -> {
+                Connection connection = DataSourceUtils.getConnection(dataSource);
+                ApplicationRecord application = load(connection, id);
+                requireScope(connection, context, application.code());
+                requireEditable(application);
+                ApplicationQuotaRecord current = repository.findQuota(connection, id)
+                        .orElseThrow(() -> new LightAiException(
+                                ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用缺少额度策略"));
+                if (current.version() != value.version()) {
+                    throw versionConflict(context, current.version());
+                }
+                validateQuotaTransition(current, value);
+                ApplicationQuotaRecord requested = new ApplicationQuotaRecord(
+                        current.id(), id, value.tokenLimit(), value.amountLimit(), value.currency(),
+                        value.rpm(), value.tpm(), value.periodType(), value.periodStart(), value.periodEnd(),
+                        current.tokensUsed(), current.tokensReserved(), current.amountUsed(),
+                        current.amountReserved(), current.version(), current.createdAt(), current.updatedAt());
+                repository.updateQuota(connection, requested, value.version());
+                auditService.recordSuccess(connection, AuditRecord.succeeded(
+                        UUID.randomUUID(), context.requestId(), operatorId(context),
+                        "APPLICATION_QUOTA_UPDATE", "APPLICATION", id.toString(),
+                        changedQuotaFields(current, requested, value.reason()),
+                        sourceMode, context.sourceIpMasked()));
+            });
+            ApplicationDetail entity = detail(context, id);
+            return new ManagementOperationResult<>(id.toString(), entity.quota().version(), entity,
+                    false, null, context.requestId());
+        } catch (JdbcApplicationRepository.OptimisticLockException e) {
+            throw new LightAiException(ErrorCode.CONFIG_VERSION_CONFLICT,
+                    "应用额度版本已变化，请刷新后重试");
+        } catch (LightAiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用额度更新失败");
+        }
+    }
+
+    public ManagementOperationResult<ApplicationDetail> updateModels(
+            RequestContext context, UUID id, ApplicationModelsUpdateCommand command) {
+        RequestPermissions.require(context, Permissions.APPLICATION_MODEL_MANAGE);
+        ValidatedModels value = validateModelsCommand(command);
+        try {
+            transaction.executeWithoutResult(status -> {
+                Connection connection = DataSourceUtils.getConnection(dataSource);
+                ApplicationRecord application = load(connection, id);
+                requireScope(connection, context, application.code());
+                requireEditable(application);
+                if (application.version() != value.applicationVersion()) {
+                    throw versionConflict(context, application.version());
+                }
+                validateModels(connection, value.virtualModelIds());
+                List<ApplicationModelPermissionRecord> current =
+                        repository.listModelPermissions(connection, id);
+                Set<UUID> target = Set.copyOf(value.virtualModelIds());
+                Set<UUID> known = new LinkedHashSet<>();
+                boolean changed = false;
+                for (ApplicationModelPermissionRecord permission : current) {
+                    known.add(permission.virtualModelId());
+                    boolean enabled = target.contains(permission.virtualModelId());
+                    if (permission.enabled() != enabled) {
+                        repository.updateModelPermission(connection, permission.id(),
+                                enabled, permission.version());
+                        changed = true;
+                    }
+                }
+                for (UUID modelId : value.virtualModelIds()) {
+                    if (!known.contains(modelId)) {
+                        repository.insertModelPermission(connection, id, modelId);
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    repository.bumpApplicationVersion(connection, id, value.applicationVersion());
+                    List<String> before = current.stream().filter(ApplicationModelPermissionRecord::enabled)
+                            .map(item -> item.virtualModelId().toString()).sorted().toList();
+                    List<String> after = value.virtualModelIds().stream()
+                            .map(UUID::toString).sorted().toList();
+                    auditService.recordSuccess(connection, AuditRecord.succeeded(
+                            UUID.randomUUID(), context.requestId(), operatorId(context),
+                            "APPLICATION_MODEL_PERMISSION_UPDATE", "APPLICATION", id.toString(),
+                            List.of(
+                                    FieldChange.changed("virtual_model_ids", before, after),
+                                    FieldChange.changed("reason", null, value.reason())),
+                            sourceMode, context.sourceIpMasked()));
+                }
+            });
+            ApplicationDetail entity = detail(context, id);
+            return new ManagementOperationResult<>(id.toString(), entity.version(), entity,
+                    false, null, context.requestId());
+        } catch (JdbcApplicationRepository.OptimisticLockException e) {
+            throw new LightAiException(ErrorCode.CONFIG_VERSION_CONFLICT,
+                    "应用版本已变化，请刷新后重试");
+        } catch (LightAiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用模型授权更新失败");
+        }
+    }
+
     private ApplicationListItem toListItem(Connection connection, ApplicationRecord record) {
         ApplicationQuotaRecord quota = repository.findQuota(connection, record.id()).orElse(null);
         return new ApplicationListItem(
@@ -311,6 +417,89 @@ public final class ApplicationService {
                 throw invalid("virtual_model_ids", "虚拟模型未启用: " + model.alias());
             }
         }
+    }
+
+    private void requireEditable(ApplicationRecord application) {
+        if ("ARCHIVED".equals(application.status())) {
+            throw new LightAiException(ErrorCode.CONFIG_FIELD_IMMUTABLE, "归档应用不能再编辑");
+        }
+    }
+
+    private ValidatedQuota validateQuota(ApplicationQuotaUpdateCommand command) {
+        if (command == null) throw invalid("body", "请求体必填");
+        List<FieldIssue> issues = new ArrayList<>();
+        Long tokenLimit = positive(command.tokenLimit(), "token_limit", issues);
+        BigDecimal amountLimit = amount(command.amountLimit(), issues);
+        String currency = enumPattern(command.currency(), CURRENCY, "currency", issues);
+        Integer rpm = positive(command.rpm(), "rpm", issues);
+        Long tpm = positive(command.tpm(), "tpm", issues);
+        String periodType = enumValue(command.periodType(), PERIOD_TYPES, "period_type", issues);
+        if (command.version() < 1) {
+            issues.add(new FieldIssue("version", "INVALID", "version 必须是正整数"));
+        }
+        String reason = reason(command.reason(), issues);
+        if ("CUSTOM".equals(periodType) && (command.periodStart() == null
+                || command.periodEnd() == null
+                || !command.periodStart().isBefore(command.periodEnd()))) {
+            issues.add(new FieldIssue("period_end", "INVALID", "自定义周期必须提供有效起止时间"));
+        }
+        if (!issues.isEmpty()) throw new LightAiException(
+                ErrorCode.FIELD_VALIDATION_FAILED, "应用额度配置不合法", issues);
+        return new ValidatedQuota(tokenLimit, amountLimit, currency, rpm, tpm,
+                periodType, command.periodStart(), command.periodEnd(), command.version(), reason);
+    }
+
+    private ValidatedModels validateModelsCommand(ApplicationModelsUpdateCommand command) {
+        if (command == null) throw invalid("body", "请求体必填");
+        List<FieldIssue> issues = new ArrayList<>();
+        List<UUID> modelIds = uuidList(command.virtualModelIds(), issues);
+        if (command.applicationVersion() < 1) {
+            issues.add(new FieldIssue("application_version", "INVALID",
+                    "application_version 必须是正整数"));
+        }
+        String reason = reason(command.reason(), issues);
+        if (!issues.isEmpty()) throw new LightAiException(
+                ErrorCode.FIELD_VALIDATION_FAILED, "应用模型授权不合法", issues);
+        return new ValidatedModels(modelIds, command.applicationVersion(), reason);
+    }
+
+    private void validateQuotaTransition(ApplicationQuotaRecord current, ValidatedQuota requested) {
+        long committedTokens = current.tokensUsed() + current.tokensReserved();
+        if (requested.tokenLimit() != null && requested.tokenLimit() < committedTokens) {
+            throw invalid("token_limit", "Token 额度不能低于已用与预占之和");
+        }
+        BigDecimal committedAmount = current.amountUsed().add(current.amountReserved());
+        if (requested.amountLimit() != null
+                && requested.amountLimit().compareTo(committedAmount) < 0) {
+            throw invalid("amount_limit", "金额预算不能低于已用与预占之和");
+        }
+        if (committedAmount.signum() > 0
+                && !current.currency().equals(requested.currency())) {
+            throw invalid("currency", "本周期已有金额用量，不能变更币种");
+        }
+        if ((current.tokensUsed() > 0 || current.tokensReserved() > 0
+                || committedAmount.signum() > 0)
+                && (!current.periodType().equals(requested.periodType())
+                || !java.util.Objects.equals(current.periodStart(), requested.periodStart())
+                || !java.util.Objects.equals(current.periodEnd(), requested.periodEnd()))) {
+            throw invalid("period_type", "当前周期已有用量，不能直接变更周期");
+        }
+    }
+
+    private static List<FieldChange> changedQuotaFields(
+            ApplicationQuotaRecord before, ApplicationQuotaRecord after, String reason) {
+        List<FieldChange> changes = new ArrayList<>();
+        addChange(changes, "token_limit", before.tokenLimit(), after.tokenLimit());
+        addChange(changes, "amount_limit", decimalText(before.amountLimit()),
+                decimalText(after.amountLimit()));
+        addChange(changes, "currency", before.currency(), after.currency());
+        addChange(changes, "rpm", before.rpm(), after.rpm());
+        addChange(changes, "tpm", before.tpm(), after.tpm());
+        addChange(changes, "period_type", before.periodType(), after.periodType());
+        addChange(changes, "period_start", before.periodStart(), after.periodStart());
+        addChange(changes, "period_end", before.periodEnd(), after.periodEnd());
+        changes.add(FieldChange.changed("reason", null, reason));
+        return List.copyOf(changes);
     }
 
     private List<String> effectiveScope(Connection connection, RequestContext context) {
@@ -440,6 +629,16 @@ public final class ApplicationService {
         return value;
     }
 
+    private static String reason(String raw, List<FieldIssue> issues) {
+        String value = trimToNull(raw);
+        if (value == null) {
+            issues.add(new FieldIssue("reason", "REQUIRED", "变更原因必填"));
+        } else if (value.length() > 500) {
+            issues.add(new FieldIssue("reason", "TOO_LONG", "变更原因最长 500 字符"));
+        }
+        return value;
+    }
+
     private static String enumValue(String raw, Set<String> values, String field,
                                     List<FieldIssue> issues) {
         String value = trimToNull(raw);
@@ -522,5 +721,15 @@ public final class ApplicationService {
     private record ValidatedUpdate(
             String name, String department, String ownerId, String ownerName,
             String environment, String description, long version) {
+    }
+
+    private record ValidatedQuota(
+            Long tokenLimit, BigDecimal amountLimit, String currency, Integer rpm, Long tpm,
+            String periodType, OffsetDateTime periodStart, OffsetDateTime periodEnd,
+            long version, String reason) {
+    }
+
+    private record ValidatedModels(
+            List<UUID> virtualModelIds, long applicationVersion, String reason) {
     }
 }

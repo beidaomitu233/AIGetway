@@ -141,6 +141,29 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
         }
     }
 
+    public void updateQuota(Connection connection, ApplicationQuotaRecord record, long expectedVersion) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "UPDATE " + qualify(connection, "application_quota_policy")
+                + " SET token_limit = ?, amount_limit = ?, currency = ?, rpm = ?, tpm = ?, "
+                + "period_type = ?, period_start = ?, period_end = ?, version = version + 1, updated_at = "
+                + dialect.nowFunction() + " WHERE application_id = ? AND version = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            bindLong(statement, 1, record.tokenLimit());
+            bindDecimal(statement, 2, record.amountLimit());
+            statement.setString(3, record.currency());
+            bindInteger(statement, 4, record.rpm());
+            bindLong(statement, 5, record.tpm());
+            statement.setString(6, record.periodType());
+            bindTime(statement, 7, record.periodStart());
+            bindTime(statement, 8, record.periodEnd());
+            dialect.bindUuid(statement, 9, record.applicationId());
+            statement.setLong(10, expectedVersion);
+            if (statement.executeUpdate() != 1) throw new OptimisticLockException();
+        } catch (SQLException e) {
+            throw translate("应用治理策略更新失败", e);
+        }
+    }
+
     public void insertModelPermission(Connection connection, UUID applicationId, UUID virtualModelId) {
         DatabaseDialect dialect = dialect(connection);
         String sql = "INSERT INTO " + qualify(connection, "application_model_permission")
@@ -156,6 +179,35 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
             statement.executeUpdate();
         } catch (SQLException e) {
             throw translate("应用模型授权写入失败", e);
+        }
+    }
+
+    public void updateModelPermission(Connection connection, UUID id, boolean enabled, long expectedVersion) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "UPDATE " + qualify(connection, "application_model_permission")
+                + " SET enabled = ?, version = version + 1, updated_at = " + dialect.nowFunction()
+                + " WHERE id = ? AND version = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setBoolean(1, enabled);
+            dialect.bindUuid(statement, 2, id);
+            statement.setLong(3, expectedVersion);
+            if (statement.executeUpdate() != 1) throw new OptimisticLockException();
+        } catch (SQLException e) {
+            throw translate("应用模型授权更新失败", e);
+        }
+    }
+
+    public void bumpApplicationVersion(Connection connection, UUID id, long expectedVersion) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "UPDATE " + qualify(connection, "application")
+                + " SET version = version + 1, updated_at = " + dialect.nowFunction()
+                + " WHERE id = ? AND version = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, id);
+            statement.setLong(2, expectedVersion);
+            if (statement.executeUpdate() != 1) throw new OptimisticLockException();
+        } catch (SQLException e) {
+            throw translate("应用版本更新失败", e);
         }
     }
 
