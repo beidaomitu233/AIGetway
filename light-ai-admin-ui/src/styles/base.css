@@ -1,16 +1,27 @@
 /* 布局与共用组件样式。 */
 
+:root {
+  --lai-bg: #f6f8fb;
+  --lai-surface: #ffffff;
+  --lai-text: #172033;
+  --lai-muted: #667085;
+  --lai-border: #e6eaf0;
+  --lai-primary: #2563eb;
+  --lai-primary-hover: #1d4ed8;
+}
+
 .lai-app {
   display: flex;
   min-height: 100vh;
-  background: #f5f6f7;
+  background: var(--lai-bg);
+  color: var(--lai-text);
 }
 
 .lai-side {
   width: 220px;
   flex-shrink: 0;
-  background: #ffffff;
-  border-right: 1px solid #e5e6eb;
+  background: var(--lai-surface);
+  border-right: 1px solid var(--lai-border);
   padding: 16px 0;
   position: sticky;
   top: 0;
@@ -32,14 +43,14 @@
 
 .lai-nav-section-title {
   font-size: 12px;
-  color: #86909c;
+  color: var(--lai-muted);
   padding: 10px 20px 4px;
 }
 
 .lai-nav-item {
   display: block;
   padding: 8px 20px;
-  color: #4e5969;
+  color: var(--lai-muted);
 }
 
 .lai-nav-item:hover {
@@ -47,8 +58,8 @@
 }
 
 .lai-nav-item.router-link-active {
-  color: #165dff;
-  background: #f2f7ff;
+  color: var(--lai-primary);
+  background: #eff6ff;
   font-weight: 500;
 }
 
@@ -65,9 +76,9 @@
   gap: 16px;
   height: 48px;
   padding: 0 24px;
-  background: #ffffff;
-  border-bottom: 1px solid #e5e6eb;
-  color: #4e5969;
+  background: var(--lai-surface);
+  border-bottom: 1px solid var(--lai-border);
+  color: var(--lai-muted);
   font-size: 13px;
 }
 
@@ -77,7 +88,7 @@
 }
 
 .lai-topbar-link {
-  color: #165dff;
+  color: var(--lai-primary);
 }
 
 .lai-topbar-link:hover {
@@ -110,7 +121,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f5f6f7;
+  background: var(--lai-bg);
   padding: 32px;
   width: 100%;
 }
@@ -216,7 +227,7 @@
 
 .lai-input:focus {
   outline: none;
-  border-color: #165dff;
+  border-color: var(--lai-primary);
 }
 
 .lai-form-field-error .lai-input {
@@ -237,8 +248,8 @@
 }
 
 .lai-btn:hover:not(:disabled) {
-  border-color: #165dff;
-  color: #165dff;
+  border-color: var(--lai-primary);
+  color: var(--lai-primary);
 }
 
 .lai-btn:disabled {
@@ -247,14 +258,14 @@
 }
 
 .lai-btn-primary {
-  background: #165dff;
-  border-color: #165dff;
+  background: var(--lai-primary);
+  border-color: var(--lai-primary);
   color: #ffffff;
 }
 
 .lai-btn-primary:hover:not(:disabled) {
-  background: #4080ff;
-  border-color: #4080ff;
+  background: var(--lai-primary-hover);
+  border-color: var(--lai-primary-hover);
   color: #ffffff;
 }
 
@@ -273,7 +284,7 @@
 .lai-btn-text {
   border: none;
   background: transparent;
-  color: #165dff;
+  color: var(--lai-primary);
   height: auto;
   padding: 0 4px;
 }
@@ -379,7 +390,7 @@
 }
 
 .lai-link {
-  color: #165dff;
+  color: var(--lai-primary);
 }
 
 .lai-link:hover {
@@ -411,7 +422,7 @@
 
 .lai-table-wrap {
   background: #ffffff;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--lai-border);
   border-radius: 6px;
   overflow-x: auto;
 }
@@ -475,7 +486,7 @@
 
 .lai-card {
   background: #ffffff;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--lai-border);
   border-radius: 6px;
   padding: 16px 20px;
   margin-bottom: 16px;

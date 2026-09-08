@@ -25,9 +25,13 @@ final class SchemaContract {
     }
 
     static Definition load(DatabaseType type) {
-        String path = type == DatabaseType.MYSQL
-                ? "db/migration/mysql/V1__baseline.sql" : "db/migration/postgres/V1__baseline.sql";
-        return parse(DefaultSchemaMigrator.loadScript(path));
+        String folder = type == DatabaseType.MYSQL ? "mysql" : "postgres";
+        String scripts = DefaultSchemaMigrator.loadScript(
+                "db/migration/" + folder + "/V1__baseline.sql")
+                + "\n"
+                + DefaultSchemaMigrator.loadScript(
+                "db/migration/" + folder + "/V2__enterprise_application_foundation.sql");
+        return parse(scripts);
     }
 
     static Definition parse(String script) {

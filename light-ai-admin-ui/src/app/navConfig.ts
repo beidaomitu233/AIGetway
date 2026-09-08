@@ -20,16 +20,22 @@ export const navSections: NavSection[] = [
     ],
   },
   {
-    title: '模型接入',
+    title: '应用中心',
     items: [
-      { title: 'Provider', to: '/ui/providers', permission: Permission.providerView },
-      { title: '凭证池', to: '/ui/credential-pools', permission: Permission.credentialView },
-      { title: '模型', to: '/ui/provider-models', permission: Permission.modelView },
-      { title: '模型别名', to: '/ui/model-aliases', permission: Permission.aliasView },
+      { title: '应用', to: '/ui/applications', permission: Permission.applicationView },
     ],
   },
   {
-    title: '运行治理',
+    title: 'AI 资源',
+    items: [
+      { title: '渠道', to: '/ui/providers', permission: Permission.providerView },
+      { title: '上游 Key 池', to: '/ui/credential-pools', permission: Permission.credentialView },
+      { title: '上游模型', to: '/ui/provider-models', permission: Permission.modelView },
+      { title: '虚拟模型与路由', to: '/ui/model-aliases', permission: Permission.aliasView },
+    ],
+  },
+  {
+    title: '可靠性与配置',
     items: [
       { title: '限流策略', to: '/ui/limit-policies', permission: Permission.limitView },
       { title: '可靠性策略', to: '/ui/reliability-policies', permission: Permission.reliabilityView },
@@ -39,17 +45,17 @@ export const navSections: NavSection[] = [
   {
     title: '调用观测',
     items: [
-      { title: 'Trace', to: '/ui/traces', permission: Permission.traceView },
-      { title: 'Usage 与 Cost', to: '/ui/usage', permission: Permission.usageView },
+      { title: '调用记录', to: '/ui/traces', permission: Permission.traceView },
+      { title: '用量与成本', to: '/ui/usage', permission: Permission.usageView },
     ],
   },
   {
-    title: '运行配置',
+    title: '系统管理',
     items: [
       { title: '待发布变更', to: '/ui/config/drafts', permission: Permission.draftView },
       { title: '配置发布', to: '/ui/config/publish', permission: Permission.publishView },
       { title: '运行参数', to: '/ui/runtime-config', permission: Permission.runtimeConfigView },
-      { title: '访问凭证', to: '/ui/access-credentials', permission: Permission.accessView },
+      { title: '旧访问凭证', to: '/ui/access-credentials', permission: Permission.accessView },
       { title: '审计日志', to: '/ui/audit-logs', permission: Permission.auditView },
     ],
   },

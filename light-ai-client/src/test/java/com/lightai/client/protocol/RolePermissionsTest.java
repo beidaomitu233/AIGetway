@@ -55,4 +55,26 @@ class RolePermissionsTest {
         List<String> permissions = RolePermissions.permissionsFor(Set.of(Roles.OPERATOR, Roles.VIEWER));
         assertThat(permissions).contains(Permissions.CIRCUIT_OPERATE, Permissions.OVERVIEW_VIEW);
     }
+
+    @Test
+    void applicationOwnerCanManageOnlyScopedApplicationResources() {
+        List<String> permissions = RolePermissions.permissionsFor(Set.of(Roles.APPLICATION_OWNER));
+        assertThat(permissions).contains(
+                Permissions.APPLICATION_MANAGE,
+                Permissions.APPLICATION_KEY_MANAGE,
+                Permissions.APPLICATION_QUOTA_MANAGE,
+                Permissions.APPLICATION_MODEL_MANAGE,
+                Permissions.DEVELOPER_TEST);
+        assertThat(permissions).doesNotContain(
+                Permissions.PROVIDER_MANAGE, Permissions.PUBLISH_MANAGE, Permissions.AUDIT_EXPORT);
+    }
+
+    @Test
+    void auditorHasEnterpriseReadOnlyAccess() {
+        List<String> permissions = RolePermissions.permissionsFor(Set.of(Roles.AUDITOR));
+        assertThat(permissions).contains(
+                Permissions.APPLICATION_VIEW, Permissions.TRACE_VIEW,
+                Permissions.USAGE_VIEW, Permissions.AUDIT_VIEW);
+        assertThat(permissions).allMatch(permission -> permission.endsWith(".view"));
+    }
 }

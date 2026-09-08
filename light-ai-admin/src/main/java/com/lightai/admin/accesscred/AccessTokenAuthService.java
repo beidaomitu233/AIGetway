@@ -5,6 +5,11 @@ import com.lightai.client.error.LightAiException;
 import com.lightai.runtime.ports.AccessTokenPort;
 import com.lightai.storage.access.AccessCredentialRecord;
 import com.lightai.storage.access.AccessCredentialRepository;
+import com.lightai.storage.application.ApplicationKeyRecord;
+import com.lightai.storage.application.ApplicationQuotaRecord;
+import com.lightai.storage.application.ApplicationRecord;
+import com.lightai.storage.application.JdbcApplicationKeyRepository;
+import com.lightai.storage.application.JdbcApplicationRepository;
 import java.sql.Connection;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -29,6 +34,8 @@ public class AccessTokenAuthService implements AccessTokenPort {
     private final com.lightai.admin.security.AccessTokenService tokenService;
     private final java.time.Clock clock;
     private final boolean recordClientIp;
+    private final JdbcApplicationRepository applications;
+    private final JdbcApplicationKeyRepository applicationKeys;
 
     public AccessTokenAuthService(DataSource dataSource, AccessCredentialRepository repository,
                                   com.lightai.storage.alias.JdbcAliasRepository aliasRepository,
@@ -40,6 +47,24 @@ public class AccessTokenAuthService implements AccessTokenPort {
         this.tokenService = tokenService;
         this.clock = clock;
         this.recordClientIp = recordClientIp;
+        this.applications = null;
+        this.applicationKeys = null;
+    }
+
+    public AccessTokenAuthService(DataSource dataSource, AccessCredentialRepository repository,
+                                  com.lightai.storage.alias.JdbcAliasRepository aliasRepository,
+                                  com.lightai.admin.security.AccessTokenService tokenService,
+                                  java.time.Clock clock, boolean recordClientIp,
+                                  JdbcApplicationRepository applications,
+                                  JdbcApplicationKeyRepository applicationKeys) {
+        this.dataSource = dataSource;
+        this.repository = repository;
+        this.aliasRepository = aliasRepository;
+        this.tokenService = tokenService;
+        this.clock = clock;
+        this.recordClientIp = recordClientIp;
+        this.applications = applications;
+        this.applicationKeys = applicationKeys;
     }
 
     @Override
@@ -54,6 +79,11 @@ public class AccessTokenAuthService implements AccessTokenPort {
         }
         byte[] hash = tokenService.digest(bearerToken.trim());
         try (Connection connection = dataSource.getConnection()) {
+            Principal applicationPrincipal = authenticateApplicationKey(
+                    connection, hash, bearerToken.trim(), sourceIp);
+            if (applicationPrincipal != null) {
+                return applicationPrincipal;
+            }
             Optional<AccessCredentialRecord> found = repository.findByTokenHash(connection, hash);
             if (found.isEmpty()) {
                 throw new LightAiException(ErrorCode.ACCESS_TOKEN_INVALID, "业务访问凭证无效");
@@ -77,6 +107,54 @@ public class AccessTokenAuthService implements AccessTokenPort {
         } catch (Exception e) {
             throw new LightAiException(ErrorCode.ACCESS_TOKEN_INVALID, "业务访问凭证无效");
         }
+    }
+
+    private Principal authenticateApplicationKey(
+            Connection connection, byte[] hash, String bearerToken, String sourceIp) {
+        if (applications == null || applicationKeys == null) return null;
+        Optional<ApplicationKeyRecord> found = applicationKeys.findByDigest(connection, hash);
+        if (found.isEmpty()) return null;
+        ApplicationKeyRecord key = found.get();
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        if (!java.security.MessageDigest.isEqual(
+                key.keyDigest(), tokenService.digest(bearerToken, key.digestVersion()))) {
+            throw new LightAiException(ErrorCode.ACCESS_TOKEN_INVALID, "应用密钥无效");
+        }
+        if (!key.status().equals("ACTIVE") || key.revokedAt() != null) {
+            throw new LightAiException(ErrorCode.ACCESS_TOKEN_INVALID, "应用密钥已撤销");
+        }
+        if (key.expiresAt() != null && !key.expiresAt().isAfter(now)) {
+            throw new LightAiException(ErrorCode.ACCESS_TOKEN_INVALID, "应用密钥已过期");
+        }
+        if (!isAllowedSource(key.ipAllowlist(), sourceIp)) {
+            throw new LightAiException(ErrorCode.ACCESS_IP_DENIED, "请求来源不在应用密钥允许的 IP 范围");
+        }
+        ApplicationRecord application = applications.findById(connection, key.applicationId())
+                .orElseThrow(() -> new LightAiException(ErrorCode.ACCESS_TOKEN_INVALID, "应用不存在"));
+        if (!"ACTIVE".equals(application.status())) {
+            throw new LightAiException(ErrorCode.ACCESS_TOKEN_INVALID, "应用已停用或归档");
+        }
+        List<String> aliases = applications.listModelPermissions(connection, application.id()).stream()
+                .filter(permission -> permission.enabled() && permission.virtualModelCode() != null)
+                .map(permission -> permission.virtualModelCode()).toList();
+        ApplicationQuotaRecord quota = applications.findQuota(connection, application.id()).orElse(null);
+        Integer rpm = stricter(key.rpm(), quota == null ? null : quota.rpm());
+        Long tpm = stricter(key.tpm(), quota == null ? null : quota.tpm());
+        if (recordClientIp) applicationKeys.touch(connection, key.id(), now, "recorded");
+        return AccessTokenPort.Principal.enterprise(
+                application.code(), aliases, application.id().toString(), key.id().toString(), rpm, tpm);
+    }
+
+    private static Integer stricter(Integer left, Integer right) {
+        if (left == null) return right;
+        if (right == null) return left;
+        return Math.min(left, right);
+    }
+
+    private static Long stricter(Long left, Long right) {
+        if (left == null) return right;
+        if (right == null) return left;
+        return Math.min(left, right);
     }
 
     /** access_credential_alias 存储授权 Alias 的 UUID；运行端口按 alias 名称做范围判定，这里完成翻译。 */

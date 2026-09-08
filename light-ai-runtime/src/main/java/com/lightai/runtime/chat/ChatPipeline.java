@@ -129,7 +129,8 @@ public class ChatPipeline {
         ParsedRequest parsed = parse(context);
         CancellationSignal signal = context.cancellation() != null
                 ? context.cancellation() : new CancellationSignal("trace-pending");
-        TraceStore.TraceHandle handle = traceStore.create(parsed.request().traceId(), parsed.alias(), null);
+        TraceStore.TraceHandle handle = traceStore.create(
+                parsed.request().traceId(), parsed.alias(), context.principal().application());
         signal.bind(handle.traceId());
 
         List<CandidateView> candidates = route(parsed);
@@ -239,7 +240,8 @@ public class ChatPipeline {
         ParsedRequest parsed = parse(context);
         CancellationSignal signal = context.cancellation() != null
                 ? context.cancellation() : new CancellationSignal("trace-pending");
-        TraceStore.TraceHandle handle = traceStore.create(parsed.request().traceId(), parsed.alias(), null);
+        TraceStore.TraceHandle handle = traceStore.create(
+                parsed.request().traceId(), parsed.alias(), context.principal().application());
         signal.bind(handle.traceId());
 
         List<CandidateView> candidates = route(parsed);
@@ -519,6 +521,9 @@ public class ChatPipeline {
                             "model 缺省且未配置默认 Alias", "model"));
         }
         String resolvedAlias = alias;
+        if (context.principal() != null && !context.principal().aliasAllowed(resolvedAlias)) {
+            throw new LightAiException(ErrorCode.ACCESS_DENIED, "应用未授权访问该模型");
+        }
         ConfigSnapshotPort.ActiveSnapshot snapshot = snapshotPort.active();
         AliasView aliasView = snapshot.alias(resolvedAlias)
                 .orElseThrow(() -> ConfigSnapshotPort.aliasNotFound(resolvedAlias));

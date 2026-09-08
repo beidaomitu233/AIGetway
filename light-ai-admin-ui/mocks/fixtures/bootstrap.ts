@@ -47,6 +47,10 @@ export const bootstrapFixtures: Record<string, BootstrapPayload> = {
     roles: ['SYSTEM_ADMIN'],
     permissions: [
       'overview.view',
+      'application.view', 'application.manage',
+      'application-key.view', 'application-key.manage',
+      'application-quota.view', 'application-quota.manage',
+      'application-model.view', 'application-model.manage',
       'provider.view', 'provider.manage', 'provider.check',
       'credential.view', 'credential.manage', 'credential.check',
       'model.view', 'model.manage', 'model.import',
@@ -79,6 +83,7 @@ export const bootstrapFixtures: Record<string, BootstrapPayload> = {
     roles: ['OPERATOR'],
     permissions: [
       'overview.view',
+      'application.view', 'application-key.view', 'application-quota.view', 'application-model.view',
       'provider.view', 'provider.check',
       'credential.view', 'credential.check',
       'model.view',
@@ -111,6 +116,7 @@ export const bootstrapFixtures: Record<string, BootstrapPayload> = {
     roles: ['DEVELOPER'],
     permissions: [
       'overview.view',
+      'application.view', 'application-key.view', 'application-quota.view', 'application-model.view',
       'provider.view',
       'model.view',
       'alias.view',
@@ -140,6 +146,7 @@ export const bootstrapFixtures: Record<string, BootstrapPayload> = {
     roles: ['VIEWER'],
     permissions: [
       'overview.view',
+      'application.view', 'application-key.view', 'application-quota.view', 'application-model.view',
       'provider.view',
       'model.view',
       'alias.view',

@@ -14,9 +14,12 @@ import org.junit.jupiter.api.Test;
 class SchemaGuardTest {
 
     @Test
-    void expectedSchemaContainsThirtyNineTables() {
-        assertThat(ExpectedSchema.TABLES).hasSize(39);
-        assertThat(ExpectedSchema.TABLES).contains("audit_log", "config_draft_state", "draft_change");
+    void expectedSchemaContainsEnterpriseApplicationTables() {
+        assertThat(ExpectedSchema.TABLES).hasSize(47);
+        assertThat(ExpectedSchema.TABLES).contains(
+                "audit_log", "config_draft_state", "draft_change",
+                "application", "application_key", "application_quota_policy",
+                "application_model_permission", "budget_reservation", "usage_ledger");
     }
 
     @Test

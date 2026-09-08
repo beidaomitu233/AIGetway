@@ -24,6 +24,9 @@ const pages = {
   accessDetail: () => import('@/pages/access/AccessDetailPage.vue'),
   auditList: () => import('@/pages/audit/AuditListPage.vue'),
   auditDetail: () => import('@/pages/audit/AuditDetailPage.vue'),
+  applicationList: () => import('@/pages/applications/ApplicationListPage.vue'),
+  applicationForm: () => import('@/pages/applications/ApplicationFormPage.vue'),
+  applicationDetail: () => import('@/pages/applications/ApplicationDetailPage.vue'),
 }
 
 function moduleRoute(
@@ -38,10 +41,15 @@ function moduleRoute(
 
 /** 全部页面路由按 FRONTEND_PLAN 第 2 节注册；未实现模块由 ModulePlaceholder 承接，随任务包替换。 */
 export const routes: RouteRecordRaw[] = [
-  { path: '/', redirect: '/ui/overview' },
-  { path: '/ui', redirect: '/ui/overview' },
-  { path: '/ui/', redirect: '/ui/overview' },
+  { path: '/', redirect: '/ui/applications' },
+  { path: '/ui', redirect: '/ui/applications' },
+  { path: '/ui/', redirect: '/ui/applications' },
   moduleRoute('overview', '/ui/overview', '运行概览', Permission.overviewView, pages.overview),
+
+  moduleRoute('application-list', '/ui/applications', '应用', Permission.applicationView, pages.applicationList),
+  moduleRoute('application-new', '/ui/applications/new', '新建应用', Permission.applicationManage, pages.applicationForm),
+  moduleRoute('application-detail', '/ui/applications/:id', '应用详情', Permission.applicationView, pages.applicationDetail),
+  moduleRoute('application-edit', '/ui/applications/:id/settings', '编辑应用', Permission.applicationManage, pages.applicationForm),
 
   moduleRoute('provider-list', '/ui/providers', 'Provider', Permission.providerView, pages.providerList),
   moduleRoute('provider-new', '/ui/providers/new', '新建 Provider', Permission.providerManage, pages.providerForm),

@@ -138,6 +138,19 @@ class ChatPipelineTest {
     }
 
     @Test
+    void enterpriseApplicationCannotCallUnassignedAlias() {
+        AccessTokenPort.Principal principal = AccessTokenPort.Principal.enterprise(
+                "app-1", List.of("other-model"), "application-1", "key-1", 60, 10_000L);
+        ChatPipeline.ChatContext context = new ChatPipeline.ChatContext(
+                principal, request("assistant", false), null);
+
+        assertThatThrownBy(() -> pipeline.chat(context))
+                .isInstanceOfSatisfying(LightAiException.class,
+                        error -> assertThat(error.code()).isEqualTo(ErrorCode.ACCESS_DENIED));
+        assertThat(adapter.invocations.get()).isZero();
+    }
+
+    @Test
     void sharedCircuitOpensAfterProviderFailureAndRejectsNextExternalAttempt() {
         String aliasId = java.util.UUID.randomUUID().toString();
         String modelPk = java.util.UUID.randomUUID().toString();

@@ -966,6 +966,44 @@ public class LightAiAdminAutoConfiguration {
             };
         }
 
+        // ---------- 企业应用中心（V2.0） ----------
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.application.JdbcApplicationRepository lightAiApplicationRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.application.JdbcApplicationRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.application.JdbcApplicationKeyRepository lightAiApplicationKeyRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.application.JdbcApplicationKeyRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.admin.application.ApplicationService lightAiApplicationService(
+                DataSource dataSource,
+                com.lightai.storage.application.JdbcApplicationRepository applicationRepository,
+                com.lightai.storage.alias.JdbcAliasRepository aliasRepository,
+                com.lightai.admin.audit.AuditService auditService,
+                PlatformTransactionManager transactionManager,
+                Clock clock, AdminProperties properties) {
+            return new com.lightai.admin.application.ApplicationService(
+                    dataSource, applicationRepository, aliasRepository, auditService,
+                    transactionManager, new com.lightai.admin.query.PageResultFactory(clock),
+                    clock, properties.getRuntimeMode());
+        }
+
+        @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+        public com.lightai.admin.application.ApplicationController lightAiApplicationController(
+                com.lightai.admin.application.ApplicationService service) {
+            return new com.lightai.admin.application.ApplicationController(service);
+        }
+
         // ---------- 数据迁移执行器（BE-003 / CR-015） ----------
 
         @Bean
@@ -1003,6 +1041,28 @@ public class LightAiAdminAutoConfiguration {
 
         @Bean
         @ConditionalOnMissingBean
+        public com.lightai.admin.application.ApplicationKeyService lightAiApplicationKeyService(
+                DataSource dataSource,
+                com.lightai.storage.application.JdbcApplicationRepository applicationRepository,
+                com.lightai.storage.application.JdbcApplicationKeyRepository applicationKeyRepository,
+                com.lightai.admin.security.AccessTokenService tokenService,
+                com.lightai.admin.audit.AuditService auditService,
+                PlatformTransactionManager transactionManager,
+                Clock clock, AdminProperties properties) {
+            return new com.lightai.admin.application.ApplicationKeyService(
+                    dataSource, applicationRepository, applicationKeyRepository, tokenService,
+                    auditService, transactionManager, clock, properties.getRuntimeMode());
+        }
+
+        @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+        public com.lightai.admin.application.ApplicationKeyController lightAiApplicationKeyController(
+                com.lightai.admin.application.ApplicationKeyService service) {
+            return new com.lightai.admin.application.ApplicationKeyController(service);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
         public com.lightai.admin.accesscred.AccessCredentialService lightAiAccessCredentialService(
                 DataSource dataSource,
                 com.lightai.storage.access.AccessCredentialRepository repository,
@@ -1029,10 +1089,13 @@ public class LightAiAdminAutoConfiguration {
                 DataSource dataSource,
                 com.lightai.storage.access.AccessCredentialRepository repository,
                 com.lightai.storage.alias.JdbcAliasRepository aliasRepository,
+                com.lightai.storage.application.JdbcApplicationRepository applicationRepository,
+                com.lightai.storage.application.JdbcApplicationKeyRepository applicationKeyRepository,
                 com.lightai.admin.security.AccessTokenService tokenService,
                 Clock clock, AdminProperties properties) {
             return new com.lightai.admin.accesscred.AccessTokenAuthService(
-                    dataSource, repository, aliasRepository, tokenService, clock, false);
+                    dataSource, repository, aliasRepository, tokenService, clock, false,
+                    applicationRepository, applicationKeyRepository);
         }
 
         // ---------- 审计查询与导出（BE-045 / CR-003） ----------

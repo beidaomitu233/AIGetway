@@ -35,7 +35,7 @@ class PostgresSchemaGuardIT {
             SchemaGuard guard = new SchemaGuard(dataSource(), schema);
             assertThatThrownBy(guard::validate)
                     .isInstanceOf(SchemaNotReadyException.class)
-                    .hasMessageContaining("缺少 39 张产品表");
+                    .hasMessageContaining("缺少 47 张产品表");
         } finally {
             try (Connection connection = dataSource().getConnection();
                  Statement statement = connection.createStatement()) {

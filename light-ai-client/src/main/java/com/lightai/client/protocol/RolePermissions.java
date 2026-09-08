@@ -13,6 +13,10 @@ public final class RolePermissions {
 
     private static final List<String> VIEW_ONLY = List.of(
             Permissions.OVERVIEW_VIEW,
+            Permissions.APPLICATION_VIEW,
+            Permissions.APPLICATION_KEY_VIEW,
+            Permissions.APPLICATION_QUOTA_VIEW,
+            Permissions.APPLICATION_MODEL_VIEW,
             Permissions.PROVIDER_VIEW,
             Permissions.MODEL_VIEW,
             Permissions.ALIAS_VIEW,
@@ -28,6 +32,10 @@ public final class RolePermissions {
     private static final List<String> OPERATOR = List.of(
             // VIEW_ONLY 全部权限，另外具备检测与人工恢复能力
             Permissions.OVERVIEW_VIEW,
+            Permissions.APPLICATION_VIEW,
+            Permissions.APPLICATION_KEY_VIEW,
+            Permissions.APPLICATION_QUOTA_VIEW,
+            Permissions.APPLICATION_MODEL_VIEW,
             Permissions.PROVIDER_VIEW, Permissions.PROVIDER_CHECK,
             Permissions.CREDENTIAL_VIEW, Permissions.CREDENTIAL_CHECK,
             Permissions.MODEL_VIEW,
@@ -45,6 +53,10 @@ public final class RolePermissions {
 
     private static final List<String> DEVELOPER = List.of(
             Permissions.OVERVIEW_VIEW,
+            Permissions.APPLICATION_VIEW,
+            Permissions.APPLICATION_KEY_VIEW,
+            Permissions.APPLICATION_QUOTA_VIEW,
+            Permissions.APPLICATION_MODEL_VIEW,
             Permissions.PROVIDER_VIEW,
             Permissions.MODEL_VIEW,
             Permissions.ALIAS_VIEW,
@@ -56,6 +68,26 @@ public final class RolePermissions {
             Permissions.DRAFT_VIEW,
             Permissions.RUNTIME_CONFIG_VIEW,
             Permissions.DEVELOPER_VIEW, Permissions.DEVELOPER_TEST);
+
+    private static final List<String> APPLICATION_OWNER = List.of(
+            Permissions.OVERVIEW_VIEW,
+            Permissions.APPLICATION_VIEW, Permissions.APPLICATION_MANAGE,
+            Permissions.APPLICATION_KEY_VIEW, Permissions.APPLICATION_KEY_MANAGE,
+            Permissions.APPLICATION_QUOTA_VIEW, Permissions.APPLICATION_QUOTA_MANAGE,
+            Permissions.APPLICATION_MODEL_VIEW, Permissions.APPLICATION_MODEL_MANAGE,
+            Permissions.TRACE_VIEW, Permissions.USAGE_VIEW,
+            Permissions.DEVELOPER_VIEW, Permissions.DEVELOPER_TEST);
+
+    private static final List<String> AUDITOR = List.of(
+            Permissions.OVERVIEW_VIEW,
+            Permissions.APPLICATION_VIEW,
+            Permissions.APPLICATION_KEY_VIEW,
+            Permissions.APPLICATION_QUOTA_VIEW,
+            Permissions.APPLICATION_MODEL_VIEW,
+            Permissions.PROVIDER_VIEW, Permissions.CREDENTIAL_VIEW,
+            Permissions.MODEL_VIEW, Permissions.ALIAS_VIEW,
+            Permissions.TRACE_VIEW, Permissions.USAGE_VIEW,
+            Permissions.AUDIT_VIEW, Permissions.DEVELOPER_VIEW);
 
     private RolePermissions() {
     }
@@ -74,6 +106,12 @@ public final class RolePermissions {
         }
         if (roles.contains(Roles.OPERATOR)) {
             merged.addAll(OPERATOR);
+        }
+        if (roles.contains(Roles.APPLICATION_OWNER)) {
+            merged.addAll(APPLICATION_OWNER);
+        }
+        if (roles.contains(Roles.AUDITOR)) {
+            merged.addAll(AUDITOR);
         }
         if (roles.contains(Roles.DEVELOPER)) {
             merged.addAll(DEVELOPER);

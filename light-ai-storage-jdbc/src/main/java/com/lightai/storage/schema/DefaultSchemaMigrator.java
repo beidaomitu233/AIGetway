@@ -27,13 +27,19 @@ import javax.sql.DataSource;
  */
 public class DefaultSchemaMigrator implements SchemaMigrator {
 
-    static final int LATEST_VERSION = 1;
+    static final int LATEST_VERSION = 2;
     private static final long POSTGRES_LOCK_ID = 738_120_426L;
     private static final String MYSQL_LOCK_NAME = "light_ai_schema_migration";
     private static final Migration POSTGRES_BASELINE = new Migration(
             1, "baseline", "db/migration/postgres/V1__baseline.sql");
     private static final Migration MYSQL_BASELINE = new Migration(
             1, "baseline", "db/migration/mysql/V1__baseline.sql");
+    private static final Migration POSTGRES_APPLICATION_FOUNDATION = new Migration(
+            2, "enterprise_application_foundation",
+            "db/migration/postgres/V2__enterprise_application_foundation.sql");
+    private static final Migration MYSQL_APPLICATION_FOUNDATION = new Migration(
+            2, "enterprise_application_foundation",
+            "db/migration/mysql/V2__enterprise_application_foundation.sql");
 
     private final DataSource dataSource;
 
@@ -53,8 +59,13 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
             acquireLock(connection, dialect, h2);
             try {
                 ensureHistoryTable(connection, dialect);
-                apply(connection, dialect.databaseType() == DatabaseType.MYSQL
-                        ? MYSQL_BASELINE : POSTGRES_BASELINE, h2);
+                if (dialect.databaseType() == DatabaseType.MYSQL) {
+                    apply(connection, MYSQL_BASELINE, h2);
+                    apply(connection, MYSQL_APPLICATION_FOUNDATION, h2);
+                } else {
+                    apply(connection, POSTGRES_BASELINE, h2);
+                    apply(connection, POSTGRES_APPLICATION_FOUNDATION, h2);
+                }
                 if (dialect.databaseType() == DatabaseType.POSTGRESQL) {
                     connection.commit();
                 }

@@ -69,7 +69,8 @@ class BootstrapWebTest {
 
         assertThat(data.get("user").get("id").asText()).isEqualTo("user-admin");
         assertThat(data.get("roles").toString()).contains("SYSTEM_ADMIN");
-        assertThat(data.get("permissions").size()).isEqualTo(35);
+        assertThat(data.get("permissions").size())
+                .isEqualTo(com.lightai.client.protocol.Permissions.all().size());
         assertThat(data.get("permissions").toString())
                 .contains("provider.manage").contains("publish.manage")
                 .contains("credential.view").contains("developer.test");

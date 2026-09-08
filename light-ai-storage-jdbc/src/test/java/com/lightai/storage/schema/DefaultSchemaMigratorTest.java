@@ -58,10 +58,15 @@ class DefaultSchemaMigratorTest {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement();
              ResultSet resultSet = statement.executeQuery(
-                     "SELECT version, description, checksum, success FROM light_ai_schema_history")) {
+                     "SELECT version, description, checksum, success FROM light_ai_schema_history ORDER BY version")) {
+            assertThat(resultSet.next()).isTrue();
+            assertThat(resultSet.getInt("version")).isEqualTo(1);
+            assertThat(resultSet.getString("description")).isEqualTo("baseline");
+            assertThat(resultSet.getString("checksum")).hasSize(64);
+            assertThat(resultSet.getBoolean("success")).isTrue();
             assertThat(resultSet.next()).isTrue();
             assertThat(resultSet.getInt("version")).isEqualTo(DefaultSchemaMigrator.LATEST_VERSION);
-            assertThat(resultSet.getString("description")).isEqualTo("baseline");
+            assertThat(resultSet.getString("description")).isEqualTo("enterprise_application_foundation");
             assertThat(resultSet.getString("checksum")).hasSize(64);
             assertThat(resultSet.getBoolean("success")).isTrue();
             assertThat(resultSet.next()).isFalse();

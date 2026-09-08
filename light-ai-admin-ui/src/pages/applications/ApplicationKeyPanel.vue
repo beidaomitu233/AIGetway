@@ -1,0 +1,184 @@
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from 'vue'
+import PageState from '@/components/PageState.vue'
+import { formatDateTime } from '@/app/display'
+import { Permission } from '@/app/permissions'
+import { useBootstrapStore } from '@/stores/bootstrap'
+import { useFormSubmit } from '@/composables/useFormSubmit'
+import {
+  createApplicationKey, fetchApplicationKeys, revokeApplicationKey, rotateApplicationKey,
+  type ApplicationKeySecretResult, type ApplicationKeyView,
+} from '@/api/applications'
+
+const props = defineProps<{ applicationId: string; applicationActive: boolean }>()
+const emit = defineEmits<{ changed: [] }>()
+const store = useBootstrapStore()
+const keys = ref<ApplicationKeyView[]>([])
+const loading = ref(true)
+const loadError = ref<unknown>(null)
+const createOpen = ref(false)
+const actionKey = ref<ApplicationKeyView | null>(null)
+const action = ref<'rotate' | 'revoke' | null>(null)
+const reason = ref('')
+const secret = ref<ApplicationKeySecretResult | null>(null)
+const copied = ref(false)
+const canManage = computed(() => store.can(Permission.applicationKeyManage))
+const form = reactive({ name: '', expires_at: '', rpm: null as number | null, tpm: null as number | null, ip_allowlist: '' })
+const { submitting, errorText, conflictError, submit, reset } = useFormSubmit()
+const labels: Record<string, string> = { ACTIVE: '有效', EXPIRED: '已过期', REVOKED: '已撤销' }
+
+async function load(): Promise<void> {
+  loadError.value = null
+  try { keys.value = await fetchApplicationKeys(props.applicationId) }
+  catch (error) { loadError.value = error }
+  finally { loading.value = false }
+}
+
+function openCreate(): void {
+  Object.assign(form, { name: '', expires_at: '', rpm: null, tpm: null, ip_allowlist: '' })
+  reset()
+  createOpen.value = true
+}
+
+function openAction(key: ApplicationKeyView, next: 'rotate' | 'revoke'): void {
+  actionKey.value = key
+  action.value = next
+  reason.value = ''
+  reset()
+}
+
+async function createKey(): Promise<void> {
+  const outcome = await submit(async () => {
+    secret.value = await createApplicationKey(props.applicationId, {
+      name: form.name.trim(),
+      expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null,
+      rpm: form.rpm || null,
+      tpm: form.tpm || null,
+      ip_allowlist: form.ip_allowlist.split(/[\n,]/).map((item) => item.trim()).filter(Boolean),
+    })
+  })
+  if (outcome.ok) {
+    createOpen.value = false
+    await load()
+    emit('changed')
+  }
+}
+
+async function applyAction(): Promise<void> {
+  if (!actionKey.value || !action.value) return
+  const current = actionKey.value
+  const outcome = await submit(async () => {
+    if (action.value === 'rotate') {
+      secret.value = await rotateApplicationKey(props.applicationId, current.id, {
+        version: current.version, reason: reason.value.trim(),
+      })
+    } else {
+      await revokeApplicationKey(props.applicationId, current.id, {
+        version: current.version, reason: reason.value.trim(),
+      })
+    }
+  })
+  if (outcome.ok) {
+    actionKey.value = null
+    action.value = null
+    await load()
+    emit('changed')
+  }
+}
+
+async function copySecret(): Promise<void> {
+  if (!secret.value) return
+  await navigator.clipboard.writeText(secret.value.key_value)
+  copied.value = true
+}
+
+onMounted(load)
+</script>
+
+<template>
+  <div class="lai-card">
+    <div class="key-heading">
+      <div>
+        <h2 class="lai-card-title">应用密钥</h2>
+        <p>业务系统使用应用密钥调用平台，上游供应商 Key 不会暴露给应用。</p>
+      </div>
+      <button v-if="canManage" type="button" class="lai-btn lai-btn-primary" :disabled="!applicationActive" @click="openCreate">签发密钥</button>
+    </div>
+    <PageState v-if="loading" status="loading" />
+    <PageState v-else-if="loadError" status="error" :error="loadError" @retry="load" />
+    <div v-else-if="keys.length" class="lai-table-wrap">
+      <table class="lai-table key-table">
+        <thead><tr><th>名称</th><th>密钥</th><th>状态</th><th>RPM / TPM</th><th>有效期</th><th>最近使用</th><th v-if="canManage">操作</th></tr></thead>
+        <tbody>
+          <tr v-for="key in keys" :key="key.id">
+            <td><strong>{{ key.name }}</strong><small>第 {{ key.rotation_generation }} 代</small></td>
+            <td class="lai-cell-mono">{{ key.masked_value }}</td>
+            <td>{{ labels[key.status] }}</td>
+            <td>{{ key.rpm ?? '继承应用' }} / {{ key.tpm == null ? '继承应用' : key.tpm.toLocaleString() }}</td>
+            <td>{{ formatDateTime(key.expires_at, store.timezone, '长期有效') }}</td>
+            <td>{{ formatDateTime(key.last_used_at, store.timezone, '尚未使用') }}</td>
+            <td v-if="canManage">
+              <span v-if="key.status !== 'REVOKED'" class="key-actions">
+                <button type="button" class="lai-btn lai-btn-text" @click="openAction(key, 'rotate')">轮换</button>
+                <button type="button" class="lai-btn lai-btn-text danger" @click="openAction(key, 'revoke')">撤销</button>
+              </span>
+              <span v-else>—</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p v-else class="empty-inline">尚未签发应用密钥。签发后，密钥原文只会显示一次。</p>
+  </div>
+
+  <div v-if="createOpen" class="lai-dialog-overlay" @click.self="createOpen = false">
+    <form class="lai-dialog" @submit.prevent="createKey">
+      <h2 class="lai-dialog-title">签发应用密钥</h2>
+      <label class="dialog-field"><span>名称</span><input v-model="form.name" class="lai-input" maxlength="64" placeholder="例如：生产服务"></label>
+      <label class="dialog-field"><span>有效期（可选）</span><input v-model="form.expires_at" class="lai-input" type="datetime-local"></label>
+      <div class="dialog-grid">
+        <label class="dialog-field"><span>独立 RPM</span><input v-model.number="form.rpm" class="lai-input" type="number" min="1" placeholder="继承应用"></label>
+        <label class="dialog-field"><span>独立 TPM</span><input v-model.number="form.tpm" class="lai-input" type="number" min="1" placeholder="继承应用"></label>
+      </div>
+      <label class="dialog-field"><span>IP 白名单（可选）</span><textarea v-model="form.ip_allowlist" class="lai-input textarea" rows="3" placeholder="每行一个 IP 或 CIDR"></textarea></label>
+      <p class="warning">创建成功后请立即复制并安全保存，关闭窗口后无法再次查看原文。</p>
+      <p v-if="errorText" class="lai-form-message-error">{{ errorText }}</p>
+      <div class="lai-dialog-actions"><button type="button" class="lai-btn" @click="createOpen = false">取消</button><button type="submit" class="lai-btn lai-btn-primary" :disabled="submitting || form.name.trim().length < 2">{{ submitting ? '签发中…' : '签发' }}</button></div>
+    </form>
+  </div>
+
+  <div v-if="actionKey && action" class="lai-dialog-overlay" @click.self="actionKey = null">
+    <form class="lai-dialog" @submit.prevent="applyAction">
+      <h2 class="lai-dialog-title">{{ action === 'rotate' ? '轮换密钥' : '撤销密钥' }}</h2>
+      <p class="lai-dialog-message">{{ action === 'rotate' ? '轮换后旧密钥立即失效，新原文只显示一次。' : '撤销不可恢复，新调用会立即被拒绝。' }}</p>
+      <label class="dialog-field"><span>操作原因</span><textarea v-model="reason" class="lai-input textarea" rows="3" maxlength="500" placeholder="必填，将写入审计记录"></textarea></label>
+      <p v-if="conflictError" class="lai-form-message-error">密钥版本已变化，请刷新后重试。</p>
+      <p v-else-if="errorText" class="lai-form-message-error">{{ errorText }}</p>
+      <div class="lai-dialog-actions"><button type="button" class="lai-btn" @click="actionKey = null">取消</button><button type="submit" class="lai-btn lai-btn-primary" :disabled="submitting || !reason.trim()">{{ submitting ? '处理中…' : '确认' }}</button></div>
+    </form>
+  </div>
+
+  <div v-if="secret" class="lai-dialog-overlay">
+    <div class="lai-dialog secret-dialog" role="dialog" aria-modal="true">
+      <h2 class="lai-dialog-title">请立即保存应用密钥</h2>
+      <p class="warning">这是唯一一次显示完整密钥。关闭后平台无法找回，只能重新轮换。</p>
+      <code class="secret-value">{{ secret.key_value }}</code>
+      <div class="lai-dialog-actions"><button type="button" class="lai-btn" @click="copySecret">{{ copied ? '已复制' : '复制密钥' }}</button><button type="button" class="lai-btn lai-btn-primary" @click="secret = null">我已保存</button></div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.key-heading { display:flex; justify-content:space-between; gap:20px; margin-bottom:14px; }
+.key-heading p, .empty-inline { color:#667085; font-size:13px; }
+.key-heading .lai-card-title { margin-bottom:4px; }
+.key-table { min-width:940px; }
+.key-table small { display:block; margin-top:3px; color:#667085; }
+.key-actions { display:flex; }.danger { color:#b42318; }
+.dialog-field { display:flex; flex-direction:column; gap:6px; margin:12px 0; color:#475467; }
+.dialog-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.dialog-field .lai-input { width:100%; max-width:none; }
+.textarea { height:auto; padding:8px 10px; resize: vertical; }
+.warning { padding:10px; color:#92400e; background:#fffbeb; border-radius:6px; font-size:13px; }
+.secret-dialog { width:560px; }.secret-value { display:block; overflow-wrap:anywhere; padding:14px; margin:14px 0; background:#f6f8fb; border:1px solid #e6eaf0; border-radius:6px; }
+</style>

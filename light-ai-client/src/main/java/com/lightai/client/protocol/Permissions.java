@@ -10,6 +10,15 @@ public final class Permissions {
 
     public static final String OVERVIEW_VIEW = "overview.view";
 
+    public static final String APPLICATION_VIEW = "application.view";
+    public static final String APPLICATION_MANAGE = "application.manage";
+    public static final String APPLICATION_KEY_VIEW = "application-key.view";
+    public static final String APPLICATION_KEY_MANAGE = "application-key.manage";
+    public static final String APPLICATION_QUOTA_VIEW = "application-quota.view";
+    public static final String APPLICATION_QUOTA_MANAGE = "application-quota.manage";
+    public static final String APPLICATION_MODEL_VIEW = "application-model.view";
+    public static final String APPLICATION_MODEL_MANAGE = "application-model.manage";
+
     public static final String PROVIDER_VIEW = "provider.view";
     public static final String PROVIDER_MANAGE = "provider.manage";
     public static final String PROVIDER_CHECK = "provider.check";
@@ -66,6 +75,10 @@ public final class Permissions {
     public static Set<String> all() {
         return Set.of(
                 OVERVIEW_VIEW,
+                APPLICATION_VIEW, APPLICATION_MANAGE,
+                APPLICATION_KEY_VIEW, APPLICATION_KEY_MANAGE,
+                APPLICATION_QUOTA_VIEW, APPLICATION_QUOTA_MANAGE,
+                APPLICATION_MODEL_VIEW, APPLICATION_MODEL_MANAGE,
                 PROVIDER_VIEW, PROVIDER_MANAGE, PROVIDER_CHECK,
                 CREDENTIAL_VIEW, CREDENTIAL_MANAGE, CREDENTIAL_CHECK,
                 MODEL_VIEW, MODEL_MANAGE, MODEL_IMPORT,

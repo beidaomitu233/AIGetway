@@ -1,0 +1,184 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import PageState from '@/components/PageState.vue'
+import ListPager from '@/components/ListPager.vue'
+import { useBootstrapStore } from '@/stores/bootstrap'
+import { Permission } from '@/app/permissions'
+import { useListQuery, type FilterValue } from '@/composables/useListQuery'
+import { fetchApplications, type ApplicationListItem } from '@/api/applications'
+import { formatDateTime } from '@/app/display'
+
+const store = useBootstrapStore()
+const canManage = computed(() => store.can(Permission.applicationManage))
+
+const {
+  state,
+  page,
+  pageSize,
+  items,
+  total,
+  status,
+  refreshing,
+  error,
+  applyFilters,
+  applyPage,
+  applyPageSize,
+  refresh,
+} = useListQuery<Record<string, FilterValue>, ApplicationListItem>({
+  fields: {
+    keyword: { default: '', url: true },
+    status: { default: '', url: true },
+    environment: { default: '', url: true },
+  },
+  defaultSort: 'updated_at desc',
+  fetcher: (params, signal) => fetchApplications(params, signal),
+})
+
+const statusLabel: Record<string, string> = {
+  ACTIVE: '启用',
+  DISABLED: '已停用',
+  ARCHIVED: '已归档',
+}
+
+const environmentLabel: Record<string, string> = {
+  DEV: '开发',
+  TEST: '测试',
+  STAGING: '预发布',
+  PROD: '生产',
+}
+
+function ratio(used: number, reserved: number, limit: number | null): string {
+  if (limit == null) return `${(used + reserved).toLocaleString()} / 不限`
+  const percent = limit === 0 ? 100 : Math.min(100, Math.round(((used + reserved) / limit) * 100))
+  return `${(used + reserved).toLocaleString()} / ${limit.toLocaleString()}（${percent}%）`
+}
+
+function amount(row: ApplicationListItem): string {
+  const used = Number(row.amount_used) + Number(row.amount_reserved)
+  const current = Number.isFinite(used) ? used.toFixed(2) : row.amount_used
+  return row.amount_limit == null
+    ? `${current} ${row.currency} / 不限`
+    : `${current} / ${Number(row.amount_limit).toFixed(2)} ${row.currency}`
+}
+</script>
+
+<template>
+  <section class="lai-page">
+    <div class="page-header">
+      <div>
+        <h1 class="lai-page-title">应用</h1>
+        <p class="page-subtitle">管理企业系统的接入凭证、模型权限、额度与速率。</p>
+      </div>
+      <RouterLink v-if="canManage" to="/ui/applications/new" class="lai-btn lai-btn-primary">
+        新建应用
+      </RouterLink>
+    </div>
+
+    <div class="lai-filter-bar application-filters">
+      <input
+        class="lai-input filter-keyword"
+        type="search"
+        placeholder="搜索应用名称或编码"
+        :value="state.keyword"
+        @change="applyFilters({ keyword: ($event.target as HTMLInputElement).value.trim() })"
+      >
+      <select
+        class="lai-select"
+        :value="state.status"
+        @change="applyFilters({ status: ($event.target as HTMLSelectElement).value })"
+      >
+        <option value="">全部状态</option>
+        <option value="ACTIVE">启用</option>
+        <option value="DISABLED">已停用</option>
+        <option value="ARCHIVED">已归档</option>
+      </select>
+      <select
+        class="lai-select"
+        :value="state.environment"
+        @change="applyFilters({ environment: ($event.target as HTMLSelectElement).value })"
+      >
+        <option value="">全部环境</option>
+        <option value="DEV">开发</option>
+        <option value="TEST">测试</option>
+        <option value="STAGING">预发布</option>
+        <option value="PROD">生产</option>
+      </select>
+      <button type="button" class="lai-btn" :disabled="refreshing" @click="refresh">
+        {{ refreshing ? '刷新中…' : '刷新' }}
+      </button>
+    </div>
+
+    <PageState v-if="status === 'loading'" status="loading" />
+    <PageState
+      v-else-if="status === 'error'"
+      status="error"
+      :error="error"
+      @retry="refresh"
+    />
+    <PageState
+      v-else-if="items.length === 0"
+      status="empty"
+      message="尚未创建应用，创建后即可签发接入密钥并授权模型。"
+    />
+    <template v-else>
+      <div class="lai-table-wrap">
+        <table class="lai-table application-table">
+          <thead>
+            <tr>
+              <th>应用</th>
+              <th>负责人 / 部门</th>
+              <th>状态</th>
+              <th>模型 / 密钥</th>
+              <th>Token</th>
+              <th>金额</th>
+              <th>RPM / TPM</th>
+              <th>最近调用</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in items" :key="row.id">
+              <td>
+                <RouterLink :to="`/ui/applications/${row.id}`" class="lai-link application-name">
+                  {{ row.name }}
+                </RouterLink>
+                <div class="cell-muted"><span class="lai-cell-mono">{{ row.code }}</span> · {{ environmentLabel[row.environment] }}</div>
+              </td>
+              <td>
+                <div>{{ row.owner_name }}</div>
+                <div class="cell-muted">{{ row.department || '—' }}</div>
+              </td>
+              <td><span class="status" :class="`status-${row.status.toLowerCase()}`">{{ statusLabel[row.status] }}</span></td>
+              <td>{{ row.model_count }} / {{ row.active_key_count }}</td>
+              <td>{{ ratio(row.tokens_used, row.tokens_reserved, row.token_limit) }}</td>
+              <td>{{ amount(row) }}</td>
+              <td>{{ row.rpm ?? '不限' }} / {{ row.tpm == null ? '不限' : row.tpm.toLocaleString() }}</td>
+              <td>{{ row.last_called_at ? formatDateTime(row.last_called_at, store.timezone) : '尚未调用' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ListPager
+        :page="page"
+        :page-size="pageSize"
+        :total="total"
+        :disabled="refreshing"
+        @update:page="applyPage"
+        @update:page-size="applyPageSize"
+      />
+    </template>
+  </section>
+</template>
+
+<style scoped>
+.page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.page-subtitle { margin: -10px 0 0; color: #667085; font-size: 14px; }
+.application-filters { display: flex; gap: 10px; align-items: center; margin: 24px 0 14px; }
+.filter-keyword { width: 280px; }
+.application-table { min-width: 1120px; }
+.application-name { font-weight: 600; color: #172033; }
+.cell-muted { margin-top: 4px; color: #667085; font-size: 12px; }
+.status { display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+.status-active { color: #166534; background: #f0fdf4; }
+.status-disabled { color: #92400e; background: #fffbeb; }
+.status-archived { color: #475467; background: #f2f4f7; }
+</style>

@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 产品必须存在的 39 张表（DATABASE_PLAN 第 2 节）。
+ * 产品必须存在的 V2 数据表。
  * VALIDATE 按此清单核对 information_schema；缺表或结构不符阻止就绪。
  */
 public final class ExpectedSchema {
@@ -50,7 +50,15 @@ public final class ExpectedSchema {
             "access_credential",
             "access_credential_alias",
             "audit_log",
-            "retention_impact");
+            "retention_impact",
+            "application",
+            "application_member",
+            "application_quota_policy",
+            "quota_adjustment",
+            "application_model_permission",
+            "application_key",
+            "budget_reservation",
+            "usage_ledger");
 
     private ExpectedSchema() {
     }

@@ -85,6 +85,12 @@ async function loadAll(): Promise<void> {
   fingerprintMismatch.value = false
 
   const requestQuery: UsageQuery = { ...query }
+  const applicationQuery = route.query.application
+  if (typeof applicationQuery === 'string' && applicationQuery !== '') {
+    requestQuery.application = [applicationQuery]
+  } else if (Array.isArray(applicationQuery)) {
+    requestQuery.application = applicationQuery.filter((value): value is string => typeof value === 'string' && value !== '')
+  }
   if (typeof route.query.currency === 'string' && route.query.currency !== '') {
     requestQuery.currency = route.query.currency
   }

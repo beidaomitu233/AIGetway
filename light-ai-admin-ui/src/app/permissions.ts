@@ -6,6 +6,15 @@
 export const Permission = {
   overviewView: 'overview.view',
 
+  applicationView: 'application.view',
+  applicationManage: 'application.manage',
+  applicationKeyView: 'application-key.view',
+  applicationKeyManage: 'application-key.manage',
+  applicationQuotaView: 'application-quota.view',
+  applicationQuotaManage: 'application-quota.manage',
+  applicationModelView: 'application-model.view',
+  applicationModelManage: 'application-model.manage',
+
   providerView: 'provider.view',
   providerManage: 'provider.manage',
   providerCheck: 'provider.check',
@@ -61,7 +70,9 @@ export type PermissionKey = (typeof Permission)[keyof typeof Permission]
 /** 角色代码与显示名：bootstrap.roles[] 的取值口径，同 C-022 登记。 */
 export const RoleLabels: Record<string, string> = {
   SYSTEM_ADMIN: '系统管理员',
-  OPERATOR: '运维人员',
-  DEVELOPER: '开发人员',
-  VIEWER: '只读人员',
+  OPERATOR: '平台运维',
+  APPLICATION_OWNER: '应用负责人',
+  AUDITOR: '审计查看者',
+  DEVELOPER: '应用负责人（兼容）',
+  VIEWER: '审计查看者（兼容）',
 }
