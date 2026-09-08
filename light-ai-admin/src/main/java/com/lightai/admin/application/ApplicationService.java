@@ -10,6 +10,8 @@ import com.lightai.client.application.ApplicationDetail;
 import com.lightai.client.application.ApplicationListItem;
 import com.lightai.client.application.ApplicationModelPermissionView;
 import com.lightai.client.application.ApplicationModelsUpdateCommand;
+import com.lightai.client.application.ApplicationQuotaAdjustmentCommand;
+import com.lightai.client.application.ApplicationQuotaAdjustmentView;
 import com.lightai.client.application.ApplicationQuotaPolicyView;
 import com.lightai.client.application.ApplicationQuotaUpdateCommand;
 import com.lightai.client.application.ApplicationStatusCommand;
@@ -27,6 +29,7 @@ import com.lightai.storage.application.ApplicationModelPermissionRecord;
 import com.lightai.storage.application.ApplicationQuotaRecord;
 import com.lightai.storage.application.ApplicationRecord;
 import com.lightai.storage.application.JdbcApplicationRepository;
+import com.lightai.storage.application.QuotaAdjustmentRecord;
 import com.lightai.storage.audit.AuditRecord;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -56,6 +59,7 @@ public final class ApplicationService {
     private static final Set<String> PERIOD_TYPES = Set.of("LIFECYCLE", "DAY", "MONTH", "CUSTOM");
     private static final Pattern CODE = Pattern.compile("^[a-z](?:[a-z0-9-]{0,62}[a-z0-9])?$");
     private static final Pattern CURRENCY = Pattern.compile("^[A-Z]{3}$");
+    private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("^[A-Za-z0-9._:-]{1,128}$");
     private static final String NO_APPLICATION = "__no_authorized_application__";
 
     private final DataSource dataSource;
@@ -362,6 +366,76 @@ public final class ApplicationService {
         }
     }
 
+    public List<ApplicationQuotaAdjustmentView> listAdjustments(
+            RequestContext context, UUID id) {
+        RequestPermissions.require(context, Permissions.APPLICATION_QUOTA_VIEW);
+        try (Connection connection = dataSource.getConnection()) {
+            ApplicationRecord application = load(connection, id);
+            requireScope(connection, context, application.code());
+            return repository.listAdjustments(connection, id, 100).stream()
+                    .map(this::toAdjustmentView).toList();
+        } catch (LightAiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE,
+                    "应用额度调整流水当前无法读取");
+        }
+    }
+
+    public ManagementOperationResult<ApplicationDetail> adjustQuota(
+            RequestContext context, UUID id, ApplicationQuotaAdjustmentCommand command) {
+        RequestPermissions.require(context, Permissions.APPLICATION_QUOTA_MANAGE);
+        ValidatedAdjustment value = validateAdjustment(command);
+        try {
+            transaction.executeWithoutResult(status -> {
+                Connection connection = DataSourceUtils.getConnection(dataSource);
+                ApplicationRecord application = load(connection, id);
+                requireScope(connection, context, application.code());
+                requireEditable(application);
+                ApplicationQuotaRecord current = repository.lockQuota(connection, id);
+                var previous = repository.findAdjustment(connection, id, value.idempotencyKey());
+                if (previous.isPresent()) {
+                    requireSameAdjustment(previous.get(), value);
+                    return;
+                }
+                if (current.version() != value.quotaVersion()) {
+                    throw versionConflict(context, current.version());
+                }
+                BigDecimal before = adjustmentBefore(current, value.dimension());
+                if (before == null) {
+                    throw invalid("dimension", "不限额策略不能使用增量调整，请先设置明确上限");
+                }
+                BigDecimal after = before.add(value.delta());
+                validateAdjustedLimit(current, value.dimension(), after);
+                ApplicationQuotaRecord requested = adjustedQuota(current, value.dimension(), after);
+                repository.updateQuota(connection, requested, current.version());
+                OffsetDateTime effectiveAt = OffsetDateTime.now(clock);
+                repository.insertAdjustment(connection, new QuotaAdjustmentRecord(
+                        UUID.randomUUID(), id, value.dimension(), before, value.delta(), after,
+                        value.reason(), effectiveAt, operatorId(context), value.idempotencyKey(), null));
+                auditService.recordSuccess(connection, AuditRecord.succeeded(
+                        UUID.randomUUID(), context.requestId(), operatorId(context),
+                        "APPLICATION_QUOTA_ADJUST", "APPLICATION", id.toString(), List.of(
+                                FieldChange.changed("dimension", null, value.dimension()),
+                                FieldChange.changed("limit", decimalText(before), decimalText(after)),
+                                FieldChange.changed("delta", null, decimalText(value.delta())),
+                                FieldChange.changed("reason", null, value.reason()),
+                                FieldChange.changed("idempotency_key", null, value.idempotencyKey())),
+                        sourceMode, context.sourceIpMasked()));
+            });
+            ApplicationDetail entity = detail(context, id);
+            return new ManagementOperationResult<>(id.toString(), entity.quota().version(), entity,
+                    false, null, context.requestId());
+        } catch (JdbcApplicationRepository.OptimisticLockException e) {
+            throw new LightAiException(ErrorCode.CONFIG_VERSION_CONFLICT,
+                    "应用额度版本已变化，请刷新后重试");
+        } catch (LightAiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用额度调整失败");
+        }
+    }
+
     private ApplicationListItem toListItem(Connection connection, ApplicationRecord record) {
         ApplicationQuotaRecord quota = repository.findQuota(connection, record.id()).orElse(null);
         return new ApplicationListItem(
@@ -402,6 +476,14 @@ public final class ApplicationService {
         return new ApplicationModelPermissionView(
                 model.id().toString(), model.virtualModelId().toString(),
                 model.virtualModelCode(), model.enabled(), model.version());
+    }
+
+    private ApplicationQuotaAdjustmentView toAdjustmentView(QuotaAdjustmentRecord record) {
+        return new ApplicationQuotaAdjustmentView(
+                record.id().toString(), record.applicationId().toString(), record.dimension(),
+                decimalText(record.beforeValue()), decimalText(record.deltaValue()),
+                decimalText(record.afterValue()), record.reason(), record.effectiveAt(),
+                record.operatorId(), record.createdAt());
     }
 
     private ApplicationRecord load(Connection connection, UUID id) {
@@ -461,6 +543,90 @@ public final class ApplicationService {
         if (!issues.isEmpty()) throw new LightAiException(
                 ErrorCode.FIELD_VALIDATION_FAILED, "应用模型授权不合法", issues);
         return new ValidatedModels(modelIds, command.applicationVersion(), reason);
+    }
+
+    private ValidatedAdjustment validateAdjustment(ApplicationQuotaAdjustmentCommand command) {
+        if (command == null) throw invalid("body", "请求体必填");
+        List<FieldIssue> issues = new ArrayList<>();
+        String dimension = enumValue(command.dimension(),
+                Set.of("TOKEN_LIMIT", "AMOUNT_LIMIT"), "dimension", issues);
+        BigDecimal delta = adjustmentDelta(command.delta(), dimension, issues);
+        String reason = reason(command.reason(), issues);
+        String idempotencyKey = trimToNull(command.idempotencyKey());
+        if (idempotencyKey == null || !IDEMPOTENCY_KEY.matcher(idempotencyKey).matches()) {
+            issues.add(new FieldIssue("idempotency_key", "INVALID",
+                    "幂等键使用 1—128 位字母、数字、点号、下划线、冒号或连字符"));
+        }
+        if (command.quotaVersion() < 1) {
+            issues.add(new FieldIssue("quota_version", "INVALID", "quota_version 必须是正整数"));
+        }
+        if (!issues.isEmpty()) throw new LightAiException(
+                ErrorCode.FIELD_VALIDATION_FAILED, "应用额度调整不合法", issues);
+        return new ValidatedAdjustment(dimension, delta, reason,
+                idempotencyKey, command.quotaVersion());
+    }
+
+    private static BigDecimal adjustmentDelta(
+            String raw, String dimension, List<FieldIssue> issues) {
+        try {
+            BigDecimal value = new BigDecimal(raw == null ? "" : raw.trim());
+            value = "TOKEN_LIMIT".equals(dimension)
+                    ? value.setScale(0, RoundingMode.UNNECESSARY)
+                    : value.setScale(8, RoundingMode.UNNECESSARY);
+            if (value.signum() == 0) throw new ArithmeticException();
+            if ("TOKEN_LIMIT".equals(dimension)) value.longValueExact();
+            return value;
+        } catch (Exception e) {
+            issues.add(new FieldIssue("delta", "INVALID",
+                    "Token 调整必须是非零整数，金额调整必须是最多 8 位小数的非零数值"));
+            return BigDecimal.ZERO;
+        }
+    }
+
+    private static BigDecimal adjustmentBefore(
+            ApplicationQuotaRecord current, String dimension) {
+        return "TOKEN_LIMIT".equals(dimension)
+                ? current.tokenLimit() == null ? null : BigDecimal.valueOf(current.tokenLimit())
+                : current.amountLimit();
+    }
+
+    private static void validateAdjustedLimit(
+            ApplicationQuotaRecord current, String dimension, BigDecimal after) {
+        if (after.signum() <= 0) {
+            throw invalid("delta", "调整后上限必须大于 0");
+        }
+        if ("TOKEN_LIMIT".equals(dimension)) {
+            long committed = current.tokensUsed() + current.tokensReserved();
+            if (after.longValueExact() < committed) {
+                throw invalid("delta", "调整后 Token 额度不能低于已用与预占之和");
+            }
+        } else if (after.compareTo(current.amountUsed().add(current.amountReserved())) < 0) {
+            throw invalid("delta", "调整后金额预算不能低于已用与预占之和");
+        }
+    }
+
+    private static ApplicationQuotaRecord adjustedQuota(
+            ApplicationQuotaRecord current, String dimension, BigDecimal after) {
+        Long tokenLimit = current.tokenLimit();
+        BigDecimal amountLimit = current.amountLimit();
+        if ("TOKEN_LIMIT".equals(dimension)) tokenLimit = after.longValueExact();
+        else amountLimit = after;
+        return new ApplicationQuotaRecord(
+                current.id(), current.applicationId(), tokenLimit, amountLimit,
+                current.currency(), current.rpm(), current.tpm(), current.periodType(),
+                current.periodStart(), current.periodEnd(), current.tokensUsed(),
+                current.tokensReserved(), current.amountUsed(), current.amountReserved(),
+                current.version(), current.createdAt(), current.updatedAt());
+    }
+
+    private static void requireSameAdjustment(
+            QuotaAdjustmentRecord previous, ValidatedAdjustment requested) {
+        if (!previous.dimension().equals(requested.dimension())
+                || previous.deltaValue().compareTo(requested.delta()) != 0
+                || !previous.reason().equals(requested.reason())) {
+            throw new LightAiException(ErrorCode.IDEMPOTENCY_KEY_CONFLICT,
+                    "幂等键已用于不同的额度调整");
+        }
     }
 
     private void validateQuotaTransition(ApplicationQuotaRecord current, ValidatedQuota requested) {
@@ -731,5 +897,10 @@ public final class ApplicationService {
 
     private record ValidatedModels(
             List<UUID> virtualModelIds, long applicationVersion, String reason) {
+    }
+
+    private record ValidatedAdjustment(
+            String dimension, BigDecimal delta, String reason,
+            String idempotencyKey, long quotaVersion) {
     }
 }

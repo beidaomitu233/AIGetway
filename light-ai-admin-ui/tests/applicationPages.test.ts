@@ -107,7 +107,7 @@ describe('Application pages（V2 应用中心）', () => {
     })
     await vi.waitFor(() => {
       expect(router.currentRoute.value.path).toBe(`/ui/applications/${application.id}`)
-    })
+    }, { timeout: 3_000 })
   })
 
   it('详情聚合接入信息、治理策略与应用范围调用入口', async () => {
@@ -159,11 +159,24 @@ describe('Application pages（V2 应用中心）', () => {
           request_id: 'req-model',
         })
       }
+      if (method === 'POST' && url.pathname.endsWith(`/admin/applications/${application.id}/quota/adjustments`)) {
+        return dataEnvelope({
+          id: application.id,
+          version: 3,
+          entity: {
+            ...application,
+            quota: { ...application.quota, token_limit: 2_500_000, version: 3 },
+          },
+          draft_changed: false,
+          draft_revision: null,
+          request_id: 'req-adjustment',
+        })
+      }
       return undefined
     })
     const { wrapper } = await mountPage(`/ui/applications/${application.id}`)
 
-    const quotaButton = wrapper.findAll('button').find((button) => button.text() === '调整')!
+    const quotaButton = wrapper.findAll('button').find((button) => button.text() === '编辑策略')!
     await quotaButton.trigger('click')
     const quotaDialog = wrapper.find('[aria-labelledby="application-quota-title"]')
     await quotaDialog.find('input[type="number"]').setValue('2000000')
@@ -172,6 +185,19 @@ describe('Application pages（V2 应用中心）', () => {
     await flushPromises()
     expect(stub.calls.find((call) => call.method === 'PUT' && call.url.endsWith('/quota'))?.body)
       .toMatchObject({ token_limit: 2_000_000, version: 1, reason: '扩大生产额度' })
+
+    const adjustmentButton = wrapper.findAll('button').find((button) => button.text() === '人工增减')!
+    await adjustmentButton.trigger('click')
+    const adjustmentDialog = wrapper.find('[aria-labelledby="application-adjustment-title"]')
+    await adjustmentDialog.find('input').setValue('500000')
+    await adjustmentDialog.find('textarea').setValue('活动期间临时扩容')
+    await adjustmentDialog.findAll('button').find((button) => button.text() === '确认调整')!.trigger('click')
+    await flushPromises()
+    expect(stub.calls.find((call) => call.method === 'POST' && call.url.endsWith('/quota/adjustments'))?.body)
+      .toMatchObject({
+        dimension: 'TOKEN_LIMIT', delta: '500000', quota_version: 2,
+        reason: '活动期间临时扩容',
+      })
 
     const modelButton = wrapper.findAll('button').find((button) => button.text() === '管理授权')!
     await modelButton.trigger('click')

@@ -8,6 +8,7 @@ import com.lightai.admin.query.PageResultFactory;
 import com.lightai.admin.web.RequestContext;
 import com.lightai.client.application.ApplicationCreateCommand;
 import com.lightai.client.application.ApplicationModelsUpdateCommand;
+import com.lightai.client.application.ApplicationQuotaAdjustmentCommand;
 import com.lightai.client.application.ApplicationQuotaUpdateCommand;
 import com.lightai.client.application.ApplicationStatusCommand;
 import com.lightai.client.application.ApplicationUpdateCommand;
@@ -142,6 +143,41 @@ class ApplicationServiceTest {
                 .isInstanceOf(LightAiException.class)
                 .extracting(error -> ((LightAiException) error).code())
                 .isEqualTo(ErrorCode.CONFIG_VERSION_CONFLICT);
+    }
+
+    @Test
+    void adjustsQuotaIdempotentlyAndRejectsKeyReuseWithDifferentPayload() {
+        var created = service.create(admin(), new ApplicationCreateCommand(
+                "quota-adjustment", "额度调整应用", null, "owner-1", "张三", "PROD", null,
+                "ACTIVE", 1_000L, "100", "CNY", null, null,
+                "LIFECYCLE", null, null, List.of()));
+        UUID applicationId = UUID.fromString(created.id());
+        var command = new ApplicationQuotaAdjustmentCommand(
+                "TOKEN_LIMIT", "500", "临时扩容", "ticket-20260908-1",
+                created.entity().quota().version());
+
+        var adjusted = service.adjustQuota(owner(), applicationId, command);
+        assertThat(adjusted.entity().quota().tokenLimit()).isEqualTo(1_500L);
+        assertThat(adjusted.entity().quota().version()).isEqualTo(2L);
+
+        var replayed = service.adjustQuota(owner(), applicationId, command);
+        assertThat(replayed.entity().quota().tokenLimit()).isEqualTo(1_500L);
+        assertThat(replayed.entity().quota().version()).isEqualTo(2L);
+        assertThat(service.listAdjustments(owner(), applicationId))
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.dimension()).isEqualTo("TOKEN_LIMIT");
+                    assertThat(item.beforeValue()).isEqualTo("1000");
+                    assertThat(item.deltaValue()).isEqualTo("500");
+                    assertThat(item.afterValue()).isEqualTo("1500");
+                });
+
+        assertThatThrownBy(() -> service.adjustQuota(owner(), applicationId,
+                new ApplicationQuotaAdjustmentCommand(
+                        "TOKEN_LIMIT", "600", "另一笔调整", "ticket-20260908-1", 2L)))
+                .isInstanceOf(LightAiException.class)
+                .extracting(error -> ((LightAiException) error).code())
+                .isEqualTo(ErrorCode.IDEMPOTENCY_KEY_CONFLICT);
     }
 
     private static RequestContext admin() {

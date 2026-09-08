@@ -10,6 +10,7 @@ import { useBootstrapStore } from '@/stores/bootstrap'
 import { useFormSubmit } from '@/composables/useFormSubmit'
 import {
   changeApplicationStatus,
+  adjustApplicationQuota,
   fetchApplication,
   updateApplicationModels,
   updateApplicationQuota,
@@ -33,13 +34,21 @@ const canManageModels = computed(() => store.can(Permission.applicationModelMana
 const statusSubmission = useFormSubmit()
 const quotaSubmission = useFormSubmit()
 const modelSubmission = useFormSubmit()
+const adjustmentSubmission = useFormSubmit()
 const quotaDialogOpen = ref(false)
 const modelDialogOpen = ref(false)
+const adjustmentDialogOpen = ref(false)
 const availableModels = ref<ModelAliasListItem[]>([])
 const modelsLoading = ref(false)
 const modelsLoadError = ref<unknown>(null)
 const selectedModelIds = ref<string[]>([])
 const modelReason = ref('')
+const adjustmentForm = reactive({
+  dimension: 'TOKEN_LIMIT' as 'TOKEN_LIMIT' | 'AMOUNT_LIMIT',
+  delta: '',
+  reason: '',
+  idempotency_key: '',
+})
 const quotaForm = reactive({
   token_limited: true,
   token_limit: 1 as number | null,
@@ -165,6 +174,37 @@ async function saveQuota(): Promise<void> {
     if (response.entity) detail.value = response.entity
   })
   if (result.ok) quotaDialogOpen.value = false
+}
+
+function openAdjustmentDialog(): void {
+  adjustmentSubmission.reset()
+  adjustmentForm.dimension = 'TOKEN_LIMIT'
+  adjustmentForm.delta = ''
+  adjustmentForm.reason = ''
+  adjustmentForm.idempotency_key = crypto.randomUUID()
+  adjustmentDialogOpen.value = true
+}
+
+const adjustmentInvalid = computed(() => {
+  if (!adjustmentForm.delta.trim() || !adjustmentForm.reason.trim()) return true
+  const delta = Number(adjustmentForm.delta)
+  if (!Number.isFinite(delta) || delta === 0) return true
+  return adjustmentForm.dimension === 'TOKEN_LIMIT' && !Number.isInteger(delta)
+})
+
+async function saveAdjustment(): Promise<void> {
+  if (!detail.value || adjustmentInvalid.value) return
+  const result = await adjustmentSubmission.submit(async () => {
+    const response = await adjustApplicationQuota(detail.value!.id, {
+      dimension: adjustmentForm.dimension,
+      delta: adjustmentForm.delta.trim(),
+      reason: adjustmentForm.reason.trim(),
+      idempotency_key: adjustmentForm.idempotency_key,
+      quota_version: detail.value!.quota.version,
+    })
+    if (response.entity) detail.value = response.entity
+  })
+  if (result.ok) adjustmentDialogOpen.value = false
 }
 
 async function openModelDialog(): Promise<void> {
@@ -295,7 +335,10 @@ onMounted(load)
           <div class="lai-card">
             <div class="card-heading">
               <h2 class="lai-card-title">额度与速率</h2>
-              <button v-if="canManageQuota && detail.status !== 'ARCHIVED'" type="button" class="lai-btn lai-btn-small" @click="openQuotaDialog">调整</button>
+              <div v-if="canManageQuota && detail.status !== 'ARCHIVED'" class="compact-actions">
+                <button type="button" class="lai-btn lai-btn-small" @click="openAdjustmentDialog">人工增减</button>
+                <button type="button" class="lai-btn lai-btn-small" @click="openQuotaDialog">编辑策略</button>
+              </div>
             </div>
             <dl class="property-list">
               <div><dt>Token 额度</dt><dd>{{ usageText(detail.quota.tokens_used, detail.quota.tokens_reserved, detail.quota.token_limit) }}</dd></div>
@@ -355,6 +398,34 @@ onMounted(load)
         <div class="lai-dialog-actions">
           <button type="button" class="lai-btn" :disabled="quotaSubmission.submitting.value" @click="quotaDialogOpen = false">取消</button>
           <button type="button" class="lai-btn lai-btn-primary" :disabled="quotaSubmission.submitting.value || quotaInvalid" @click="saveQuota">{{ quotaSubmission.submitting.value ? '保存中…' : '保存调整' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="adjustmentDialogOpen && detail" class="lai-dialog-overlay" @click.self="adjustmentDialogOpen = false">
+      <div class="lai-dialog" role="dialog" aria-modal="true" aria-labelledby="application-adjustment-title">
+        <h2 id="application-adjustment-title" class="lai-dialog-title">人工增减额度</h2>
+        <p class="lai-dialog-message">正数增加上限，负数扣减上限；调整后不能低于已用与预占。重复提交由幂等键保护。</p>
+        <label class="lai-dialog-field">
+          <span>调整维度</span>
+          <select v-model="adjustmentForm.dimension" class="lai-select full-control">
+            <option value="TOKEN_LIMIT">Token 额度</option>
+            <option value="AMOUNT_LIMIT">金额预算</option>
+          </select>
+        </label>
+        <label class="lai-dialog-field">
+          <span>增减值</span>
+          <input v-model="adjustmentForm.delta" class="lai-input" inputmode="decimal" placeholder="例如 50000 或 -100">
+        </label>
+        <label class="lai-dialog-field">
+          <span>调整原因</span>
+          <textarea v-model="adjustmentForm.reason" class="lai-input status-reason" maxlength="500" rows="3" placeholder="必填，将写入额度流水与审计记录" />
+        </label>
+        <p v-if="adjustmentSubmission.conflictError.value" class="lai-form-message-error">额度版本或幂等键发生冲突，请刷新后重试。</p>
+        <p v-else-if="adjustmentSubmission.errorText.value" class="lai-form-message-error">{{ adjustmentSubmission.errorText.value }}</p>
+        <div class="lai-dialog-actions">
+          <button type="button" class="lai-btn" :disabled="adjustmentSubmission.submitting.value" @click="adjustmentDialogOpen = false">取消</button>
+          <button type="button" class="lai-btn lai-btn-primary" :disabled="adjustmentSubmission.submitting.value || adjustmentInvalid" @click="saveAdjustment">{{ adjustmentSubmission.submitting.value ? '提交中…' : '确认调整' }}</button>
         </div>
       </div>
     </div>
@@ -419,6 +490,7 @@ onMounted(load)
 .property-list { margin: 0; }.property-list div { padding: 10px 0; border-bottom: 1px solid #e6eaf0; }.property-list div:last-child { border: 0; }.property-list dt { margin-bottom: 3px; color: #667085; font-size: 12px; }.property-list dd { margin: 0; overflow-wrap: anywhere; }
 .status-reason { width: 100%; max-width: none; height: auto; margin-top: 6px; padding: 8px 10px; resize: vertical; }
 .lai-btn-small { min-height: 30px; padding: 4px 10px; font-size: 12px; }
+.compact-actions { display: flex; gap: 6px; }
 .governance-dialog { width: min(720px, calc(100vw - 32px)); max-width: 720px; }
 .governance-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; margin-top: 12px; }
 .wide-field { grid-column: 1 / -1; }

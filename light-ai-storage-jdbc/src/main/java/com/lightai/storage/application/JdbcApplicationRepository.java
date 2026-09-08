@@ -239,6 +239,83 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
         }
     }
 
+    public ApplicationQuotaRecord lockQuota(Connection connection, UUID applicationId) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT " + QUOTA_COLUMNS + " FROM "
+                + qualify(connection, "application_quota_policy") + " WHERE application_id = ? "
+                + dialect.forUpdateClause();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, applicationId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) throw new IllegalStateException("应用缺少额度策略");
+                return mapQuota(resultSet, dialect);
+            }
+        } catch (SQLException e) {
+            throw translate("应用治理策略锁定失败", e);
+        }
+    }
+
+    public Optional<QuotaAdjustmentRecord> findAdjustment(
+            Connection connection, UUID applicationId, String idempotencyKey) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT id, application_id, dimension, before_value, delta_value, "
+                + "after_value, reason, effective_at, operator_id, idempotency_key, created_at FROM "
+                + qualify(connection, "quota_adjustment")
+                + " WHERE application_id=? AND idempotency_key=?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, applicationId);
+            statement.setString(2, idempotencyKey);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next()
+                        ? Optional.of(mapAdjustment(resultSet, dialect)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw translate("应用额度调整流水读取失败", e);
+        }
+    }
+
+    public List<QuotaAdjustmentRecord> listAdjustments(
+            Connection connection, UUID applicationId, int limit) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT id, application_id, dimension, before_value, delta_value, "
+                + "after_value, reason, effective_at, operator_id, idempotency_key, created_at FROM "
+                + qualify(connection, "quota_adjustment") + " WHERE application_id=? "
+                + "ORDER BY created_at DESC, id DESC " + dialect.limitOffsetClause(limit, 0);
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, applicationId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<QuotaAdjustmentRecord> records = new ArrayList<>();
+                while (resultSet.next()) records.add(mapAdjustment(resultSet, dialect));
+                return List.copyOf(records);
+            }
+        } catch (SQLException e) {
+            throw translate("应用额度调整流水读取失败", e);
+        }
+    }
+
+    public void insertAdjustment(Connection connection, QuotaAdjustmentRecord record) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "INSERT INTO " + qualify(connection, "quota_adjustment")
+                + " (id, created_at, application_id, dimension, before_value, delta_value, "
+                + "after_value, reason, effective_at, operator_id, idempotency_key) VALUES (?, "
+                + dialect.nowFunction() + ", ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, record.id());
+            dialect.bindUuid(statement, 2, record.applicationId());
+            statement.setString(3, record.dimension());
+            bindDecimal(statement, 4, record.beforeValue());
+            bindDecimal(statement, 5, record.deltaValue());
+            bindDecimal(statement, 6, record.afterValue());
+            statement.setString(7, record.reason());
+            bindTime(statement, 8, record.effectiveAt());
+            statement.setString(9, record.operatorId());
+            statement.setString(10, record.idempotencyKey());
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw translate("应用额度调整流水写入失败", e);
+        }
+    }
+
     public List<ApplicationModelPermissionRecord> listModelPermissions(
             Connection connection, UUID applicationId) {
         DatabaseDialect dialect = dialect(connection);
@@ -427,6 +504,22 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
                 resultSet.getBigDecimal("amount_used"), resultSet.getBigDecimal("amount_reserved"),
                 resultSet.getLong("version"), dialect.readOffsetDateTime(resultSet, "created_at"),
                 dialect.readOffsetDateTime(resultSet, "updated_at"));
+    }
+
+    private QuotaAdjustmentRecord mapAdjustment(ResultSet resultSet, DatabaseDialect dialect)
+            throws SQLException {
+        return new QuotaAdjustmentRecord(
+                dialect.readUuid(resultSet, "id"),
+                dialect.readUuid(resultSet, "application_id"),
+                resultSet.getString("dimension"),
+                resultSet.getBigDecimal("before_value"),
+                resultSet.getBigDecimal("delta_value"),
+                resultSet.getBigDecimal("after_value"),
+                resultSet.getString("reason"),
+                dialect.readOffsetDateTime(resultSet, "effective_at"),
+                resultSet.getString("operator_id"),
+                resultSet.getString("idempotency_key"),
+                dialect.readOffsetDateTime(resultSet, "created_at"));
     }
 
     private static void bindLong(PreparedStatement statement, int index, Long value) throws SQLException {

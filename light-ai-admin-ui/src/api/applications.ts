@@ -145,6 +145,19 @@ export interface ApplicationQuotaUpdatePayload {
   reason: string
 }
 
+export interface ApplicationQuotaAdjustment {
+  id: string
+  application_id: string
+  dimension: 'TOKEN_LIMIT' | 'AMOUNT_LIMIT' | 'TOKEN_USAGE_RESET' | 'AMOUNT_USAGE_RESET'
+  before_value: string
+  delta_value: string
+  after_value: string
+  reason: string
+  effective_at: string
+  operator_id: string
+  created_at: string
+}
+
 export function fetchApplications(
   query: Record<string, QueryValue>,
   signal: AbortSignal,
@@ -188,6 +201,27 @@ export function updateApplicationModels(
   payload: { virtual_model_ids: string[]; application_version: number; reason: string },
 ): Promise<ManagementOperationResult<ApplicationDetail>> {
   return request({ path: `/applications/${id}/models`, method: 'PUT', body: payload })
+}
+
+export function fetchApplicationQuotaAdjustments(
+  id: string,
+): Promise<ApplicationQuotaAdjustment[]> {
+  return request({ path: `/applications/${id}/quota/adjustments` })
+}
+
+export function adjustApplicationQuota(
+  id: string,
+  payload: {
+    dimension: 'TOKEN_LIMIT' | 'AMOUNT_LIMIT'
+    delta: string
+    reason: string
+    idempotency_key: string
+    quota_version: number
+  },
+): Promise<ManagementOperationResult<ApplicationDetail>> {
+  return request({
+    path: `/applications/${id}/quota/adjustments`, method: 'POST', body: payload,
+  })
 }
 
 export function fetchApplicationKeys(
