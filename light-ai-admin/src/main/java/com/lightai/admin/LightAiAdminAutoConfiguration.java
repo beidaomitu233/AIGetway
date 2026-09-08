@@ -50,7 +50,6 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * 无 DataSource 时仅提供无存储默认（草稿状态为零值），不假装已连接数据库。
  */
 @AutoConfiguration(after = DataSourceAutoConfiguration.class)
-@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnProperty(name = "light-ai.admin.enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties({AdminProperties.class, StorageProperties.class})
 public class LightAiAdminAutoConfiguration {
@@ -69,6 +68,7 @@ public class LightAiAdminAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     @ConditionalOnMissingBean
     public CsrfTokenService lightAiCsrfTokenService() {
         return new CsrfTokenService();
@@ -84,6 +84,7 @@ public class LightAiAdminAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     public BootstrapController lightAiBootstrapController(BootstrapService bootstrapService,
                                                           CsrfTokenService csrfTokenService,
                                                           AdminProperties properties) {
@@ -91,23 +92,27 @@ public class LightAiAdminAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     public AdminAuthInterceptor lightAiAdminAuthInterceptor(AuthContextProvider authContextProvider) {
         return new AdminAuthInterceptor(authContextProvider);
     }
 
     /** 管理面统一错误映射：未注册为 Bean 时宿主应用收到的是容器原始错误页。 */
     @Bean
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     @ConditionalOnMissingBean
     public com.lightai.admin.web.AdminErrorHandler lightAiAdminErrorHandler() {
         return new com.lightai.admin.web.AdminErrorHandler();
     }
 
     @Bean
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     public WebMvcConfigurer lightAiAdminWebMvcConfigurer(AdminAuthInterceptor adminAuthInterceptor) {
         return new AdminWebMvcConfigurer(adminAuthInterceptor);
     }
 
     @Bean
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     public FilterRegistrationBean<RequestIdFilter> lightAiRequestIdFilter() {
         FilterRegistrationBean<RequestIdFilter> registration =
                 new FilterRegistrationBean<>(new RequestIdFilter());
@@ -117,6 +122,7 @@ public class LightAiAdminAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     @ConditionalOnProperty(name = "light-ai.admin.csrf-enabled", havingValue = "true")
     public FilterRegistrationBean<CsrfTokenFilter> lightAiCsrfTokenFilter(CsrfTokenService csrfTokenService) {
         FilterRegistrationBean<CsrfTokenFilter> registration =
@@ -216,6 +222,7 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.runtimeconfig.RuntimeConfigController lightAiRuntimeConfigController(
                 com.lightai.admin.runtimeconfig.RuntimeConfigAdminService service) {
             return new com.lightai.admin.runtimeconfig.RuntimeConfigController(service);
@@ -359,6 +366,7 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.provider.ProviderController lightAiProviderController(
                 com.lightai.admin.provider.ProviderService providerService,
                 com.lightai.admin.check.ProviderCheckService providerCheckService) {
@@ -366,6 +374,7 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.pool.PoolController lightAiPoolController(
                 com.lightai.admin.pool.PoolService poolService) {
             return new com.lightai.admin.pool.PoolController(poolService);
@@ -451,6 +460,7 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.credential.CredentialController lightAiCredentialController(
                 com.lightai.admin.credential.CredentialService credentialService) {
             return new com.lightai.admin.credential.CredentialController(credentialService);
@@ -492,6 +502,7 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.model.ProviderModelController lightAiProviderModelController(
                 com.lightai.admin.model.ProviderModelService modelService,
                 com.lightai.admin.model.ModelImportService importService) {
@@ -529,6 +540,7 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.alias.ModelAliasController lightAiModelAliasController(
                 com.lightai.admin.alias.ModelAliasService aliasService,
                 com.lightai.admin.alias.RouteCandidateService candidateService) {
@@ -605,6 +617,7 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.governance.GovernanceController lightAiGovernanceController(
                 com.lightai.admin.governance.GovernanceAdminService governanceService,
                 com.lightai.admin.governance.CircuitManagementService circuitService) {
@@ -727,6 +740,7 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.usage.UsageController lightAiUsageController(
                 com.lightai.admin.usage.UsageService usageService,
                 com.lightai.admin.usage.UsageExportService usageExportService) {
@@ -744,12 +758,14 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.overview.OverviewController lightAiOverviewController(
                 com.lightai.admin.overview.OverviewService overviewService) {
             return new com.lightai.admin.overview.OverviewController(overviewService);
         }
 
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.trace.TraceObservationController lightAiTraceObservationController(
                 com.lightai.admin.trace.TraceService traceService,
                 com.lightai.admin.trace.TraceDetailService traceDetailService,
@@ -912,6 +928,7 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.publish.ConfigDraftController lightAiConfigDraftController(
                 com.lightai.admin.publish.DraftStateQueryService queryService,
                 com.lightai.admin.publish.DraftRevertService revertService) {
@@ -919,6 +936,7 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.publish.ConfigPublishController lightAiConfigPublishController(
                 com.lightai.admin.publish.ConfigValidationService validationService,
                 com.lightai.admin.publish.ConfigPublishService publishService) {
@@ -926,6 +944,7 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.publish.InternalInstanceController lightAiInternalInstanceController(
                 com.lightai.admin.publish.ConfigPublishService publishService,
                 com.lightai.admin.publish.InternalInstanceAuth instanceAuth) {
@@ -934,6 +953,7 @@ public class LightAiAdminAutoConfiguration {
 
         /** /internal/** 实例认证拦截注册（仅存储装配时存在内部接口）。 */
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public WebMvcConfigurer lightAiInternalWebMvcConfigurer(
                 com.lightai.admin.publish.InternalInstanceAuth instanceAuth) {
             return new WebMvcConfigurer() {
@@ -997,6 +1017,7 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.accesscred.AccessCredentialController lightAiAccessCredentialController(
                 com.lightai.admin.accesscred.AccessCredentialService service) {
             return new com.lightai.admin.accesscred.AccessCredentialController(service);
@@ -1031,6 +1052,7 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.audit.AuditController lightAiAuditController(
                 com.lightai.admin.audit.AuditQueryService service) {
             return new com.lightai.admin.audit.AuditController(service);
@@ -1056,6 +1078,7 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.developer.DeveloperAccessController lightAiDeveloperAccessController(
                 com.lightai.admin.developer.DeveloperAccessService service) {
             return new com.lightai.admin.developer.DeveloperAccessController(service);

@@ -1,12 +1,21 @@
 package com.lightai.starter.autoconfigure;
 
+import com.lightai.admin.LightAiAdminAutoConfiguration;
+import com.lightai.admin.bootstrap.BootstrapController;
 import com.lightai.client.ChatRequest;
 import com.lightai.client.LightAiClient;
+import com.lightai.runtime.chat.ChatPipeline;
+import com.lightai.runtime.ports.ConfigSnapshotPort;
+import com.lightai.runtime.ports.CredentialSecretPort;
+import com.lightai.storage.credential.JdbcCredentialSecretPort;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ReactiveWebApplicationContextRunner;
+
+import javax.sql.DataSource;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -57,5 +66,43 @@ class LightAiReactiveAutoConfigurationTest {
                                     .build()).content())
                             .isEqualTo("embedded response");
                 });
+    }
+
+    @Test
+    @DisplayName("Reactive EMBEDDED 可复用管理 JDBC 存储并组装运行端口")
+    void embeddedUsesJdbcStorageWithoutServletEndpoints() {
+        new ReactiveWebApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(
+                        LightAiAdminAutoConfiguration.class,
+                        LightAiAutoConfiguration.class))
+                .withBean(DataSource.class, LightAiReactiveAutoConfigurationTest::dataSource)
+                .withPropertyValues(
+                        "light-ai.mode=EMBEDDED",
+                        "light-ai.application=reactive-jdbc-app",
+                        "light-ai.storage.schema-mode=MIGRATE",
+                        "light-ai.admin.runtime-mode=EMBEDDED",
+                        "light-ai.admin.secret-master-key-base64=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+                        "light-ai.admin.secret-master-key-id=test-key",
+                        "light-ai.admin.usage-aggregation-enabled=false",
+                        "light-ai.admin.retention-cleanup-enabled=false")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(ConfigSnapshotPort.class);
+                    assertThat(context).hasSingleBean(CredentialSecretPort.class);
+                    assertThat(context.getBean(CredentialSecretPort.class))
+                            .isInstanceOf(JdbcCredentialSecretPort.class);
+                    assertThat(context).hasSingleBean(ChatPipeline.class);
+                    assertThat(context).hasSingleBean(LightAiClient.class);
+                    assertThat(context).doesNotHaveBean(BootstrapController.class);
+                    assertThat(context.getBean(LightAiClient.class).models()).isEmpty();
+                });
+    }
+
+    private static DataSource dataSource() {
+        org.h2.jdbcx.JdbcDataSource dataSource = new org.h2.jdbcx.JdbcDataSource();
+        dataSource.setURL("jdbc:h2:mem:starter_reactive_" + UUID.randomUUID()
+                + ";MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE");
+        dataSource.setUser("sa");
+        return dataSource;
     }
 }
