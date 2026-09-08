@@ -1985,7 +1985,13 @@ Bootstrap追加adapters数组：provider_type、adapter_version、default_base_u
 
 ### BE-047 审查修复补充（2026-09-08）
 
-管理身份分别携带 pplicationScope 与 liasScope。开发者在线测试只接受 liasScope 明确授权的已发布 Alias，空范围拒绝全部 Alias；应用范围只用于 Trace 数据范围和单应用归属。相关7例测试通过。
+管理身份分别携带 applicationScope 与 aliasScope。开发者在线测试只接受 aliasScope 明确授权的已发布 Alias，空范围拒绝全部 Alias；应用范围只用于 Trace 数据范围和单应用归属。相关7例测试通过。
 ### BE-028/047/049 流终态审查补充（2026-09-08）
 
 Runtime 在 Attempt 与 Trace 成功最终化后调用 StreamListener.onComplete。HTTP、管理测试、Local SDK 与 Embedded 均以该回调生成唯一 DONE；流错误关闭后不生成成功终态。框架 SSE 入口传入纯 JSON 数据，避免重复 data: 包装。新增异步 Publisher 与 MockMvc 回归测试，相关16例通过。
+
+## 审查修复最终验证（2026-09-08）
+
+审查修复补齐逐实例内部凭证、applicationScope/aliasScope 隔离、运行参数草稿与 CAS 并发、流完成回调、观测聚合、Standalone/H2 快照兼容和 Provider Publisher 终态。`mvn -B verify` 成功，79 份 Surefire 报告合计 379 例，0 failure、0 error、0 skipped；可执行 JAR 的 15 步真实 HTTP 冒烟覆盖发布收敛、同步 Chat、业务 SSE 和管理 SSE。
+
+CR-004、CR-015、CR-016 尚未达到生产验收：仓库缺少 Redis 共享原子状态实现；版本化数据库升级/回滚和 PostgreSQL/MySQL 8.0 实库矩阵未完成；物理双实例、200 HTTP 流连接、长稳态、故障恢复及 Java/Boot/Servlet/Reactive 矩阵未执行。因此 BE-059、BE-060 及相应集群/性能验收项保持未勾选，不能用当前单机结果替代生产门禁。

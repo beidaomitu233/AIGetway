@@ -1479,3 +1479,9 @@ Trace ID唯一只覆盖仍保留的Trace；PRD要求“已存在”重复拒绝�
 Provider/模型/凭证可以在Alias与候选建立前检测。CONNECTION_ONLY不执行模型推理时仅生成ProviderCheckRecord；MINIMAL_CHAT产生Trace与Attempt，Trace.invocation_source=PROVIDER_CHECK、application=ADMIN_CONSOLE、alias_id/alias可空，Attempt.route_candidate_id可空，其余Provider/Model/Pool/Credential路径必填。currency和价格来自检测选定模型，可靠性采用固定单次检测预算，超时采用命令；不进行Alias Fallback。触发半开探测时attempt_type=HALF_OPEN_PROBE。
 
 数据库对APPLICATION/ADMIN_TEST的Trace施加alias_id/alias非空条件，对普通路由Attempt施加route_candidate_id非空服务约束。检测Trace仍结算并生成Usage事件，使用null Alias维度，页面显示“模型检测”；该文字由invocation_source派生，不伪造可调用Alias。此补充为C-021，防止执行方为满足外键而创建虚假Alias/候选。
+
+## 审查修复数据库同步（2026-09-08）
+
+本轮未修改已发布 PostgreSQL/MySQL DDL。Standalone 的 H2 自动初始化在执行 MySQL schema 时仅将 JSON 列转换为 LONGTEXT，避免 H2 JSON 驱动对字符串二次编码；JDBC Provider Model 与 Snapshot 读取统一规范化 nullable TINYINT/BOOLEAN。新增真实 H2 仓储回归覆盖 Provider JSON 往返、模型可空能力字段、快照布尔值和 Usage 聚合 upsert。
+
+当前 PostgreSQL 集成测试 3 例因未配置 `LAI_IT_DB_URL` 跳过；未形成版本化迁移历史，也未完成空库到升级版本、失败恢复和回滚演练。DB-001～DB-030 保持未勾选，待真实 PostgreSQL、MySQL 5.7/8.0 验收后逐项关闭。代码回滚可撤销 `81cc236`；生产 DDL 无本轮回滚操作。

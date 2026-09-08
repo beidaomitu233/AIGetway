@@ -1,190 +1,147 @@
-# 轻享 AI（Light AI）全栈联调与生产可用优化最终交付报告
+# 轻享 AI 全栈审查修复最终报告
 
-## 1. 优化背景与目标
+日期：2026-09-08
+分支：`fix/fullstack-review-optimization`
+审查问题基线：`f798e0e`（CR-001～CR-019）
+当前代码基线：`e1ea53d`（文档提交前）
 
-在此前阶段，轻享 AI（Light AI）完成了前后端各模块的代码编写并通过了初步审查。但在实际全栈联调与实机部署验证中发现，系统存在多项关键阻碍，导致其仅可用于单模块演示，无法达到可用级别，更未达到生产可用标准：
+## 1. 修复范围与结论
 
-1. **前端联调被 Mock 强制截断**：Vite 无论在何种模式下均无条件注入 `adminMockPlugin`，导致前端所有请求无法穿透至真实后端服务；
-2. **服务端无法独立零依赖启动**：缺乏开箱即用的轻量自愈机制，未配置外部数据库时服务无法启动，且 H2 MySQL 兼容模式下存在方言语法错误（`date_sub`、`INTERVAL ? SECOND`）与 Schema 识别遗漏；
-3. **配置发布闭环阻塞**：两阶段配置发布机制（4.5.2.4）缺乏本地运行时实例协调器，导致执行发布时抛出 `NO_ONLINE_RUNTIME_INSTANCE` 异常，配置草稿无法生效收敛；
-4. **调用观测数据丢失**：服务端默认采用 `InMemoryTraceStore`，真实调用产生的 Trace、Attempt、耗时、Token 与费用未持久化落盘，管理端调用记录、Usage 聚合与概览大盘呈现空白；
-5. **SPA 托管深链 404**：前端打入 JAR 后，深链路由（如 `/ui/traces`）在刷新时报 404 错误。
+本轮按 PRD、PROJECT_DOCUMENT、前端/后端/数据库计划和审查台账复核并修复前端、后端、JDBC 存储、Standalone 启动、权限、配置发布、观测和流式协议。CR-001～CR-019 中 16 项已完成代码修复与当前环境验证；CR-004、CR-015、CR-016 保留为生产验收阻塞项。
 
-本次全栈架构优化严格基于 PRD V1.0、`PROJECT_DOCUMENT.md` 与 `AGENTS.md` 规范，不超范围新增功能，不推翻既有架构，旨在彻底打通全栈链路，消除所有演示级短板，实现**开箱即用、真实联调、可靠发布、全链路可观测**的生产级 AI 运行时网关。
+单实例 Standalone 的功能链路已经可交付验证：可执行 JAR 能启动，H2 空库能初始化，Provider/凭证池/凭证/模型/Alias/候选可写入，配置可校验并发布收敛，Access Token、`/v1/models`、同步 Chat、业务 SSE 和管理 StreamEvent SSE 均通过真实 HTTP 冒烟。
 
----
+当前不建议进入最终生产验收。生产放行前仍需交付 Redis 共享原子容量与熔断实现、版本化数据库升级/回滚和真实 PostgreSQL/MySQL 8.0 验证，以及物理双实例与性能兼容矩阵。
 
-## 2. 核心架构优化与问题修复
+## 2. CR-001～CR-019 状态
 
-### 2.1 前端联调机制与反向代理重构（FE-P01 ~ FE-P09）
-- **按需 Mock 与真实服务穿透**：修改 `light-ai-admin-ui/vite.config.ts`，仅当命令行显式指定 `mode === 'mock'` 或环境变量 `VITE_USE_MOCK === 'true'` 时才挂载 Mock 插件；常规 `dev` 与 `preview` 模式下直接通过 Vite 反向代理将 `/admin`、`/v1`、`/internal` 转发至后端网关（默认 `http://127.0.0.1:8080`，可通过 `VITE_BACKEND_TARGET` 灵活重写）。
-- **受保护请求头统一透传**：在 `light-ai-admin-ui/src/api/http.ts` 中增强请求头拦截，在开发调试与本地环境下自动携带 `lai_admin_token`，配合后端的本机回环管理员信任策略（`light-ai.server.auth.trusted-local=true`），彻底解决本地浏览器访问管理端的 403 阻断问题。
-- **SPA 生产部署路由兜底**：在 `light-ai-server` 中通过 Spring Boot `ErrorViewResolver` 与 `ViewControllerRegistry` 结合，将 `/ui/**` 的 404 请求优雅回退至 `/ui/index.html` 并显式设置 HTTP 200 状态码；根路径 `/` 自动重定向至 `/ui/`，保障刷新与多层级深链的正确呈现。
+| 编号 | 状态 | 修复或当前结论 | 验收方式 |
+| --- | --- | --- | --- |
+| CR-001 | 已完成 | Server 主类、Boot repackage、生产装配和 H2 JSON/布尔兼容已完成；JAR 可直接启动。 | `mvn -B verify`；15 步 JAR 冒烟。 |
+| CR-002 | 已完成 | Embedded 使用活动快照端口，移除硬编码模型定义。 | Starter/快照测试。 |
+| CR-003 | 已完成 | 运行参数、Access Credential、开发接入、留存清理进入默认管理装配。 | Admin 自动装配测试。 |
+| CR-004 | 部分完成 | 单实例内存容量具备原子预占与 fail-closed；仓库仍无 `light-ai-storage-redis` 共享实现，不能证明集群全局限额。 | 内存容量测试通过；真实 Redis 双实例未执行。 |
+| CR-005 | 已完成 | 业务 Token 鉴权执行 IPv4/IPv6 CIDR 白名单并传入真实来源 IP。 | 鉴权边界测试。 |
+| CR-006 | 已完成 | `AuthContext.applicationScope` 与 `aliasScope` 分离；开发者空 Alias 范围默认拒绝。 | `DeveloperAccessServiceScopeTest` 等 7 项。 |
+| CR-007 | 已完成 | 内部接口使用 `internal-instance-credentials.<UUID>` 逐实例口令；头、路径、正文身份必须一致。 | `InternalInstanceAuthTest`/`PublishWebTest` 等 14 项；H2 发布实例协议冒烟。 |
+| CR-008 | 已完成 | Provider URL 规范化和连接边界 DNS/IP 二次检查覆盖 loopback、私网和链路本地地址。 | `TargetUrlPolicyTest` 和 Adapter HTTP 测试。 |
+| CR-009 | 已完成 | RuntimeConfig 写入草稿、递增 revision，并进入快照和恢复。 | 草稿/发布服务测试与端到端发布。 |
+| CR-010 | 已完成 | 事务连接生命周期交由 Spring 管理。 | 事务提交/回滚测试。 |
+| CR-011 | 已完成 | 管理 SSE 使用 START/DELTA/USAGE/DONE；业务 SSE 使用纯 JSON 块和唯一 `[DONE]`；Provider Publisher 正常结束后触发 `onComplete`。 | MockMvc、Publisher 测试；真实业务 SSE 3 块/1 DONE；管理 SSE START/DELTA/DONE。 |
+| CR-012 | 已完成 | 流式前端请求复用受保护请求头并携带 CSRF 与 request id。 | 前端测试与构建。 |
+| CR-013 | 已完成 | 留存影响使用独立 DTO、嵌套目标/计数和真实估算绑定。 | Admin 测试。 |
+| CR-014 | 已完成 | JDBC 删除端口和调度已装配；Usage、审计、样本和逐 Trace 清理相互隔离。 | `RetentionCleanupServiceTest`。 |
+| CR-015 | 部分完成 | PostgreSQL/MySQL 全量 schema、默认 migrator、SchemaGuard 和 H2 空库迁移可用；仍缺版本历史、升级/回滚演练、当前 PostgreSQL/MySQL 8.0 全仓 SQL 证据。 | H2 迁移和仓储测试通过；历史 MySQL 5.7 冒烟见 `baa3415`；PostgreSQL 3 项因无测试库跳过。 |
+| CR-016 | 未完成 | 本机测试不能替代真实 Redis、物理双实例、200 HTTP 流连接、10 分钟稳态和 Java/Boot/Reactive 矩阵。 | 当前仅有进程内基准和同一 Server 内两个发布实例身份收敛。 |
+| CR-017 | 已完成 | 管理请求超时覆盖响应体读取，定时器和取消监听在 `finally` 清理。 | 前端慢响应体/取消测试。 |
+| CR-018 | 已完成 | `draft_change` 按 R 类物理删除语义移除不存在的 `deleted_at` 条件。 | JDBC/草稿测试。 |
+| CR-019 | 已完成 | RuntimeConfig 在事务内以 `WHERE version=?` CAS 更新，并检查影响行数。 | 版本冲突和事务测试。 |
 
-### 2.2 Standalone Server 零外部依赖自愈启动（BE-056 / DB-P01 ~ DB-P05）
-- **开箱即用轻量存储配置**：`light-ai-server/src/main/resources/application.properties` 默认启用 H2 内存库（`jdbc:h2:mem:lightai;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH`），并配置 `light-ai.storage.schema-mode=MIGRATE`，无需提前安装配置 PostgreSQL 或 MySQL 即可秒级拉起。
-- **SchemaGuard 多方言元数据适配**：修复 `SchemaGuard` 在 H2 MySQL 兼容模式下将 catalog 误作为 schema 导致查询 39 张表结构为空的缺陷；动态识别产品名并在 H2 下采用全局 catalog 检索，保障 39 张核心表结构精准校验。
-- **DatabaseDialect ANSI/ODBC 语法抹平**：
-  - 修复 `MySqlDialect` 的 `intervalSecondsBeforeNow` 实现：将原非标 `DATE_SUB(now(6), INTERVAL X SECOND)` 替换为标准 ODBC/ANSI 函数 `TIMESTAMPADD(SECOND, -X, now(6))`，在 MySQL 5.7、MySQL 8.0 及 H2 MySQL 兼容模式下均原生支持，彻底消除了 H2 中 `Function "date_sub" not found` 语法异常。
-  - 修复 `JdbcRuntimeInstanceRepository.sweepStale` 中非法占位符绑定：消除 `INTERVAL ? SECOND` 动态参数绑定的 SQL 解析错误。
-  - 修复 `JdbcUsageAggregationEventRepository.claimNext` 中 SQL 子句顺序：将 `LIMIT 1` 置于锁语句 `FOR UPDATE` 之前，符合标准 SQL 与 MySQL 语法规范。
+## 3. 前端修改
 
-### 2.3 两阶段配置发布状态机协调与收敛（BE-040 ~ BE-042 / BE-056）
-- **本地实例生命周期协调器（`ServerInstanceCoordinator`）**：
-  - 在 `light-ai-server` 中新增并注册 `ServerInstanceCoordinator`（实现 Spring `SmartLifecycle`，启动阶段 `Integer.MAX_VALUE - 100`）；
-  - 服务启动后立即发起首轮注册心跳，随后以 3 秒为周期向 `ConfigPublishService` 汇报自身为 `ONLINE` 实例（包含运行时版本、支持协议版本、加载的 Adapter 列表及当前激活快照号）；
-  - 优雅下线支持：容器停止时向发布服务上报 `acceptingRequests=false`（`DRAINING`），实现平滑注销。
-- **两阶段发布协议自动响应**：
-  - 当收到 `InstancePrepareCommand` 时，按指令预载目标快照并核对 SHA-256 校验和，校验通过后向管理服务上报 `READY`；
-  - 当收到 `InstanceActivationCommand` 时，立即使本地 `ConfigSnapshotPort` 缓存失效并重新加载最新快照，同时上报 `LOADED`；
-  - 协调器快速收敛心跳周期，彻底解决配置发布流程因缺少在线实例而中断在 `NO_ONLINE_RUNTIME_INSTANCE` 的缺陷，实现草稿到运行快照的无缝发布与原子切换。
+从审查提交 `f798e0e` 到当前分支共修改 12 个前端文件：
 
-### 2.4 Trace、Attempt 与 Usage 真实数据库持久化（BE-031 ~ BE-036 / BE-027 ~ BE-030）
-- **交付 `JdbcTraceStore` 仓储实现**：
-  - 全面替代原有内存存根 `InMemoryTraceStore`，所有通过 `/v1/chat/completions` 发起的模型调用均实时持久化入库；
-  - `create`：原子插入 `trace` 表（初始状态 `RUNNING`），校验 `client_trace_id` 唯一性，重复时严格抛出 `TRACE_ID_CONFLICT`；
-  - `startAttempt` / `finishAttempt`：记录候选尝试序号、Provider 类型、凭证 ID、状态、首 Token 耗时（TTFT）、总延迟、输入输出 Token 及精确费用；
-  - `markCommitted`：标记流式首块业务内容已提交，严格防范提交后的跨模型 Fallback 与输出拼接；
-  - `finalizeTrace`：更新 `trace` 终态（`SUCCEEDED` / `FAILED` / `STREAM_INTERRUPTED` / `CANCELLED`），并同事务触发 `TraceFinalizer.finalizeTrace` 写入 `usage_aggregation_event` 异步事件，驱动 `UsageAggregator` 进行 HOUR/DAY 维度聚合入库；
-  - `attempts`：支持根据 `trace_id` 实时读取历史 Attempt 列表。
-- **配置快照端口修正**：
-  - 修复 `ConfigSnapshotPort.empty()` 返回空快照时 `hasActiveSnapshot() == false` 的语义，防止服务初始化阶段误读空配置。
+- `light-ai-admin-ui/index.html`
+- `light-ai-admin-ui/mocks/adminMockPlugin.ts`
+- `light-ai-admin-ui/package.json`
+- `light-ai-admin-ui/src/api/developerAccess.ts`
+- `light-ai-admin-ui/src/api/http.ts`
+- `light-ai-admin-ui/src/app/router.ts`
+- `light-ai-admin-ui/src/app/routerGuards.ts`
+- `light-ai-admin-ui/src/pages/circuits/CircuitDetailPage.vue`
+- `light-ai-admin-ui/src/pages/developer/DeveloperAccessPage.vue`
+- `light-ai-admin-ui/src/pages/providers/ProviderDetailPage.vue`
+- `light-ai-admin-ui/src/pages/usage/UsagePage.vue`
+- `light-ai-admin-ui/vite.config.ts`
 
----
+主要变化包括真实后端代理与按需 Mock、CSRF 流式请求头、响应体超时、路由守卫和深链、字段契约、错误/空态以及页面运行时异常修复。`FRONTEND_PLAN.md` 当前 54/54 已勾选；本轮复核未新增产品功能。
 
-## 3. 全量测试与质量门禁验证
+## 4. 后端修改
 
-### 3.1 后端工程多模块自动化测试
-在工程根目录下执行全量测试：
-```bash
-mvn test "-Dsurefire.failIfNoSpecifiedTests=false"
-```
-**测试结果**：13 个子模块全部构建成功，**0 错误、0 失败、100% 通过**。
+生产代码修改覆盖 101 个文件，集中在以下模块和关键入口：
 
-| 模块名称 | 测试数量 | 失败数 | 错误数 | 耗时 | 关键验证覆盖点 |
-|---|---|---|---|---|---|
-| `light-ai-parent` | - | 0 | 0 | 0.001s | 父工程依赖与插件管控 |
-| `light-ai-client` | 48 | 0 | 0 | 2.290s | 统一模型请求、DTO 序列化、未知字段容忍、错误码表 |
-| `light-ai-spi` | 4 | 0 | 0 | 0.544s | `AuthContext`、Provider SPI 契约 |
-| `light-ai-storage-jdbc` | 14 | 0 | 0 | 0.898s | 多方言自适应、H2/MySQL `TIMESTAMPADD` 时间函数、`SchemaGuard` 结构自检 |
-| `light-ai-runtime` | 46 | 0 | 0 | 2.356s | 路由确定性排序、容量三层预占与单次释放、恢复决策矩阵、流式首块提交阻断 |
-| `light-ai-provider-common` | 5 | 0 | 0 | 0.660s | HTTP 连接池、SSE 解析、错误统一分类 |
-| `light-ai-provider-openai` | 5 | 0 | 0 | 0.036s | OpenAI 协议映射与流式块处理 |
-| `light-ai-provider-anthropic`| 5 | 0 | 0 | 0.666s | Anthropic 顶层 System 消息与工具调用协议映射 |
-| `light-ai-provider-gemini` | 5 | 0 | 0 | 0.641s | Gemini 安全审查与 FinishReason 映射 |
-| `light-ai-provider-deepseek`| 5 | 0 | 0 | 0.037s | DeepSeek 协议兼容与适配 |
-| `light-ai-admin` | 164 | 0 | 0 | 2.548s | 四角色权限矩阵、草稿锁、两阶段发布服务、Usage 聚合 Outbox、审计 |
-| `light-ai-server` | 28 | 0 | 0 | 4.832s | `ServerInstanceCoordinatorTest`（两阶段协调）、`JdbcTraceStoreTest`（持久化与聚合）、`ServerHealthAndDrainingTest`（就绪摘流）、性能压测基线 |
-| `light-ai-spring-boot-starter`| 9 | 0 | 0 | 2.900s | 条件自动装配、动态多数据源路由 |
-| **全工程汇总** | **338** | **0** | **0** | **18.6s** | **全部 13 模块构建通过 (BUILD SUCCESS)** |
+| 模块 | 关键文件与变化 |
+| --- | --- |
+| Client/SPI | `AccessTokenPort`、`AuthContext`、Retention DTO、Provider Network Policy；分离应用与 Alias 范围。 |
+| Runtime | `ChatPipeline`、`SseEncoder`、`LocalLightAiClient`、`InMemoryCapacityStore`；统一结算、流终态和 fail-closed。 |
+| Provider | `AdapterHttp`、`OpenAiCompatibleAdapter`；连接地址复核和 Publisher `onComplete`。 |
+| Admin | `LightAiAdminAutoConfiguration`、`InternalInstanceAuth`、`DeveloperAccessService/Controller`、`RuntimeConfigAdminService`、`ConfigValidationService`、`RetentionCleanupService`、Trace/Overview/Usage 服务。 |
+| Server | `ServerApplication`、`V1Controller`、`ReadinessService`、`ServerLifecycleService`、`ServerInstanceCoordinator`、`JdbcTraceStore`、快照路由与凭证端口。 |
+| Starter | `LightAiEmbeddedConfiguration`；接入活动快照和宿主覆盖。 |
+| JDBC | 方言、schema migrator、草稿/发布/Trace/Usage/留存仓储；H2 与 MySQL JDBC 类型兼容。 |
 
-### 3.2 前端代码检查与测试套件
-在 `light-ai-admin-ui` 目录下执行质量门禁：
-1. **单元与集成测试**：
-   ```bash
-   npm test
-   ```
-   **结果**：22 个测试套件，**160 个测试用例全部通过（160 passed）**，无任何失败。
-2. **静态类型检查**：
-   ```bash
-   npm run typecheck
-   ```
-   **结果**：`vue-tsc --noEmit` 严格类型推断全部通过，**0 错误**。
-3. **生产环境构建**：
-   ```bash
-   npm run build
-   ```
-   **结果**：Vite 成功生成 84 项生产级静态资源（包含 HTML/JS/CSS/资产包），耗时 2.32 秒。
+完整文件审计可用 `git diff --name-only f798e0e..HEAD` 获取。
 
-### 3.3 Standalone Server 实机独立拉起验证
-通过原生命令启动构建完成的 fat JAR 制品：
-```powershell
-java -jar light-ai-server/target/light-ai-server-0.1.0-SNAPSHOT.jar
-```
-**实测结果**：
-- **启动耗时**：1.868 秒冷启动成功，Tomcat 监听 `8080` 端口；
-- **数据库迁移**：SchemaGuard 成功校验并初始化 39 张表，无任何缺表告警；
-- **实例协调器**：`ServerInstanceCoordinator` 自动生成 `instanceId`，每 3 秒稳定向服务注册心跳，0 告警，0 异常；
-- **Usage 聚合轮询器**：`UsageAggregationPoller` 每 5 秒轮询 Outbox 队列，执行正常；
-- **健康检查接口实测**：
-  - `GET http://127.0.0.1:8080/health/live` $\rightarrow$ `{"status": "UP"}` (HTTP 200)
-  - `GET http://127.0.0.1:8080/health/ready` $\rightarrow$ `{"status": "UP"}` (HTTP 200)
-- **管理自省接口实测**：
-  - `GET http://127.0.0.1:8080/admin/bootstrap` $\rightarrow$ 成功返回当前用户信息、权限列表及运行模式（HTTP 200）
-  - `GET http://127.0.0.1:8080/admin/runtime-instances` $\rightarrow$ 返回状态为 `ONLINE` 的当前实例条目（`total: 1`，HTTP 200）
-- **UI 页面访问实测**：
-  - `GET http://127.0.0.1:8080/` $\rightarrow$ HTTP 302 重定向至 `/ui/`
-  - `GET http://127.0.0.1:8080/ui/` $\rightarrow$ 成功输出 Admin UI SPA HTML 入口文件（HTTP 200）
-  - `GET http://127.0.0.1:8080/ui/traces` $\rightarrow$ 经 SPA ErrorViewResolver 拦截，成功返回 `index.html`（HTTP 200）
+## 5. 数据库修改与迁移说明
 
----
+生产 schema 文件：
 
-## 4. 规范与边界核对
+- `light-ai-storage-jdbc/src/main/resources/schema/mysql/light_ai_schema.sql`
+- `light-ai-storage-jdbc/src/main/resources/schema/postgres/light_ai_schema.sql`
 
-严格遵守 `AGENTS.md` 协作规范：
-1. **范围控制**：未新增注册、充值、多租户运营、Prompt 管理、Agent Runtime、多模态或训练功能；
-2. **代码规范**：不引入未经测试的临时代码，不留无用注释，无硬编码秘钥；
-3. **架构约束**：Local Runtime 不连接管理库；流式响应首块提交后严禁切换模型；集群容量与熔断状态 fail-closed；
-4. **诚实报告**：所有测试与启动数据均取自真实构建与运行输出，未伪造测试结果。
+本轮新增的 Standalone 兼容修复位于 `DefaultSchemaMigrator`：H2 运行时把 MySQL schema 的 JSON 列转换为 LONGTEXT，保持 JDBC `setString/getString` 的对象 JSON 语义；MySQL/PostgreSQL 生产 schema 不受此转换影响。ProviderModel 可空能力字段和快照 enabled/support 字段统一转换为 Boolean，避免 H2 的 TINYINT 数值导致模型被错误判定为停用。
 
----
+本轮没有修改已发布生产表结构，没有数据迁移和数据删除。代码回滚可直接回退 `81cc236`；生产数据库无需执行逆向 DDL。CR-015 的版本化升级、失败恢复和回滚演练仍需数据库交付环境完成，`DATABASE_PLAN.md` 的 DB-001～DB-030 保持未勾选。
 
-## 5. 结论
+## 6. 安全与性能
 
-经过本次全栈架构优化与联调，轻享 AI 已彻底解决原有“仅为演示、无法自愈启动、联调被 Mock 拦截、发布无实例响应、调用无数据落盘”的系统性短板，实现了：
-1. **全栈连通**：前端直连真实后端，实时交互与状态双向同步；
-2. **零依赖开箱可用**：单文件 JAR 直接秒级启动，自动建表与自注册；
-3. **闭环可靠**：两阶段配置发布平滑收敛，调用链路全方位落盘观测；
-4. **门禁全绿**：全工程 13 模块 338 项测试及前端 160 项测试 100% 通过。
+安全修复覆盖业务 Token IP 白名单、开发者 Alias 数据范围、逐实例内部身份、Provider SSRF、CSRF、敏感值快照边界和错误响应。逐实例口令配置替代旧的全局 `light-ai.admin.internal-instance-token`；部署必须配置 `light-ai.admin.internal-instance-credentials.<UUID>`。
 
-项目已达到生产级交付要求。
+本轮未引入未经测量的缓存或重构。JDBC Usage upsert 修正 49 个绑定参数并增加真实 H2 重放测试；查询范围支持 `*` 系统范围。真实性能门禁仍受 CR-004/016 阻塞，当前 P50/P95 微基准不能作为生产容量结论。
 
----
+## 7. 新增或修改的测试
 
-## 6. 真实数据库端到端联调与剩余断点修复（2026-09-08 追加）
+共新增或修改 25 个测试/冒烟文件，重点包括：
 
-前述交付后，以本机真实 MySQL 5.7.44（`lightai` 库）+ 本地 Stub OpenAI 兼容 Provider 为验收环境复测，发现并修复了在"真实数据库 + 真实 HTTP 外呼"下才暴露的系统性断点（单元测试使用替身连接无法发现）。台账登记于 [COMMUNICATION.md 第 11 节](COMMUNICATION.md)（JT-001~JT-010）。
+- 权限与身份：`AuthContextTest`、`DeveloperAccessServiceScopeTest`、`InternalInstanceAuthTest`、`PublishWebTest`。
+- 流协议：`ChatPipelineTest`、`SseEncoderTest`、`OpenAiCompatibleAdapterTest`、`V1ControllerStreamTest`。
+- 存储：`JdbcProviderRepositoryTest`、`JdbcProviderModelRepositoryTest`、`JdbcSnapshotContentRepositoryTest`、`JdbcUsageAggregateRepositoryTest`、`DefaultSchemaMigratorTest`。
+- 发布/留存/观测：`ConfigValidationServiceTest`、`ConfigPublishServiceTest`、`RetentionCleanupServiceTest`、`TraceServiceScopeTest`、`JdbcTraceStoreTest`、`ServerInstanceCoordinatorTest`。
+- 真实 HTTP 冒烟：`scripts/e2e-stub-provider.js`、`scripts/e2e-smoke.sh`。
 
-### 6.1 关键根因与修复
+## 8. 测试命令与结果
 
-| 编号 | 层 | 根因 | 修复 |
-|---|---|---|---|
-| JT-001 | 运行端口 | ConfigSnapshotPort 仅有 empty() 实现，发布快照从未进入 Runtime | 新增 `JdbcConfigSnapshotPortAdapter`（config_snapshot.content → ActiveSnapshot，发布激活后失效），自动装配注册 |
-| JT-002 | 运行管道 | ChatPipeline 将 baseUrl 硬编码为 adapter.invalid | CandidateView 扩展 baseUrl/proxy/timeout/headers 五连接字段并真实使用；缺 base_url 拒绝外呼 |
-| JT-003 | 数据库 | audit_log 等 8 仓储 INSERT 缺 created_at/updated_at（无默认值） | 全部补齐事务 now()；MySQL/PG 上管理写操作恢复可用 |
-| JT-004 | 数据库 | setObject(UUID) 与手写 schema 限定名在 MySQL 失效 | 方言 bindUuid 化；新增 `SqlNames.table()` 与 `DatabaseDialect.quoteColumn`（usage 保留字） |
-| JT-005 | schema | 6 表 DDL 与 DATABASE_PLAN/仓储列名错配（object_runtime_state、provider_check_record、publish_record、publish_instance_result、limit_policy、reliability_policy） | 按 DATABASE_PLAN 重写双方言 DDL |
-| JT-006 | DTO | Jackson snake_case 陷阱：topPMin → top_pmin ≠ 前端/快照的 top_p_min | 四个 DTO 显式 `@JsonProperty("top_p_min"/"top_p_max")` |
-| JT-007 | Server | Standalone 未装配管理面/DB/适配器/真实运行链路 | ServerApplication 装配 AdapterRegistry/容量/凭证/路由/TraceStore/部署身份适配（默认拒绝） |
-| JT-008 | 可靠性 | 事务外 DataSourceUtils.getConnection 不释放 → 连接池耗尽 | 发布/草稿读路径 try/finally 释放；leak-detection 复核 |
-| JT-009 | 可靠性 | 可调度凭证 JOIN 列 id 歧义（translate 误报 UNIQUE_VIOLATION） | PREFIXED_COLUMNS + 凭证/管道失败根因日志（System.Logger，runtime 零依赖） |
-| JT-010 | 安全一致性 | AdapterHttp 连接时内网复核与管理面内网许可开关不同源 | checkedUri 统一走 SPI `ProviderNetworkPolicies`，Server 按同一配置 configure |
+| 命令 | 实际结果 |
+| --- | --- |
+| `mvn -B verify` | BUILD SUCCESS；79 个报告、379 测试、0 failure、0 error、0 skipped；13 个 Reactor 项完成；Server fat JAR repackage 成功。 |
+| 显式 `PostgresSchemaGuardIT` | 3 项全部跳过，原因是当前环境未配置 `LAI_IT_DB_URL`；不计为通过。 |
+| `npm run lint` | 0 error、37 warning。 |
+| `npm run typecheck` | 通过。 |
+| `npm test -- --run` | 22 个文件、160/160 通过。 |
+| `npm run build` | 通过，Vite 生产构建成功。 |
+| `java -jar ...` + `scripts/e2e-smoke.sh` | 当前 JAR 启动成功；H2 空库迁移成功；发布最终 SUCCEEDED；ready/models/sync/stream/admin-stream 均 HTTP 200；业务流 3 块且 1 个 `[DONE]`；管理流事件为 START/DELTA/DONE。 |
+| `git diff --check` | 通过。 |
 
-### 6.2 端到端验收证据（真实 MySQL 5.7.44）
+测试 Stub 仅返回固定 Provider 响应，用于验证网关真实 HTTP 传输、发布、权限、持久化和 SSE 协议；它不替代真实供应商兼容验收。
 
-`scripts/e2e-smoke.sh` 13 步全部通过：
+## 9. 文档更新
 
-1. Provider / 凭证池 / 凭证（AES-GCM 加密）/ 模型 / Alias / 候选 创建全部成功，草稿 revision 递增；
-2. `POST /admin/config/validate` PASSED（含 CONNECTION_CHECK_STALE 警告确认）→ `POST /admin/config/publish` PREPARING → 实例协议 prepare → READY → activate → LOADED → 发布 SUCCEEDED，ACTIVE 快照生效；
-3. `/health/ready` 200 UP；签发业务 Access Token（一次显示）；
-4. `GET /v1/models` 200 返回已发布别名 `chat-demo`；
-5. `POST /v1/chat/completions` 200：内容来自真实外呼 Stub Provider，`usage{12,9,21,source=ACTUAL}`、`cost{0.00000003 USD, estimated=false}`、`trace_id` 均由统一结算与观测链路产生。
+- `FRONTEND_PLAN.md`：记录最终门禁，保留 54/54 完成状态。
+- `BACKEND_PLAN.md`：记录审查修复、真实 H2 HTTP 验收和剩余集群/兼容任务。
+- `DATABASE_PLAN.md`：记录 H2 JSON/TINYINT 兼容、无生产 DDL 变更、回滚说明和未完成的真实数据库门禁。
+- `PROJECT_DOCUMENT.md`：同步逐实例内部身份、Alias/Application 范围和单实例/集群部署边界。
+- `COMMUNICATION.md`：CR-001～019 更新为 16 项已完成、2 项部分完成、1 项未完成，并写入验收证据。
 
-### 6.3 本轮测试结果
+## 10. Git 提交
 
-| 门禁 | 结果 |
-|---|---|
-| `mvn -B test`（13 模块） | BUILD SUCCESS，0 失败（含 server 28、admin 169） |
-| `npm test` / `lint` / `typecheck` / `build` | 160 用例通过 / 0 error / 通过 / 成功 |
-| MIGRATE 空库启动 | 约 2.5s，39 表迁移 + SchemaGuard 通过 |
+本修复分支在 `dev` 基线 `baa3415` 之后的提交：
 
-### 6.4 遗留事项（进入最终验收前建议完成）
+- `175d3e5` `fix(fullstack): bind internal authentication to deployment instance credentials`
+- `65a6a2f` `fix(fullstack): separate developer alias and application scopes`
+- `4165b4a` `fix(fullstack): finalize streams on runtime completion`
+- `659a823` `fix(fullstack): restore scoped observation aggregation`
+- `81cc236` `fix(fullstack): make standalone snapshots portable`
+- `807bf82` `fix(fullstack): complete provider stream publishers`
+- `e1ea53d` `test(fullstack): add standalone sync and stream smoke coverage`
 
-1. **熔断 attempt 级接线**（P1）：CircuitStateStore.recordResult 未接入 ChatPipeline；预路由过滤受 C-008 键（model+credential）路由期无凭证的约束，需专项设计。
-2. **真实 Provider 与流式联调**：本地 Stub 非流式，SSE 端到端需真实流式模型复核（管理流协议已有单测）。
-3. **集群形态**（P2 部署项）：Redis 共享容量与双实例演练按 CR-016 由部署环境执行。
-4. **Embedded 形态**：宿主需提供的最小 Bean 清单应在 Starter 文档中明确。
+审查修复的更早集成提交可从 `3b92435`、`a790477`、`baa3415` 追踪。未推送、未合并到 `dev/main`、未发布制品。
 
-### 6.5 验收结论（更新）
+## 11. 未完成问题及最终验收建议
 
-在第 5 节结论基础上收窄为：**单实例 Standalone（MySQL 5.7/8.0、PostgreSQL）已达到真实可用与可交付标准（有条件通过）**；上述遗留项完成后即可关闭最终验收。
+生产验收前必须关闭：
+
+1. CR-004：实现并装配 Redis 共享原子容量、队列与熔断状态；验证故障时拒绝新预占、恢复收敛和 Watchdog 回收。
+2. CR-015：使用版本化迁移历史完成空库安装、升级、失败恢复和回滚；在真实 PostgreSQL、MySQL 5.7、MySQL 8.0 执行仓储与事务矩阵。
+3. CR-016：执行物理双实例、共享 Redis、200 HTTP 流连接、2 分钟预热、10 分钟稳态、故障恢复，以及 Java 17/21 和支持的 Spring Boot/Servlet/Reactive 兼容矩阵。
+
+建议允许单实例 Standalone 功能验收和后续代码审查。当前不建议签署最终生产验收，也不建议合并到 `main` 或发布生产制品。

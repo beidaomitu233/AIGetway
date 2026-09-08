@@ -203,3 +203,11 @@ Trace 创建后处于 RUNNING；只有因容量 QUEUE 等待时使用 QUEUED，�
 Runtime Instance 正常心跳且 accepting_requests=true 时为 ONLINE，关闭接入时为 DRAINING，超过失联阈值为 STALE 或 OFFLINE。Standalone Access Credential 到达 expires_at 后由读取逻辑计算为 EXPIRED；轮换不改变 ACTIVE 或 DISABLED 状态，只递增 rotation_generation 并立即使旧 Token 失效；DELETED 为不可恢复终态。
 
 ## 2.6 信息结构
+
+## 审查修复后的部署与验收约束（2026-09-08）
+
+内部实例接口使用 `light-ai.admin.internal-instance-credentials.<UUID>` 配置逐实例独立口令。服务端由口令映射确定实例身份，并要求认证身份与请求头、路径及正文 UUID 一致；共享口令不能作为部署方案。管理身份的 `applicationScope` 约束应用数据归属与查询，`aliasScope` 单独约束开发人员可查看和在线测试的已发布 Alias，空 Alias 范围默认拒绝。
+
+H2 仅用于单实例本地验证，执行 MySQL schema 时由 migrator 做 JSON 到 LONGTEXT 的兼容转换。生产集群必须使用共享原子容量、队列和熔断状态；共享状态不可用时拒绝新预占。当前仓库尚未交付 Redis 共享实现，因此只能进行单实例 Standalone 功能验收。
+
+最终生产验收还要求版本化数据库升级/回滚、真实 PostgreSQL/MySQL 8.0 仓储矩阵、物理双实例与 Redis 故障恢复，以及约定的性能和 Java/Boot/Servlet/Reactive 兼容矩阵。完成这些门禁前不得把当前单机验证描述为可上线结论。
