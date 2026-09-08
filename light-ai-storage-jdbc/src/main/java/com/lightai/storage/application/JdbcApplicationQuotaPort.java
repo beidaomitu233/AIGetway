@@ -15,7 +15,9 @@ import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.UUID;
 import javax.sql.DataSource;
@@ -136,6 +138,7 @@ public final class JdbcApplicationQuotaPort extends AbstractJdbcRepository
         KeyLimits key = lockAndValidateKey(connection, applicationId, applicationKeyId);
         ApplicationQuotaRecord quota = lockQuota(connection, applicationId);
         OffsetDateTime now = OffsetDateTime.now(clock).withOffsetSameInstant(ZoneOffset.UTC);
+        quota = rollPeriodIfRequired(connection, quota, now);
         if ((quota.periodStart() != null && now.isBefore(quota.periodStart()))
                 || (quota.periodEnd() != null && !now.isBefore(quota.periodEnd()))) {
             throw new LightAiException(ErrorCode.APPLICATION_QUOTA_INACTIVE,
@@ -178,6 +181,101 @@ public final class JdbcApplicationQuotaPort extends AbstractJdbcRepository
         updateQuotaReservation(connection, applicationId, estimatedTokens, reservedAmount);
         return new DbReservation(id,
                 limit(quota.rpm(), quota.tpm()), limit(key.rpm(), key.tpm()));
+    }
+
+    private ApplicationQuotaRecord rollPeriodIfRequired(
+            Connection connection, ApplicationQuotaRecord quota, OffsetDateTime now)
+            throws SQLException {
+        if (!"DAY".equals(quota.periodType()) && !"MONTH".equals(quota.periodType())) {
+            return quota;
+        }
+        PeriodWindow window = currentPeriod(connection, quota.periodType(), now);
+        if (sameInstant(quota.periodStart(), window.start())
+                && sameInstant(quota.periodEnd(), window.end())) {
+            return quota;
+        }
+        if (quota.tokensReserved() != 0 || quota.amountReserved().signum() != 0) {
+            throw new LightAiException(ErrorCode.APPLICATION_QUOTA_INACTIVE,
+                    "应用额度周期切换中，请稍后重试");
+        }
+        insertPeriodReset(connection, quota, window, "TOKEN_USAGE_RESET",
+                BigDecimal.valueOf(quota.tokensUsed()), "token");
+        insertPeriodReset(connection, quota, window, "AMOUNT_USAGE_RESET",
+                quota.amountUsed(), "amount");
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "UPDATE " + qualify(connection, "application_quota_policy")
+                + " SET period_start=?, period_end=?, tokens_used=0, amount_used=0, "
+                + "version=version+1, updated_at=" + dialect.nowFunction()
+                + " WHERE id=? AND version=?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, window.start());
+            statement.setObject(2, window.end());
+            dialect.bindUuid(statement, 3, quota.id());
+            statement.setLong(4, quota.version());
+            if (statement.executeUpdate() != 1) {
+                throw new LightAiException(ErrorCode.CONFIG_VERSION_CONFLICT,
+                        "应用额度周期版本已变化");
+            }
+        }
+        return lockQuota(connection, quota.applicationId());
+    }
+
+    private PeriodWindow currentPeriod(
+            Connection connection, String periodType, OffsetDateTime now) throws SQLException {
+        ZoneId zone = readPlatformZone(connection);
+        ZonedDateTime local = now.atZoneSameInstant(zone);
+        ZonedDateTime start = "DAY".equals(periodType)
+                ? local.toLocalDate().atStartOfDay(zone)
+                : local.withDayOfMonth(1).toLocalDate().atStartOfDay(zone);
+        ZonedDateTime end = "DAY".equals(periodType) ? start.plusDays(1) : start.plusMonths(1);
+        return new PeriodWindow(start.toOffsetDateTime().withOffsetSameInstant(ZoneOffset.UTC),
+                end.toOffsetDateTime().withOffsetSameInstant(ZoneOffset.UTC));
+    }
+
+    private ZoneId readPlatformZone(Connection connection) throws SQLException {
+        String sql = "SELECT timezone FROM " + qualify(connection, "runtime_config")
+                + " WHERE singleton_key=1";
+        try (PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            if (!resultSet.next()) {
+                throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE,
+                        "平台时区配置不存在");
+            }
+            try {
+                return ZoneId.of(resultSet.getString(1));
+            } catch (RuntimeException invalidZone) {
+                throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE,
+                        "平台时区配置不合法");
+            }
+        }
+    }
+
+    private void insertPeriodReset(
+            Connection connection, ApplicationQuotaRecord quota, PeriodWindow window,
+            String dimension, BigDecimal before, String suffix) throws SQLException {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "INSERT INTO " + qualify(connection, "quota_adjustment")
+                + " (id, created_at, application_id, dimension, before_value, delta_value, "
+                + "after_value, reason, effective_at, operator_id, idempotency_key) VALUES (?, "
+                + dialect.nowFunction() + ", ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, UUID.randomUUID());
+            dialect.bindUuid(statement, 2, quota.applicationId());
+            statement.setString(3, dimension);
+            statement.setBigDecimal(4, before);
+            statement.setBigDecimal(5, before.negate());
+            statement.setBigDecimal(6, ZERO);
+            statement.setString(7, "额度周期自动重置");
+            statement.setObject(8, window.start());
+            statement.setString(9, "system");
+            statement.setString(10, "period:" + quota.periodType() + ":"
+                    + window.start().toInstant() + ":" + suffix);
+            statement.executeUpdate();
+        }
+    }
+
+    private static boolean sameInstant(OffsetDateTime left, OffsetDateTime right) {
+        return left != null && right != null && left.toInstant().equals(right.toInstant());
     }
 
     private KeyLimits lockAndValidateKey(Connection connection, UUID applicationId,
@@ -476,6 +574,9 @@ public final class JdbcApplicationQuotaPort extends AbstractJdbcRepository
     private static String escape(String value) {
         if (value == null) return "";
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private record PeriodWindow(OffsetDateTime start, OffsetDateTime end) {
     }
 
     private record DbReservation(UUID id, CapacityStore.ScopeLimit applicationLimit,

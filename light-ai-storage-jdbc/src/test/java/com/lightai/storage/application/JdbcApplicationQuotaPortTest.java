@@ -160,6 +160,49 @@ class JdbcApplicationQuotaPortTest {
         }
     }
 
+    @Test
+    void rollsNaturalDayInPlatformTimezoneAndAppendsResetLedger() throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "UPDATE application_quota_policy SET period_type='DAY', "
+                             + "period_start=?, period_end=?, tokens_used=900, amount_used=9 "
+                             + "WHERE application_id=?")) {
+            statement.setObject(1, java.time.OffsetDateTime.parse("2026-09-06T16:00:00Z"));
+            statement.setObject(2, java.time.OffsetDateTime.parse("2026-09-07T16:00:00Z"));
+            statement.setString(3, applicationId.toString());
+            statement.executeUpdate();
+        }
+
+        var reservation = port.reserve(principal, "req-new-day", 200,
+                List.of(new ApplicationQuotaPort.AmountEstimate("CNY", new BigDecimal("2"))));
+
+        ApplicationQuotaRecord current = quota();
+        assertThat(current.periodStart().toInstant())
+                .isEqualTo(Instant.parse("2026-09-07T16:00:00Z"));
+        assertThat(current.periodEnd().toInstant())
+                .isEqualTo(Instant.parse("2026-09-08T16:00:00Z"));
+        assertThat(current.tokensUsed()).isZero();
+        assertThat(current.tokensReserved()).isEqualTo(200);
+        assertThat(current.amountUsed()).isZero();
+        assertThat(current.amountReserved()).isEqualByComparingTo("2");
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "SELECT dimension, before_value, delta_value, after_value "
+                             + "FROM quota_adjustment WHERE application_id=? ORDER BY dimension")) {
+            statement.setString(1, applicationId.toString());
+            try (var result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString("dimension")).isEqualTo("AMOUNT_USAGE_RESET");
+                assertThat(result.getBigDecimal("before_value")).isEqualByComparingTo("9");
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString("dimension")).isEqualTo("TOKEN_USAGE_RESET");
+                assertThat(result.getBigDecimal("delta_value")).isEqualByComparingTo("-900");
+                assertThat(result.next()).isFalse();
+            }
+        }
+        port.release(reservation, "TEST_DONE");
+    }
+
     private Object reserveAfter(CountDownLatch start, String requestId) throws InterruptedException {
         start.await();
         try {
