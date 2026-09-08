@@ -316,7 +316,7 @@ public class JdbcUsageAggregateRepository extends AbstractJdbcRepository {
                     + "  total_ms_sum, total_ms_count, first_token_ms_sum, first_token_ms_count, queued_ms_sum, "
                     + "  latency_histogram, first_token_histogram, created_at, updated_at) "
                     + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                    + "        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                    + "        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
                     + "        ?, ?, " + d.nowFunction() + ", " + d.nowFunction() + ")";
             try (PreparedStatement ins = connection.prepareStatement(insertSql)) {
                 d.bindUuid(ins, 1, UUID.randomUUID());

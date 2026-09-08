@@ -261,6 +261,10 @@ public class OverviewService {
     private OverviewFilter filterOf(Connection connection, RequestContext context,
                                     OverviewQuery query, Clock clock) {
         List<String> scope = scopeOf(context);
+        // "*" 通配符表示全域（PROJECT_DOCUMENT 2.4.1），按空 scope 处理
+        if (scope.contains("*")) {
+            scope = List.of();
+        }
         String application = query.application();
         if (application != null && !scope.isEmpty() && !scope.contains(application)) {
             throw new LightAiException(ErrorCode.ACCESS_DENIED, "无权查询该应用数据");

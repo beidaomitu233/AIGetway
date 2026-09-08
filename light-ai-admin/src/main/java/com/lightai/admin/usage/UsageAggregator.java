@@ -161,8 +161,12 @@ public class UsageAggregator {
                         log.error("Usage聚合连续失败告警 trace_id={} retry_count={} "
                                         + "事件保留继续重试", event.traceId(), nextRetryCount);
                     } else {
-                        log.warn("Usage聚合失败将退避重试 trace_id={} retry_count={}",
-                                event.traceId(), nextRetryCount);
+                        Throwable root = cause;
+                        while (root.getCause() != null && root.getCause() != root) {
+                            root = root.getCause();
+                        }
+                        log.warn("Usage聚合失败将退避重试 trace_id={} retry_count={} cause_type={}",
+                                event.traceId(), nextRetryCount, root.getClass().getSimpleName());
                     }
                 } catch (SQLException e) {
                     throw new IllegalStateException("聚合失败记录写入异常", e);

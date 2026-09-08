@@ -690,3 +690,6 @@
 ## CR-011 流终态复核修复（2026-09-08）
 
 历史管理端虽改为 StreamEvent，Controller 仍在 chatStream 返回后立即发送 DONE；SPI Publisher 异步执行时会先结束响应，后续分片被丢弃。Runtime 本轮增加 StreamListener.onComplete，只在 Attempt 结算和 Trace 成功最终化后触发。Standalone /v1、管理在线测试、Local SDK 与 Embedded 客户端均由该回调发送唯一成功终态；错误与成功通过原子标志互斥，客户端关闭/超时向取消信号传播。SseEmitter 使用纯 JSON 载荷，由框架添加一次 data:，避免双重编码。ChatPipelineTest 11例、SseEncoderTest 4例、V1ControllerStreamTest 1例通过，覆盖异步 Provider 返回前无 DONE、完成后 DONE、错误无 DONE及单层编码。CR-011 本轮状态：已完成。
+## 观测与聚合一致性修复（2026-09-08）
+
+复核真实 MySQL 联调遗留改动后，修复管理员 applicationScope=["*"] 被当作字面应用名导致 Trace、Overview 查询为空；仓储仅对明确应用集合追加范围条件。修复 MySQL/H2 usage_aggregate 首次插入占位符少于49个绑定参数的问题，真实 H2 MySQL 模式连续 upsert 后保持一行且 request_count=2。聚合退避日志只记录异常类型，避免底层连接信息进入日志。JdbcUsageAggregateRepositoryTest 与 TraceServiceScopeTest 共4例通过。

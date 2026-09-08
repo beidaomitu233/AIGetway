@@ -216,7 +216,11 @@ public class JdbcTraceRepository extends AbstractJdbcRepository {
             params.add(filter.endAt());
         }
         appendIn(sql, params, "application", filter.applications(), d);
-        appendIn(sql, params, "application", filter.scopeApplications(), d);
+        // scope 含 "*"（全域）时不追加 SQL 过滤
+        List<String> scope = filter.scopeApplications();
+        if (scope != null && !scope.contains("*")) {
+            appendIn(sql, params, "application", scope, d);
+        }
         appendIn(sql, params, "alias_id", filter.aliasIds(), d);
         appendIn(sql, params, "final_provider_id", filter.providerIds(), d);
         appendIn(sql, params, "final_provider_model_id", filter.providerModelIds(), d);

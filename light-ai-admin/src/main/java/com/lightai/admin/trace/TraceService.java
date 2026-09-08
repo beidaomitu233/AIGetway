@@ -92,7 +92,9 @@ public class TraceService {
     }
 
     static boolean inScope(String application, List<String> scopeApplications) {
-        return scopeApplications.isEmpty() || scopeApplications.contains(application);
+        // "*" 通配符表示全部应用（PROJECT_DOCUMENT 2.4.1 管理员全域范围）
+        return scopeApplications.isEmpty() || scopeApplications.contains("*")
+                || scopeApplications.contains(application);
     }
 
     static List<String> scopeApplications(RequestContext context) {

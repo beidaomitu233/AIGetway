@@ -39,6 +39,7 @@ class TraceServiceScopeTest {
         assertThat(TraceService.inScope("app-c", List.of("app-a", "app-b"))).isFalse();
         // 空范围 = 不限制
         assertThat(TraceService.inScope("app-c", List.of())).isTrue();
+        assertThat(TraceService.inScope("app-c", List.of("*"))).isTrue();
     }
 
     @Test
