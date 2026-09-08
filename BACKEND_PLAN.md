@@ -1982,3 +1982,7 @@ Bootstrap追加adapters数组：provider_type、adapter_version、default_base_u
 ### BE-041 审查修复补充（2026-09-08）
 
 内部实例认证使用 `light-ai.admin.internal-instance-credentials.<UUID>` 的逐实例独立部署口令；共享口令及调用方自报身份不能完成认证。请求头、路径及正文必须匹配认证所得 UUID。配置重复口令启动失败，未配置拒绝内部访问。InternalInstanceAuthTest/PublishWebTest 14例通过；双实例发布收敛仍需独立集成验收。
+
+### BE-047 审查修复补充（2026-09-08）
+
+管理身份分别携带 pplicationScope 与 liasScope。开发者在线测试只接受 liasScope 明确授权的已发布 Alias，空范围拒绝全部 Alias；应用范围只用于 Trace 数据范围和单应用归属。相关7例测试通过。

@@ -49,15 +49,15 @@ public class DeveloperAccessService {
     /** 接入上下文：只输出已发布且授权的 Alias；开发仅看授权 Alias。 */
     public DeveloperAccessContext context(RequestContext context, String aliasIdOrNull) {
         RequestPermissions.require(context, Permissions.DEVELOPER_VIEW);
-        List<String> allowedScope = context.authContext().applicationScope();
-        boolean hasScope = allowedScope != null && !allowedScope.isEmpty() && !allowedScope.contains("*");
+        List<String> allowedScope = aliasScope(context);
+        boolean unrestricted = allowedScope.contains("*");
         ConfigSnapshotPort.ActiveSnapshot snapshot = snapshotPort.active();
         List<DeveloperAccessContext.AliasOption> options = new ArrayList<>();
         for (ConfigSnapshotPort.AliasView alias : snapshot.aliases()) {
             if (!alias.enabled() || alias.enabledCandidates().isEmpty()) {
                 continue;
             }
-            if (hasScope && !allowedScope.contains(alias.aliasId()) && !allowedScope.contains(alias.alias())) {
+            if (!unrestricted && !allowedScope.contains(alias.aliasId()) && !allowedScope.contains(alias.alias())) {
                 continue;
             }
             if (aliasIdOrNull != null && !aliasIdOrNull.isBlank()
@@ -79,13 +79,13 @@ public class DeveloperAccessService {
     /** 代码示例：三模式模板，秘密一律 lai_YOUR_TOKEN / YOUR_API_KEY 占位。 */
     public CodeSampleResult codeSample(RequestContext context, String alias, String language, boolean stream) {
         RequestPermissions.require(context, Permissions.DEVELOPER_VIEW);
-        List<String> allowedScope = context.authContext().applicationScope();
-        boolean hasScope = allowedScope != null && !allowedScope.isEmpty() && !allowedScope.contains("*");
+        List<String> allowedScope = aliasScope(context);
+        boolean unrestricted = allowedScope.contains("*");
         ConfigSnapshotPort.ActiveSnapshot snapshot = snapshotPort.active();
         ConfigSnapshotPort.AliasView view = snapshot.alias(alias)
                 .orElseThrow(() -> new LightAiException(ErrorCode.MODEL_ALIAS_NOT_FOUND,
                         "Alias 不存在或未发布: " + alias));
-        if (!view.enabled() || (hasScope && !allowedScope.contains(view.aliasId()) && !allowedScope.contains(view.alias()))) {
+        if (!view.enabled() || (!unrestricted && !allowedScope.contains(view.aliasId()) && !allowedScope.contains(view.alias()))) {
             throw new LightAiException(ErrorCode.ACCESS_DENIED, "Alias 未授权: " + alias);
         }
         String languageKey = language == null ? "curl" : language.trim().toLowerCase();
@@ -119,15 +119,23 @@ public class DeveloperAccessService {
     private AccessTokenPort.Principal principalForTest(RequestContext context, String model) {
         ConfigSnapshotPort.AliasView alias = snapshotPort.active().alias(model)
                 .orElseThrow(() -> ConfigSnapshotPort.aliasNotFound(model));
-        List<String> allowedScope = context.authContext().applicationScope();
-        boolean hasScope = allowedScope != null && !allowedScope.isEmpty() && !allowedScope.contains("*");
-        if (hasScope && !allowedScope.contains(alias.aliasId()) && !allowedScope.contains(alias.alias())) {
+        List<String> allowedScope = aliasScope(context);
+        boolean unrestricted = allowedScope.contains("*");
+        if (!unrestricted && !allowedScope.contains(alias.aliasId()) && !allowedScope.contains(alias.alias())) {
             throw new LightAiException(ErrorCode.ACCESS_DENIED, "当前管理身份未授权该 Alias");
         }
-        String app = context.authContext().userId() != null && !context.authContext().userId().isBlank()
-                ? context.authContext().userId()
-                : "ADMIN_CONSOLE";
+        List<String> applications = context.authContext().applicationScope();
+        String app = applications.size() == 1 && !"*".equals(applications.get(0))
+                ? applications.get(0) : "ADMIN_CONSOLE";
         return new AccessTokenPort.Principal(app, List.of(alias.aliasId(), alias.alias()));
+    }
+
+    private static List<String> aliasScope(RequestContext context) {
+        if (context.authContext().roles().stream().anyMatch(role ->
+                "SYSTEM_ADMIN".equals(role) || "OPERATOR".equals(role))) {
+            return List.of("*");
+        }
+        return context.authContext().aliasScope();
     }
 
     private UnifiedRequestPair toUnifiedRequest(ApiTestCommand command) {

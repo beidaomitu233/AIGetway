@@ -37,4 +37,11 @@ class AuthContextTest {
         assertThat(context.roles()).isEmpty();
         assertThat(context.applicationScope()).isEmpty();
     }
+    @Test
+    void applicationAndAliasScopesAreIndependent() {
+        AuthContext context = AuthContext.authenticated("dev-1", "开发人员", Set.of("DEVELOPER"),
+                List.of("orders-app"), List.of("alias-chat"));
+        assertThat(context.applicationScope()).containsExactly("orders-app");
+        assertThat(context.aliasScope()).containsExactly("alias-chat");
+    }
 }

@@ -683,3 +683,7 @@
 历史实现允许持有共享口令者同时伪造实例头和正文，本轮重新修复身份根因。部署配置 `light-ai.admin.internal-instance-credentials.<UUID>` 为每个实例提供独立口令；认证身份从服务端配置取得，请求头/正文只能与之匹配。禁止重复口令，未配置默认拒绝。旧 `internal-instance-token` 属性与 String 构造器保留绑定兼容，但共享口令不再获得内部接口访问权；部署需迁移为逐实例凭证。进程内 ServerInstanceCoordinator 直接调用服务不受影响。
 
 涉及后端：InternalInstanceAuth、AdminProperties、LightAiAdminAutoConfiguration、Server application.properties；前端与数据库：无。验收：InternalInstanceAuthTest 与 PublishWebTest 共14例通过（0失败/错误/跳过），覆盖独立凭证成功、伪造头、拼接口令、重复配置、正文不匹配及默认拒绝。CR-007 本轮状态：已完成；其他 CR 仍需复核，历史“已修复”不代表本轮验收。
+
+## CR-006 复核修复（2026-09-08）
+
+历史修复错误地把 AuthContext.applicationScope 同时作为 Alias 授权范围，应用名碰巧等于 Alias 时仍可越权。本轮为部署身份增加独立 liasScope，保留五参数构造器源码兼容且默认不授予 Alias；开发人员的目录、代码示例和在线测试统一按该范围校验，系统管理员与运维按既有角色权限访问全部已发布 Alias。在线测试 Trace 的 application 仅在身份绑定单一应用时使用该应用，否则记录 ADMIN_CONSOLE。AuthContextTest 5例与 DeveloperAccessServiceScopeTest 2例通过，覆盖权限域隔离、显式 Alias 成功与跨 Alias 拒绝。CR-006 本轮状态：已完成。
