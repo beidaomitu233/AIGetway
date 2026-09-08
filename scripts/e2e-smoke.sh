@@ -1,11 +1,12 @@
 #!/bin/bash
 # 轻享 AI Standalone Server 端到端冒烟脚本：
 # 配置(Provider/池/凭证/模型/Alias/候选) → 校验 → 发布(实例协议) → /v1 调用
-# 依赖：服务已在 18080 启动（trusted-local 或 X-Admin-Token），内部口令通过 INTERNAL_TOKEN 传入。
+# 依赖：服务已在 18080 启动；INSTANCE_ID 对应的独立部署口令通过 INTERNAL_TOKEN 传入。
 set -e
 BASE=${BASE:-http://127.0.0.1:18080}
 INTERNAL_TOKEN=${INTERNAL_TOKEN:-}
-INSTANCE_ID=$(python -c "import uuid; print(uuid.uuid4())")
+PROVIDER_BASE=${PROVIDER_BASE:-http://127.0.0.1:19099/v1}
+INSTANCE_ID=${INSTANCE_ID:-$(python -c "import uuid; print(uuid.uuid4())")}
 OUT=$(cygpath -m "${TEMP:-/tmp}")/e2e-out
 mkdir -p "$OUT" 2>/dev/null || OUT=/c/Users/12062/AppData/Local/Temp/e2e-out
 
@@ -21,7 +22,7 @@ print(v if v is not None else '')
 
 echo "== 1. 创建 Provider =="
 curl -s -X POST $BASE/admin/providers -H 'Content-Type: application/json' \
-  -d '{"name":"stub-provider","type":"OPENAI","base_url":"http://127.0.0.1:19099/v1","connect_timeout_ms":3000,"read_timeout_ms":20000,"enabled":true}' \
+  -d "{\"name\":\"stub-provider\",\"type\":\"OPENAI\",\"base_url\":\"$PROVIDER_BASE\",\"connect_timeout_ms\":3000,\"read_timeout_ms\":20000,\"enabled\":true}" \
   -o $OUT/e2e-provider.json
 PROVIDER_ID=$(json_field $OUT/e2e-provider.json data.id)
 [ -z "$PROVIDER_ID" ] && { echo "PROVIDER FAILED:"; cat $OUT/e2e-provider.json; exit 1; }
@@ -45,7 +46,7 @@ echo "credential=$CRED_ID"
 
 echo "== 4. 创建模型 =="
 curl -s -X POST $BASE/admin/providers/$PROVIDER_ID/models -H 'Content-Type: application/json' \
-  -d '{"display_name":"Stub Model","tokenizer_family":"cl100k","context_window":8192,"max_output_tokens":4096,
+  -d '{"model_id":"stub-model","display_name":"Stub Model","tokenizer_family":"cl100k","context_window":8192,"max_output_tokens":4096,
         "support_stream":true,"support_system_message":true,"support_temperature":true,"support_top_p":true,"support_stop":true,
         "temperature_min":0,"temperature_max":2,"top_p_min":0,"top_p_max":1,"max_stop_sequences":4,
         "default_temperature":0.7,"default_max_tokens":1024,
@@ -78,7 +79,7 @@ HBEAT() {
   curl -s -X POST $BASE/internal/runtime-instances/heartbeat \
     -H 'Content-Type: application/json' \
     -H "X-Light-AI-Instance-Token: $INTERNAL_TOKEN" -H "X-Light-AI-Instance-Id: $INSTANCE_ID" \
-    -d "{\"instance_id\":\"$INSTANCE_ID\",\"runtime_mode\":\"STANDALONE_SERVER\",\"runtime_version\":\"0.1.0\",\"application\":\"light-ai-server\",\"zone\":\"local\",\"supported_schema_versions\":[\"1\"],\"loaded_adapter_types\":[\"OPENAI\",\"ANTHROPIC\",\"GEMINI\",\"DEEPSEEK\"],\"active_snapshot_no\":0,\"accepting_requests\":true,\"reported_at\":\"2026-09-07T00:00:00+08:00\"}"
+    -d "{\"instance_id\":\"$INSTANCE_ID\",\"runtime_mode\":\"STANDALONE_SERVER\",\"runtime_version\":\"0.1.0\",\"application\":\"light-ai-server\",\"zone\":\"local\",\"supported_schema_versions\":[\"1\"],\"loaded_adapter_types\":[\"OPENAI\",\"ANTHROPIC\",\"GEMINI\",\"DEEPSEEK\"],\"active_snapshot_no\":0,\"accepting_requests\":true,\"reported_at\":null}"
 }
 HBEAT > $OUT/e2e-hb.json
 echo "heartbeat=$(head -c 200 $OUT/e2e-hb.json)"
@@ -93,6 +94,8 @@ curl -s -X POST $BASE/admin/config/validate -H 'Content-Type: application/json' 
   -d "{\"draft_revision\":$DRAFT_REVISION}" -o $OUT/e2e-validate.json
 VALIDATION_ID=$(json_field $OUT/e2e-validate.json data.validation_id)
 [ -z "$VALIDATION_ID" ] && { echo "VALIDATE FAILED:"; cat $OUT/e2e-validate.json; exit 1; }
+VALIDATION_STATUS=$(json_field $OUT/e2e-validate.json data.status)
+[ "$VALIDATION_STATUS" != "PASSED" ] && { echo "VALIDATION NOT PASSED:"; cat $OUT/e2e-validate.json; exit 1; }
 echo "validation=$VALIDATION_ID"
 curl -s -X POST $BASE/admin/config/publish -H 'Content-Type: application/json' \
   -d "{\"validation_id\":\"$VALIDATION_ID\",\"draft_revision\":$DRAFT_REVISION,\"acknowledged_warning_ids\":$(python -c "
@@ -103,6 +106,8 @@ ids=[i.get('code') for i in issues if (i.get('severity') or '').upper()=='WARNIN
 print(json.dumps([i for i in ids if i]))
 "),\"publish_note\":\"e2e\"}" \
   -o $OUT/e2e-publish.json
+PUBLISH_ID=$(json_field $OUT/e2e-publish.json data.id)
+[ -z "$PUBLISH_ID" ] && { echo "PUBLISH FAILED:"; cat $OUT/e2e-publish.json; exit 1; }
 head -c 300 $OUT/e2e-publish.json; echo
 
 echo "== 9. 实例准备→激活（驱动发布收敛） =="
@@ -111,7 +116,7 @@ for i in 1 2 3 4 5 6; do
   HBEAT > $OUT/e2e-hb.json
   PREPARE=$(json_field $OUT/e2e-hb.json data.prepare_command.publish_id)
   ACTIVATE=$(json_field $OUT/e2e-hb.json data.activation_command.publish_id)
-  PUBLISH_ID=$(json_field $OUT/e2e-publish.json data.publish_id)
+  PUBLISH_ID=$(json_field $OUT/e2e-publish.json data.id)
   SNAP_NO=$(json_field $OUT/e2e-hb.json data.active_snapshot_no)
   TARGET_SNAP=$(json_field $OUT/e2e-hb.json data.prepare_command.snapshot_no)
   [ -z "$TARGET_SNAP" ] && TARGET_SNAP=$(json_field $OUT/e2e-hb.json data.activation_command.snapshot_no)
@@ -140,16 +145,26 @@ print(d.get('data',{}).get('status',''))")
   fi
   sleep 1
 done
-curl -s "$BASE/admin/config/publish-records" -o $OUT/e2e-records.json
-python -c "
+PUBLISH_STATUS=""
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  curl -s "$BASE/admin/config/publish-records" -o $OUT/e2e-records.json
+  PUBLISH_STATUS=$(python -c "
 import json
 d=json.load(open(r'$OUT/e2e-records.json',encoding='utf-8'))
 items=d.get('data',{}).get('items',[])
-print('publish records:', [(i.get('status'), i.get('target_snapshot_no') or i.get('targetSnapshotNo')) for i in items][:3])
-"
+item=next((row for row in items if row.get('id')=='$PUBLISH_ID'), {})
+print(item.get('status',''))
+")
+  [ "$PUBLISH_STATUS" = "SUCCEEDED" ] && break
+  sleep 0.5
+done
+[ "$PUBLISH_STATUS" != "SUCCEEDED" ] && { echo "PUBLISH DID NOT CONVERGE:"; cat $OUT/e2e-records.json; exit 1; }
+echo "publish_status=$PUBLISH_STATUS"
 
 echo "== 10. 就绪检查 =="
-curl -s $BASE/health/ready -o $OUT/e2e-ready.json -w "ready_http=%{http_code}\n"
+READY_HTTP=$(curl -s $BASE/health/ready -o $OUT/e2e-ready.json -w "%{http_code}")
+echo "ready_http=$READY_HTTP"
+[ "$READY_HTTP" != "200" ] && { cat $OUT/e2e-ready.json; exit 1; }
 cat $OUT/e2e-ready.json; echo
 
 echo "== 11. 创建业务 Access Token =="
@@ -161,7 +176,9 @@ BEARER=$(json_field $OUT/e2e-token.json data.token_value)
 echo "token acquired (hidden)"
 
 echo "== 12. /v1/models =="
-curl -s $BASE/v1/models -H "Authorization: Bearer $BEARER" -o $OUT/e2e-models.json -w "models_http=%{http_code}\n"
+MODELS_HTTP=$(curl -s $BASE/v1/models -H "Authorization: Bearer $BEARER" -o $OUT/e2e-models.json -w "%{http_code}")
+echo "models_http=$MODELS_HTTP"
+[ "$MODELS_HTTP" != "200" ] && { cat $OUT/e2e-models.json; exit 1; }
 python -c "
 import json
 d=json.load(open(r'$OUT/e2e-models.json',encoding='utf-8'))
@@ -169,17 +186,57 @@ print('models:', [m.get('id') for m in d.get('data',[])])
 "
 
 echo "== 13. /v1/chat/completions（走 Stub Provider 全链路） =="
-curl -s -X POST $BASE/v1/chat/completions -H "Authorization: Bearer $BEARER" \
+CHAT_HTTP=$(curl -s -X POST $BASE/v1/chat/completions -H "Authorization: Bearer $BEARER" \
   -H 'Content-Type: application/json' \
   -d '{"model":"chat-demo","stream":false,"messages":[{"role":"user","content":"你好"}]}' \
-  -o $OUT/e2e-chat.json -w "chat_http=%{http_code}\n"
+  -o $OUT/e2e-chat.json -w "%{http_code}")
+echo "chat_http=$CHAT_HTTP"
+[ "$CHAT_HTTP" != "200" ] && { cat $OUT/e2e-chat.json; exit 1; }
 python -c "
 import json
 d=json.load(open(r'$OUT/e2e-chat.json',encoding='utf-8'))
-if 'error' in d: print('CHAT ERROR:', d['error'])
+if 'error' in d: raise SystemExit('CHAT ERROR: '+str(d['error']))
 else:
     ch=d.get('choices',[{}])[0].get('message',{})
     print('content=', ch.get('content'))
     print('trace=', d.get('light_ai',{}).get('trace_id'), 'usage=', d.get('usage'))
+"
+
+echo "== 14. /v1/chat/completions 流式协议 =="
+STREAM_HTTP=$(curl -sN --max-time 15 -X POST $BASE/v1/chat/completions -H "Authorization: Bearer $BEARER" \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"chat-demo","stream":true,"messages":[{"role":"user","content":"stream smoke"}]}' \
+  -o $OUT/e2e-stream.txt -w "%{http_code}")
+echo "stream_http=$STREAM_HTTP"
+[ "$STREAM_HTTP" != "200" ] && { cat $OUT/e2e-stream.txt; exit 1; }
+python -c "
+import json
+lines=[line.strip() for line in open(r'$OUT/e2e-stream.txt',encoding='utf-8') if line.startswith('data:')]
+payloads=[line[5:].strip() for line in lines]
+assert payloads and payloads[-1]=='[DONE]', 'missing terminal [DONE]'
+chunks=[json.loads(value) for value in payloads[:-1]]
+assert any((choice.get('delta') or {}).get('content') for chunk in chunks for choice in chunk.get('choices',[])), 'missing content delta'
+assert sum(value == '[DONE]' for value in payloads) == 1, 'duplicate [DONE]'
+print('stream_chunks=', len(chunks), 'done_count=1')
+"
+
+echo "== 15. 管理在线测试流式协议 =="
+ADMIN_STREAM_HTTP=$(curl -sN --max-time 15 -X POST $BASE/admin/developer-access/test/chat/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"chat-demo","system_message":null,"user_message":"admin stream smoke","stream":true,"temperature":null,"top_p":null,"max_tokens":null}' \
+  -o $OUT/e2e-admin-stream.txt -w "%{http_code}")
+echo "admin_stream_http=$ADMIN_STREAM_HTTP"
+[ "$ADMIN_STREAM_HTTP" != "200" ] && { cat $OUT/e2e-admin-stream.txt; exit 1; }
+python -c "
+import json
+lines=[line.strip() for line in open(r'$OUT/e2e-admin-stream.txt',encoding='utf-8') if line.startswith('data:')]
+payloads=[json.loads(line[5:].strip()) for line in lines]
+assert payloads and all('error' not in item for item in payloads), 'management stream error'
+events=[item.get('event') for item in payloads]
+assert events[0]=='START' and events[-1]=='DONE', 'invalid management terminal sequence'
+assert 'DELTA' in events and '[DONE]' not in [line[5:].strip() for line in lines], 'invalid management payload contract'
+sequences=[item.get('sequence') for item in payloads]
+assert sequences == sorted(sequences), 'non-monotonic management sequence'
+print('admin_events=', events)
 "
 echo "E2E DONE"
