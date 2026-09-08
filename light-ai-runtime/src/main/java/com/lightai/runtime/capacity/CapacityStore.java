@@ -17,6 +17,17 @@ public interface CapacityStore {
     /** 三层原子预占；requestCount 固定为 1 次 RPM 计数。 */
     ReservationHandle reserve(ReserveRequest request);
 
+    /**
+     * 应用与应用密钥两层原子预占。默认实现用于第三方存储兼容；内置实现会使用
+     * application/application_key 独立作用域，确保多密钥仍共享应用级窗口。
+     */
+    default ReservationHandle reserveApplication(
+            UUID applicationId, UUID applicationKeyId, long estimatedTokens,
+            ScopeLimit applicationLimit, ScopeLimit applicationKeyLimit) {
+        return reserve(new ReserveRequest(applicationId, applicationKeyId, applicationKeyId,
+                estimatedTokens, 0, applicationLimit, applicationKeyLimit, null));
+    }
+
     /** 结算：实际用量写入原预占窗口；requestSent=false 时退还未发送 RPM。 */
     void settle(UUID reservationId, long actualTokens, boolean requestSent);
 

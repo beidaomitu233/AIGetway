@@ -119,15 +119,39 @@ public final class RedisCapacityStore implements CapacityStore, AutoCloseable {
     public ReservationHandle reserve(ReserveRequest request) {
         Objects.requireNonNull(request, "request 不能为空");
         requireScopeIds(request);
+        return reserveScopes(
+                new String[]{"alias", "provider_model", "credential"},
+                new UUID[]{request.aliasId(), request.providerModelId(), request.credentialId()},
+                new ScopeLimit[]{request.aliasLimit(), request.providerModelLimit(), request.credentialLimit()},
+                request.estimatedTokens(), request.maxTokens());
+    }
+
+    @Override
+    public ReservationHandle reserveApplication(
+            UUID applicationId, UUID applicationKeyId, long estimatedTokens,
+            ScopeLimit applicationLimit, ScopeLimit applicationKeyLimit) {
+        if (applicationId == null || applicationKeyId == null) {
+            throw new IllegalArgumentException("应用容量预占 scope id 不能为空");
+        }
+        return reserveScopes(
+                new String[]{"application", "application_key", "noop"},
+                new UUID[]{applicationId, applicationKeyId, null},
+                new ScopeLimit[]{applicationLimit, applicationKeyLimit, null},
+                estimatedTokens, 0);
+    }
+
+    private ReservationHandle reserveScopes(
+            String[] scopeTypes, UUID[] scopeIds, ScopeLimit[] limits,
+            long estimatedTokens, long maxTokens) {
         long window = windowStart(Instant.now());
-        long tokens = Math.max(request.estimatedTokens(), 0) + Math.max(request.maxTokens(), 0);
+        long tokens = Math.max(estimatedTokens, 0) + Math.max(maxTokens, 0);
         UUID reservationId = UUID.randomUUID();
         String reservationKey = reservationKey(reservationId);
         String[] keys = {
                 reservationKey,
-                counterKey("alias", request.aliasId(), window),
-                counterKey("provider_model", request.providerModelId(), window),
-                counterKey("credential", request.credentialId(), window),
+                counterKeyOrNoop(scopeTypes[0], scopeIds[0], window),
+                counterKeyOrNoop(scopeTypes[1], scopeIds[1], window),
+                counterKeyOrNoop(scopeTypes[2], scopeIds[2], window),
                 reservationsKey()
         };
         List<String> args = new ArrayList<>();
@@ -136,14 +160,14 @@ public final class RedisCapacityStore implements CapacityStore, AutoCloseable {
         args.add(Long.toString(System.currentTimeMillis() + leaseMillis));
         args.add(Long.toString(COUNTER_TTL_SECONDS));
         args.add(Long.toString(RESERVATION_TTL_SECONDS));
-        addLimit(args, request.aliasLimit());
-        addLimit(args, request.providerModelLimit());
-        addLimit(args, request.credentialLimit());
+        addLimit(args, limits[0]);
+        addLimit(args, limits[1]);
+        addLimit(args, limits[2]);
         try {
             Number result = redis.eval(RESERVE, ScriptOutputType.INTEGER, keys, args.toArray(String[]::new));
             long code = result == null ? -1 : result.longValue();
             if (code != 0) {
-                throw limited(code);
+                throw limited(code, scopeTypes);
             }
             return new ReservationHandle(reservationId, window, tokens);
         } catch (CapacityLimitedException e) {
@@ -227,6 +251,10 @@ public final class RedisCapacityStore implements CapacityStore, AutoCloseable {
         return key == null || key.isBlank() ? prefix + "noop" : key;
     }
 
+    private String counterKeyOrNoop(String type, UUID id, long window) {
+        return id == null ? prefix + "noop" : counterKey(type, id, window);
+    }
+
     private static void addLimit(List<String> args, ScopeLimit limit) {
         args.add(limit == null || limit.rpmLimit() == null ? "-1" : limit.rpmLimit().toString());
         args.add(limit == null || limit.tpmLimit() == null ? "-1" : limit.tpmLimit().toString());
@@ -248,13 +276,12 @@ public final class RedisCapacityStore implements CapacityStore, AutoCloseable {
                 + (metric < metrics.length ? metrics[metric] : "限额") + " 不足";
     }
 
-    private static CapacityLimitedException limited(long code) {
-        String[] scopes = {"", "alias", "provider_model", "credential"};
+    private static CapacityLimitedException limited(long code, String[] requestedScopes) {
         String[] metrics = {"", "RPM", "TPM", "CONCURRENT"};
         int scope = (int) (code / 10);
         int metric = (int) (code % 10);
-        if (scope > 0 && scope < scopes.length && metric > 0 && metric < metrics.length) {
-            return new CapacityLimitedException(scopes[scope], metrics[metric]);
+        if (scope > 0 && scope <= requestedScopes.length && metric > 0 && metric < metrics.length) {
+            return new CapacityLimitedException(requestedScopes[scope - 1], metrics[metric]);
         }
         return new CapacityLimitedException(limitMessage(code));
     }

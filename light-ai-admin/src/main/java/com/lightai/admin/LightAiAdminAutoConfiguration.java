@@ -983,6 +983,15 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnMissingBean(com.lightai.runtime.ports.ApplicationQuotaPort.class)
+        public com.lightai.runtime.ports.ApplicationQuotaPort lightAiApplicationQuotaPort(
+                DataSource dataSource, com.lightai.runtime.capacity.CapacityStore capacityStore,
+                Clock clock, StorageProperties properties) {
+            return new com.lightai.storage.application.JdbcApplicationQuotaPort(
+                    dataSource, capacityStore, clock, properties.getSchemaName());
+        }
+
+        @Bean
         @ConditionalOnMissingBean
         public com.lightai.admin.application.ApplicationService lightAiApplicationService(
                 DataSource dataSource,

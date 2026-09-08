@@ -13,6 +13,7 @@ import com.lightai.runtime.chat.CancellationSignal;
 import com.lightai.runtime.chat.ReliabilityBudgets;
 import com.lightai.runtime.ports.AccessTokenPort;
 import com.lightai.runtime.ports.AdapterRegistryPort;
+import com.lightai.runtime.ports.ApplicationQuotaPort;
 import com.lightai.runtime.ports.CapacityPort;
 import com.lightai.runtime.ports.ConfigSnapshotPort;
 import com.lightai.runtime.ports.ConfigSnapshotPort.AliasView;
@@ -147,6 +148,56 @@ class ChatPipelineTest {
         assertThatThrownBy(() -> pipeline.chat(context))
                 .isInstanceOfSatisfying(LightAiException.class,
                         error -> assertThat(error.code()).isEqualTo(ErrorCode.ACCESS_DENIED));
+        assertThat(adapter.invocations.get()).isZero();
+    }
+
+    @Test
+    void enterpriseQuotaIsReservedOnceAcrossRecoveryAndSettledOnce() {
+        adapter.error = ProviderFailure.http(500, null, "boom");
+        adapter.failFirstN = 2;
+        adapter.response = new ProviderChatResponse("ok", "stop", 10L, 5L, 15L,
+                "ACTUAL", "provider-request");
+        RecordingApplicationQuota quota = new RecordingApplicationQuota();
+        AdapterRegistryPort registry = type -> Optional.of(adapter);
+        CredentialSecretPort credentials = (poolId, failoverIndex) ->
+                new CredentialSecretPort.ResolvedCredential(poolId + "-c" + failoverIndex,
+                        () -> "sk-test".toCharArray());
+        ChatPipeline quotaPipeline = new ChatPipeline(snapshot(), () -> Optional.empty(), routing(),
+                capacity, null, credentials, null, registry, traceStore, quota,
+                () -> ReliabilityBudgets.DEFAULT, 30_000);
+        var principal = AccessTokenPort.Principal.enterprise("app-1", List.of("assistant"),
+                java.util.UUID.randomUUID().toString(), java.util.UUID.randomUUID().toString(),
+                100, 10_000L);
+
+        quotaPipeline.chat(new ChatPipeline.ChatContext(
+                principal, withTraceId(request("assistant", false), "quota-request"), null));
+
+        assertThat(quota.reserved.get()).isEqualTo(1);
+        assertThat(quota.settled.get()).isEqualTo(1);
+        assertThat(quota.released.get()).isZero();
+        assertThat(quota.lastSettlement.totalTokens()).isEqualTo(15);
+        assertThat(adapter.invocations.get()).isEqualTo(3);
+    }
+
+    @Test
+    void enterpriseQuotaRejectionHappensBeforeTraceAndProviderCall() {
+        RecordingApplicationQuota quota = new RecordingApplicationQuota();
+        quota.reject = ErrorCode.APPLICATION_TOKEN_QUOTA_EXHAUSTED;
+        ChatPipeline quotaPipeline = new ChatPipeline(snapshot(), () -> Optional.empty(), routing(),
+                capacity, null,
+                (poolId, index) -> new CredentialSecretPort.ResolvedCredential(
+                        "credential", () -> "sk-test".toCharArray()), null,
+                type -> Optional.of(adapter), traceStore, quota,
+                () -> ReliabilityBudgets.DEFAULT, 30_000);
+        var principal = AccessTokenPort.Principal.enterprise("app-1", List.of("assistant"),
+                java.util.UUID.randomUUID().toString(), java.util.UUID.randomUUID().toString(),
+                100, 10_000L);
+
+        assertThatThrownBy(() -> quotaPipeline.chat(new ChatPipeline.ChatContext(
+                principal, withTraceId(request("assistant", false), "quota-rejected"), null)))
+                .isInstanceOfSatisfying(LightAiException.class,
+                        error -> assertThat(error.code())
+                                .isEqualTo(ErrorCode.APPLICATION_TOKEN_QUOTA_EXHAUSTED));
         assertThat(adapter.invocations.get()).isZero();
     }
 
@@ -443,6 +494,34 @@ class ChatPipelineTest {
     }
 
     /** 可编程桩 Adapter：同步返回/失败、流式脚本、提交后中断。 */
+    private static final class RecordingApplicationQuota implements ApplicationQuotaPort {
+        private final AtomicInteger reserved = new AtomicInteger();
+        private final AtomicInteger settled = new AtomicInteger();
+        private final AtomicInteger released = new AtomicInteger();
+        private Settlement lastSettlement;
+        private ErrorCode reject;
+
+        @Override
+        public Reservation reserve(AccessTokenPort.Principal principal, String requestId,
+                                   long estimatedTokens, List<AmountEstimate> amountEstimates) {
+            reserved.incrementAndGet();
+            if (reject != null) throw new LightAiException(reject, "额度不足");
+            return new Reservation("quota-1", requestId, principal.applicationId(),
+                    principal.applicationKeyId(), null, true);
+        }
+
+        @Override
+        public void settle(Reservation reservation, Settlement settlement) {
+            settled.incrementAndGet();
+            lastSettlement = settlement;
+        }
+
+        @Override
+        public void release(Reservation reservation, String reason) {
+            released.incrementAndGet();
+        }
+    }
+
     static class StubAdapter implements ProviderAdapter {
         ProviderChatResponse response;
         ProviderFailure error;

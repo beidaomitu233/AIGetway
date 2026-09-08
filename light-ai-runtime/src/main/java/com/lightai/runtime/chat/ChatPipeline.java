@@ -10,6 +10,7 @@ import com.lightai.client.error.LightAiException;
 import com.lightai.client.error.UnifiedError;
 import com.lightai.runtime.ports.AccessTokenPort;
 import com.lightai.runtime.ports.AdapterRegistryPort;
+import com.lightai.runtime.ports.ApplicationQuotaPort;
 import com.lightai.runtime.ports.CapacityPort;
 import com.lightai.runtime.ports.ConfigSnapshotPort;
 import com.lightai.runtime.ports.ConfigSnapshotPort.AliasView;
@@ -60,6 +61,7 @@ public class ChatPipeline {
     private final AccessTokenPort.RuntimeConfigPort runtimeConfigPort;
     private final RoutingPort routingPort;
     private final CapacityPort capacityPort;
+    private final ApplicationQuotaPort applicationQuotaPort;
     private final CircuitStateStore circuitStateStore;
     private final QueueService queueService;
     private final CredentialSecretPort credentialPort;
@@ -91,10 +93,23 @@ public class ChatPipeline {
                         QueueService queueService, AdapterRegistryPort adapterRegistry,
                         TraceStore traceStore, ReliabilityBudgets.Port reliabilityPort,
                         long totalTimeoutMs) {
+        this(snapshotPort, runtimeConfigPort, routingPort, capacityPort, circuitStateStore,
+                credentialPort, queueService, adapterRegistry, traceStore,
+                ApplicationQuotaPort.unlimited(), reliabilityPort, totalTimeoutMs);
+    }
+
+    public ChatPipeline(ConfigSnapshotPort snapshotPort, AccessTokenPort.RuntimeConfigPort runtimeConfigPort,
+                        RoutingPort routingPort, CapacityPort capacityPort,
+                        CircuitStateStore circuitStateStore, CredentialSecretPort credentialPort,
+                        QueueService queueService, AdapterRegistryPort adapterRegistry,
+                        TraceStore traceStore, ApplicationQuotaPort applicationQuotaPort,
+                        ReliabilityBudgets.Port reliabilityPort, long totalTimeoutMs) {
         this.snapshotPort = snapshotPort;
         this.runtimeConfigPort = runtimeConfigPort;
         this.routingPort = routingPort;
         this.capacityPort = capacityPort;
+        this.applicationQuotaPort = applicationQuotaPort == null
+                ? ApplicationQuotaPort.unlimited() : applicationQuotaPort;
         this.circuitStateStore = circuitStateStore;
         this.queueService = queueService;
         this.credentialPort = credentialPort;
@@ -127,14 +142,23 @@ public class ChatPipeline {
     public UnifiedChatResponse chat(ChatContext context) {
         long started = System.currentTimeMillis();
         ParsedRequest parsed = parse(context);
+        List<CandidateView> candidates = route(parsed);
+        String requestId = requestId(parsed.request());
+        ApplicationQuotaPort.Reservation applicationReservation =
+                reserveApplicationQuota(context.principal(), requestId, parsed, candidates);
         CancellationSignal signal = context.cancellation() != null
                 ? context.cancellation() : new CancellationSignal("trace-pending");
-        TraceStore.TraceHandle handle = traceStore.create(
-                parsed.request().traceId(), parsed.alias(), context.principal().application());
+        TraceStore.TraceHandle handle;
+        try {
+            handle = traceStore.create(requestId, parsed.alias(), context.principal().application());
+        } catch (RuntimeException | Error failure) {
+            applicationQuotaPort.release(applicationReservation, "TRACE_CREATE_FAILED");
+            throw failure;
+        }
         signal.bind(handle.traceId());
 
-        List<CandidateView> candidates = route(parsed);
-        ReliabilityBudgets budgets = reliabilityPort.budgets();
+        try {
+            ReliabilityBudgets budgets = reliabilityPort.budgets();
         int credentialIndex = 0;
         int candidateIndex = 0;
         int retries = 0;
@@ -153,6 +177,7 @@ public class ChatPipeline {
             CapacityPort.Reservation reservation = null;
             CircuitAttempt circuitAttempt = null;
             String attemptId = null;
+            boolean attemptFinished = false;
             try {
                 CredentialSecretPort.ResolvedCredential credential =
                         credentialPort.resolve(candidate.poolId(), credentialIndex);
@@ -185,8 +210,11 @@ public class ChatPipeline {
                         settlement.usage().promptTokens(), settlement.usage().completionTokens(), source,
                         settlement.cost().amount().toPlainString(), settlement.cost().currency(),
                         settlement.cost().estimated());
+                attemptFinished = true;
                 capacityPort.settle(reservation.reservationId(),
                         settlement.usage().promptTokens(), settlement.usage().completionTokens());
+                applicationQuotaPort.settle(applicationReservation,
+                        applicationSettlement(parsed.aliasView().aliasId(), candidate, settlement));
                 traceStore.finalizeTrace(traceId(handle), "SUCCEEDED");
                 return new UnifiedChatResponse(
                         traceId(handle), "chat.completion", started / 1000, parsed.alias(),
@@ -197,6 +225,10 @@ public class ChatPipeline {
                         new com.lightai.client.chat.ResponseTraceInfo(traceId(handle), candidate.providerType(),
                                 candidate.modelId(), source, settlement.cost(), handle.snapshotNo()));
             } catch (LightAiException e) {
+                if (attemptFinished) {
+                    traceStore.finalizeTrace(traceId(handle), "FAILED");
+                    throw e;
+                }
                 if (attemptId != null) {
                     traceStore.finishAttempt(traceId(handle), attemptId, "FAILED", e.code().name(),
                             0, 0, "ESTIMATED", null, null, false);
@@ -231,6 +263,10 @@ public class ChatPipeline {
                 }
             }
         }
+        } catch (RuntimeException | Error failure) {
+            applicationQuotaPort.release(applicationReservation, "REQUEST_FAILED");
+            throw failure;
+        }
     }
 
     // ---------------------------------------------------------------- 流式
@@ -238,14 +274,23 @@ public class ChatPipeline {
     public void chatStream(ChatContext context, StreamListener listener) {
         long started = System.currentTimeMillis();
         ParsedRequest parsed = parse(context);
+        List<CandidateView> candidates = route(parsed);
+        String requestId = requestId(parsed.request());
+        ApplicationQuotaPort.Reservation applicationReservation =
+                reserveApplicationQuota(context.principal(), requestId, parsed, candidates);
         CancellationSignal signal = context.cancellation() != null
                 ? context.cancellation() : new CancellationSignal("trace-pending");
-        TraceStore.TraceHandle handle = traceStore.create(
-                parsed.request().traceId(), parsed.alias(), context.principal().application());
+        TraceStore.TraceHandle handle;
+        try {
+            handle = traceStore.create(requestId, parsed.alias(), context.principal().application());
+        } catch (RuntimeException | Error failure) {
+            applicationQuotaPort.release(applicationReservation, "TRACE_CREATE_FAILED");
+            throw failure;
+        }
         signal.bind(handle.traceId());
 
-        List<CandidateView> candidates = route(parsed);
-        ReliabilityBudgets budgets = reliabilityPort.budgets();
+        try {
+            ReliabilityBudgets budgets = reliabilityPort.budgets();
         AtomicSequencer sequence = new AtomicSequencer();
         int credentialIndex = 0;
         int candidateIndex = 0;
@@ -259,6 +304,7 @@ public class ChatPipeline {
             }
             if (exceededTimeout(started)) {
                 failFinal(handle, signal, false, ErrorCode.TOTAL_TIMEOUT);
+                applicationQuotaPort.release(applicationReservation, "TOTAL_TIMEOUT");
                 return;
             }
             CandidateView candidate = candidates.get(Math.min(candidateIndex, candidates.size() - 1));
@@ -283,7 +329,8 @@ public class ChatPipeline {
                         && parsed.request().streamOptions().includeUsage();
                 StreamAccumulator accumulator = new StreamAccumulator(handle, parsed.alias(), candidate,
                         adapterRequest, includeUsage, listener, sequence, signal, reservation, attemptId,
-                        estimatedInput, estimatedOutput(candidate), circuitAttempt);
+                        estimatedInput, estimatedOutput(candidate), circuitAttempt,
+                        applicationReservation, parsed.aliasView().aliasId());
                 adapter.streamChat(callContext).subscribe(accumulator.subscriber(adapter));
                 return;
             } catch (LightAiException e) {
@@ -310,15 +357,21 @@ public class ChatPipeline {
                         candidateIndex++;
                         if (candidateIndex >= candidates.size()) {
                             failFinal(handle, signal, false, ErrorCode.ALL_CANDIDATES_FAILED);
+                            applicationQuotaPort.release(applicationReservation, "ALL_CANDIDATES_FAILED");
                             return;
                         }
                     }
                     case FAIL -> {
                         failFinal(handle, signal, false, mapFinal(e.code().name()));
+                        applicationQuotaPort.release(applicationReservation, e.code().name());
                         return;
                     }
                 }
             }
+        }
+        } catch (RuntimeException | Error failure) {
+            applicationQuotaPort.release(applicationReservation, "REQUEST_FAILED");
+            throw failure;
         }
     }
 
@@ -340,6 +393,8 @@ public class ChatPipeline {
         private final long estimatedInputTokens;
         private final long estimatedOutputTokens;
         private final CircuitAttempt circuitAttempt;
+        private final ApplicationQuotaPort.Reservation applicationReservation;
+        private final String virtualModelId;
         private Long capturedInputTokens;
         private Long capturedOutputTokens;
 
@@ -348,7 +403,9 @@ public class ChatPipeline {
                                    StreamListener listener, AtomicSequencer sequence, CancellationSignal signal,
                                    CapacityPort.Reservation reservation, String attemptId,
                                    long estimatedInputTokens, long estimatedOutputTokens,
-                                   CircuitAttempt circuitAttempt) {
+                                   CircuitAttempt circuitAttempt,
+                                   ApplicationQuotaPort.Reservation applicationReservation,
+                                   String virtualModelId) {
             this.handle = handle;
             this.alias = alias;
             this.candidate = candidate;
@@ -362,6 +419,8 @@ public class ChatPipeline {
             this.estimatedInputTokens = estimatedInputTokens;
             this.estimatedOutputTokens = estimatedOutputTokens;
             this.circuitAttempt = circuitAttempt;
+            this.applicationReservation = applicationReservation;
+            this.virtualModelId = virtualModelId;
         }
 
         java.util.concurrent.Flow.Subscriber<ProviderStreamChunk> subscriber(ProviderAdapter adapter) {
@@ -404,6 +463,7 @@ public class ChatPipeline {
                         traceStore.finishAttempt(traceId(handle), attemptId, "FAILED",
                                 error.code().name(), 0, 0, "ESTIMATED", null, null, false);
                         signal.releaseOnce(() -> capacityPort.release(reservation.reservationId()));
+                        applicationQuotaPort.release(applicationReservation, "STREAM_INTERRUPTED");
                         traceStore.finalizeTrace(traceId(handle), "STREAM_INTERRUPTED");
                         listener.onError(UnifiedError.builder(ErrorCode.STREAM_INTERRUPTED, "流式输出中断")
                                 .traceId(traceId(handle)).build());
@@ -439,6 +499,18 @@ public class ChatPipeline {
                             settlement.cost().currency(), settlement.cost().estimated());
                     signal.releaseOnce(() -> capacityPort.settle(reservation.reservationId(),
                             settlement.usage().promptTokens(), settlement.usage().completionTokens()));
+                    try {
+                        applicationQuotaPort.settle(applicationReservation,
+                                applicationSettlement(virtualModelId, candidate, settlement));
+                    } catch (RuntimeException settlementFailure) {
+                        applicationQuotaPort.release(applicationReservation,
+                                "SETTLEMENT_FAILED");
+                        traceStore.finalizeTrace(traceId(handle), "STREAM_INTERRUPTED");
+                        listener.onError(UnifiedError.builder(
+                                ErrorCode.OBSERVATION_DATA_UNAVAILABLE, "应用用量结算失败")
+                                .traceId(traceId(handle)).build());
+                        return;
+                    }
                     completeCircuit(circuitAttempt, true, false);
                     traceStore.finalizeTrace(traceId(handle), "SUCCEEDED");
                     listener.onComplete();
@@ -511,6 +583,40 @@ public class ChatPipeline {
     }
 
     // ---------------------------------------------------------------- 共用
+
+    private String requestId(UnifiedChatRequest request) {
+        return request.traceId() == null || request.traceId().isBlank()
+                ? UUID.randomUUID().toString() : request.traceId();
+    }
+
+    private ApplicationQuotaPort.Reservation reserveApplicationQuota(
+            AccessTokenPort.Principal principal, String requestId, ParsedRequest parsed,
+            List<CandidateView> candidates) {
+        long input = estimatedInput(requestChars(parsed.request()));
+        long maxTotal = input;
+        List<ApplicationQuotaPort.AmountEstimate> estimates = new ArrayList<>();
+        for (CandidateView candidate : candidates) {
+            long output = resolveMaxTokens(candidate, parsed.request(), input);
+            maxTotal = Math.max(maxTotal, input + output);
+            UsageSettlement.AttemptSettlement estimate = UsageSettlement.settle(
+                    priceSnapshot(candidate), null, null, input, output);
+            estimates.add(new ApplicationQuotaPort.AmountEstimate(
+                    estimate.cost().currency(), estimate.cost().amount()));
+        }
+        return applicationQuotaPort.reserve(principal, requestId, maxTotal, estimates);
+    }
+
+    private ApplicationQuotaPort.Settlement applicationSettlement(
+            String virtualModelId, CandidateView candidate,
+            UsageSettlement.AttemptSettlement settlement) {
+        PriceSnapshot price = priceSnapshot(candidate);
+        return new ApplicationQuotaPort.Settlement(
+                settlement.usage().promptTokens(), settlement.usage().completionTokens(),
+                settlement.cost().amount(), settlement.cost().currency(),
+                settlement.usage().source(), virtualModelId, candidate.modelPk(),
+                price.inputPrice().toPlainString(), price.outputPrice().toPlainString(),
+                price.priceUnit());
+    }
 
     private ParsedRequest parse(ChatContext context) {
         ChatRequestValidator.validate(context.request(), true);

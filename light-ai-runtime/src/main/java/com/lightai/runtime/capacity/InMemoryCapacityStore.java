@@ -76,15 +76,35 @@ public class InMemoryCapacityStore implements CapacityStore {
 
     @Override
     public synchronized ReservationHandle reserve(ReserveRequest request) {
+        return reserveScopes(
+                new String[]{"alias", "provider_model", "credential"},
+                new UUID[]{request.aliasId(), request.providerModelId(), request.credentialId()},
+                new CapacityStore.ScopeLimit[]{request.aliasLimit(), request.providerModelLimit(), request.credentialLimit()},
+                request.estimatedTokens(), request.maxTokens());
+    }
+
+    @Override
+    public synchronized ReservationHandle reserveApplication(
+            UUID applicationId, UUID applicationKeyId, long estimatedTokens,
+            CapacityStore.ScopeLimit applicationLimit,
+            CapacityStore.ScopeLimit applicationKeyLimit) {
+        if (applicationId == null || applicationKeyId == null) {
+            throw new IllegalArgumentException("应用容量预占 scope id 不能为空");
+        }
+        return reserveScopes(
+                new String[]{"application", "application_key"},
+                new UUID[]{applicationId, applicationKeyId},
+                new CapacityStore.ScopeLimit[]{applicationLimit, applicationKeyLimit},
+                estimatedTokens, 0);
+    }
+
+    private ReservationHandle reserveScopes(
+            String[] scopeTypes, UUID[] scopeIds, CapacityStore.ScopeLimit[] requestLimits,
+            long estimatedTokens, long maxTokens) {
         checkAvailable();
         long window = windowStart(Instant.now());
         UUID reservationId = UUID.randomUUID();
-        String[] scopeTypes = {"alias", "provider_model", "credential"};
-        UUID[] scopeIds = {request.aliasId(), request.providerModelId(), request.credentialId()};
-        CapacityStore.ScopeLimit[] requestLimits = {
-                request.aliasLimit(), request.providerModelLimit(), request.credentialLimit()
-        };
-        long tokens = Math.max(request.estimatedTokens(), 0) + Math.max(request.maxTokens(), 0);
+        long tokens = Math.max(estimatedTokens, 0) + Math.max(maxTokens, 0);
 
         List<CounterDelta> applied = new ArrayList<>();
         List<CounterDelta> rpmDeltas = new ArrayList<>();

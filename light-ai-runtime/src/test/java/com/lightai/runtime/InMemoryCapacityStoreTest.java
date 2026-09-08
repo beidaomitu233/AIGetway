@@ -109,4 +109,28 @@ class InMemoryCapacityStoreTest {
                 .extracting(e -> ((LightAiException) e).code())
                 .isEqualTo(ErrorCode.CAPACITY_LIMITED);
     }
+
+    @Test
+    void applicationAndKeyWindowsAreIndependentAndAtomic() {
+        UUID applicationId = UUID.randomUUID();
+        UUID keyId = UUID.randomUUID();
+        var first = store.reserveApplication(applicationId, keyId, 40,
+                new CapacityStore.ScopeLimit(2L, 100L, null),
+                new CapacityStore.ScopeLimit(1L, 80L, null));
+        assertThat(store.usage("application", applicationId).rpmReserved()).isEqualTo(1);
+        assertThat(store.usage("application_key", keyId).tpmReserved()).isEqualTo(40);
+
+        assertThatThrownBy(() -> store.reserveApplication(applicationId, keyId, 10,
+                new CapacityStore.ScopeLimit(2L, 100L, null),
+                new CapacityStore.ScopeLimit(1L, 80L, null)))
+                .isInstanceOf(CapacityStore.CapacityLimitedException.class)
+                .satisfies(error -> assertThat(
+                        ((CapacityStore.CapacityLimitedException) error).scopeType())
+                        .isEqualTo("application_key"));
+        assertThat(store.usage("application", applicationId).rpmReserved()).isEqualTo(1);
+
+        store.settle(first.reservationId(), 30, true);
+        assertThat(store.usage("application", applicationId).tpmReserved()).isEqualTo(30);
+        assertThat(store.usage("application_key", keyId).tpmReserved()).isEqualTo(30);
+    }
 }

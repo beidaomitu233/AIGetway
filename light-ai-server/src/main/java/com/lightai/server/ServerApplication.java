@@ -210,10 +210,11 @@ public class ServerApplication {
                                      com.lightai.runtime.capacity.QueueService queueService,
                                      com.lightai.runtime.ports.CredentialSecretPort credentialPort,
                                      com.lightai.runtime.ports.AdapterRegistryPort adapterRegistry,
-                                     TraceStore traceStore) {
+                                     TraceStore traceStore,
+                                     com.lightai.runtime.ports.ApplicationQuotaPort applicationQuotaPort) {
         return new ChatPipeline(snapshotPort, runtimeConfigPort::defaultAliasId, routingPort, capacityPort,
                 circuitStateStore, credentialPort, queueService, adapterRegistry, traceStore,
-                () -> ReliabilityBudgets.DEFAULT, 120_000L);
+                applicationQuotaPort, () -> ReliabilityBudgets.DEFAULT, 120_000L);
     }
 
     // ---------------- Admin UI 静态资源（/ui/** → classpath:/static/ui/，深链回落 index.html） ----------------
