@@ -67,6 +67,7 @@ public class OpenAiCompatibleAdapter implements com.lightai.spi.provider.Provide
     public Flow.Publisher<ProviderStreamChunk> streamChat(ProviderCallContext context) {
         return subscriber -> subscriber.onSubscribe(new Flow.Subscription() {
             volatile boolean done;
+            volatile boolean cancelled;
 
             @Override
             public void request(long n) {
@@ -76,6 +77,9 @@ public class OpenAiCompatibleAdapter implements com.lightai.spi.provider.Provide
                 done = true;
                 try {
                     streamOnce(context, subscriber);
+                    if (!cancelled) {
+                        subscriber.onComplete();
+                    }
                 } catch (AdapterHttp.TransportException e) {
                     subscriber.onError(e);
                 } catch (Exception e) {
@@ -86,6 +90,7 @@ public class OpenAiCompatibleAdapter implements com.lightai.spi.provider.Provide
 
             @Override
             public void cancel() {
+                cancelled = true;
                 done = true;
             }
         });

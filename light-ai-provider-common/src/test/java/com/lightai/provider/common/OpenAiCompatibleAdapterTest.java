@@ -21,7 +21,7 @@ class OpenAiCompatibleAdapterTest {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
-    private static final class TestAdapter extends OpenAiCompatibleAdapter {
+    private static class TestAdapter extends OpenAiCompatibleAdapter {
         TestAdapter(String type, String baseUrl) {
             super(type, baseUrl, new com.lightai.spi.provider.AdapterCapabilities(
                     true, true, true, true,
@@ -100,6 +100,28 @@ class OpenAiCompatibleAdapterTest {
         assertThat(adapter.classifyError(ProviderFailure.http(401, null, "x")).countsTowardCircuit()).isFalse();
     }
 
+    @Test
+    void publisherCompletesAfterUpstreamStreamEnds() {
+        TestAdapter adapter = new TestAdapter("OPENAI", "https://api.openai.com/v1/") {
+            @Override
+            protected void streamOnce(ProviderCallContext context,
+                                      java.util.concurrent.Flow.Subscriber<? super ProviderStreamChunk> subscriber) {
+                subscriber.onNext(ProviderStreamChunk.content("done"));
+            }
+        };
+        java.util.concurrent.atomic.AtomicBoolean completed = new java.util.concurrent.atomic.AtomicBoolean();
+
+        adapter.streamChat(null).subscribe(new java.util.concurrent.Flow.Subscriber<>() {
+            @Override public void onSubscribe(java.util.concurrent.Flow.Subscription subscription) {
+                subscription.request(Long.MAX_VALUE);
+            }
+            @Override public void onNext(ProviderStreamChunk item) { }
+            @Override public void onError(Throwable throwable) { }
+            @Override public void onComplete() { completed.set(true); }
+        });
+
+        assertThat(completed).isTrue();
+    }
     @Test
     void sseEventsConvertAndStopAtDone() throws Exception {
         TestAdapter adapter = new TestAdapter("DEEPSEEK", "https://api.deepseek.com/v1/");
