@@ -3,7 +3,6 @@ package com.lightai.starter.autoconfigure;
 import com.lightai.client.LightAiClient;
 import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
-import com.lightai.runtime.local.LocalRuntimeDefinition;
 import com.lightai.spi.auth.AuthContext;
 import com.lightai.spi.auth.AuthContextProvider;
 import com.lightai.spi.auth.AuthRequest;
@@ -16,6 +15,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
@@ -55,6 +55,10 @@ public class LightAiEmbeddedConfiguration {
         Map<String, String> typeToBean = new HashMap<>();
         for (ProviderAdapter adapter : adapters) {
             String type = adapter.providerType();
+            if (type == null || type.isBlank()) {
+                throw new IllegalStateException("ProviderAdapter provider_type 不能为空");
+            }
+            type = type.toUpperCase(java.util.Locale.ROOT);
             String beanName = adapter.getClass().getSimpleName();
             if (typeToBean.containsKey(type)) {
                 throw new IllegalStateException("检测到冲突的 ProviderAdapter provider_type: " + type
@@ -74,13 +78,96 @@ public class LightAiEmbeddedConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean({
+            javax.sql.DataSource.class,
+            com.lightai.storage.credential.JdbcCredentialRepository.class,
+            com.lightai.storage.credential.JdbcCredentialSecretRepository.class,
+            com.lightai.spi.secret.SecretCipher.class
+    })
+    @ConditionalOnMissingBean({
+            com.lightai.runtime.chat.ChatPipeline.class,
+            com.lightai.runtime.ports.CredentialSecretPort.class
+    })
+    public com.lightai.runtime.ports.CredentialSecretPort embeddedCredentialSecretPort(
+            javax.sql.DataSource dataSource,
+            com.lightai.storage.credential.JdbcCredentialRepository credentialRepository,
+            com.lightai.storage.credential.JdbcCredentialSecretRepository secretRepository,
+            com.lightai.spi.secret.SecretCipher secretCipher) {
+        return new com.lightai.storage.credential.JdbcCredentialSecretPort(
+                dataSource, credentialRepository, secretRepository, secretCipher);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(com.lightai.runtime.chat.ChatPipeline.class)
+    public com.lightai.runtime.chat.ChatPipeline embeddedChatPipeline(
+            ObjectProvider<com.lightai.runtime.ports.ConfigSnapshotPort> snapshotPortProvider,
+            ObjectProvider<com.lightai.runtime.ports.CredentialSecretPort> credentialPortProvider,
+            ObjectProvider<com.lightai.runtime.ports.AccessTokenPort.RuntimeConfigPort> runtimeConfigPortProvider,
+            ObjectProvider<com.lightai.runtime.ports.RoutingPort> routingPortProvider,
+            ObjectProvider<com.lightai.runtime.ports.CapacityPort> capacityPortProvider,
+            ObjectProvider<com.lightai.runtime.circuit.CircuitStateStore> circuitStateStoreProvider,
+            ObjectProvider<com.lightai.runtime.capacity.QueueService> queueServiceProvider,
+            ObjectProvider<com.lightai.runtime.ports.AdapterRegistryPort> adapterRegistryPortProvider,
+            ObjectProvider<com.lightai.runtime.trace.TraceStore> traceStoreProvider,
+            ObjectProvider<List<ProviderAdapter>> adaptersProvider) {
+        com.lightai.runtime.capacity.InMemoryCapacityStore capacityStore =
+                new com.lightai.runtime.capacity.InMemoryCapacityStore();
+        com.lightai.runtime.ports.ConfigSnapshotPort snapshotPort =
+                snapshotPortProvider.getIfAvailable(com.lightai.runtime.ports.ConfigSnapshotPort::empty);
+        com.lightai.runtime.ports.CredentialSecretPort credentialPort =
+                credentialPortProvider.getIfAvailable(() -> (poolId, failoverIndex) -> {
+                    throw new LightAiException(ErrorCode.CREDENTIAL_NOT_AVAILABLE,
+                            "Embedded Runtime 未配置 CredentialSecretPort");
+                });
+        com.lightai.runtime.ports.AccessTokenPort.RuntimeConfigPort runtimeConfigPort =
+                runtimeConfigPortProvider.getIfAvailable(() -> () -> java.util.Optional.empty());
+        com.lightai.runtime.ports.RoutingPort routingPort = routingPortProvider.getIfAvailable(() ->
+                (alias, request, estimatedInputTokens) -> new com.lightai.runtime.ports.RoutingPort.RoutingResult(
+                        alias.enabledCandidates().stream()
+                                .sorted(java.util.Comparator
+                                        .comparingLong(com.lightai.runtime.ports.ConfigSnapshotPort.CandidateView::priority)
+                                        .thenComparingInt(candidate -> -candidate.weight()))
+                                .toList(),
+                        false,
+                        false));
+        com.lightai.runtime.ports.CapacityPort capacityPort = capacityPortProvider.getIfAvailable(() ->
+                new com.lightai.runtime.capacity.StoreBackedCapacityPort(capacityStore));
+        com.lightai.runtime.circuit.CircuitStateStore circuitStateStore =
+                circuitStateStoreProvider.getIfAvailable(com.lightai.runtime.circuit.InMemoryCircuitStore::new);
+        com.lightai.runtime.capacity.QueueService queueService = queueServiceProvider.getIfAvailable(() ->
+                new com.lightai.runtime.capacity.InMemoryFifoQueue(1000, capacityStore));
+        com.lightai.runtime.ports.AdapterRegistryPort adapterRegistry =
+                adapterRegistryPortProvider.getIfAvailable(() -> {
+                    Map<String, ProviderAdapter> adapters = new HashMap<>();
+                    for (ProviderAdapter adapter : adaptersProvider.getIfAvailable(ArrayList::new)) {
+                        adapters.put(adapter.providerType().toUpperCase(java.util.Locale.ROOT), adapter);
+                    }
+                    return providerType -> java.util.Optional.ofNullable(adapters.get(
+                            providerType == null ? null : providerType.toUpperCase(java.util.Locale.ROOT)));
+                });
+        com.lightai.runtime.trace.TraceStore traceStore =
+                traceStoreProvider.getIfAvailable(com.lightai.runtime.trace.InMemoryTraceStore::new);
+        return new com.lightai.runtime.chat.ChatPipeline(
+                snapshotPort,
+                runtimeConfigPort,
+                routingPort,
+                capacityPort,
+                circuitStateStore,
+                credentialPort,
+                queueService,
+                adapterRegistry,
+                traceStore,
+                () -> com.lightai.runtime.chat.ReliabilityBudgets.DEFAULT,
+                120_000L);
+    }
+
+    @Bean
     @ConditionalOnMissingBean(LightAiClient.class)
     public LightAiClient embeddedLightAiClient(SpringLightAiProperties properties,
-                                              ObjectProvider<com.lightai.runtime.ports.ConfigSnapshotPort> configSnapshotPortProvider,
-                                              ObjectProvider<com.lightai.runtime.chat.ChatPipeline> chatPipelineProvider) {
-        com.lightai.runtime.chat.ChatPipeline pipeline = chatPipelineProvider.getIfAvailable();
+                                              ObjectProvider<com.lightai.runtime.ports.ConfigSnapshotPort> snapshotPortProvider,
+                                              com.lightai.runtime.chat.ChatPipeline pipeline) {
         com.lightai.runtime.ports.ConfigSnapshotPort snapshotPort =
-                configSnapshotPortProvider.getIfAvailable(com.lightai.runtime.ports.ConfigSnapshotPort::empty);
+                snapshotPortProvider.getIfAvailable(com.lightai.runtime.ports.ConfigSnapshotPort::empty);
         return new EmbeddedPipelineLightAiClient(snapshotPort, pipeline, properties.getApplication());
     }
 

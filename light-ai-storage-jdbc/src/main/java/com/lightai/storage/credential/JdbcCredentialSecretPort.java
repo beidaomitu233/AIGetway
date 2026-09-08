@@ -1,25 +1,17 @@
-package com.lightai.server.runtime;
+package com.lightai.storage.credential;
 
 import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
 import com.lightai.runtime.ports.CredentialSecretPort;
-import com.lightai.storage.credential.CredentialRecord;
-import com.lightai.storage.credential.JdbcCredentialRepository;
-import com.lightai.storage.credential.JdbcCredentialSecretRepository;
 import com.lightai.spi.secret.SecretCipher;
+
+import javax.sql.DataSource;
 import java.sql.Connection;
 import java.util.List;
 import java.util.UUID;
-import javax.sql.DataSource;
 
-/**
- * JDBC 凭证秘密端口（BE-020/BE-P04 接线）：
- * 按池内启用凭证的权重顺序解析第 failoverIndex 个凭证；
- * 秘密经 AES-GCM 解密为短期句柄，仅允许 Adapter 在构造认证头时读取一次；
- * 无可用凭证抛 CREDENTIAL_NOT_AVAILABLE，不伪造 Attempt。
- */
+/** Resolves encrypted JDBC credentials for runtime provider calls. */
 public final class JdbcCredentialSecretPort implements CredentialSecretPort {
-
     private static final System.Logger log = System.getLogger(JdbcCredentialSecretPort.class.getName());
 
     private final DataSource dataSource;
@@ -44,15 +36,13 @@ public final class JdbcCredentialSecretPort implements CredentialSecretPort {
             throw new LightAiException(ErrorCode.CREDENTIAL_NOT_AVAILABLE, "凭证池 ID 不合法");
         }
         try (Connection connection = dataSource.getConnection()) {
-            // PRD：HEALTHY 优先，UNKNOWN 可参与但排在其后；不可用与未过复位时间的 RATE_LIMITED 不参与。
             List<CredentialRecord> credentials = credentialRepository.listSelectableByPool(
                     connection, poolUuid, "weight DESC, name ASC", 200, 0);
             if (credentials.isEmpty()) {
                 throw new LightAiException(ErrorCode.CREDENTIAL_NOT_AVAILABLE,
                         "凭证池没有可用 Credential: " + poolId);
             }
-            int index = Math.floorMod(failoverIndex, credentials.size());
-            CredentialRecord chosen = credentials.get(index);
+            CredentialRecord chosen = credentials.get(Math.floorMod(failoverIndex, credentials.size()));
             byte[] ciphertext = secretRepository.findByCredential(connection, chosen.id())
                     .orElseThrow(() -> new LightAiException(ErrorCode.CREDENTIAL_NOT_AVAILABLE,
                             "Credential 缺少秘密记录: " + chosen.id()))

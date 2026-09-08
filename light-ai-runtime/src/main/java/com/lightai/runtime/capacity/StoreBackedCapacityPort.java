@@ -1,13 +1,11 @@
-package com.lightai.server.runtime;
+package com.lightai.runtime.capacity;
 
-import com.lightai.runtime.capacity.CapacityStore;
 import com.lightai.runtime.ports.CapacityPort;
+
 import java.util.UUID;
 
 /**
- * CapacityStore → CapacityPort 运行适配（BE-P04 接线）：
- * 预占失败（限额/共享状态不可用）原样透传给管道恢复判定；
- * 结算把实际用量写入原预占窗口，释放幂等。
+ * 将容量存储适配为运行时容量端口，并保持预占、结算与释放的幂等语义。
  */
 public final class StoreBackedCapacityPort implements CapacityPort {
 
@@ -19,7 +17,8 @@ public final class StoreBackedCapacityPort implements CapacityPort {
 
     @Override
     public Reservation reserve(String aliasId, String modelId, String credentialId, long estimatedTokens) {
-        return reserve(aliasId, modelId, credentialId, estimatedTokens, 0, null, null, null);
+        return reserve(aliasId, modelId, credentialId,
+                estimatedTokens, 0, null, null, null);
     }
 
     @Override

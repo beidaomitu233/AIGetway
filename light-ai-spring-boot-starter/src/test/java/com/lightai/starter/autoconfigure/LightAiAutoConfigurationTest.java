@@ -1,5 +1,6 @@
 package com.lightai.starter.autoconfigure;
 
+import com.lightai.client.ChatRequest;
 import com.lightai.client.LightAiClient;
 import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
@@ -76,9 +77,10 @@ class LightAiAutoConfigurationTest {
     }
 
     @Test
-    @DisplayName("EMBEDDED 模式装配成功且支持 Web Admin 安全配置")
+    @DisplayName("EMBEDDED 模式装配成功且可完成进程内 Chat")
     void embeddedModeSucceedsWithApplication() {
-        contextRunner.withPropertyValues(
+        contextRunner.withUserConfiguration(EmbeddedRuntimeTestConfiguration.class)
+                .withPropertyValues(
                 "light-ai.mode=EMBEDDED",
                 "light-ai.application=my-app",
                 "light-ai.admin.path=/light-ai/admin",
@@ -87,6 +89,28 @@ class LightAiAutoConfigurationTest {
             assertThat(context).hasNotFailed();
             assertThat(context).hasSingleBean(LightAiClient.class);
             assertThat(context).hasBean("embeddedLightAiClient");
+            LightAiClient client = context.getBean(LightAiClient.class);
+            assertThat(client.chat(ChatRequest.builder()
+                            .model("demo")
+                            .addUserMessage("hello")
+                            .build()).content())
+                    .isEqualTo("embedded response");
+        });
+    }
+
+    @Test
+    @DisplayName("无 Web 与管理存储时仍装配 EMBEDDED 客户端和空快照运行内核")
+    void embeddedModeLoadsWithoutWebOrStorage() {
+        contextRunner.withPropertyValues(
+                "light-ai.mode=EMBEDDED",
+                "light-ai.application=no-web-app",
+                "light-ai.admin.enabled=false"
+        ).run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context).hasSingleBean(LightAiClient.class);
+            assertThat(context).hasSingleBean(com.lightai.runtime.chat.ChatPipeline.class);
+            assertThat(context).doesNotHaveBean(com.lightai.runtime.ports.CredentialSecretPort.class);
+            assertThat(context.getBean(LightAiClient.class).models()).isEmpty();
         });
     }
 
