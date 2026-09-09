@@ -90,6 +90,7 @@ export interface ApplicationKeyView {
   revoked_at: string | null
   rotation_generation: number
   version: number
+  virtual_model_ids: string[]
 }
 
 export interface ApplicationKeySecretResult {
@@ -254,6 +255,7 @@ export function createApplicationKey(
     expires_at: string | null
     rpm: number | null
     tpm: number | null
+    virtual_model_ids: string[]
   },
 ): Promise<ApplicationKeySecretResult> {
   return request({ path: `/applications/${applicationId}/keys`, method: 'POST', body: payload })

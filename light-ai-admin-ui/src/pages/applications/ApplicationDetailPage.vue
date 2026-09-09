@@ -377,6 +377,7 @@ onMounted(load)
           <ApplicationKeyPanel
             :application-id="detail.id"
             :application-active="detail.status === 'ACTIVE'"
+            :application-models="detail.models.filter((item) => item.enabled)"
             @changed="load"
           />
 

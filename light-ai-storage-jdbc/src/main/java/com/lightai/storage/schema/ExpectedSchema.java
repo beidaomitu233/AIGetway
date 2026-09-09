@@ -57,6 +57,7 @@ public final class ExpectedSchema {
             "quota_adjustment",
             "application_model_permission",
             "application_key",
+            "application_key_model_permission",
             "budget_reservation",
             "usage_ledger");
 

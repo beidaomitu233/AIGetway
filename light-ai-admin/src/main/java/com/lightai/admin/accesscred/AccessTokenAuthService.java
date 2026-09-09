@@ -134,8 +134,11 @@ public class AccessTokenAuthService implements AccessTokenPort {
         if (!"ACTIVE".equals(application.status())) {
             throw new LightAiException(ErrorCode.ACCESS_TOKEN_INVALID, "应用已停用或归档");
         }
+        List<UUID> keyModelIds = applicationKeys.listModelIds(connection, key.id());
         List<String> aliases = applications.listModelPermissions(connection, application.id()).stream()
                 .filter(permission -> permission.enabled() && permission.virtualModelCode() != null)
+                .filter(permission -> keyModelIds.isEmpty()
+                        || keyModelIds.contains(permission.virtualModelId()))
                 .map(permission -> permission.virtualModelCode()).toList();
         ApplicationQuotaRecord quota = applications.findQuota(connection, application.id()).orElse(null);
         Integer rpm = stricter(key.rpm(), quota == null ? null : quota.rpm());

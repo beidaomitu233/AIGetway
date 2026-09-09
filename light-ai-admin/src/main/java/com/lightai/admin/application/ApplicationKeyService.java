@@ -69,7 +69,7 @@ public final class ApplicationKeyService {
             requireScope(connection, context, application.code());
             OffsetDateTime now = OffsetDateTime.now(clock);
             return keys.list(connection, applicationId).stream()
-                    .map(key -> view(key, now)).toList();
+                    .map(key -> view(key, now, keys.listModelIds(connection, key.id()))).toList();
         } catch (LightAiException e) {
             throw e;
         } catch (Exception e) {
@@ -98,16 +98,20 @@ public final class ApplicationKeyService {
                             "同一应用下密钥名称已存在", "name");
                 }
                 validateStricterLimits(connection, applicationId, value.rpm(), value.tpm());
+                validateModelScope(connection, applicationId, value.virtualModelIds());
                 keys.insert(connection, new ApplicationKeyRecord(
                         id, applicationId, value.name(), issued.prefix(), issued.maskedValue(),
                         issued.tokenHash(), issued.pepperVersion(), 1L, value.ipAllowlist(),
                         value.expiresAt(), value.rpm(), value.tpm(), "ACTIVE", null, null,
                         null, null, 1L, now, now));
+                keys.replaceModelPermissions(connection, id, value.virtualModelIds());
                 auditService.recordSuccess(connection, AuditRecord.succeeded(
                         UUID.randomUUID(), context.requestId(), operatorId(context), "CREATE",
                         "APPLICATION_KEY", id.toString(), List.of(
                                 FieldChange.changed("application_id", null, applicationId.toString()),
                                 FieldChange.changed("name", null, value.name()),
+                                FieldChange.changed("virtual_model_ids", null,
+                                        value.virtualModelIds().stream().map(UUID::toString).toList()),
                                 FieldChange.sensitiveChanged("key_value")),
                         sourceMode, context.sourceIpMasked()));
             });
@@ -172,7 +176,7 @@ public final class ApplicationKeyService {
         String target = validateStatus(command);
         OffsetDateTime now = OffsetDateTime.now(clock);
         try {
-            final ApplicationKeyRecord[] updated = new ApplicationKeyRecord[1];
+            final ApplicationKeyView[] updated = new ApplicationKeyView[1];
             transaction.executeWithoutResult(status -> {
                 Connection connection = DataSourceUtils.getConnection(dataSource);
                 ApplicationRecord application = loadApplication(connection, applicationId);
@@ -197,10 +201,12 @@ public final class ApplicationKeyService {
                     }
                 }
                 if (target.equals(current.status())) {
-                    updated[0] = current;
+                    updated[0] = view(current, now, keys.listModelIds(connection, keyId));
                     return;
                 }
-                updated[0] = keys.updateStatus(connection, keyId, target, now, command.version());
+                ApplicationKeyRecord result = keys.updateStatus(
+                        connection, keyId, target, now, command.version());
+                updated[0] = view(result, now, keys.listModelIds(connection, keyId));
                 auditService.recordSuccess(connection, AuditRecord.succeeded(
                         UUID.randomUUID(), context.requestId(), operatorId(context),
                         "APPLICATION_KEY_STATUS_CHANGE", "APPLICATION_KEY", keyId.toString(),
@@ -209,7 +215,7 @@ public final class ApplicationKeyService {
                                 FieldChange.changed("reason", null, command.reason().trim())),
                         sourceMode, context.sourceIpMasked()));
             });
-            ApplicationKeyView entity = view(updated[0], now);
+            ApplicationKeyView entity = updated[0];
             return new ManagementOperationResult<>(keyId.toString(), entity.version(), entity,
                     false, null, context.requestId());
         } catch (JdbcApplicationKeyRepository.OptimisticLockException e) {
@@ -230,13 +236,14 @@ public final class ApplicationKeyService {
         if (command.version() < 1) throw invalid("version", "version 必须是正整数");
         OffsetDateTime now = OffsetDateTime.now(clock);
         try {
-            final ApplicationKeyRecord[] updated = new ApplicationKeyRecord[1];
+            final ApplicationKeyView[] updated = new ApplicationKeyView[1];
             transaction.executeWithoutResult(status -> {
                 Connection connection = DataSourceUtils.getConnection(dataSource);
                 ApplicationRecord application = loadApplication(connection, applicationId);
                 requireScope(connection, context, application.code());
                 loadKey(connection, applicationId, keyId);
-                updated[0] = keys.revoke(connection, keyId, now, command.version());
+                ApplicationKeyRecord result = keys.revoke(connection, keyId, now, command.version());
+                updated[0] = view(result, now, keys.listModelIds(connection, keyId));
                 auditService.recordSuccess(connection, AuditRecord.succeeded(
                         UUID.randomUUID(), context.requestId(), operatorId(context), "REVOKE",
                         "APPLICATION_KEY", keyId.toString(), List.of(
@@ -244,7 +251,7 @@ public final class ApplicationKeyService {
                                 FieldChange.changed("reason", null, command.reason().trim())),
                         sourceMode, context.sourceIpMasked()));
             });
-            ApplicationKeyView entity = view(updated[0], now);
+            ApplicationKeyView entity = updated[0];
             return new ManagementOperationResult<>(keyId.toString(), entity.version(), entity,
                     false, null, context.requestId());
         } catch (JdbcApplicationKeyRepository.OptimisticLockException e) {
@@ -282,6 +289,18 @@ public final class ApplicationKeyService {
         }
     }
 
+    private void validateModelScope(
+            Connection connection, UUID applicationId, List<UUID> virtualModelIds) {
+        if (virtualModelIds.isEmpty()) return;
+        Set<UUID> applicationModels = applications.listModelPermissions(connection, applicationId).stream()
+                .filter(permission -> permission.enabled())
+                .map(permission -> permission.virtualModelId())
+                .collect(java.util.stream.Collectors.toSet());
+        if (!applicationModels.containsAll(virtualModelIds)) {
+            throw invalid("virtual_model_ids", "密钥模型范围只能从应用已授权模型中选择");
+        }
+    }
+
     private ValidatedCreate validate(ApplicationKeyCreateCommand command) {
         if (command == null) throw invalid("body", "请求体必填");
         String name = command.name() == null ? "" : command.name().trim();
@@ -300,8 +319,16 @@ public final class ApplicationKeyService {
             }
             allowlist.add(value);
         }
+        LinkedHashSet<UUID> virtualModelIds = new LinkedHashSet<>();
+        for (String raw : command.virtualModelIds()) {
+            try {
+                virtualModelIds.add(UUID.fromString(raw == null ? "" : raw.trim()));
+            } catch (IllegalArgumentException e) {
+                throw invalid("virtual_model_ids", "密钥模型范围包含非法虚拟模型 ID");
+            }
+        }
         return new ValidatedCreate(name, List.copyOf(allowlist), command.expiresAt(),
-                command.rpm(), command.tpm());
+                command.rpm(), command.tpm(), List.copyOf(virtualModelIds));
     }
 
     private static boolean validNetwork(String value) {
@@ -325,12 +352,14 @@ public final class ApplicationKeyService {
         if (!allowed.contains(code)) throw new LightAiException(ErrorCode.ACCESS_DENIED, "无权访问该应用");
     }
 
-    private static ApplicationKeyView view(ApplicationKeyRecord key, OffsetDateTime now) {
+    private static ApplicationKeyView view(
+            ApplicationKeyRecord key, OffsetDateTime now, List<UUID> virtualModelIds) {
         return new ApplicationKeyView(
                 key.id().toString(), key.applicationId().toString(), key.name(), key.maskedValue(),
                 key.ipAllowlist(), key.expiresAt(), key.rpm(), key.tpm(), key.status().equals("ACTIVE")
                         ? key.effectiveStatus(now) : key.status(), key.lastUsedAt(), key.lastUsedIpMasked(),
-                key.createdAt(), key.rotatedAt(), key.revokedAt(), key.rotationGeneration(), key.version());
+                key.createdAt(), key.rotatedAt(), key.revokedAt(), key.rotationGeneration(), key.version(),
+                virtualModelIds.stream().map(UUID::toString).toList());
     }
 
     private static void requireReason(String reason) {
@@ -359,6 +388,7 @@ public final class ApplicationKeyService {
     }
 
     private record ValidatedCreate(
-            String name, List<String> ipAllowlist, OffsetDateTime expiresAt, Integer rpm, Long tpm) {
+            String name, List<String> ipAllowlist, OffsetDateTime expiresAt, Integer rpm, Long tpm,
+            List<UUID> virtualModelIds) {
     }
 }

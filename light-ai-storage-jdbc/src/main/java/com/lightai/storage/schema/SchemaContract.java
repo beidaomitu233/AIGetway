@@ -30,7 +30,10 @@ final class SchemaContract {
                 "db/migration/" + folder + "/V1__baseline.sql")
                 + "\n"
                 + DefaultSchemaMigrator.loadScript(
-                "db/migration/" + folder + "/V2__enterprise_application_foundation.sql");
+                "db/migration/" + folder + "/V2__enterprise_application_foundation.sql")
+                + "\n"
+                + DefaultSchemaMigrator.loadScript(
+                "db/migration/" + folder + "/V3__application_key_model_scope.sql");
         return parse(scripts);
     }
 

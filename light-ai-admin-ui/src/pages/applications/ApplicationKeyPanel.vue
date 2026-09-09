@@ -8,10 +8,14 @@ import { useFormSubmit } from '@/composables/useFormSubmit'
 import {
   changeApplicationKeyStatus, createApplicationKey, fetchApplicationKeys,
   revokeApplicationKey, rotateApplicationKey,
-  type ApplicationKeySecretResult, type ApplicationKeyView,
+  type ApplicationKeySecretResult, type ApplicationKeyView, type ApplicationModelPermission,
 } from '@/api/applications'
 
-const props = defineProps<{ applicationId: string; applicationActive: boolean }>()
+const props = defineProps<{
+  applicationId: string
+  applicationActive: boolean
+  applicationModels: ApplicationModelPermission[]
+}>()
 const emit = defineEmits<{ changed: [] }>()
 type KeyAction = 'enable' | 'disable' | 'rotate' | 'revoke'
 const store = useBootstrapStore()
@@ -25,7 +29,10 @@ const reason = ref('')
 const secret = ref<ApplicationKeySecretResult | null>(null)
 const copied = ref(false)
 const canManage = computed(() => store.can(Permission.applicationKeyManage))
-const form = reactive({ name: '', expires_at: '', rpm: null as number | null, tpm: null as number | null, ip_allowlist: '' })
+const form = reactive({
+  name: '', expires_at: '', rpm: null as number | null, tpm: null as number | null,
+  ip_allowlist: '', virtual_model_ids: [] as string[],
+})
 const { submitting, errorText, conflictError, submit, reset } = useFormSubmit()
 const labels: Record<string, string> = {
   ACTIVE: '有效', DISABLED: '已停用', EXPIRED: '已过期', REVOKED: '已撤销',
@@ -39,7 +46,9 @@ async function load(): Promise<void> {
 }
 
 function openCreate(): void {
-  Object.assign(form, { name: '', expires_at: '', rpm: null, tpm: null, ip_allowlist: '' })
+  Object.assign(form, {
+    name: '', expires_at: '', rpm: null, tpm: null, ip_allowlist: '', virtual_model_ids: [],
+  })
   reset()
   createOpen.value = true
 }
@@ -59,12 +68,12 @@ async function createKey(): Promise<void> {
       rpm: form.rpm || null,
       tpm: form.tpm || null,
       ip_allowlist: form.ip_allowlist.split(/[\n,]/).map((item) => item.trim()).filter(Boolean),
+      virtual_model_ids: form.virtual_model_ids,
     })
   })
   if (outcome.ok) {
     createOpen.value = false
     await load()
-    emit('changed')
   }
 }
 
@@ -93,7 +102,7 @@ async function applyAction(): Promise<void> {
     actionKey.value = null
     action.value = null
     await load()
-    emit('changed')
+    if (selectedAction !== 'rotate') emit('changed')
   }
 }
 
@@ -115,10 +124,24 @@ function actionMessage(value: KeyAction): string {
   }[value]
 }
 
+function modelScopeText(key: ApplicationKeyView): string {
+  if (!key.virtual_model_ids.length) return '继承应用全部'
+  const labelsById = new Map(props.applicationModels.map((model) => [
+    model.virtual_model_id, model.virtual_model_code || model.virtual_model_id,
+  ]))
+  return key.virtual_model_ids.map((id) => labelsById.get(id) || id).join('、')
+}
+
 async function copySecret(): Promise<void> {
   if (!secret.value) return
   await navigator.clipboard.writeText(secret.value.key_value)
   copied.value = true
+}
+
+function closeSecret(): void {
+  secret.value = null
+  copied.value = false
+  emit('changed')
 }
 
 onMounted(load)
@@ -137,12 +160,13 @@ onMounted(load)
     <PageState v-else-if="loadError" status="error" :error="loadError" @retry="load" />
     <div v-else-if="keys.length" class="lai-table-wrap">
       <table class="lai-table key-table">
-        <thead><tr><th>名称</th><th>密钥</th><th>状态</th><th>RPM / TPM</th><th>有效期</th><th>最近使用</th><th v-if="canManage">操作</th></tr></thead>
+        <thead><tr><th>名称</th><th>密钥</th><th>状态</th><th>模型范围</th><th>RPM / TPM</th><th>有效期</th><th>最近使用</th><th v-if="canManage">操作</th></tr></thead>
         <tbody>
           <tr v-for="key in keys" :key="key.id">
             <td><strong>{{ key.name }}</strong><small>第 {{ key.rotation_generation }} 代</small></td>
             <td class="lai-cell-mono">{{ key.masked_value }}</td>
             <td>{{ labels[key.status] }}</td>
+            <td class="model-scope">{{ modelScopeText(key) }}</td>
             <td>{{ key.rpm ?? '继承应用' }} / {{ key.tpm == null ? '继承应用' : key.tpm.toLocaleString() }}</td>
             <td>{{ formatDateTime(key.expires_at, store.timezone, '长期有效') }}</td>
             <td>{{ formatDateTime(key.last_used_at, store.timezone, '尚未使用') }}</td>
@@ -172,6 +196,15 @@ onMounted(load)
         <label class="dialog-field"><span>独立 TPM</span><input v-model.number="form.tpm" class="lai-input" type="number" min="1" placeholder="继承应用"></label>
       </div>
       <label class="dialog-field"><span>IP 白名单（可选）</span><textarea v-model="form.ip_allowlist" class="lai-input textarea" rows="3" placeholder="每行一个 IP 或 CIDR"></textarea></label>
+      <fieldset class="model-field">
+        <legend>虚拟模型子集（可选）</legend>
+        <p>不选择表示继承应用全部授权；选择后只能调用所选模型。</p>
+        <label v-for="model in applicationModels" :key="model.virtual_model_id" class="model-option">
+          <input v-model="form.virtual_model_ids" type="checkbox" :value="model.virtual_model_id">
+          <span>{{ model.virtual_model_code || model.virtual_model_id }}</span>
+        </label>
+        <span v-if="!applicationModels.length" class="empty-inline">应用尚未授权虚拟模型。</span>
+      </fieldset>
       <p class="warning">创建成功后请立即复制并安全保存，关闭窗口后无法再次查看原文。</p>
       <p v-if="errorText" class="lai-form-message-error">{{ errorText }}</p>
       <div class="lai-dialog-actions"><button type="button" class="lai-btn" @click="createOpen = false">取消</button><button type="submit" class="lai-btn lai-btn-primary" :disabled="submitting || form.name.trim().length < 2">{{ submitting ? '签发中…' : '签发' }}</button></div>
@@ -194,7 +227,7 @@ onMounted(load)
       <h2 class="lai-dialog-title">请立即保存应用密钥</h2>
       <p class="warning">这是唯一一次显示完整密钥。关闭后平台无法找回，只能重新轮换。</p>
       <code class="secret-value">{{ secret.key_value }}</code>
-      <div class="lai-dialog-actions"><button type="button" class="lai-btn" @click="copySecret">{{ copied ? '已复制' : '复制密钥' }}</button><button type="button" class="lai-btn lai-btn-primary" @click="secret = null">我已保存</button></div>
+      <div class="lai-dialog-actions"><button type="button" class="lai-btn" @click="copySecret">{{ copied ? '已复制' : '复制密钥' }}</button><button type="button" class="lai-btn lai-btn-primary" @click="closeSecret">我已保存</button></div>
     </div>
   </div>
 </template>
@@ -205,11 +238,16 @@ onMounted(load)
 .key-heading .lai-card-title { margin-bottom:4px; }
 .key-table { min-width:940px; }
 .key-table small { display:block; margin-top:3px; color:#667085; }
+.model-scope { max-width:220px; overflow-wrap:anywhere; }
 .key-actions { display:flex; }.danger { color:#b42318; }
 .dialog-field { display:flex; flex-direction:column; gap:6px; margin:12px 0; color:#475467; }
 .dialog-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .dialog-field .lai-input { width:100%; max-width:none; }
 .textarea { height:auto; padding:8px 10px; resize: vertical; }
 .warning { padding:10px; color:#92400e; background:#fffbeb; border-radius:6px; font-size:13px; }
+.model-field { margin:12px 0; padding:10px 12px; border:1px solid #d0d5dd; border-radius:6px; }
+.model-field legend { padding:0 4px; color:#475467; }
+.model-field p { margin:0 0 8px; color:#667085; font-size:12px; }
+.model-option { display:flex; align-items:center; gap:8px; margin:7px 0; }
 .secret-dialog { width:560px; }.secret-value { display:block; overflow-wrap:anywhere; padding:14px; margin:14px 0; background:#f6f8fb; border:1px solid #e6eaf0; border-radius:6px; }
 </style>

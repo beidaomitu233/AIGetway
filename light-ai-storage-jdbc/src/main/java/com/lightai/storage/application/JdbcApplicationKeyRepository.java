@@ -115,6 +115,49 @@ public final class JdbcApplicationKeyRepository extends AbstractJdbcRepository {
         }
     }
 
+    public void replaceModelPermissions(
+            Connection connection, UUID applicationKeyId, List<UUID> virtualModelIds) {
+        DatabaseDialect dialect = dialect(connection);
+        String deleteSql = "DELETE FROM " + qualify(connection, "application_key_model_permission")
+                + " WHERE application_key_id = ?";
+        String insertSql = "INSERT INTO " + qualify(connection, "application_key_model_permission")
+                + " (id, created_at, application_key_id, virtual_model_id) VALUES (?, "
+                + dialect.nowFunction() + ", ?, ?)";
+        try (PreparedStatement delete = connection.prepareStatement(deleteSql)) {
+            dialect.bindUuid(delete, 1, applicationKeyId);
+            delete.executeUpdate();
+        } catch (SQLException e) {
+            throw failure("密钥模型权限清理失败", e);
+        }
+        for (UUID virtualModelId : virtualModelIds) {
+            try (PreparedStatement insert = connection.prepareStatement(insertSql)) {
+                dialect.bindUuid(insert, 1, UUID.randomUUID());
+                dialect.bindUuid(insert, 2, applicationKeyId);
+                dialect.bindUuid(insert, 3, virtualModelId);
+                insert.executeUpdate();
+            } catch (SQLException e) {
+                throw failure("密钥模型权限写入失败", e);
+            }
+        }
+    }
+
+    public List<UUID> listModelIds(Connection connection, UUID applicationKeyId) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT virtual_model_id FROM "
+                + qualify(connection, "application_key_model_permission")
+                + " WHERE application_key_id = ? ORDER BY virtual_model_id";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, applicationKeyId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<UUID> ids = new ArrayList<>();
+                while (resultSet.next()) ids.add(dialect.readUuid(resultSet, "virtual_model_id"));
+                return List.copyOf(ids);
+            }
+        } catch (SQLException e) {
+            throw failure("密钥模型权限读取失败", e);
+        }
+    }
+
     public ApplicationKeyRecord replaceSecret(
             Connection connection, UUID id, String prefix, String maskedValue, byte[] digest,
             int digestVersion, OffsetDateTime now, long expectedVersion) {

@@ -18,6 +18,7 @@ import com.lightai.client.error.LightAiException;
 import com.lightai.client.protocol.Roles;
 import com.lightai.spi.auth.AuthContext;
 import com.lightai.storage.access.JdbcAccessCredentialRepository;
+import com.lightai.storage.alias.AliasRecord;
 import com.lightai.storage.alias.JdbcAliasRepository;
 import com.lightai.storage.application.JdbcApplicationKeyRepository;
 import com.lightai.storage.application.JdbcApplicationRepository;
@@ -42,6 +43,8 @@ class ApplicationKeyServiceTest {
     private AccessTokenService tokenService;
     private ApplicationKeyService service;
     private UUID applicationId;
+    private UUID allowedModelId;
+    private UUID otherModelId;
 
     @BeforeEach
     void setUp() {
@@ -58,13 +61,27 @@ class ApplicationKeyServiceTest {
         applications = new JdbcApplicationRepository();
         keys = new JdbcApplicationKeyRepository();
         tokenService = new AccessTokenService(AccessTokenService.fixedPepper(1, "test-pepper"));
+        JdbcAliasRepository aliases = new JdbcAliasRepository();
+        allowedModelId = UUID.randomUUID();
+        otherModelId = UUID.randomUUID();
+        try (var connection = dataSource.getConnection()) {
+            aliases.insert(connection, new AliasRecord(
+                    allowedModelId, "chat-primary", "主模型", null,
+                    "PRIORITY_WEIGHTED", true, 1L, null, null));
+            aliases.insert(connection, new AliasRecord(
+                    otherModelId, "chat-secondary", "备用模型", null,
+                    "PRIORITY_WEIGHTED", true, 1L, null, null));
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
         ApplicationService applicationService = new ApplicationService(
-                dataSource, applications, new JdbcAliasRepository(), audits, transactions,
+                dataSource, applications, aliases, audits, transactions,
                 new PageResultFactory(clock), clock, "STANDALONE_SERVER");
         applicationId = UUID.fromString(applicationService.create(admin(), new ApplicationCreateCommand(
                 "service-desk", "服务台助手", "IT", "owner-1", "张三", "PROD", null,
                 "ACTIVE", null, null, "CNY", 100, 50_000L,
-                "MONTH", null, null, List.of())).id());
+                "MONTH", null, null,
+                List.of(allowedModelId.toString(), otherModelId.toString()))).id());
         service = new ApplicationKeyService(dataSource, applications, keys, tokenService,
                 audits, transactions, clock, "STANDALONE_SERVER");
     }
@@ -73,13 +90,15 @@ class ApplicationKeyServiceTest {
     void issuesOnceAuthenticatesDisablesEnablesRotatesAndRevokesApplicationKey() {
         var issued = service.create(owner(), applicationId,
                 new ApplicationKeyCreateCommand("生产接入", List.of("127.0.0.1"),
-                        null, 60, 30_000L));
+                        null, 60, 30_000L, List.of(allowedModelId.toString())));
         assertThat(issued.keyValue()).startsWith("lai_");
         assertThat(service.list(owner(), applicationId)).singleElement()
                 .satisfies(key -> {
                     assertThat(key.maskedValue()).startsWith("lai_****");
                     assertThat(key.status()).isEqualTo("ACTIVE");
                     assertThat(key.rotationGeneration()).isEqualTo(1);
+                    assertThat(key.virtualModelIds())
+                            .containsExactly(allowedModelId.toString());
                 });
 
         AccessTokenAuthService auth = new AccessTokenAuthService(
@@ -90,6 +109,8 @@ class ApplicationKeyServiceTest {
         assertThat(principal.application()).isEqualTo("service-desk");
         assertThat(principal.applicationKeyId()).isEqualTo(issued.keyId());
         assertThat(principal.rpm()).isEqualTo(60);
+        assertThat(principal.aliasAllowed("chat-primary")).isTrue();
+        assertThat(principal.aliasAllowed("chat-secondary")).isFalse();
         assertThat(principal.aliasAllowed("ungranted-model")).isFalse();
 
         var disabled = service.changeStatus(owner(), applicationId, UUID.fromString(issued.keyId()),
@@ -138,6 +159,29 @@ class ApplicationKeyServiceTest {
                 .isInstanceOf(LightAiException.class)
                 .extracting(error -> ((LightAiException) error).code())
                 .isEqualTo(ErrorCode.FIELD_VALIDATION_FAILED);
+
+        assertThatThrownBy(() -> service.create(owner(), applicationId,
+                new ApplicationKeyCreateCommand("越权模型密钥", List.of(), null, null, null,
+                        List.of(UUID.randomUUID().toString()))))
+                .isInstanceOf(LightAiException.class)
+                .extracting(error -> ((LightAiException) error).code())
+                .isEqualTo(ErrorCode.FIELD_VALIDATION_FAILED);
+    }
+
+    @Test
+    void keyWithoutModelSubsetInheritsAllApplicationModels() {
+        var issued = service.create(owner(), applicationId,
+                new ApplicationKeyCreateCommand("继承应用模型", List.of(), null, null, null));
+        AccessTokenAuthService auth = new AccessTokenAuthService(
+                dataSource, new JdbcAccessCredentialRepository(), new JdbcAliasRepository(),
+                tokenService, Clock.fixed(Instant.parse("2026-09-08T09:00:00Z"), ZoneOffset.UTC),
+                false, applications, keys);
+
+        var principal = auth.authenticate(issued.keyValue(), "127.0.0.1");
+        assertThat(principal.aliasAllowed("chat-primary")).isTrue();
+        assertThat(principal.aliasAllowed("chat-secondary")).isTrue();
+        assertThat(service.list(owner(), applicationId)).singleElement()
+                .satisfies(key -> assertThat(key.virtualModelIds()).isEmpty());
     }
 
     private static RequestContext admin() {

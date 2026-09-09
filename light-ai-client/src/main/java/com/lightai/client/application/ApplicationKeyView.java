@@ -22,9 +22,11 @@ public record ApplicationKeyView(
         OffsetDateTime rotatedAt,
         OffsetDateTime revokedAt,
         long rotationGeneration,
-        long version) {
+        long version,
+        List<String> virtualModelIds) {
 
     public ApplicationKeyView {
         ipAllowlist = ipAllowlist == null ? List.of() : List.copyOf(ipAllowlist);
+        virtualModelIds = virtualModelIds == null ? List.of() : List.copyOf(virtualModelIds);
     }
 }

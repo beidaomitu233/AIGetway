@@ -135,7 +135,7 @@ describe('Application pages（V2 应用中心）', () => {
       rpm: 30, tpm: 50_000, status: keyStatus,
       last_used_at: null, last_used_ip_masked: null,
       issued_at: '2026-09-08T08:00:00Z', rotated_at: null, revoked_at: null,
-      rotation_generation: 1, version: keyVersion,
+      rotation_generation: 1, version: keyVersion, virtual_model_ids: [],
     })
     stub = installJsonFetchStub(({ url, method, body }) => {
       if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}`)) {
@@ -180,6 +180,40 @@ describe('Application pages（V2 应用中心）', () => {
     expect(statusCalls.at(-1)?.body)
       .toEqual({ status: 'ACTIVE', version: 2, reason: '排查完成恢复' })
     expect(wrapper.find('[data-test="key-disable-key-1"]').exists()).toBe(true)
+  })
+
+  it('签发密钥时可将模型权限收紧为应用授权子集', async () => {
+    stub = installJsonFetchStub(({ url, method }) => {
+      if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}`)) {
+        return dataEnvelope(application)
+      }
+      if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}/keys`)) {
+        return dataEnvelope([])
+      }
+      if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}/quota/adjustments`)) {
+        return dataEnvelope([])
+      }
+      if (method === 'POST' && url.pathname.endsWith(`/admin/applications/${application.id}/keys`)) {
+        return dataEnvelope({
+          key_id: 'key-new', application_id: application.id, key_value: 'lai_test-once',
+          masked_value: 'lai_****once', issued_at: '2026-09-09T02:00:00Z',
+          rotation_generation: 1, version: 1,
+        })
+      }
+      return undefined
+    })
+    const { wrapper } = await mountPage(`/ui/applications/${application.id}`)
+
+    await wrapper.findAll('button').find((button) => button.text() === '签发密钥')!.trigger('click')
+    const createForm = wrapper.findAll('form').find((form) => form.text().includes('签发应用密钥'))!
+    await createForm.find('input.lai-input').setValue('仅客服模型')
+    await createForm.find('input[type="checkbox"][value="alias-1"]').setValue(true)
+    await createForm.trigger('submit')
+    await flushPromises()
+
+    expect(stub.calls.find((call) => call.method === 'POST' && call.url.endsWith('/keys'))?.body)
+      .toMatchObject({ name: '仅客服模型', virtual_model_ids: ['alias-1'] })
+    expect(wrapper.text()).toContain('这是唯一一次显示完整密钥')
   })
 
   it('在应用详情调整额度并替换模型授权', async () => {

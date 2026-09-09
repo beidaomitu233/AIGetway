@@ -9,9 +9,17 @@ public record ApplicationKeyCreateCommand(
         List<String> ipAllowlist,
         OffsetDateTime expiresAt,
         Integer rpm,
-        Long tpm) {
+        Long tpm,
+        List<String> virtualModelIds) {
 
     public ApplicationKeyCreateCommand {
         ipAllowlist = ipAllowlist == null ? List.of() : List.copyOf(ipAllowlist);
+        virtualModelIds = virtualModelIds == null ? List.of() : List.copyOf(virtualModelIds);
+    }
+
+    public ApplicationKeyCreateCommand(
+            String name, List<String> ipAllowlist, OffsetDateTime expiresAt,
+            Integer rpm, Long tpm) {
+        this(name, ipAllowlist, expiresAt, rpm, tpm, List.of());
     }
 }
