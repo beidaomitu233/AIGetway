@@ -126,6 +126,62 @@ describe('Application pages（V2 应用中心）', () => {
     expect(wrapper.find('a[href*="application=customer-service-prod"]').exists()).toBe(true)
   })
 
+  it('可停用并重新启用应用密钥', async () => {
+    let keyStatus: 'ACTIVE' | 'DISABLED' = 'ACTIVE'
+    let keyVersion = 1
+    const key = () => ({
+      id: 'key-1', application_id: application.id, name: '生产接入',
+      masked_value: 'lai_****abcd', ip_allowlist: [], expires_at: null,
+      rpm: 30, tpm: 50_000, status: keyStatus,
+      last_used_at: null, last_used_ip_masked: null,
+      issued_at: '2026-09-08T08:00:00Z', rotated_at: null, revoked_at: null,
+      rotation_generation: 1, version: keyVersion,
+    })
+    stub = installJsonFetchStub(({ url, method, body }) => {
+      if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}`)) {
+        return dataEnvelope(application)
+      }
+      if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}/keys`)) {
+        return dataEnvelope([key()])
+      }
+      if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}/quota/adjustments`)) {
+        return dataEnvelope([])
+      }
+      if (method === 'POST' && url.pathname.endsWith(`/admin/applications/${application.id}/keys/key-1/status`)) {
+        const payload = body as { status: 'ACTIVE' | 'DISABLED' }
+        keyStatus = payload.status
+        keyVersion += 1
+        return dataEnvelope({
+          id: 'key-1', version: keyVersion, entity: key(),
+          draft_changed: false, draft_revision: null, request_id: 'req-key-status',
+        })
+      }
+      return undefined
+    })
+    const { wrapper } = await mountPage(`/ui/applications/${application.id}`)
+
+    await wrapper.find('[data-test="key-disable-key-1"]').trigger('click')
+    let actionDialog = wrapper.find('[aria-labelledby="application-key-action-title"]')
+    await actionDialog.find('textarea').setValue('排查异常调用')
+    await actionDialog.trigger('submit')
+    await flushPromises()
+
+    expect(stub.calls.find((call) => call.method === 'POST' && call.url.endsWith('/keys/key-1/status'))?.body)
+      .toEqual({ status: 'DISABLED', version: 1, reason: '排查异常调用' })
+    expect(wrapper.find('[data-test="key-enable-key-1"]').exists()).toBe(true)
+
+    await wrapper.find('[data-test="key-enable-key-1"]').trigger('click')
+    actionDialog = wrapper.find('[aria-labelledby="application-key-action-title"]')
+    await actionDialog.find('textarea').setValue('排查完成恢复')
+    await actionDialog.trigger('submit')
+    await flushPromises()
+
+    const statusCalls = stub.calls.filter((call) => call.method === 'POST' && call.url.endsWith('/keys/key-1/status'))
+    expect(statusCalls.at(-1)?.body)
+      .toEqual({ status: 'ACTIVE', version: 2, reason: '排查完成恢复' })
+    expect(wrapper.find('[data-test="key-disable-key-1"]').exists()).toBe(true)
+  })
+
   it('在应用详情调整额度并替换模型授权', async () => {
     stub = installJsonFetchStub(({ url, method }) => {
       if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}`)) {

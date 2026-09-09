@@ -82,7 +82,7 @@ export interface ApplicationKeyView {
   expires_at: string | null
   rpm: number | null
   tpm: number | null
-  status: 'ACTIVE' | 'EXPIRED' | 'REVOKED'
+  status: 'ACTIVE' | 'DISABLED' | 'EXPIRED' | 'REVOKED'
   last_used_at: string | null
   last_used_ip_masked: string | null
   issued_at: string
@@ -265,6 +265,16 @@ export function rotateApplicationKey(
   payload: { version: number; reason: string },
 ): Promise<ApplicationKeySecretResult> {
   return request({ path: `/applications/${applicationId}/keys/${keyId}/rotate`, method: 'POST', body: payload })
+}
+
+export function changeApplicationKeyStatus(
+  applicationId: string,
+  keyId: string,
+  payload: { status: 'ACTIVE' | 'DISABLED'; version: number; reason: string },
+): Promise<ManagementOperationResult<ApplicationKeyView>> {
+  return request({
+    path: `/applications/${applicationId}/keys/${keyId}/status`, method: 'POST', body: payload,
+  })
 }
 
 export function revokeApplicationKey(

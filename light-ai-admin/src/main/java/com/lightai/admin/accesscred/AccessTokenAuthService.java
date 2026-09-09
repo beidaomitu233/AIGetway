@@ -121,7 +121,7 @@ public class AccessTokenAuthService implements AccessTokenPort {
             throw new LightAiException(ErrorCode.ACCESS_TOKEN_INVALID, "应用密钥无效");
         }
         if (!key.status().equals("ACTIVE") || key.revokedAt() != null) {
-            throw new LightAiException(ErrorCode.ACCESS_TOKEN_INVALID, "应用密钥已撤销");
+            throw new LightAiException(ErrorCode.ACCESS_TOKEN_INVALID, "应用密钥已停用或撤销");
         }
         if (key.expiresAt() != null && !key.expiresAt().isAfter(now)) {
             throw new LightAiException(ErrorCode.ACCESS_TOKEN_INVALID, "应用密钥已过期");

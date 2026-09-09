@@ -6,26 +6,30 @@ import { Permission } from '@/app/permissions'
 import { useBootstrapStore } from '@/stores/bootstrap'
 import { useFormSubmit } from '@/composables/useFormSubmit'
 import {
-  createApplicationKey, fetchApplicationKeys, revokeApplicationKey, rotateApplicationKey,
+  changeApplicationKeyStatus, createApplicationKey, fetchApplicationKeys,
+  revokeApplicationKey, rotateApplicationKey,
   type ApplicationKeySecretResult, type ApplicationKeyView,
 } from '@/api/applications'
 
 const props = defineProps<{ applicationId: string; applicationActive: boolean }>()
 const emit = defineEmits<{ changed: [] }>()
+type KeyAction = 'enable' | 'disable' | 'rotate' | 'revoke'
 const store = useBootstrapStore()
 const keys = ref<ApplicationKeyView[]>([])
 const loading = ref(true)
 const loadError = ref<unknown>(null)
 const createOpen = ref(false)
 const actionKey = ref<ApplicationKeyView | null>(null)
-const action = ref<'rotate' | 'revoke' | null>(null)
+const action = ref<KeyAction | null>(null)
 const reason = ref('')
 const secret = ref<ApplicationKeySecretResult | null>(null)
 const copied = ref(false)
 const canManage = computed(() => store.can(Permission.applicationKeyManage))
 const form = reactive({ name: '', expires_at: '', rpm: null as number | null, tpm: null as number | null, ip_allowlist: '' })
 const { submitting, errorText, conflictError, submit, reset } = useFormSubmit()
-const labels: Record<string, string> = { ACTIVE: '有效', EXPIRED: '已过期', REVOKED: '已撤销' }
+const labels: Record<string, string> = {
+  ACTIVE: '有效', DISABLED: '已停用', EXPIRED: '已过期', REVOKED: '已撤销',
+}
 
 async function load(): Promise<void> {
   loadError.value = null
@@ -40,7 +44,7 @@ function openCreate(): void {
   createOpen.value = true
 }
 
-function openAction(key: ApplicationKeyView, next: 'rotate' | 'revoke'): void {
+function openAction(key: ApplicationKeyView, next: KeyAction): void {
   actionKey.value = key
   action.value = next
   reason.value = ''
@@ -67,14 +71,21 @@ async function createKey(): Promise<void> {
 async function applyAction(): Promise<void> {
   if (!actionKey.value || !action.value) return
   const current = actionKey.value
+  const selectedAction = action.value
   const outcome = await submit(async () => {
-    if (action.value === 'rotate') {
+    if (selectedAction === 'rotate') {
       secret.value = await rotateApplicationKey(props.applicationId, current.id, {
         version: current.version, reason: reason.value.trim(),
       })
-    } else {
+    } else if (selectedAction === 'revoke') {
       await revokeApplicationKey(props.applicationId, current.id, {
         version: current.version, reason: reason.value.trim(),
+      })
+    } else {
+      await changeApplicationKeyStatus(props.applicationId, current.id, {
+        status: selectedAction === 'enable' ? 'ACTIVE' : 'DISABLED',
+        version: current.version,
+        reason: reason.value.trim(),
       })
     }
   })
@@ -84,6 +95,24 @@ async function applyAction(): Promise<void> {
     await load()
     emit('changed')
   }
+}
+
+function actionTitle(value: KeyAction): string {
+  return {
+    enable: '启用密钥',
+    disable: '停用密钥',
+    rotate: '轮换密钥',
+    revoke: '撤销密钥',
+  }[value]
+}
+
+function actionMessage(value: KeyAction): string {
+  return {
+    enable: '启用后，新请求可再次使用此密钥；仍受应用状态、有效期和治理策略约束。',
+    disable: '停用后新请求会立即被拒绝，后续可以重新启用。',
+    rotate: '轮换后旧密钥立即失效，新原文只显示一次。',
+    revoke: '撤销不可恢复，新调用会立即被拒绝。',
+  }[value]
 }
 
 async function copySecret(): Promise<void> {
@@ -119,8 +148,10 @@ onMounted(load)
             <td>{{ formatDateTime(key.last_used_at, store.timezone, '尚未使用') }}</td>
             <td v-if="canManage">
               <span v-if="key.status !== 'REVOKED'" class="key-actions">
-                <button type="button" class="lai-btn lai-btn-text" @click="openAction(key, 'rotate')">轮换</button>
-                <button type="button" class="lai-btn lai-btn-text danger" @click="openAction(key, 'revoke')">撤销</button>
+                <button v-if="key.status === 'ACTIVE'" :data-test="`key-disable-${key.id}`" type="button" class="lai-btn lai-btn-text" @click="openAction(key, 'disable')">停用</button>
+                <button v-if="key.status === 'DISABLED'" :data-test="`key-enable-${key.id}`" type="button" class="lai-btn lai-btn-text" :disabled="!applicationActive" @click="openAction(key, 'enable')">启用</button>
+                <button v-if="key.status === 'ACTIVE'" type="button" class="lai-btn lai-btn-text" @click="openAction(key, 'rotate')">轮换</button>
+                <button :data-test="`key-revoke-${key.id}`" type="button" class="lai-btn lai-btn-text danger" @click="openAction(key, 'revoke')">撤销</button>
               </span>
               <span v-else>—</span>
             </td>
@@ -148,9 +179,9 @@ onMounted(load)
   </div>
 
   <div v-if="actionKey && action" class="lai-dialog-overlay" @click.self="actionKey = null">
-    <form class="lai-dialog" @submit.prevent="applyAction">
-      <h2 class="lai-dialog-title">{{ action === 'rotate' ? '轮换密钥' : '撤销密钥' }}</h2>
-      <p class="lai-dialog-message">{{ action === 'rotate' ? '轮换后旧密钥立即失效，新原文只显示一次。' : '撤销不可恢复，新调用会立即被拒绝。' }}</p>
+    <form class="lai-dialog" role="dialog" aria-modal="true" aria-labelledby="application-key-action-title" @submit.prevent="applyAction">
+      <h2 id="application-key-action-title" class="lai-dialog-title">{{ actionTitle(action) }}</h2>
+      <p class="lai-dialog-message">{{ actionMessage(action) }}</p>
       <label class="dialog-field"><span>操作原因</span><textarea v-model="reason" class="lai-input textarea" rows="3" maxlength="500" placeholder="必填，将写入审计记录"></textarea></label>
       <p v-if="conflictError" class="lai-form-message-error">密钥版本已变化，请刷新后重试。</p>
       <p v-else-if="errorText" class="lai-form-message-error">{{ errorText }}</p>

@@ -5,6 +5,7 @@ import com.lightai.admin.web.RequestContext;
 import com.lightai.client.application.ApplicationKeyCreateCommand;
 import com.lightai.client.application.ApplicationKeyRevokeCommand;
 import com.lightai.client.application.ApplicationKeyRotateCommand;
+import com.lightai.client.application.ApplicationKeyStatusCommand;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -47,6 +48,14 @@ public final class ApplicationKeyController {
             @RequestBody(required = false) String body, HttpServletRequest request) {
         return service.rotate(context(request), applicationId, keyId,
                 CommandBodies.parse(body, ApplicationKeyRotateCommand.class));
+    }
+
+    @PostMapping("/{keyId}/status")
+    public Object changeStatus(
+            @PathVariable UUID applicationId, @PathVariable UUID keyId,
+            @RequestBody(required = false) String body, HttpServletRequest request) {
+        return service.changeStatus(context(request), applicationId, keyId,
+                CommandBodies.parse(body, ApplicationKeyStatusCommand.class));
     }
 
     @PostMapping("/{keyId}/revoke")

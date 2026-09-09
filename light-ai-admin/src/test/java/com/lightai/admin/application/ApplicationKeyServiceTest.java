@@ -12,6 +12,7 @@ import com.lightai.client.application.ApplicationCreateCommand;
 import com.lightai.client.application.ApplicationKeyCreateCommand;
 import com.lightai.client.application.ApplicationKeyRevokeCommand;
 import com.lightai.client.application.ApplicationKeyRotateCommand;
+import com.lightai.client.application.ApplicationKeyStatusCommand;
 import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
 import com.lightai.client.protocol.Roles;
@@ -69,7 +70,7 @@ class ApplicationKeyServiceTest {
     }
 
     @Test
-    void issuesOnceAuthenticatesRotatesAndRevokesApplicationKey() {
+    void issuesOnceAuthenticatesDisablesEnablesRotatesAndRevokesApplicationKey() {
         var issued = service.create(owner(), applicationId,
                 new ApplicationKeyCreateCommand("生产接入", List.of("127.0.0.1"),
                         null, 60, 30_000L));
@@ -91,8 +92,29 @@ class ApplicationKeyServiceTest {
         assertThat(principal.rpm()).isEqualTo(60);
         assertThat(principal.aliasAllowed("ungranted-model")).isFalse();
 
+        var disabled = service.changeStatus(owner(), applicationId, UUID.fromString(issued.keyId()),
+                new ApplicationKeyStatusCommand("DISABLED", issued.version(), "暂停接入排查"));
+        assertThat(disabled.entity().status()).isEqualTo("DISABLED");
+        assertThatThrownBy(() -> auth.authenticate(issued.keyValue(), "127.0.0.1"))
+                .isInstanceOf(LightAiException.class)
+                .extracting(error -> ((LightAiException) error).code())
+                .isEqualTo(ErrorCode.ACCESS_TOKEN_INVALID);
+
+        assertThatThrownBy(() -> service.rotate(owner(), applicationId,
+                UUID.fromString(issued.keyId()),
+                new ApplicationKeyRotateCommand(disabled.version(), "停用状态尝试轮换")))
+                .isInstanceOf(LightAiException.class)
+                .extracting(error -> ((LightAiException) error).code())
+                .isEqualTo(ErrorCode.CONFIG_FIELD_IMMUTABLE);
+
+        var enabled = service.changeStatus(owner(), applicationId, UUID.fromString(issued.keyId()),
+                new ApplicationKeyStatusCommand("ACTIVE", disabled.version(), "排查完成恢复"));
+        assertThat(enabled.entity().status()).isEqualTo("ACTIVE");
+        assertThat(auth.authenticate(issued.keyValue(), "127.0.0.1").application())
+                .isEqualTo("service-desk");
+
         var rotated = service.rotate(owner(), applicationId, UUID.fromString(issued.keyId()),
-                new ApplicationKeyRotateCommand(issued.version(), "季度轮换"));
+                new ApplicationKeyRotateCommand(enabled.version(), "季度轮换"));
         assertThat(rotated.rotationGeneration()).isEqualTo(2);
         assertThatThrownBy(() -> auth.authenticate(issued.keyValue(), "127.0.0.1"))
                 .isInstanceOf(LightAiException.class)

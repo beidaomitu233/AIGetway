@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/** 应用密钥仓储：摘要查询、应用范围列表、CAS 轮换/撤销和活动摘要。 */
+/** 应用密钥仓储：摘要查询、应用范围列表、CAS 启停/轮换/撤销和活动摘要。 */
 public final class JdbcApplicationKeyRepository extends AbstractJdbcRepository {
 
     private static final String COLUMNS = "id, application_id, name, key_prefix, masked_value, "
@@ -158,6 +158,26 @@ public final class JdbcApplicationKeyRepository extends AbstractJdbcRepository {
             throw e;
         } catch (SQLException e) {
             throw failure("应用密钥撤销失败", e);
+        }
+    }
+
+    public ApplicationKeyRecord updateStatus(
+            Connection connection, UUID id, String status, OffsetDateTime now, long expectedVersion) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "UPDATE " + qualify(connection, "application_key")
+                + " SET status=?, version=version+1, updated_at=? "
+                + "WHERE id=? AND version=? AND status <> 'REVOKED'";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, status);
+            time(statement, 2, now);
+            dialect.bindUuid(statement, 3, id);
+            statement.setLong(4, expectedVersion);
+            if (statement.executeUpdate() != 1) throw new OptimisticLockException();
+            return find(connection, id).orElseThrow();
+        } catch (OptimisticLockException e) {
+            throw e;
+        } catch (SQLException e) {
+            throw failure("应用密钥状态更新失败", e);
         }
     }
 

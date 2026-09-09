@@ -7,6 +7,7 @@ import com.lightai.admin.web.RequestPermissions;
 import com.lightai.client.application.ApplicationKeyCreateCommand;
 import com.lightai.client.application.ApplicationKeyRevokeCommand;
 import com.lightai.client.application.ApplicationKeyRotateCommand;
+import com.lightai.client.application.ApplicationKeyStatusCommand;
 import com.lightai.client.application.ApplicationKeySecretResult;
 import com.lightai.client.application.ApplicationKeyView;
 import com.lightai.client.changes.FieldChange;
@@ -27,6 +28,7 @@ import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.springframework.jdbc.datasource.DataSourceUtils;
@@ -137,6 +139,10 @@ public final class ApplicationKeyService {
                     throw new LightAiException(ErrorCode.CONFIG_FIELD_IMMUTABLE,
                             "已撤销密钥不能轮换，请签发新密钥");
                 }
+                if (!current.active(now)) {
+                    throw new LightAiException(ErrorCode.CONFIG_FIELD_IMMUTABLE,
+                            "仅当前有效且启用的密钥可以轮换");
+                }
                 updated[0] = keys.replaceSecret(connection, keyId, issued.prefix(),
                         issued.maskedValue(), issued.tokenHash(), issued.pepperVersion(),
                         now, command.version());
@@ -156,6 +162,63 @@ public final class ApplicationKeyService {
             throw e;
         } catch (Exception e) {
             throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用密钥轮换失败");
+        }
+    }
+
+    public ManagementOperationResult<ApplicationKeyView> changeStatus(
+            RequestContext context, UUID applicationId, UUID keyId,
+            ApplicationKeyStatusCommand command) {
+        RequestPermissions.require(context, Permissions.APPLICATION_KEY_MANAGE);
+        String target = validateStatus(command);
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        try {
+            final ApplicationKeyRecord[] updated = new ApplicationKeyRecord[1];
+            transaction.executeWithoutResult(status -> {
+                Connection connection = DataSourceUtils.getConnection(dataSource);
+                ApplicationRecord application = loadApplication(connection, applicationId);
+                requireScope(connection, context, application.code());
+                ApplicationKeyRecord current = loadKey(connection, applicationId, keyId);
+                if (current.version() != command.version()) {
+                    throw new LightAiException(ErrorCode.CONFIG_VERSION_CONFLICT,
+                            "应用密钥版本已变化，请刷新后重试");
+                }
+                if ("REVOKED".equals(current.status())) {
+                    throw new LightAiException(ErrorCode.CONFIG_FIELD_IMMUTABLE,
+                            "已撤销密钥不可恢复");
+                }
+                if ("ACTIVE".equals(target)) {
+                    if (!"ACTIVE".equals(application.status())) {
+                        throw new LightAiException(ErrorCode.CONFIG_FIELD_IMMUTABLE,
+                                "应用未启用，不能启用密钥");
+                    }
+                    if (current.expired(now)) {
+                        throw new LightAiException(ErrorCode.CONFIG_FIELD_IMMUTABLE,
+                                "已过期密钥不能重新启用");
+                    }
+                }
+                if (target.equals(current.status())) {
+                    updated[0] = current;
+                    return;
+                }
+                updated[0] = keys.updateStatus(connection, keyId, target, now, command.version());
+                auditService.recordSuccess(connection, AuditRecord.succeeded(
+                        UUID.randomUUID(), context.requestId(), operatorId(context),
+                        "APPLICATION_KEY_STATUS_CHANGE", "APPLICATION_KEY", keyId.toString(),
+                        List.of(
+                                FieldChange.changed("status", current.status(), target),
+                                FieldChange.changed("reason", null, command.reason().trim())),
+                        sourceMode, context.sourceIpMasked()));
+            });
+            ApplicationKeyView entity = view(updated[0], now);
+            return new ManagementOperationResult<>(keyId.toString(), entity.version(), entity,
+                    false, null, context.requestId());
+        } catch (JdbcApplicationKeyRepository.OptimisticLockException e) {
+            throw new LightAiException(ErrorCode.CONFIG_VERSION_CONFLICT,
+                    "应用密钥版本已变化，请刷新后重试");
+        } catch (LightAiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用密钥状态更新失败");
         }
     }
 
@@ -274,6 +337,17 @@ public final class ApplicationKeyService {
         if (reason == null || reason.isBlank() || reason.trim().length() > 500) {
             throw invalid("reason", "原因长度为 1—500 字符");
         }
+    }
+
+    private static String validateStatus(ApplicationKeyStatusCommand command) {
+        if (command == null) throw invalid("body", "请求体必填");
+        String target = command.status() == null ? "" : command.status().trim();
+        if (!Set.of("ACTIVE", "DISABLED").contains(target)) {
+            throw invalid("status", "密钥状态只能是 ACTIVE 或 DISABLED");
+        }
+        if (command.version() < 1) throw invalid("version", "version 必须是正整数");
+        requireReason(command.reason());
+        return target;
     }
 
     private static String operatorId(RequestContext context) {
