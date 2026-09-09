@@ -9,6 +9,7 @@ import com.lightai.admin.web.RequestContext;
 import com.lightai.client.application.ApplicationCreateCommand;
 import com.lightai.client.application.ApplicationModelsUpdateCommand;
 import com.lightai.client.application.ApplicationQuotaAdjustmentCommand;
+import com.lightai.client.application.ApplicationQuotaResetCommand;
 import com.lightai.client.application.ApplicationQuotaUpdateCommand;
 import com.lightai.client.application.ApplicationStatusCommand;
 import com.lightai.client.application.ApplicationUpdateCommand;
@@ -16,11 +17,12 @@ import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
 import com.lightai.client.protocol.Roles;
 import com.lightai.spi.auth.AuthContext;
-import com.lightai.storage.alias.JdbcAliasRepository;
 import com.lightai.storage.alias.AliasRecord;
+import com.lightai.storage.alias.JdbcAliasRepository;
 import com.lightai.storage.application.JdbcApplicationRepository;
 import com.lightai.storage.audit.JdbcAuditRepository;
 import com.lightai.storage.schema.DefaultSchemaMigrator;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -178,6 +180,70 @@ class ApplicationServiceTest {
                 .isInstanceOf(LightAiException.class)
                 .extracting(error -> ((LightAiException) error).code())
                 .isEqualTo(ErrorCode.IDEMPOTENCY_KEY_CONFLICT);
+    }
+
+    @Test
+    void resetsUsageWithExplicitConfirmationAndKeepsHistoryIdempotently() throws Exception {
+        var created = service.create(admin(), new ApplicationCreateCommand(
+                "quota-reset", "额度重置应用", null, "owner-1", "张三", "PROD", null,
+                "ACTIVE", 1_000L, "100", "CNY", null, null,
+                "LIFECYCLE", null, null, List.of()));
+        UUID applicationId = UUID.fromString(created.id());
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "UPDATE application_quota_policy SET tokens_used=?, tokens_reserved=?, "
+                             + "amount_used=?, amount_reserved=? "
+                             + "WHERE application_id=?")) {
+            statement.setLong(1, 250L);
+            statement.setLong(2, 20L);
+            statement.setBigDecimal(3, new BigDecimal("12.5"));
+            statement.setBigDecimal(4, new BigDecimal("1.5"));
+            statement.setString(5, applicationId.toString());
+            assertThat(statement.executeUpdate()).isEqualTo(1);
+        }
+        var command = new ApplicationQuotaResetCommand(
+                "TOKEN_USAGE", "新核算周期人工重置", "quota-reset", "reset-ticket-1",
+                created.entity().quota().version());
+
+        var reset = service.resetQuotaUsage(owner(), applicationId, command);
+        assertThat(reset.entity().quota().tokensUsed()).isZero();
+        assertThat(reset.entity().quota().tokensReserved()).isEqualTo(20L);
+        assertThat(reset.entity().quota().amountUsed()).isEqualTo("12.5");
+        assertThat(reset.entity().quota().version()).isEqualTo(2L);
+
+        var replayed = service.resetQuotaUsage(owner(), applicationId, command);
+        assertThat(replayed.entity().quota().version()).isEqualTo(2L);
+        assertThat(service.listAdjustments(owner(), applicationId))
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.dimension()).isEqualTo("TOKEN_USAGE_RESET");
+                    assertThat(item.beforeValue()).isEqualTo("250");
+                    assertThat(item.deltaValue()).isEqualTo("-250");
+                    assertThat(item.afterValue()).isEqualTo("0");
+                });
+
+        assertThatThrownBy(() -> service.resetQuotaUsage(owner(), applicationId,
+                new ApplicationQuotaResetCommand(
+                        "AMOUNT_USAGE", "另一项重置", "quota-reset", "reset-ticket-1", 2L)))
+                .isInstanceOf(LightAiException.class)
+                .extracting(error -> ((LightAiException) error).code())
+                .isEqualTo(ErrorCode.IDEMPOTENCY_KEY_CONFLICT);
+        assertThatThrownBy(() -> service.resetQuotaUsage(owner(), applicationId,
+                new ApplicationQuotaResetCommand(
+                        "AMOUNT_USAGE", "金额重置", "错误编码", "reset-ticket-2", 2L)))
+                .isInstanceOf(LightAiException.class)
+                .extracting(error -> ((LightAiException) error).code())
+                .isEqualTo(ErrorCode.FIELD_VALIDATION_FAILED);
+
+        var amountReset = service.resetQuotaUsage(owner(), applicationId,
+                new ApplicationQuotaResetCommand(
+                        "AMOUNT_USAGE", "金额核算重置", "quota-reset", "reset-ticket-2", 2L));
+        assertThat(amountReset.entity().quota().amountUsed()).isEqualTo("0");
+        assertThat(amountReset.entity().quota().amountReserved()).isEqualTo("1.5");
+        assertThat(amountReset.entity().quota().version()).isEqualTo(3L);
+        assertThat(service.listAdjustments(owner(), applicationId))
+                .extracting(item -> item.dimension())
+                .containsExactly("AMOUNT_USAGE_RESET", "TOKEN_USAGE_RESET");
     }
 
     private static RequestContext admin() {

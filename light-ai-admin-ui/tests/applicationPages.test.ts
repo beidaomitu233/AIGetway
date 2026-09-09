@@ -114,6 +114,7 @@ describe('Application pages（V2 应用中心）', () => {
     stub = installJsonFetchStub(({ url, method }) => {
       if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}`)) return dataEnvelope(application)
       if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}/keys`)) return dataEnvelope([])
+      if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}/quota/adjustments`)) return dataEnvelope([])
       return undefined
     })
     const { wrapper } = await mountPage(`/ui/applications/${application.id}`)
@@ -132,6 +133,14 @@ describe('Application pages（V2 应用中心）', () => {
       }
       if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}/keys`)) {
         return dataEnvelope([])
+      }
+      if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}/quota/adjustments`)) {
+        return dataEnvelope([{
+          id: 'adjustment-1', application_id: application.id, dimension: 'TOKEN_LIMIT',
+          before_value: '500000', delta_value: '500000', after_value: '1000000',
+          reason: '初始扩容', effective_at: '2026-09-08T07:00:00Z',
+          operator_id: 'user-admin', created_at: '2026-09-08T07:00:00Z',
+        }])
       }
       if (method === 'GET' && url.pathname.endsWith('/admin/model-aliases')) {
         return pageEnvelope([
@@ -172,6 +181,19 @@ describe('Application pages（V2 应用中心）', () => {
           request_id: 'req-adjustment',
         })
       }
+      if (method === 'POST' && url.pathname.endsWith(`/admin/applications/${application.id}/quota/reset`)) {
+        return dataEnvelope({
+          id: application.id,
+          version: 4,
+          entity: {
+            ...application,
+            quota: { ...application.quota, token_limit: 2_500_000, tokens_used: 0, version: 4 },
+          },
+          draft_changed: false,
+          draft_revision: null,
+          request_id: 'req-reset',
+        })
+      }
       return undefined
     })
     const { wrapper } = await mountPage(`/ui/applications/${application.id}`)
@@ -197,6 +219,20 @@ describe('Application pages（V2 应用中心）', () => {
       .toMatchObject({
         dimension: 'TOKEN_LIMIT', delta: '500000', quota_version: 2,
         reason: '活动期间临时扩容',
+      })
+
+    expect(wrapper.text()).toContain('Token 额度调整')
+    const resetButton = wrapper.findAll('button').find((button) => button.text() === '重置用量')!
+    await resetButton.trigger('click')
+    const resetDialog = wrapper.find('[aria-labelledby="application-reset-title"]')
+    await resetDialog.find('textarea').setValue('新结算周期人工重置')
+    await resetDialog.find('input').setValue('customer-service-prod')
+    await resetDialog.findAll('button').find((button) => button.text() === '确认重置')!.trigger('click')
+    await flushPromises()
+    expect(stub.calls.find((call) => call.method === 'POST' && call.url.endsWith('/quota/reset'))?.body)
+      .toMatchObject({
+        dimension: 'TOKEN_USAGE', confirmation_code: 'customer-service-prod', quota_version: 3,
+        reason: '新结算周期人工重置',
       })
 
     const modelButton = wrapper.findAll('button').find((button) => button.text() === '管理授权')!

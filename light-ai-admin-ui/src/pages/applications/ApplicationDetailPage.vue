@@ -12,9 +12,12 @@ import {
   changeApplicationStatus,
   adjustApplicationQuota,
   fetchApplication,
+  fetchApplicationQuotaAdjustments,
+  resetApplicationQuotaUsage,
   updateApplicationModels,
   updateApplicationQuota,
   type ApplicationDetail,
+  type ApplicationQuotaAdjustment,
   type ApplicationStatus,
 } from '@/api/applications'
 import { fetchModelAliases, type ModelAliasListItem } from '@/api/modelAliases'
@@ -29,15 +32,21 @@ const statusDialogOpen = ref(false)
 const targetStatus = ref<ApplicationStatus>('DISABLED')
 const statusReason = ref('')
 const canManage = computed(() => store.can(Permission.applicationManage))
+const canViewQuota = computed(() => store.can(Permission.applicationQuotaView))
 const canManageQuota = computed(() => store.can(Permission.applicationQuotaManage))
 const canManageModels = computed(() => store.can(Permission.applicationModelManage))
 const statusSubmission = useFormSubmit()
 const quotaSubmission = useFormSubmit()
 const modelSubmission = useFormSubmit()
 const adjustmentSubmission = useFormSubmit()
+const resetSubmission = useFormSubmit()
 const quotaDialogOpen = ref(false)
 const modelDialogOpen = ref(false)
 const adjustmentDialogOpen = ref(false)
+const resetDialogOpen = ref(false)
+const adjustments = ref<ApplicationQuotaAdjustment[]>([])
+const adjustmentsLoading = ref(false)
+const adjustmentsLoadError = ref<unknown>(null)
 const availableModels = ref<ModelAliasListItem[]>([])
 const modelsLoading = ref(false)
 const modelsLoadError = ref<unknown>(null)
@@ -47,6 +56,12 @@ const adjustmentForm = reactive({
   dimension: 'TOKEN_LIMIT' as 'TOKEN_LIMIT' | 'AMOUNT_LIMIT',
   delta: '',
   reason: '',
+  idempotency_key: '',
+})
+const resetForm = reactive({
+  dimension: 'TOKEN_USAGE' as 'TOKEN_USAGE' | 'AMOUNT_USAGE',
+  reason: '',
+  confirmation_code: '',
   idempotency_key: '',
 })
 const quotaForm = reactive({
@@ -75,6 +90,12 @@ const environmentLabel: Record<string, string> = {
 }
 const periodLabel: Record<string, string> = {
   LIFECYCLE: '应用生命周期', DAY: '每日', MONTH: '每月', CUSTOM: '自定义',
+}
+const adjustmentLabel: Record<ApplicationQuotaAdjustment['dimension'], string> = {
+  TOKEN_LIMIT: 'Token 额度调整',
+  AMOUNT_LIMIT: '金额预算调整',
+  TOKEN_USAGE_RESET: 'Token 用量重置',
+  AMOUNT_USAGE_RESET: '金额用量重置',
 }
 
 function usageText(used: number, reserved: number, limit: number | null): string {
@@ -204,7 +225,58 @@ async function saveAdjustment(): Promise<void> {
     })
     if (response.entity) detail.value = response.entity
   })
-  if (result.ok) adjustmentDialogOpen.value = false
+  if (result.ok) {
+    adjustmentDialogOpen.value = false
+    await loadAdjustments()
+  }
+}
+
+function openResetDialog(): void {
+  if (!detail.value) return
+  resetSubmission.reset()
+  resetForm.dimension = detail.value.quota.tokens_used > 0 ? 'TOKEN_USAGE' : 'AMOUNT_USAGE'
+  resetForm.reason = ''
+  resetForm.confirmation_code = ''
+  resetForm.idempotency_key = crypto.randomUUID()
+  resetDialogOpen.value = true
+}
+
+const resetInvalid = computed(() => !detail.value
+  || !resetForm.reason.trim()
+  || resetForm.confirmation_code !== detail.value.code
+  || (resetForm.dimension === 'TOKEN_USAGE'
+    ? detail.value.quota.tokens_used <= 0
+    : Number(detail.value.quota.amount_used) <= 0))
+
+async function saveReset(): Promise<void> {
+  if (!detail.value || resetInvalid.value) return
+  const result = await resetSubmission.submit(async () => {
+    const response = await resetApplicationQuotaUsage(detail.value!.id, {
+      dimension: resetForm.dimension,
+      reason: resetForm.reason.trim(),
+      confirmation_code: resetForm.confirmation_code,
+      idempotency_key: resetForm.idempotency_key,
+      quota_version: detail.value!.quota.version,
+    })
+    if (response.entity) detail.value = response.entity
+  })
+  if (result.ok) {
+    resetDialogOpen.value = false
+    await loadAdjustments()
+  }
+}
+
+async function loadAdjustments(): Promise<void> {
+  if (!canViewQuota.value) return
+  adjustmentsLoading.value = true
+  adjustmentsLoadError.value = null
+  try {
+    adjustments.value = await fetchApplicationQuotaAdjustments(id.value)
+  } catch (error) {
+    adjustmentsLoadError.value = error
+  } finally {
+    adjustmentsLoading.value = false
+  }
 }
 
 async function openModelDialog(): Promise<void> {
@@ -246,6 +318,7 @@ async function load(): Promise<void> {
   loadError.value = null
   try {
     detail.value = await fetchApplication(id.value)
+    await loadAdjustments()
   } catch (error) {
     loadError.value = error
   } finally {
@@ -337,6 +410,12 @@ onMounted(load)
               <h2 class="lai-card-title">额度与速率</h2>
               <div v-if="canManageQuota && detail.status !== 'ARCHIVED'" class="compact-actions">
                 <button type="button" class="lai-btn lai-btn-small" @click="openAdjustmentDialog">人工增减</button>
+                <button
+                  type="button"
+                  class="lai-btn lai-btn-small"
+                  :disabled="detail.quota.tokens_used <= 0 && Number(detail.quota.amount_used) <= 0"
+                  @click="openResetDialog"
+                >重置用量</button>
                 <button type="button" class="lai-btn lai-btn-small" @click="openQuotaDialog">编辑策略</button>
               </div>
             </div>
@@ -347,6 +426,21 @@ onMounted(load)
               <div><dt>TPM</dt><dd>{{ detail.quota.tpm == null ? '不限' : detail.quota.tpm.toLocaleString() }}</dd></div>
               <div><dt>结算周期</dt><dd>{{ periodLabel[detail.quota.period_type] }}</dd></div>
             </dl>
+            <div v-if="canViewQuota" class="adjustment-history">
+              <div class="history-heading">
+                <h3>最近额度流水</h3>
+                <button type="button" class="lai-btn lai-btn-text" :disabled="adjustmentsLoading" @click="loadAdjustments">刷新</button>
+              </div>
+              <p v-if="adjustmentsLoading" class="history-state">正在加载…</p>
+              <p v-else-if="adjustmentsLoadError" class="history-state error-text">流水加载失败，请重试。</p>
+              <ul v-else-if="adjustments.length" class="adjustment-list">
+                <li v-for="item in adjustments.slice(0, 5)" :key="item.id">
+                  <div><strong>{{ adjustmentLabel[item.dimension] }}</strong><time>{{ formatDateTime(item.effective_at, store.timezone) }} · {{ item.operator_id }}</time></div>
+                  <p><span class="lai-cell-mono">{{ item.before_value }} → {{ item.after_value }}</span><span>{{ item.reason }}</span></p>
+                </li>
+              </ul>
+              <p v-else class="history-state">暂无额度调整或重置记录。</p>
+            </div>
           </div>
           <div class="lai-card">
             <h2 class="lai-card-title">基本信息</h2>
@@ -430,6 +524,34 @@ onMounted(load)
       </div>
     </div>
 
+    <div v-if="resetDialogOpen && detail" class="lai-dialog-overlay" @click.self="resetDialogOpen = false">
+      <div class="lai-dialog" role="dialog" aria-modal="true" aria-labelledby="application-reset-title">
+        <h2 id="application-reset-title" class="lai-dialog-title">重置应用用量</h2>
+        <p class="warning">这是高风险操作。只清零所选维度的当前已用量，预占、历史调用和用量账本不会删除；保存后应用可重新消耗相应预算。</p>
+        <label class="lai-dialog-field">
+          <span>重置维度</span>
+          <select v-model="resetForm.dimension" class="lai-select full-control">
+            <option value="TOKEN_USAGE" :disabled="detail.quota.tokens_used <= 0">Token 已用量（当前 {{ detail.quota.tokens_used.toLocaleString() }}）</option>
+            <option value="AMOUNT_USAGE" :disabled="Number(detail.quota.amount_used) <= 0">金额已用量（当前 {{ detail.quota.amount_used }} {{ detail.quota.currency }}）</option>
+          </select>
+        </label>
+        <label class="lai-dialog-field">
+          <span>重置原因</span>
+          <textarea v-model="resetForm.reason" class="lai-input status-reason" maxlength="500" rows="3" placeholder="必填，将写入额度流水与审计记录" />
+        </label>
+        <label class="lai-dialog-field">
+          <span>输入应用编码 <code>{{ detail.code }}</code> 确认</span>
+          <input v-model="resetForm.confirmation_code" class="lai-input lai-cell-mono" autocomplete="off" :placeholder="detail.code">
+        </label>
+        <p v-if="resetSubmission.conflictError.value" class="lai-form-message-error">额度版本或幂等键发生冲突，请刷新后重试。</p>
+        <p v-else-if="resetSubmission.errorText.value" class="lai-form-message-error">{{ resetSubmission.errorText.value }}</p>
+        <div class="lai-dialog-actions">
+          <button type="button" class="lai-btn" :disabled="resetSubmission.submitting.value" @click="resetDialogOpen = false">取消</button>
+          <button type="button" class="lai-btn lai-btn-primary" :disabled="resetSubmission.submitting.value || resetInvalid" @click="saveReset">{{ resetSubmission.submitting.value ? '重置中…' : '确认重置' }}</button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="modelDialogOpen && detail" class="lai-dialog-overlay" @click.self="modelDialogOpen = false">
       <div class="lai-dialog governance-dialog" role="dialog" aria-modal="true" aria-labelledby="application-model-title">
         <h2 id="application-model-title" class="lai-dialog-title">管理模型授权</h2>
@@ -490,7 +612,20 @@ onMounted(load)
 .property-list { margin: 0; }.property-list div { padding: 10px 0; border-bottom: 1px solid #e6eaf0; }.property-list div:last-child { border: 0; }.property-list dt { margin-bottom: 3px; color: #667085; font-size: 12px; }.property-list dd { margin: 0; overflow-wrap: anywhere; }
 .status-reason { width: 100%; max-width: none; height: auto; margin-top: 6px; padding: 8px 10px; resize: vertical; }
 .lai-btn-small { min-height: 30px; padding: 4px 10px; font-size: 12px; }
-.compact-actions { display: flex; gap: 6px; }
+.compact-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.adjustment-history { padding-top: 14px; margin-top: 14px; border-top: 1px solid #e6eaf0; }
+.history-heading, .adjustment-list li > div, .adjustment-list li p { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.history-heading h3 { margin: 0; font-size: 13px; color: #344054; }
+.history-heading .lai-btn { min-height: 28px; padding: 2px 6px; }
+.history-state { margin: 10px 0 0; color: #667085; font-size: 12px; }
+.error-text { color: #b42318; }
+.adjustment-list { padding: 0; margin: 8px 0 0; list-style: none; }
+.adjustment-list li { padding: 9px 0; border-top: 1px solid #f0f2f5; }
+.adjustment-list li strong { font-size: 12px; color: #344054; }
+.adjustment-list time, .adjustment-list li p span:last-child { color: #667085; font-size: 11px; }
+.adjustment-list li p { align-items: flex-start; margin: 5px 0 0; }
+.adjustment-list li p span:last-child { max-width: 150px; text-align: right; overflow-wrap: anywhere; }
+.warning { padding: 10px; color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; font-size: 13px; }
 .governance-dialog { width: min(720px, calc(100vw - 32px)); max-width: 720px; }
 .governance-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; margin-top: 12px; }
 .wide-field { grid-column: 1 / -1; }

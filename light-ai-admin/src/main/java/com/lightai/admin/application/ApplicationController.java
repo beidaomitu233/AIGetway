@@ -6,6 +6,7 @@ import com.lightai.admin.web.RequestContext;
 import com.lightai.client.application.ApplicationCreateCommand;
 import com.lightai.client.application.ApplicationModelsUpdateCommand;
 import com.lightai.client.application.ApplicationQuotaAdjustmentCommand;
+import com.lightai.client.application.ApplicationQuotaResetCommand;
 import com.lightai.client.application.ApplicationQuotaUpdateCommand;
 import com.lightai.client.application.ApplicationStatusCommand;
 import com.lightai.client.application.ApplicationUpdateCommand;
@@ -90,6 +91,15 @@ public final class ApplicationController {
                 body, ApplicationQuotaAdjustmentCommand.class);
         return json(ManagementResponses.ok(
                 service.adjustQuota(context(request), parseId(id), command)));
+    }
+
+    @PostMapping("/admin/applications/{id}/quota/reset")
+    public ResponseEntity<String> resetQuotaUsage(@PathVariable String id, @RequestBody String body,
+                                                 HttpServletRequest request) {
+        ApplicationQuotaResetCommand command = CommandBodies.parse(
+                body, ApplicationQuotaResetCommand.class);
+        return json(ManagementResponses.ok(
+                service.resetQuotaUsage(context(request), parseId(id), command)));
     }
 
     @PostMapping("/admin/applications/{id}/status")

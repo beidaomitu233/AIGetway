@@ -164,6 +164,22 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
         }
     }
 
+    public void resetUsage(
+            Connection connection, UUID applicationId, boolean tokenUsage, long expectedVersion) {
+        DatabaseDialect dialect = dialect(connection);
+        String column = tokenUsage ? "tokens_used" : "amount_used";
+        String sql = "UPDATE " + qualify(connection, "application_quota_policy")
+                + " SET " + column + " = 0, version = version + 1, updated_at = "
+                + dialect.nowFunction() + " WHERE application_id = ? AND version = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, applicationId);
+            statement.setLong(2, expectedVersion);
+            if (statement.executeUpdate() != 1) throw new OptimisticLockException();
+        } catch (SQLException e) {
+            throw translate("应用用量重置失败", e);
+        }
+    }
+
     public void insertModelPermission(Connection connection, UUID applicationId, UUID virtualModelId) {
         DatabaseDialect dialect = dialect(connection);
         String sql = "INSERT INTO " + qualify(connection, "application_model_permission")

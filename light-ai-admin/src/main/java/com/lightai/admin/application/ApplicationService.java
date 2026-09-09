@@ -13,6 +13,7 @@ import com.lightai.client.application.ApplicationModelsUpdateCommand;
 import com.lightai.client.application.ApplicationQuotaAdjustmentCommand;
 import com.lightai.client.application.ApplicationQuotaAdjustmentView;
 import com.lightai.client.application.ApplicationQuotaPolicyView;
+import com.lightai.client.application.ApplicationQuotaResetCommand;
 import com.lightai.client.application.ApplicationQuotaUpdateCommand;
 import com.lightai.client.application.ApplicationStatusCommand;
 import com.lightai.client.application.ApplicationUpdateCommand;
@@ -436,6 +437,62 @@ public final class ApplicationService {
         }
     }
 
+    public ManagementOperationResult<ApplicationDetail> resetQuotaUsage(
+            RequestContext context, UUID id, ApplicationQuotaResetCommand command) {
+        RequestPermissions.require(context, Permissions.APPLICATION_QUOTA_MANAGE);
+        ValidatedReset value = validateReset(command);
+        try {
+            transaction.executeWithoutResult(status -> {
+                Connection connection = DataSourceUtils.getConnection(dataSource);
+                ApplicationRecord application = load(connection, id);
+                requireScope(connection, context, application.code());
+                requireEditable(application);
+                if (!application.code().equals(value.confirmationCode())) {
+                    throw invalid("confirmation_code", "确认文本必须与应用编码完全一致");
+                }
+                ApplicationQuotaRecord current = repository.lockQuota(connection, id);
+                var previous = repository.findAdjustment(connection, id, value.idempotencyKey());
+                if (previous.isPresent()) {
+                    requireSameReset(previous.get(), value);
+                    return;
+                }
+                if (current.version() != value.quotaVersion()) {
+                    throw versionConflict(context, current.version());
+                }
+                BigDecimal before = resetBefore(current, value.dimension());
+                if (before.signum() == 0) {
+                    throw invalid("dimension", "当前维度的已用量为 0，无需重置");
+                }
+                repository.resetUsage(connection, id,
+                        "TOKEN_USAGE".equals(value.dimension()), current.version());
+                String ledgerDimension = resetLedgerDimension(value.dimension());
+                OffsetDateTime effectiveAt = OffsetDateTime.now(clock);
+                repository.insertAdjustment(connection, new QuotaAdjustmentRecord(
+                        UUID.randomUUID(), id, ledgerDimension, before, before.negate(),
+                        BigDecimal.ZERO, value.reason(), effectiveAt, operatorId(context),
+                        value.idempotencyKey(), null));
+                auditService.recordSuccess(connection, AuditRecord.succeeded(
+                        UUID.randomUUID(), context.requestId(), operatorId(context),
+                        "APPLICATION_QUOTA_USAGE_RESET", "APPLICATION", id.toString(), List.of(
+                                FieldChange.changed("dimension", null, ledgerDimension),
+                                FieldChange.changed("usage", decimalText(before), "0"),
+                                FieldChange.changed("reason", null, value.reason()),
+                                FieldChange.changed("idempotency_key", null, value.idempotencyKey())),
+                        sourceMode, context.sourceIpMasked()));
+            });
+            ApplicationDetail entity = detail(context, id);
+            return new ManagementOperationResult<>(id.toString(), entity.quota().version(), entity,
+                    false, null, context.requestId());
+        } catch (JdbcApplicationRepository.OptimisticLockException e) {
+            throw new LightAiException(ErrorCode.CONFIG_VERSION_CONFLICT,
+                    "应用额度版本已变化，请刷新后重试");
+        } catch (LightAiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用用量重置失败");
+        }
+    }
+
     private ApplicationListItem toListItem(Connection connection, ApplicationRecord record) {
         ApplicationQuotaRecord quota = repository.findQuota(connection, record.id()).orElse(null);
         return new ApplicationListItem(
@@ -552,11 +609,7 @@ public final class ApplicationService {
                 Set.of("TOKEN_LIMIT", "AMOUNT_LIMIT"), "dimension", issues);
         BigDecimal delta = adjustmentDelta(command.delta(), dimension, issues);
         String reason = reason(command.reason(), issues);
-        String idempotencyKey = trimToNull(command.idempotencyKey());
-        if (idempotencyKey == null || !IDEMPOTENCY_KEY.matcher(idempotencyKey).matches()) {
-            issues.add(new FieldIssue("idempotency_key", "INVALID",
-                    "幂等键使用 1—128 位字母、数字、点号、下划线、冒号或连字符"));
-        }
+        String idempotencyKey = validateIdempotencyKey(command.idempotencyKey(), issues);
         if (command.quotaVersion() < 1) {
             issues.add(new FieldIssue("quota_version", "INVALID", "quota_version 必须是正整数"));
         }
@@ -564,6 +617,35 @@ public final class ApplicationService {
                 ErrorCode.FIELD_VALIDATION_FAILED, "应用额度调整不合法", issues);
         return new ValidatedAdjustment(dimension, delta, reason,
                 idempotencyKey, command.quotaVersion());
+    }
+
+    private ValidatedReset validateReset(ApplicationQuotaResetCommand command) {
+        if (command == null) throw invalid("body", "请求体必填");
+        List<FieldIssue> issues = new ArrayList<>();
+        String dimension = enumValue(command.dimension(),
+                Set.of("TOKEN_USAGE", "AMOUNT_USAGE"), "dimension", issues);
+        String reason = reason(command.reason(), issues);
+        String confirmationCode = trimToNull(command.confirmationCode());
+        if (confirmationCode == null) {
+            issues.add(new FieldIssue("confirmation_code", "REQUIRED", "请输入应用编码进行确认"));
+        }
+        String idempotencyKey = validateIdempotencyKey(command.idempotencyKey(), issues);
+        if (command.quotaVersion() < 1) {
+            issues.add(new FieldIssue("quota_version", "INVALID", "quota_version 必须是正整数"));
+        }
+        if (!issues.isEmpty()) throw new LightAiException(
+                ErrorCode.FIELD_VALIDATION_FAILED, "应用用量重置不合法", issues);
+        return new ValidatedReset(dimension, reason, confirmationCode,
+                idempotencyKey, command.quotaVersion());
+    }
+
+    private static String validateIdempotencyKey(String raw, List<FieldIssue> issues) {
+        String idempotencyKey = trimToNull(raw);
+        if (idempotencyKey == null || !IDEMPOTENCY_KEY.matcher(idempotencyKey).matches()) {
+            issues.add(new FieldIssue("idempotency_key", "INVALID",
+                    "幂等键使用 1—128 位字母、数字、点号、下划线、冒号或连字符"));
+        }
+        return idempotencyKey;
     }
 
     private static BigDecimal adjustmentDelta(
@@ -626,6 +708,24 @@ public final class ApplicationService {
                 || !previous.reason().equals(requested.reason())) {
             throw new LightAiException(ErrorCode.IDEMPOTENCY_KEY_CONFLICT,
                     "幂等键已用于不同的额度调整");
+        }
+    }
+
+    private static BigDecimal resetBefore(ApplicationQuotaRecord current, String dimension) {
+        return "TOKEN_USAGE".equals(dimension)
+                ? BigDecimal.valueOf(current.tokensUsed()) : current.amountUsed();
+    }
+
+    private static String resetLedgerDimension(String dimension) {
+        return "TOKEN_USAGE".equals(dimension) ? "TOKEN_USAGE_RESET" : "AMOUNT_USAGE_RESET";
+    }
+
+    private static void requireSameReset(
+            QuotaAdjustmentRecord previous, ValidatedReset requested) {
+        if (!previous.dimension().equals(resetLedgerDimension(requested.dimension()))
+                || !previous.reason().equals(requested.reason())) {
+            throw new LightAiException(ErrorCode.IDEMPOTENCY_KEY_CONFLICT,
+                    "幂等键已用于不同的额度操作");
         }
     }
 
@@ -901,6 +1001,11 @@ public final class ApplicationService {
 
     private record ValidatedAdjustment(
             String dimension, BigDecimal delta, String reason,
+            String idempotencyKey, long quotaVersion) {
+    }
+
+    private record ValidatedReset(
+            String dimension, String reason, String confirmationCode,
             String idempotencyKey, long quotaVersion) {
     }
 }

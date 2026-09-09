@@ -224,6 +224,21 @@ export function adjustApplicationQuota(
   })
 }
 
+export function resetApplicationQuotaUsage(
+  id: string,
+  payload: {
+    dimension: 'TOKEN_USAGE' | 'AMOUNT_USAGE'
+    reason: string
+    confirmation_code: string
+    idempotency_key: string
+    quota_version: number
+  },
+): Promise<ManagementOperationResult<ApplicationDetail>> {
+  return request({
+    path: `/applications/${id}/quota/reset`, method: 'POST', body: payload,
+  })
+}
+
 export function fetchApplicationKeys(
   applicationId: string,
   signal?: AbortSignal,
