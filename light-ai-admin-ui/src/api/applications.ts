@@ -26,7 +26,16 @@ export interface ApplicationModelPermission {
   virtual_model_id: string
   virtual_model_code: string | null
   enabled: boolean
+  max_output_tokens: number | null
+  stream_allowed: boolean | null
   version: number
+}
+
+/** 应用对某个虚拟模型的请求参数上限；null 表示不施加该维度限制。 */
+export interface ApplicationModelConstraintPayload {
+  virtual_model_id: string
+  max_output_tokens: number | null
+  stream_allowed: boolean | null
 }
 
 export interface ApplicationListItem {
@@ -199,7 +208,12 @@ export function updateApplicationQuota(
 
 export function updateApplicationModels(
   id: string,
-  payload: { virtual_model_ids: string[]; application_version: number; reason: string },
+  payload: {
+    virtual_model_ids: string[]
+    constraints: ApplicationModelConstraintPayload[]
+    application_version: number
+    reason: string
+  },
 ): Promise<ManagementOperationResult<ApplicationDetail>> {
   return request({ path: `/applications/${id}/models`, method: 'PUT', body: payload })
 }

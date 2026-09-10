@@ -1,11 +1,13 @@
 package com.lightai.admin.accesscred;
 
+import com.lightai.client.application.ApplicationModelConstraint;
 import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
 import com.lightai.runtime.ports.AccessTokenPort;
 import com.lightai.storage.access.AccessCredentialRecord;
 import com.lightai.storage.access.AccessCredentialRepository;
 import com.lightai.storage.application.ApplicationKeyRecord;
+import com.lightai.storage.application.ApplicationModelPermissionRecord;
 import com.lightai.storage.application.ApplicationQuotaRecord;
 import com.lightai.storage.application.ApplicationRecord;
 import com.lightai.storage.application.JdbcApplicationKeyRepository;
@@ -13,7 +15,9 @@ import com.lightai.storage.application.JdbcApplicationRepository;
 import java.sql.Connection;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.net.InetAddress;
@@ -135,17 +139,29 @@ public class AccessTokenAuthService implements AccessTokenPort {
             throw new LightAiException(ErrorCode.ACCESS_TOKEN_INVALID, "应用已停用或归档");
         }
         List<UUID> keyModelIds = applicationKeys.listModelIds(connection, key.id());
-        List<String> aliases = applications.listModelPermissions(connection, application.id()).stream()
+        List<ApplicationModelPermissionRecord> permissions = applications
+                .listModelPermissions(connection, application.id()).stream()
                 .filter(permission -> permission.enabled() && permission.virtualModelCode() != null)
                 .filter(permission -> keyModelIds.isEmpty()
                         || keyModelIds.contains(permission.virtualModelId()))
-                .map(permission -> permission.virtualModelCode()).toList();
+                .toList();
+        List<String> aliases = permissions.stream()
+                .map(ApplicationModelPermissionRecord::virtualModelCode).toList();
+        Map<String, ApplicationModelConstraint> constraints = new LinkedHashMap<>();
+        for (ApplicationModelPermissionRecord permission : permissions) {
+            ApplicationModelConstraint constraint = ApplicationModelConstraint.fromJson(
+                    permission.virtualModelCode(), permission.constraintsJson());
+            if (!constraint.isEmpty()) {
+                constraints.put(permission.virtualModelCode(), constraint);
+            }
+        }
         ApplicationQuotaRecord quota = applications.findQuota(connection, application.id()).orElse(null);
         Integer rpm = stricter(key.rpm(), quota == null ? null : quota.rpm());
         Long tpm = stricter(key.tpm(), quota == null ? null : quota.tpm());
         if (recordClientIp) applicationKeys.touch(connection, key.id(), now, "recorded");
         return AccessTokenPort.Principal.enterprise(
-                application.code(), aliases, application.id().toString(), key.id().toString(), rpm, tpm);
+                application.code(), aliases, application.id().toString(), key.id().toString(),
+                rpm, tpm, constraints);
     }
 
     private static Integer stricter(Integer left, Integer right) {

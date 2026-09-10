@@ -7,6 +7,7 @@ import com.lightai.admin.audit.AuditService;
 import com.lightai.admin.query.PageResultFactory;
 import com.lightai.admin.web.RequestContext;
 import com.lightai.client.application.ApplicationCreateCommand;
+import com.lightai.client.application.ApplicationModelConstraint;
 import com.lightai.client.application.ApplicationModelsUpdateCommand;
 import com.lightai.client.application.ApplicationQuotaAdjustmentCommand;
 import com.lightai.client.application.ApplicationQuotaResetCommand;
@@ -133,7 +134,7 @@ class ApplicationServiceTest {
 
         var modelsUpdated = service.updateModels(owner(), applicationId,
                 new ApplicationModelsUpdateCommand(
-                        List.of(modelId.toString()), created.version(), "授权客服模型"));
+                        List.of(modelId.toString()), List.of(), created.version(), "授权客服模型"));
         assertThat(modelsUpdated.entity().models())
                 .filteredOn(item -> item.enabled())
                 .extracting(item -> item.virtualModelCode())
@@ -141,7 +142,7 @@ class ApplicationServiceTest {
         assertThat(modelsUpdated.entity().version()).isEqualTo(created.version() + 1);
 
         assertThatThrownBy(() -> service.updateModels(owner(), applicationId,
-                new ApplicationModelsUpdateCommand(List.of(), created.version(), "撤销授权")))
+                new ApplicationModelsUpdateCommand(List.of(), List.of(), created.version(), "撤销授权")))
                 .isInstanceOf(LightAiException.class)
                 .extracting(error -> ((LightAiException) error).code())
                 .isEqualTo(ErrorCode.CONFIG_VERSION_CONFLICT);
@@ -244,6 +245,78 @@ class ApplicationServiceTest {
         assertThat(service.listAdjustments(owner(), applicationId))
                 .extracting(item -> item.dimension())
                 .containsExactly("AMOUNT_USAGE_RESET", "TOKEN_USAGE_RESET");
+    }
+
+    @Test
+    void appliesApplicationModelConstraintsAndRejectsOutOfScopeTargets() throws Exception {
+        UUID granted = UUID.randomUUID();
+        UUID notGranted = UUID.randomUUID();
+        try (var connection = dataSource.getConnection()) {
+            aliases.insert(connection, new AliasRecord(
+                    granted, "constrained-chat", "受限客服模型", null,
+                    "WEIGHTED_RANDOM", true, 1L, null, null));
+            aliases.insert(connection, new AliasRecord(
+                    notGranted, "unlisted-chat", "未授权模型", null,
+                    "WEIGHTED_RANDOM", true, 1L, null, null));
+        }
+        var created = service.create(admin(), new ApplicationCreateCommand(
+                "constraint-app", "参数上限应用", null, "owner-1", "张三", "PROD", null,
+                "ACTIVE", null, null, "CNY", null, null,
+                "LIFECYCLE", null, null, List.of()));
+        UUID applicationId = UUID.fromString(created.id());
+
+        var updated = service.updateModels(owner(), applicationId,
+                new ApplicationModelsUpdateCommand(
+                        List.of(granted.toString()),
+                        List.of(new ApplicationModelConstraint(granted.toString(), 512, false)),
+                        created.version(), "收紧客服模型参数上限"));
+
+        var permission = updated.entity().models().stream()
+                .filter(item -> item.virtualModelId().equals(granted.toString()))
+                .findFirst().orElseThrow();
+        assertThat(permission.maxOutputTokens()).isEqualTo(512);
+        assertThat(permission.streamAllowed()).isFalse();
+
+        assertThatThrownBy(() -> service.updateModels(owner(), applicationId,
+                new ApplicationModelsUpdateCommand(
+                        List.of(granted.toString()),
+                        List.of(new ApplicationModelConstraint(notGranted.toString(), 128, null)),
+                        updated.version(), "给未授权模型配置上限")))
+                .isInstanceOf(LightAiException.class)
+                .extracting(error -> ((LightAiException) error).code())
+                .isEqualTo(ErrorCode.FIELD_VALIDATION_FAILED);
+
+        assertThatThrownBy(() -> service.updateModels(owner(), applicationId,
+                new ApplicationModelsUpdateCommand(
+                        List.of(granted.toString()),
+                        List.of(new ApplicationModelConstraint(granted.toString(), 0, null)),
+                        updated.version(), "非法上限")))
+                .isInstanceOf(LightAiException.class)
+                .extracting(error -> ((LightAiException) error).code())
+                .isEqualTo(ErrorCode.FIELD_VALIDATION_FAILED);
+    }
+
+    @Test
+    void listsApplicationMembersReadOnlyAndKeepsOwnerScope() {
+        var created = service.create(admin(), new ApplicationCreateCommand(
+                "member-app", "成员应用", null, "owner-1", "张三", "PROD", null,
+                "ACTIVE", null, null, "CNY", null, null,
+                "LIFECYCLE", null, null, List.of()));
+        UUID applicationId = UUID.fromString(created.id());
+
+        assertThat(service.listMembers(owner(), applicationId))
+                .singleElement()
+                .satisfies(member -> {
+                    assertThat(member.subjectId()).isEqualTo("owner-1");
+                    assertThat(member.subjectName()).isEqualTo("张三");
+                    assertThat(member.role()).isEqualTo("OWNER");
+                });
+
+        assertThatThrownBy(() -> service.listMembers(
+                context("other-user", "李四", Roles.APPLICATION_OWNER), applicationId))
+                .isInstanceOf(LightAiException.class)
+                .extracting(error -> ((LightAiException) error).code())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
     }
 
     private static RequestContext admin() {

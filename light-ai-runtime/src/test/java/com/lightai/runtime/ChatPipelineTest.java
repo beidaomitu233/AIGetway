@@ -1,5 +1,6 @@
 package com.lightai.runtime;
 
+import com.lightai.client.application.ApplicationModelConstraint;
 import com.lightai.client.chat.ChatMessage;
 import com.lightai.client.chat.StreamOptions;
 import com.lightai.client.chat.UnifiedChatChunk;
@@ -149,6 +150,44 @@ class ChatPipelineTest {
                 .isInstanceOfSatisfying(LightAiException.class,
                         error -> assertThat(error.code()).isEqualTo(ErrorCode.ACCESS_DENIED));
         assertThat(adapter.invocations.get()).isZero();
+    }
+
+    @Test
+    void applicationModelConstraintRejectsBreachBeforeAnyUpstreamCall() {
+        Map<String, ApplicationModelConstraint> constraints = Map.of(
+                "assistant", new ApplicationModelConstraint("assistant", 256, false));
+        AccessTokenPort.Principal principal = AccessTokenPort.Principal.enterprise(
+                "app-1", List.of("assistant"), "application-1", "key-1", 60, 10_000L, constraints);
+
+        assertThatThrownBy(() -> pipeline.chat(new ChatPipeline.ChatContext(
+                principal, withMaxTokens(request("assistant", false), 512), null)))
+                .isInstanceOfSatisfying(LightAiException.class,
+                        error -> assertThat(error.code())
+                                .isEqualTo(ErrorCode.APPLICATION_MODEL_CONSTRAINT_VIOLATED));
+        assertThat(adapter.invocations.get()).isZero();
+
+        assertThatThrownBy(() -> pipeline.chat(new ChatPipeline.ChatContext(
+                principal, request("assistant", true), null)))
+                .isInstanceOfSatisfying(LightAiException.class,
+                        error -> assertThat(error.code())
+                                .isEqualTo(ErrorCode.APPLICATION_MODEL_CONSTRAINT_VIOLATED));
+        assertThat(adapter.invocations.get()).isZero();
+        assertThat(capacity.reserved.get()).isZero();
+    }
+
+    @Test
+    void applicationModelConstraintCapsEffectiveMaxTokensWhenClientOmitsIt() {
+        Map<String, ApplicationModelConstraint> constraints = Map.of(
+                "assistant", new ApplicationModelConstraint("assistant", 64, null));
+        AccessTokenPort.Principal principal = AccessTokenPort.Principal.enterprise(
+                "app-1", List.of("assistant"), "application-1", "key-1", 60, 10_000L, constraints);
+        adapter.response = new ProviderChatResponse("ok", "stop", 10L, 5L, 15L,
+                "ACTUAL", "provider-request");
+
+        pipeline.chat(new ChatPipeline.ChatContext(
+                principal, withTraceId(request("assistant", false), "constraint-cap"), null));
+
+        assertThat(adapter.lastRequest.maxTokens()).isEqualTo(64L);
     }
 
     @Test
@@ -529,6 +568,7 @@ class ChatPipelineTest {
         List<ProviderStreamChunk> streamScript = List.of();
         boolean streamInterruptAfterCommit;
         final AtomicInteger invocations = new AtomicInteger();
+        volatile ProviderChatRequest lastRequest;
         private int failures;
 
         @Override
@@ -549,6 +589,7 @@ class ChatPipelineTest {
 
         @Override
         public ProviderChatResponse chat(ProviderCallContext context) {
+            lastRequest = context.request();
             invocations.incrementAndGet();
             if (error != null && invocations.get() <= failFirstN) {
                 throw new com.lightai.spi.provider.ProviderTransportException(error, null);
@@ -617,6 +658,12 @@ class ChatPipelineTest {
         return new UnifiedChatRequest(request.model(), request.messages(), request.stream(),
                 request.temperature(), request.topP(), request.maxTokens(), request.stop(),
                 traceId, request.metadata(), request.providerOptions(), request.streamOptions());
+    }
+
+    private static UnifiedChatRequest withMaxTokens(UnifiedChatRequest request, Integer maxTokens) {
+        return new UnifiedChatRequest(request.model(), request.messages(), request.stream(),
+                request.temperature(), request.topP(), maxTokens, request.stop(),
+                request.traceId(), request.metadata(), request.providerOptions(), request.streamOptions());
     }
 
     private ChatPipeline.ChatContext context(UnifiedChatRequest request, CancellationSignal signal) {

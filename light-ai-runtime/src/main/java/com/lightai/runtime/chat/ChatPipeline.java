@@ -1,11 +1,13 @@
 package com.lightai.runtime.chat;
 
+import com.lightai.client.application.ApplicationModelConstraint;
 import com.lightai.client.chat.ChatMessage;
 import com.lightai.client.chat.ChatRequestValidator;
 import com.lightai.client.chat.UnifiedChatChunk;
 import com.lightai.client.chat.UnifiedChatRequest;
 import com.lightai.client.chat.UnifiedChatResponse;
 import com.lightai.client.error.ErrorCode;
+import com.lightai.client.error.FieldIssue;
 import com.lightai.client.error.LightAiException;
 import com.lightai.client.error.UnifiedError;
 import com.lightai.runtime.ports.AccessTokenPort;
@@ -188,7 +190,8 @@ public class ChatPipeline {
                 attemptId = traceStore.startAttempt(traceId(handle), candidate.candidateId(),
                         candidate.providerType(), candidate.modelId());
                 ProviderAdapter adapter = requireAdapter(candidate);
-                ProviderChatRequest adapterRequest = toAdapterRequest(candidate, parsed.request(), estimatedInput);
+                ProviderChatRequest adapterRequest = toAdapterRequest(candidate, parsed.request(),
+                        estimatedInput, parsed.applicationMaxOutputTokens());
                 ProviderCallContext callContext = callContext(candidate, adapterRequest, credential, started);
                 ProviderChatResponse response;
                 try {
@@ -321,7 +324,8 @@ public class ChatPipeline {
                 attemptId = traceStore.startAttempt(traceId(handle), candidate.candidateId(),
                         candidate.providerType(), candidate.modelId());
                 ProviderAdapter adapter = requireAdapter(candidate);
-                ProviderChatRequest adapterRequest = toAdapterRequest(candidate, parsed.request(), estimatedInput);
+                ProviderChatRequest adapterRequest = toAdapterRequest(candidate, parsed.request(),
+                        estimatedInput, parsed.applicationMaxOutputTokens());
                 ProviderCallContext callContext = callContext(candidate, adapterRequest, credential, started);
 
                 // include_usage 默认 false（4.7.1.4）；Trace 仍记录用量与成本
@@ -596,7 +600,8 @@ public class ChatPipeline {
         long maxTotal = input;
         List<ApplicationQuotaPort.AmountEstimate> estimates = new ArrayList<>();
         for (CandidateView candidate : candidates) {
-            long output = resolveMaxTokens(candidate, parsed.request(), input);
+            long output = resolveMaxTokens(candidate, parsed.request(), input,
+                    parsed.applicationMaxOutputTokens());
             maxTotal = Math.max(maxTotal, input + output);
             UsageSettlement.AttemptSettlement estimate = UsageSettlement.settle(
                     priceSnapshot(candidate), null, null, input, output);
@@ -636,7 +641,40 @@ public class ChatPipeline {
         if (!aliasView.enabled()) {
             throw ConfigSnapshotPort.aliasDisabled(resolvedAlias);
         }
-        return new ParsedRequest(resolvedAlias, context.request(), snapshot, aliasView);
+        ApplicationModelConstraint constraint = enforceApplicationModelConstraint(
+                context.principal(), resolvedAlias, context.request());
+        return new ParsedRequest(resolvedAlias, context.request(), snapshot, aliasView,
+                constraint == null ? null : constraint.maxOutputTokens());
+    }
+
+    /**
+     * PRD 9.2.5：应用为虚拟模型配置的请求参数上限在路由前生效。
+     * 显式越界参数直接以统一错误拒绝，不静默删除参数后继续调用。
+     */
+    private static ApplicationModelConstraint enforceApplicationModelConstraint(
+            AccessTokenPort.Principal principal, String alias, UnifiedChatRequest request) {
+        if (principal == null) {
+            return null;
+        }
+        ApplicationModelConstraint constraint = principal.constraintFor(alias);
+        if (constraint == null || constraint.isEmpty()) {
+            return null;
+        }
+        List<FieldIssue> issues = new ArrayList<>();
+        if (Boolean.FALSE.equals(constraint.streamAllowed()) && request.stream()) {
+            issues.add(new FieldIssue("stream", "APPLICATION_LIMIT",
+                    "应用未允许该模型使用流式调用"));
+        }
+        if (constraint.maxOutputTokens() != null && request.maxTokens() != null
+                && request.maxTokens() > constraint.maxOutputTokens()) {
+            issues.add(new FieldIssue("max_tokens", "APPLICATION_LIMIT",
+                    "max_tokens 超过应用对该模型的上限 " + constraint.maxOutputTokens()));
+        }
+        if (!issues.isEmpty()) {
+            throw new LightAiException(ErrorCode.APPLICATION_MODEL_CONSTRAINT_VIOLATED,
+                    "请求参数超过应用模型策略上限: " + alias, issues);
+        }
+        return constraint;
     }
 
     private List<CandidateView> route(ParsedRequest parsed) {
@@ -656,7 +694,8 @@ public class ChatPipeline {
             ParsedRequest parsed, CandidateView candidate,
             CredentialSecretPort.ResolvedCredential credential, long estimatedInput,
             String traceId, CancellationSignal signal, long started) {
-        long maxTokens = resolveMaxTokens(candidate, parsed.request(), estimatedInput);
+        long maxTokens = resolveMaxTokens(candidate, parsed.request(), estimatedInput,
+                parsed.applicationMaxOutputTokens());
         try {
             return reserveOnce(parsed, candidate, credential, estimatedInput, maxTokens);
         } catch (CapacityLimitedException limited) {
@@ -807,8 +846,9 @@ public class ChatPipeline {
     }
 
     private ProviderChatRequest toAdapterRequest(CandidateView candidate, UnifiedChatRequest request,
-                                                 long estimatedInput) {
-        Long resolvedMaxTokens = resolveMaxTokens(candidate, request, estimatedInput);
+                                                 long estimatedInput, Integer applicationMaxOutputTokens) {
+        Long resolvedMaxTokens = resolveMaxTokens(candidate, request, estimatedInput,
+                applicationMaxOutputTokens);
         BigDecimal temperature = request.temperature() != null ? request.temperature()
                 : candidate.defaultTemperature();
         BigDecimal topP = request.topP() != null ? request.topP() : candidate.defaultTopP();
@@ -825,7 +865,8 @@ public class ChatPipeline {
                 temperature, topP, request.stop(), filteredOptions(candidate, request));
     }
 
-    private Long resolveMaxTokens(CandidateView candidate, UnifiedChatRequest request, long estimatedInput) {
+    private Long resolveMaxTokens(CandidateView candidate, UnifiedChatRequest request,
+                                  long estimatedInput, Integer applicationMaxOutputTokens) {
         if (request.maxTokens() != null) {
             return request.maxTokens().longValue();
         }
@@ -833,6 +874,9 @@ public class ChatPipeline {
                 : (candidate.maxOutputTokens() != null ? candidate.maxOutputTokens() : 1024L);
         if (candidate.maxOutputTokens() != null) {
             resolved = Math.min(resolved, candidate.maxOutputTokens());
+        }
+        if (applicationMaxOutputTokens != null) {
+            resolved = Math.min(resolved, applicationMaxOutputTokens);
         }
         if (candidate.contextWindow() != null) {
             resolved = Math.min(resolved, Math.max(1, candidate.contextWindow() - estimatedInput));
@@ -963,7 +1007,8 @@ public class ChatPipeline {
 
     private record ParsedRequest(String alias, UnifiedChatRequest request,
                                  ConfigSnapshotPort.ActiveSnapshot snapshot,
-                                 AliasView aliasView) {
+                                 AliasView aliasView,
+                                 Integer applicationMaxOutputTokens) {
     }
 
     private record CircuitAttempt(CircuitKey key, CircuitPolicy policy,

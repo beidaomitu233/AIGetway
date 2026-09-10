@@ -1,8 +1,10 @@
 package com.lightai.runtime.ports;
 
+import com.lightai.client.application.ApplicationModelConstraint;
 import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -26,28 +28,44 @@ public interface AccessTokenPort {
             String applicationKeyId,
             Integer rpm,
             Long tpm,
-            boolean allAliasesAllowed) {
+            boolean allAliasesAllowed,
+            Map<String, ApplicationModelConstraint> aliasConstraints) {
 
         public Principal {
             application = application == null ? "default" : application;
             allowedAliasIds = allowedAliasIds == null ? List.of() : List.copyOf(allowedAliasIds);
+            aliasConstraints = aliasConstraints == null ? Map.of() : Map.copyOf(aliasConstraints);
         }
 
         /** 旧运行入口保持“空白名单表示全部 Alias”的兼容语义。 */
         public Principal(String application, List<String> allowedAliasIds) {
-            this(application, allowedAliasIds, null, null, null, null, true);
+            this(application, allowedAliasIds, null, null, null, null, true, Map.of());
         }
 
         /** V2 企业应用入口：即使未授权任何模型，也必须解释为拒绝全部模型。 */
         public static Principal enterprise(
                 String application, List<String> allowedAliasIds, String applicationId,
                 String applicationKeyId, Integer rpm, Long tpm) {
+            return enterprise(application, allowedAliasIds, applicationId, applicationKeyId,
+                    rpm, tpm, Map.of());
+        }
+
+        /** 企业应用入口：附带应用级模型参数上限（PRD 9.2.5）。 */
+        public static Principal enterprise(
+                String application, List<String> allowedAliasIds, String applicationId,
+                String applicationKeyId, Integer rpm, Long tpm,
+                Map<String, ApplicationModelConstraint> aliasConstraints) {
             return new Principal(application, allowedAliasIds, applicationId,
-                    applicationKeyId, rpm, tpm, false);
+                    applicationKeyId, rpm, tpm, false, aliasConstraints);
         }
 
         public boolean aliasAllowed(String alias) {
             return allAliasesAllowed || allowedAliasIds.contains(alias);
+        }
+
+        /** 应用为该虚拟模型配置的请求参数上限；未配置返回 null。 */
+        public ApplicationModelConstraint constraintFor(String alias) {
+            return alias == null ? null : aliasConstraints.get(alias);
         }
     }
 

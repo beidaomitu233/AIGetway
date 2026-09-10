@@ -17,10 +17,17 @@ import {
   updateApplicationModels,
   updateApplicationQuota,
   type ApplicationDetail,
+  type ApplicationModelPermission,
   type ApplicationQuotaAdjustment,
   type ApplicationStatus,
 } from '@/api/applications'
 import { fetchModelAliases, type ModelAliasListItem } from '@/api/modelAliases'
+
+/** 应用级模型参数上限的表单状态；空值表示不施加该维度限制。 */
+interface ModelConstraintForm {
+  maxOutputTokens: string | number
+  streamAllowed: '' | 'allow' | 'deny'
+}
 
 const route = useRoute()
 const store = useBootstrapStore()
@@ -52,6 +59,7 @@ const modelsLoading = ref(false)
 const modelsLoadError = ref<unknown>(null)
 const selectedModelIds = ref<string[]>([])
 const modelReason = ref('')
+const modelConstraints = ref<Record<string, ModelConstraintForm>>({})
 const adjustmentForm = reactive({
   dimension: 'TOKEN_LIMIT' as 'TOKEN_LIMIT' | 'AMOUNT_LIMIT',
   delta: '',
@@ -279,20 +287,45 @@ async function loadAdjustments(): Promise<void> {
   }
 }
 
+/** 已授权模型的应用级参数上限摘要；未配置或无限制时返回空串。 */
+function modelConstraintText(model: ApplicationModelPermission): string {
+  if (!model.enabled) return ''
+  const parts: string[] = []
+  if (model.max_output_tokens !== null) {
+    parts.push(`最大输出 ${model.max_output_tokens.toLocaleString()} Token`)
+  }
+  if (model.stream_allowed !== null) {
+    parts.push(model.stream_allowed ? '允许流式' : '禁止流式')
+  }
+  return parts.join(' · ')
+}
+
 async function openModelDialog(): Promise<void> {
   if (!detail.value) return
   modelSubmission.reset()
   selectedModelIds.value = detail.value.models
     .filter((item) => item.enabled)
     .map((item) => item.virtual_model_id)
+  modelConstraints.value = {}
+  for (const item of detail.value.models) {
+    if (!item.enabled) continue
+    modelConstraints.value[item.virtual_model_id] = {
+      maxOutputTokens: item.max_output_tokens === null ? '' : String(item.max_output_tokens),
+      streamAllowed: item.stream_allowed === null ? '' : item.stream_allowed ? 'allow' : 'deny',
+    }
+  }
   modelReason.value = ''
   modelDialogOpen.value = true
-  if (availableModels.value.length) return
+  if (availableModels.value.length) {
+    ensureConstraintForms()
+    return
+  }
   modelsLoading.value = true
   modelsLoadError.value = null
   try {
     const page = await fetchModelAliases({ enabled: true, page: 1, page_size: 100, sort: 'alias' })
     availableModels.value = page.items
+    ensureConstraintForms()
   } catch (error) {
     modelsLoadError.value = error
   } finally {
@@ -300,11 +333,66 @@ async function openModelDialog(): Promise<void> {
   }
 }
 
+function ensureConstraintForm(modelId: string): void {
+  if (!modelConstraints.value[modelId]) {
+    modelConstraints.value[modelId] = { maxOutputTokens: '', streamAllowed: '' }
+  }
+}
+
+function ensureConstraintForms(): void {
+  for (const model of availableModels.value) {
+    ensureConstraintForm(model.id)
+  }
+}
+
+/** 留空返回 null 表示不限；非法值返回 NaN 供校验拦截。 */
+function parseMaxOutputTokens(form?: ModelConstraintForm): number | null {
+  const raw = form?.maxOutputTokens
+  if (raw === undefined || raw === null || raw === '') return null
+  const parsed = typeof raw === 'number' ? raw : Number(String(raw).trim())
+  return Number.isInteger(parsed) && parsed >= 1 ? parsed : Number.NaN
+}
+
+/** 最大输出 Token 只接受大于 0 的整数；留空表示不限制。 */
+const modelConstraintInvalid = computed(() =>
+  selectedModelIds.value.some((modelId) =>
+    Number.isNaN(parseMaxOutputTokens(modelConstraints.value[modelId])),
+  ),
+)
+
+function modelConstraintPayload(): {
+  virtual_model_id: string
+  max_output_tokens: number | null
+  stream_allowed: boolean | null
+}[] {
+  const payload: {
+    virtual_model_id: string
+    max_output_tokens: number | null
+    stream_allowed: boolean | null
+  }[] = []
+  for (const modelId of selectedModelIds.value) {
+    const form = modelConstraints.value[modelId]
+    const parsedMax = parseMaxOutputTokens(form)
+    const maxOutputTokens = parsedMax === null || Number.isNaN(parsedMax) ? null : parsedMax
+    const streamAllowed = form?.streamAllowed === 'allow'
+      ? true
+      : form?.streamAllowed === 'deny' ? false : null
+    if (maxOutputTokens === null && streamAllowed === null) continue
+    payload.push({
+      virtual_model_id: modelId,
+      max_output_tokens: maxOutputTokens,
+      stream_allowed: streamAllowed,
+    })
+  }
+  return payload
+}
+
 async function saveModels(): Promise<void> {
-  if (!detail.value || !modelReason.value.trim()) return
+  if (!detail.value || !modelReason.value.trim() || modelConstraintInvalid.value) return
   const result = await modelSubmission.submit(async () => {
     const response = await updateApplicationModels(detail.value!.id, {
       virtual_model_ids: selectedModelIds.value,
+      constraints: modelConstraintPayload(),
       application_version: detail.value!.version,
       reason: modelReason.value.trim(),
     })
@@ -390,7 +478,10 @@ onMounted(load)
             <div v-if="detail.models.length" class="model-list">
               <div v-for="model in detail.models" :key="model.id" class="model-row">
                 <div><strong>{{ model.virtual_model_code || model.virtual_model_id }}</strong><small>请求 model 字段</small></div>
-                <span :class="model.enabled ? 'enabled-text' : 'disabled-text'">{{ model.enabled ? '已授权' : '已停用' }}</span>
+                <div class="model-row-meta">
+                  <span v-if="modelConstraintText(model)">{{ modelConstraintText(model) }}</span>
+                  <span :class="model.enabled ? 'enabled-text' : 'disabled-text'">{{ model.enabled ? '已授权' : '已停用' }}</span>
+                </div>
               </div>
             </div>
             <p v-else class="empty-inline">尚未授权虚拟模型，应用当前无法完成模型调用。</p>
@@ -560,10 +651,41 @@ onMounted(load)
         <PageState v-if="modelsLoading" status="loading" />
         <PageState v-else-if="modelsLoadError" status="error" :error="modelsLoadError" @retry="openModelDialog" />
         <div v-else-if="availableModels.length" class="model-options">
-          <label v-for="model in availableModels" :key="model.id" class="model-option">
-            <input v-model="selectedModelIds" type="checkbox" :value="model.id">
-            <span><strong>{{ model.display_name }}</strong><small>{{ model.alias }}</small></span>
-          </label>
+          <div v-for="model in availableModels" :key="model.id" class="model-option-group">
+            <label class="model-option">
+              <input
+                v-model="selectedModelIds"
+                type="checkbox"
+                :value="model.id"
+                @change="ensureConstraintForm(model.id)"
+              >
+              <span><strong>{{ model.display_name }}</strong><small>{{ model.alias }}</small></span>
+            </label>
+            <div v-if="selectedModelIds.includes(model.id)" class="model-constraint">
+              <label class="model-constraint-field">
+                <span>最大输出 Token</span>
+                <input
+                  v-model="modelConstraints[model.id].maxOutputTokens"
+                  class="lai-input"
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="留空表示不限"
+                >
+              </label>
+              <label class="model-constraint-field">
+                <span>流式调用</span>
+                <select v-model="modelConstraints[model.id].streamAllowed" class="lai-input">
+                  <option value="">继承（不限）</option>
+                  <option value="allow">允许</option>
+                  <option value="deny">禁止</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <p v-if="modelConstraintInvalid" class="lai-form-message-error">
+            最大输出 Token 必须是大于 0 的整数；留空表示不限制。
+          </p>
         </div>
         <p v-else class="empty-inline">当前没有已启用的虚拟模型。保存后应用将没有可调用模型。</p>
         <label class="lai-dialog-field"><span>变更原因</span><textarea v-model="modelReason" class="lai-input status-reason" maxlength="500" rows="3" placeholder="必填，将写入审计记录" /></label>
@@ -571,7 +693,7 @@ onMounted(load)
         <p v-else-if="modelSubmission.errorText.value" class="lai-form-message-error">{{ modelSubmission.errorText.value }}</p>
         <div class="lai-dialog-actions">
           <button type="button" class="lai-btn" :disabled="modelSubmission.submitting.value" @click="modelDialogOpen = false">取消</button>
-          <button type="button" class="lai-btn lai-btn-primary" :disabled="modelSubmission.submitting.value || !modelReason.trim() || modelsLoading" @click="saveModels">{{ modelSubmission.submitting.value ? '保存中…' : '保存授权' }}</button>
+          <button type="button" class="lai-btn lai-btn-primary" :disabled="modelSubmission.submitting.value || !modelReason.trim() || modelsLoading || modelConstraintInvalid" @click="saveModels">{{ modelSubmission.submitting.value ? '保存中…' : '保存授权' }}</button>
         </div>
       </div>
     </div>
@@ -608,7 +730,11 @@ onMounted(load)
 .workspace-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; }.main-column { min-width: 0; }
 .card-heading { justify-content: space-between; margin-bottom: 12px; }.card-heading .lai-card-title { margin: 0; }.card-heading > span { color: #667085; font-size: 12px; }
 .card-note { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e6eaf0; font-size: 13px; }
-.model-list { border-top: 1px solid #e6eaf0; }.model-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid #e6eaf0; }.model-row div { display: flex; flex-direction: column; gap: 3px; }.model-row small { color: #667085; }.enabled-text { color: #166534; }.disabled-text { color: #667085; }
+.model-list { border-top: 1px solid #e6eaf0; }.model-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid #e6eaf0; }.model-row div { display: flex; flex-direction: column; gap: 3px; }.model-row small { color: #667085; }.model-row-meta { align-items: flex-end; gap: 5px; }.model-row-meta span { font-size: 12px; color: #667085; }.enabled-text { color: #166534; }.disabled-text { color: #667085; }
+.model-option-group { border-bottom: 1px solid #e6eaf0; }
+.model-option-group .model-option { border-bottom: 0; }
+.model-constraint { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0 12px 12px; }
+.model-constraint-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #667085; }
 .shortcut-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }.shortcut { display: flex; flex-direction: column; gap: 6px; padding: 14px; color: #172033; border: 1px solid #e6eaf0; border-radius: 6px; }.shortcut:hover { border-color: #2563eb; }.shortcut span { color: #667085; font-size: 13px; }
 .property-list { margin: 0; }.property-list div { padding: 10px 0; border-bottom: 1px solid #e6eaf0; }.property-list div:last-child { border: 0; }.property-list dt { margin-bottom: 3px; color: #667085; font-size: 12px; }.property-list dd { margin: 0; overflow-wrap: anywhere; }
 .status-reason { width: 100%; max-width: none; height: auto; margin-top: 6px; padding: 8px 10px; resize: vertical; }

@@ -109,6 +109,12 @@ public final class ApplicationController {
         return json(ManagementResponses.ok(service.changeStatus(context(request), parseId(id), command)));
     }
 
+    /** 应用成员只读列表（PRD 9.2.7）；成员维护方式属待确认事项，本期不提供写接口。 */
+    @GetMapping("/admin/applications/{id}/members")
+    public ResponseEntity<String> listMembers(@PathVariable String id, HttpServletRequest request) {
+        return json(ManagementResponses.ok(service.listMembers(context(request), parseId(id))));
+    }
+
     private static UUID parseId(String raw) {
         try {
             return UUID.fromString(raw);

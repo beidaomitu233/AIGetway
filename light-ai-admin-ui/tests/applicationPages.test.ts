@@ -37,7 +37,10 @@ const application = {
     amount_limit: '1000', amount_used: '12.5', amount_reserved: '0.5', currency: 'CNY',
     rpm: 60, tpm: 100_000, period_type: 'MONTH', period_start: null, period_end: null, version: 1,
   },
-  models: [{ id: 'permission-1', virtual_model_id: 'alias-1', virtual_model_code: 'chat-default', enabled: true, version: 1 }],
+  models: [{
+    id: 'permission-1', virtual_model_id: 'alias-1', virtual_model_code: 'chat-default',
+    enabled: true, max_output_tokens: null, stream_allowed: null, version: 1,
+  }],
 }
 
 async function mountPage(path: string) {
@@ -330,12 +333,19 @@ describe('Application pages（V2 应用中心）', () => {
     await flushPromises()
     const modelDialog = wrapper.find('[aria-labelledby="application-model-title"]')
     await modelDialog.find('input[type="checkbox"][value="alias-2"]').setValue(true)
+    const aliasTwoGroup = modelDialog.findAll('.model-option-group')
+      .find((group) => group.find('input[type="checkbox"][value="alias-2"]').exists())!
+    await aliasTwoGroup.find('input[type="number"]').setValue('256')
+    await aliasTwoGroup.find('select').setValue('deny')
     await modelDialog.find('textarea').setValue('增加备用模型')
     await modelDialog.findAll('button').find((button) => button.text() === '保存授权')!.trigger('click')
     await flushPromises()
     expect(stub.calls.find((call) => call.method === 'PUT' && call.url.endsWith('/models'))?.body)
       .toMatchObject({
         virtual_model_ids: ['alias-1', 'alias-2'],
+        constraints: [{
+          virtual_model_id: 'alias-2', max_output_tokens: 256, stream_allowed: false,
+        }],
         application_version: 2,
         reason: '增加备用模型',
       })

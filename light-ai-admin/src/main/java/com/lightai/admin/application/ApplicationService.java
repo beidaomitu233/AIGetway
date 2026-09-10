@@ -8,6 +8,8 @@ import com.lightai.admin.web.RequestPermissions;
 import com.lightai.client.application.ApplicationCreateCommand;
 import com.lightai.client.application.ApplicationDetail;
 import com.lightai.client.application.ApplicationListItem;
+import com.lightai.client.application.ApplicationMemberView;
+import com.lightai.client.application.ApplicationModelConstraint;
 import com.lightai.client.application.ApplicationModelPermissionView;
 import com.lightai.client.application.ApplicationModelsUpdateCommand;
 import com.lightai.client.application.ApplicationQuotaAdjustmentCommand;
@@ -38,9 +40,11 @@ import java.sql.Connection;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -149,7 +153,7 @@ public final class ApplicationService {
                         value.rpm(), value.tpm(), value.periodType(), value.periodStart(), value.periodEnd(),
                         0L, 0L, BigDecimal.ZERO, BigDecimal.ZERO, 1L, null, null));
                 for (UUID modelId : value.virtualModelIds()) {
-                    repository.insertModelPermission(connection, id, modelId);
+                    repository.insertModelPermission(connection, id, modelId, "{}");
                 }
                 auditService.recordSuccess(connection, AuditRecord.succeeded(
                         UUID.randomUUID(), context.requestId(), operatorId(context), "CREATE",
@@ -327,15 +331,21 @@ public final class ApplicationService {
                 for (ApplicationModelPermissionRecord permission : current) {
                     known.add(permission.virtualModelId());
                     boolean enabled = target.contains(permission.virtualModelId());
-                    if (permission.enabled() != enabled) {
-                        repository.updateModelPermission(connection, permission.id(),
-                                enabled, permission.version());
+                    ApplicationModelConstraint constraint = enabled
+                            ? value.constraints().get(permission.virtualModelId()) : null;
+                    String constraintsJson = enabled
+                            ? constraintsJson(constraint) : permission.constraintsJson();
+                    if (permission.enabled() != enabled
+                            || (enabled && !sameConstraints(permission.constraintsJson(), constraint))) {
+                        repository.updateModelPermission(connection, permission.id(), enabled,
+                                constraintsJson, permission.version());
                         changed = true;
                     }
                 }
                 for (UUID modelId : value.virtualModelIds()) {
                     if (!known.contains(modelId)) {
-                        repository.insertModelPermission(connection, id, modelId);
+                        repository.insertModelPermission(connection, id, modelId,
+                                constraintsJson(value.constraints().get(modelId)));
                         changed = true;
                     }
                 }
@@ -345,11 +355,21 @@ public final class ApplicationService {
                             .map(item -> item.virtualModelId().toString()).sorted().toList();
                     List<String> after = value.virtualModelIds().stream()
                             .map(UUID::toString).sorted().toList();
+                    List<String> beforeConstraints = current.stream()
+                            .filter(ApplicationModelPermissionRecord::enabled)
+                            .map(item -> constraintText(item.virtualModelId(), item.constraintsJson()))
+                            .sorted().toList();
+                    List<String> afterConstraints = value.virtualModelIds().stream()
+                            .map(modelId -> constraintText(modelId, constraintsJson(
+                                    value.constraints().get(modelId))))
+                            .sorted().toList();
                     auditService.recordSuccess(connection, AuditRecord.succeeded(
                             UUID.randomUUID(), context.requestId(), operatorId(context),
                             "APPLICATION_MODEL_PERMISSION_UPDATE", "APPLICATION", id.toString(),
                             List.of(
                                     FieldChange.changed("virtual_model_ids", before, after),
+                                    FieldChange.changed("virtual_model_constraints",
+                                            beforeConstraints, afterConstraints),
                                     FieldChange.changed("reason", null, value.reason())),
                             sourceMode, context.sourceIpMasked()));
                 }
@@ -380,6 +400,27 @@ public final class ApplicationService {
         } catch (Exception e) {
             throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE,
                     "应用额度调整流水当前无法读取");
+        }
+    }
+
+    /**
+     * 应用成员只读列表（PRD 9.2.7）。成员变更方式在 PRD 中仍属待确认事项，
+     * 因此本期只提供查看，不提供平台侧增删改。
+     */
+    public List<ApplicationMemberView> listMembers(RequestContext context, UUID id) {
+        RequestPermissions.require(context, Permissions.APPLICATION_VIEW);
+        try (Connection connection = dataSource.getConnection()) {
+            ApplicationRecord application = load(connection, id);
+            requireScope(connection, context, application.code());
+            return repository.listMembers(connection, id).stream()
+                    .map(member -> new ApplicationMemberView(
+                            member.id().toString(), member.subjectId(),
+                            member.subjectName(), member.role()))
+                    .toList();
+        } catch (LightAiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用成员当前无法读取");
         }
     }
 
@@ -530,9 +571,12 @@ public final class ApplicationService {
     }
 
     private ApplicationModelPermissionView toModelView(ApplicationModelPermissionRecord model) {
+        ApplicationModelConstraint constraint =
+                ApplicationModelConstraint.fromJson(model.virtualModelCode(), model.constraintsJson());
         return new ApplicationModelPermissionView(
                 model.id().toString(), model.virtualModelId().toString(),
-                model.virtualModelCode(), model.enabled(), model.version());
+                model.virtualModelCode(), model.enabled(),
+                constraint.maxOutputTokens(), constraint.streamAllowed(), model.version());
     }
 
     private ApplicationQuotaAdjustmentView toAdjustmentView(QuotaAdjustmentRecord record) {
@@ -592,6 +636,8 @@ public final class ApplicationService {
         if (command == null) throw invalid("body", "请求体必填");
         List<FieldIssue> issues = new ArrayList<>();
         List<UUID> modelIds = uuidList(command.virtualModelIds(), issues);
+        Map<UUID, ApplicationModelConstraint> constraints =
+                modelConstraints(command.constraints(), modelIds, issues);
         if (command.applicationVersion() < 1) {
             issues.add(new FieldIssue("application_version", "INVALID",
                     "application_version 必须是正整数"));
@@ -599,7 +645,68 @@ public final class ApplicationService {
         String reason = reason(command.reason(), issues);
         if (!issues.isEmpty()) throw new LightAiException(
                 ErrorCode.FIELD_VALIDATION_FAILED, "应用模型授权不合法", issues);
-        return new ValidatedModels(modelIds, command.applicationVersion(), reason);
+        return new ValidatedModels(modelIds, constraints, command.applicationVersion(), reason);
+    }
+
+    /**
+     * 解析应用级模型参数上限：只能对本次授权的模型配置，且上限必须是正整数。
+     * 两个维度都为空的条目按“无上限”处理，不进入持久化。
+     */
+    private static Map<UUID, ApplicationModelConstraint> modelConstraints(
+            List<ApplicationModelConstraint> raw, List<UUID> granted, List<FieldIssue> issues) {
+        if (raw == null || raw.isEmpty()) {
+            return Map.of();
+        }
+        Set<UUID> grantedIds = new LinkedHashSet<>(granted);
+        Map<UUID, ApplicationModelConstraint> result = new LinkedHashMap<>();
+        for (ApplicationModelConstraint constraint : raw) {
+            if (constraint == null) continue;
+            UUID modelId;
+            try {
+                modelId = UUID.fromString(constraint.virtualModelId() == null
+                        ? "" : constraint.virtualModelId());
+            } catch (Exception e) {
+                issues.add(new FieldIssue("constraints[].virtual_model_id", "INVALID",
+                        "包含非法虚拟模型 ID"));
+                continue;
+            }
+            if (!grantedIds.contains(modelId)) {
+                issues.add(new FieldIssue("constraints[].virtual_model_id", "NOT_GRANTED",
+                        "模型 " + modelId + " 未在本次授权范围内，不能配置参数上限"));
+                continue;
+            }
+            if (constraint.isEmpty()) {
+                continue;
+            }
+            if (constraint.maxOutputTokens() != null && constraint.maxOutputTokens() < 1) {
+                issues.add(new FieldIssue("constraints[].max_output_tokens", "INVALID",
+                        "max_output_tokens 必须是正整数"));
+                continue;
+            }
+            result.put(modelId, constraint);
+        }
+        return Map.copyOf(result);
+    }
+
+    private static String constraintsJson(ApplicationModelConstraint constraint) {
+        return constraint == null ? "{}" : constraint.toJson();
+    }
+
+    private static boolean sameConstraints(String storedJson, ApplicationModelConstraint target) {
+        ApplicationModelConstraint stored = ApplicationModelConstraint.fromJson(null, storedJson);
+        ApplicationModelConstraint next = target == null
+                ? new ApplicationModelConstraint(null, null, null) : target;
+        return Objects.equals(stored.maxOutputTokens(), next.maxOutputTokens())
+                && Objects.equals(stored.streamAllowed(), next.streamAllowed());
+    }
+
+    private static String constraintText(UUID modelId, String constraintsJson) {
+        ApplicationModelConstraint constraint = ApplicationModelConstraint.fromJson(null, constraintsJson);
+        if (constraint.isEmpty()) {
+            return modelId + "=unlimited";
+        }
+        return modelId + "=max_output_tokens:" + constraint.maxOutputTokens()
+                + ",stream_allowed:" + constraint.streamAllowed();
     }
 
     private ValidatedAdjustment validateAdjustment(ApplicationQuotaAdjustmentCommand command) {
@@ -996,7 +1103,9 @@ public final class ApplicationService {
     }
 
     private record ValidatedModels(
-            List<UUID> virtualModelIds, long applicationVersion, String reason) {
+            List<UUID> virtualModelIds,
+            Map<UUID, ApplicationModelConstraint> constraints,
+            long applicationVersion, String reason) {
     }
 
     private record ValidatedAdjustment(

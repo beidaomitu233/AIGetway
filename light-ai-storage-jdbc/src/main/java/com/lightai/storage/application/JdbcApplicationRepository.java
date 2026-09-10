@@ -114,6 +114,33 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
         insertOwner(connection, applicationId, ownerId, ownerName);
     }
 
+    /** 应用成员只读列表；按角色与主体标识稳定排序（PRD 9.2.7）。 */
+    public List<ApplicationMemberRecord> listMembers(Connection connection, UUID applicationId) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT id, application_id, subject_id, subject_name, role, created_at, updated_at FROM "
+                + qualify(connection, "application_member")
+                + " WHERE application_id = ? ORDER BY role, subject_id";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, applicationId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<ApplicationMemberRecord> records = new ArrayList<>();
+                while (resultSet.next()) {
+                    records.add(new ApplicationMemberRecord(
+                            dialect.readUuid(resultSet, "id"),
+                            dialect.readUuid(resultSet, "application_id"),
+                            resultSet.getString("subject_id"),
+                            resultSet.getString("subject_name"),
+                            resultSet.getString("role"),
+                            dialect.readOffsetDateTime(resultSet, "created_at"),
+                            dialect.readOffsetDateTime(resultSet, "updated_at")));
+                }
+                return List.copyOf(records);
+            }
+        } catch (SQLException e) {
+            throw translate("应用成员读取失败", e);
+        }
+    }
+
     public void insertQuota(Connection connection, ApplicationQuotaRecord record) {
         DatabaseDialect dialect = dialect(connection);
         String sql = "INSERT INTO " + qualify(connection, "application_quota_policy")
@@ -180,7 +207,8 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
         }
     }
 
-    public void insertModelPermission(Connection connection, UUID applicationId, UUID virtualModelId) {
+    public void insertModelPermission(Connection connection, UUID applicationId, UUID virtualModelId,
+                                      String constraintsJson) {
         DatabaseDialect dialect = dialect(connection);
         String sql = "INSERT INTO " + qualify(connection, "application_model_permission")
                 + " (id, created_at, updated_at, version, application_id, virtual_model_id, enabled, constraints_json) "
@@ -191,26 +219,32 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
             dialect.bindUuid(statement, 2, applicationId);
             dialect.bindUuid(statement, 3, virtualModelId);
             statement.setBoolean(4, true);
-            dialect.bindJson(statement, 5, "{}");
+            dialect.bindJson(statement, 5, normalizeConstraints(constraintsJson));
             statement.executeUpdate();
         } catch (SQLException e) {
             throw translate("应用模型授权写入失败", e);
         }
     }
 
-    public void updateModelPermission(Connection connection, UUID id, boolean enabled, long expectedVersion) {
+    public void updateModelPermission(Connection connection, UUID id, boolean enabled,
+                                      String constraintsJson, long expectedVersion) {
         DatabaseDialect dialect = dialect(connection);
         String sql = "UPDATE " + qualify(connection, "application_model_permission")
-                + " SET enabled = ?, version = version + 1, updated_at = " + dialect.nowFunction()
-                + " WHERE id = ? AND version = ?";
+                + " SET enabled = ?, constraints_json = ?, version = version + 1, updated_at = "
+                + dialect.nowFunction() + " WHERE id = ? AND version = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setBoolean(1, enabled);
-            dialect.bindUuid(statement, 2, id);
-            statement.setLong(3, expectedVersion);
+            dialect.bindJson(statement, 2, normalizeConstraints(constraintsJson));
+            dialect.bindUuid(statement, 3, id);
+            statement.setLong(4, expectedVersion);
             if (statement.executeUpdate() != 1) throw new OptimisticLockException();
         } catch (SQLException e) {
             throw translate("应用模型授权更新失败", e);
         }
+    }
+
+    private static String normalizeConstraints(String constraintsJson) {
+        return constraintsJson == null || constraintsJson.isBlank() ? "{}" : constraintsJson;
     }
 
     public void bumpApplicationVersion(Connection connection, UUID id, long expectedVersion) {
