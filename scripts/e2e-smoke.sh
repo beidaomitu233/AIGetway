@@ -6,9 +6,28 @@ set -e
 BASE=${BASE:-http://127.0.0.1:18080}
 INTERNAL_TOKEN=${INTERNAL_TOKEN:-}
 PROVIDER_BASE=${PROVIDER_BASE:-http://127.0.0.1:19099/v1}
+PROVIDER_NAME=${PROVIDER_NAME:-stub-provider}
+PROVIDER_MODEL_ID=${PROVIDER_MODEL_ID:-stub-model}
+PROVIDER_MODEL_NAME=${PROVIDER_MODEL_NAME:-Stub Model}
+PROVIDER_SECRET=${PROVIDER_SECRET:-}
 INSTANCE_ID=${INSTANCE_ID:-$(python -c "import uuid; print(uuid.uuid4())")}
 OUT=$(cygpath -m "${TEMP:-/tmp}")/e2e-out
 mkdir -p "$OUT" 2>/dev/null || OUT=/c/Users/12062/AppData/Local/Temp/e2e-out
+TOKEN_OUTPUT=$OUT/e2e-token.json
+cleanup_sensitive_outputs() {
+  rm -f "$TOKEN_OUTPUT"
+  unset PROVIDER_SECRET BEARER
+}
+trap cleanup_sensitive_outputs EXIT
+
+if [ -z "$PROVIDER_SECRET" ] && [[ "$PROVIDER_BASE" == http://127.0.0.1:* ]]; then
+  PROVIDER_SECRET=sk-stub-1234567890
+fi
+if [ -z "$PROVIDER_SECRET" ]; then
+  read -r -s -p "Provider API key: " PROVIDER_SECRET
+  echo
+fi
+[ -z "$PROVIDER_SECRET" ] && { echo "PROVIDER_SECRET is required"; exit 1; }
 
 json_field() { python -c "
 import json,sys
@@ -22,7 +41,7 @@ print(v if v is not None else '')
 
 echo "== 1. 创建 Provider =="
 curl -s -X POST $BASE/admin/providers -H 'Content-Type: application/json' \
-  -d "{\"name\":\"stub-provider\",\"type\":\"OPENAI\",\"base_url\":\"$PROVIDER_BASE\",\"connect_timeout_ms\":3000,\"read_timeout_ms\":20000,\"enabled\":true}" \
+  -d "{\"name\":\"$PROVIDER_NAME\",\"type\":\"OPENAI\",\"base_url\":\"$PROVIDER_BASE\",\"connect_timeout_ms\":3000,\"read_timeout_ms\":90000,\"enabled\":true}" \
   -o $OUT/e2e-provider.json
 PROVIDER_ID=$(json_field $OUT/e2e-provider.json data.id)
 [ -z "$PROVIDER_ID" ] && { echo "PROVIDER FAILED:"; cat $OUT/e2e-provider.json; exit 1; }
@@ -37,20 +56,22 @@ POOL_ID=$(json_field $OUT/e2e-pool.json data.id)
 echo "pool=$POOL_ID"
 
 echo "== 3. 创建凭证 =="
+printf '{"name":"e2e-key","secret_source":"INLINE_ENCRYPTED","secret_value":"%s","weight":100,"enabled":true}' "$PROVIDER_SECRET" | \
 curl -s -X POST $BASE/admin/credential-pools/$POOL_ID/credentials -H 'Content-Type: application/json' \
-  -d '{"name":"stub-key","secret_source":"INLINE_ENCRYPTED","secret_value":"sk-stub-1234567890","weight":100,"enabled":true}' \
+  --data-binary @- \
   -o $OUT/e2e-cred.json
+unset PROVIDER_SECRET
 CRED_ID=$(json_field $OUT/e2e-cred.json data.id)
 [ -z "$CRED_ID" ] && { echo "CREDENTIAL FAILED:"; cat $OUT/e2e-cred.json; exit 1; }
 echo "credential=$CRED_ID"
 
 echo "== 4. 创建模型 =="
 curl -s -X POST $BASE/admin/providers/$PROVIDER_ID/models -H 'Content-Type: application/json' \
-  -d '{"model_id":"stub-model","display_name":"Stub Model","tokenizer_family":"cl100k","context_window":8192,"max_output_tokens":4096,
+  -d '{"model_id":"'"$PROVIDER_MODEL_ID"'","display_name":"'"$PROVIDER_MODEL_NAME"'","tokenizer_family":"O200K","context_window":262144,"max_output_tokens":8192,
         "support_stream":true,"support_system_message":true,"support_temperature":true,"support_top_p":true,"support_stop":true,
         "temperature_min":0,"temperature_max":2,"top_p_min":0,"top_p_max":1,"max_stop_sequences":4,
         "default_temperature":0.7,"default_max_tokens":1024,
-        "input_price":"0.000001","output_price":"0.000002","price_unit":1000,"currency":"USD","enabled":true}' \
+        "input_price":"0","output_price":"0","price_unit":1000000,"currency":"USD","enabled":true}' \
   -o $OUT/e2e-model.json
 MODEL_ID=$(json_field $OUT/e2e-model.json data.id)
 [ -z "$MODEL_ID" ] && { echo "MODEL FAILED:"; cat $OUT/e2e-model.json; exit 1; }
@@ -170,9 +191,9 @@ cat $OUT/e2e-ready.json; echo
 echo "== 11. 创建业务 Access Token =="
 curl -s -X POST $BASE/admin/access-credentials -H 'Content-Type: application/json' \
   -d "{\"name\":\"e2e-token\",\"application\":\"e2e-app\",\"allowed_alias_ids\":[\"$ALIAS_ID\"],\"ip_allowlist\":[],\"enabled\":true}" \
-  -o $OUT/e2e-token.json
-BEARER=$(json_field $OUT/e2e-token.json data.token_value)
-[ -z "$BEARER" ] && { echo "TOKEN FAILED:"; cat $OUT/e2e-token.json; exit 1; }
+  -o "$TOKEN_OUTPUT"
+BEARER=$(json_field "$TOKEN_OUTPUT" data.token_value)
+[ -z "$BEARER" ] && { echo "TOKEN FAILED:"; cat "$TOKEN_OUTPUT"; exit 1; }
 echo "token acquired (hidden)"
 
 echo "== 12. /v1/models =="
@@ -185,10 +206,10 @@ d=json.load(open(r'$OUT/e2e-models.json',encoding='utf-8'))
 print('models:', [m.get('id') for m in d.get('data',[])])
 "
 
-echo "== 13. /v1/chat/completions（走 Stub Provider 全链路） =="
+echo "== 13. /v1/chat/completions（真实 Provider 全链路） =="
 CHAT_HTTP=$(curl -s -X POST $BASE/v1/chat/completions -H "Authorization: Bearer $BEARER" \
   -H 'Content-Type: application/json' \
-  -d '{"model":"chat-demo","stream":false,"messages":[{"role":"user","content":"你好"}]}' \
+  -d '{"model":"chat-demo","stream":false,"messages":[{"role":"user","content":"Reply with exactly LIGHT_AI_SYNC_OK"}]}' \
   -o $OUT/e2e-chat.json -w "%{http_code}")
 echo "chat_http=$CHAT_HTTP"
 [ "$CHAT_HTTP" != "200" ] && { cat $OUT/e2e-chat.json; exit 1; }
@@ -198,14 +219,16 @@ d=json.load(open(r'$OUT/e2e-chat.json',encoding='utf-8'))
 if 'error' in d: raise SystemExit('CHAT ERROR: '+str(d['error']))
 else:
     ch=d.get('choices',[{}])[0].get('message',{})
-    print('content=', ch.get('content'))
+    content=ch.get('content') or ''
+    assert 'LIGHT_AI_SYNC_OK' in content, 'sync response marker missing'
+    print('content=', content)
     print('trace=', d.get('light_ai',{}).get('trace_id'), 'usage=', d.get('usage'))
 "
 
 echo "== 14. /v1/chat/completions 流式协议 =="
 STREAM_HTTP=$(curl -sN --max-time 15 -X POST $BASE/v1/chat/completions -H "Authorization: Bearer $BEARER" \
   -H 'Content-Type: application/json' \
-  -d '{"model":"chat-demo","stream":true,"messages":[{"role":"user","content":"stream smoke"}]}' \
+  -d '{"model":"chat-demo","stream":true,"messages":[{"role":"user","content":"Reply with exactly LIGHT_AI_STREAM_OK"}]}' \
   -o $OUT/e2e-stream.txt -w "%{http_code}")
 echo "stream_http=$STREAM_HTTP"
 [ "$STREAM_HTTP" != "200" ] && { cat $OUT/e2e-stream.txt; exit 1; }
@@ -216,6 +239,8 @@ payloads=[line[5:].strip() for line in lines]
 assert payloads and payloads[-1]=='[DONE]', 'missing terminal [DONE]'
 chunks=[json.loads(value) for value in payloads[:-1]]
 assert any((choice.get('delta') or {}).get('content') for chunk in chunks for choice in chunk.get('choices',[])), 'missing content delta'
+content=''.join((choice.get('delta') or {}).get('content') or '' for chunk in chunks for choice in chunk.get('choices',[]))
+assert 'LIGHT_AI_STREAM_OK' in content, 'stream response marker missing'
 assert sum(value == '[DONE]' for value in payloads) == 1, 'duplicate [DONE]'
 print('stream_chunks=', len(chunks), 'done_count=1')
 "
@@ -223,7 +248,7 @@ print('stream_chunks=', len(chunks), 'done_count=1')
 echo "== 15. 管理在线测试流式协议 =="
 ADMIN_STREAM_HTTP=$(curl -sN --max-time 15 -X POST $BASE/admin/developer-access/test/chat/stream \
   -H 'Content-Type: application/json' \
-  -d '{"model":"chat-demo","system_message":null,"user_message":"admin stream smoke","stream":true,"temperature":null,"top_p":null,"max_tokens":null}' \
+  -d '{"model":"chat-demo","system_message":null,"user_message":"Reply with exactly LIGHT_AI_ADMIN_STREAM_OK","stream":true,"temperature":null,"top_p":null,"max_tokens":null}' \
   -o $OUT/e2e-admin-stream.txt -w "%{http_code}")
 echo "admin_stream_http=$ADMIN_STREAM_HTTP"
 [ "$ADMIN_STREAM_HTTP" != "200" ] && { cat $OUT/e2e-admin-stream.txt; exit 1; }
@@ -235,6 +260,8 @@ assert payloads and all('error' not in item for item in payloads), 'management s
 events=[item.get('event') for item in payloads]
 assert events[0]=='START' and events[-1]=='DONE', 'invalid management terminal sequence'
 assert 'DELTA' in events and '[DONE]' not in [line[5:].strip() for line in lines], 'invalid management payload contract'
+content=''.join(item.get('delta') or '' for item in payloads if item.get('event')=='DELTA')
+assert 'LIGHT_AI_ADMIN_STREAM_OK' in content, 'management stream response marker missing'
 sequences=[item.get('sequence') for item in payloads]
 assert sequences == sorted(sequences), 'non-monotonic management sequence'
 print('admin_events=', events)

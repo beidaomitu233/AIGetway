@@ -1,1 +1,2 @@
 com.lightai.admin.LightAiAdminAutoConfiguration
+com.lightai.admin.LightAiReactiveAdminAutoConfiguration
