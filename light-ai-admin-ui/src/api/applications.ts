@@ -168,6 +168,20 @@ export interface ApplicationQuotaAdjustment {
   created_at: string
 }
 
+export interface ApplicationMemberView {
+  id: string
+  subject_id: string
+  subject_name: string
+  role: string
+}
+
+export function fetchApplicationMembers(
+  applicationId: string,
+  signal?: AbortSignal,
+): Promise<ApplicationMemberView[]> {
+  return request({ path: `/applications/${applicationId}/members`, signal })
+}
+
 export function fetchApplications(
   query: Record<string, QueryValue>,
   signal: AbortSignal,

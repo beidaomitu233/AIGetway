@@ -27,6 +27,7 @@ const pages = {
   applicationList: () => import('@/pages/applications/ApplicationListPage.vue'),
   applicationForm: () => import('@/pages/applications/ApplicationFormPage.vue'),
   applicationDetail: () => import('@/pages/applications/ApplicationDetailPage.vue'),
+  applicationIntegration: () => import('@/pages/applications/ApplicationIntegrationPage.vue'),
 }
 
 function moduleRoute(
@@ -50,6 +51,7 @@ export const routes: RouteRecordRaw[] = [
   moduleRoute('application-new', '/ui/applications/new', '新建应用', Permission.applicationManage, pages.applicationForm),
   moduleRoute('application-detail', '/ui/applications/:id', '应用详情', Permission.applicationView, pages.applicationDetail),
   moduleRoute('application-edit', '/ui/applications/:id/settings', '编辑应用', Permission.applicationManage, pages.applicationForm),
+  moduleRoute('application-integration', '/ui/applications/:id/integration', '开发接入', Permission.applicationView, pages.applicationIntegration),
 
   moduleRoute('provider-list', '/ui/providers', 'Provider', Permission.providerView, pages.providerList),
   moduleRoute('provider-new', '/ui/providers/new', '新建 Provider', Permission.providerManage, pages.providerForm),

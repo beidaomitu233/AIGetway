@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import FormField from '@/components/FormField.vue'
 import PageState from '@/components/PageState.vue'
 import ApplicationKeyPanel from './ApplicationKeyPanel.vue'
@@ -12,11 +12,13 @@ import {
   changeApplicationStatus,
   adjustApplicationQuota,
   fetchApplication,
+  fetchApplicationMembers,
   fetchApplicationQuotaAdjustments,
   resetApplicationQuotaUsage,
   updateApplicationModels,
   updateApplicationQuota,
   type ApplicationDetail,
+  type ApplicationMemberView,
   type ApplicationModelPermission,
   type ApplicationQuotaAdjustment,
   type ApplicationStatus,
@@ -42,6 +44,72 @@ const canManage = computed(() => store.can(Permission.applicationManage))
 const canViewQuota = computed(() => store.can(Permission.applicationQuotaView))
 const canManageQuota = computed(() => store.can(Permission.applicationQuotaManage))
 const canManageModels = computed(() => store.can(Permission.applicationModelManage))
+
+/** 应用详情页签（PRD 9.2.3）；当前页签写入 URL，返回列表后可还原。 */
+type DetailTab = 'overview' | 'keys' | 'models' | 'quota' | 'calls' | 'usage' | 'members'
+
+const router = useRouter()
+const tabs: { key: DetailTab; label: string }[] = [
+  { key: 'overview', label: '概览' },
+  { key: 'keys', label: '接入密钥' },
+  { key: 'models', label: '可用模型' },
+  { key: 'quota', label: '额度与速率' },
+  { key: 'calls', label: '调用记录' },
+  { key: 'usage', label: '用量成本' },
+  { key: 'members', label: '成员与审计' },
+]
+const activeTab = ref<DetailTab>('overview')
+
+const members = ref<ApplicationMemberView[]>([])
+const membersLoading = ref(false)
+const membersLoadError = ref<unknown>(null)
+const memberRoleLabel: Record<string, string> = { OWNER: '负责人', VIEWER: '只读成员' }
+
+/** 接入检查清单：未完成时给出最短接入路径，完成后只保留运行摘要。 */
+const onboardingSteps = computed(() => [
+  {
+    label: '授权虚拟模型',
+    done: (detail.value?.models.filter((item) => item.enabled).length ?? 0) > 0,
+    hint: '在“可用模型”页签选择允许调用的虚拟模型',
+  },
+  {
+    label: '签发应用密钥',
+    done: (detail.value?.active_key_count ?? 0) > 0,
+    hint: '在“接入密钥”页签创建密钥，原文只在创建成功时显示一次',
+  },
+  {
+    label: '完成首次调用',
+    done: detail.value?.last_called_at != null,
+    hint: '使用应用密钥调用 /v1/chat/completions',
+  },
+])
+const onboardingComplete = computed(() => onboardingSteps.value.every((step) => step.done))
+
+function selectTab(tab: DetailTab): void {
+  activeTab.value = tab
+  if (tab === 'members') void loadMembers()
+  void router.replace({ query: { ...route.query, tab } })
+}
+
+function syncTabFromQuery(): void {
+  const raw = typeof route.query.tab === 'string' ? route.query.tab : ''
+  activeTab.value = tabs.some((item) => item.key === raw) ? (raw as DetailTab) : 'overview'
+  if (activeTab.value === 'members') void loadMembers()
+}
+
+async function loadMembers(): Promise<void> {
+  if (!detail.value) return
+  membersLoading.value = true
+  membersLoadError.value = null
+  try {
+    members.value = await fetchApplicationMembers(detail.value.id)
+  } catch (error) {
+    membersLoadError.value = error
+  } finally {
+    membersLoading.value = false
+  }
+}
+
 const statusSubmission = useFormSubmit()
 const quotaSubmission = useFormSubmit()
 const modelSubmission = useFormSubmit()
@@ -407,6 +475,7 @@ async function load(): Promise<void> {
   try {
     detail.value = await fetchApplication(id.value)
     await loadAdjustments()
+    syncTabFromQuery()
   } catch (error) {
     loadError.value = error
   } finally {
@@ -442,109 +511,211 @@ onMounted(load)
       <div v-if="detail.status === 'DISABLED'" class="notice warning">应用已停用。所有应用密钥应停止新调用，历史调用与费用记录继续保留。</div>
       <div v-else-if="detail.status === 'ARCHIVED'" class="notice">应用已归档且不可恢复编辑，历史治理与调用快照仍保留。</div>
 
-      <div class="metric-grid">
-        <div class="metric"><span>活跃密钥</span><strong>{{ detail.active_key_count }}</strong><small>仅统计未撤销且有效的应用密钥</small></div>
-        <div class="metric"><span>授权模型</span><strong>{{ detail.models.filter((item) => item.enabled).length }}</strong><small>调用仅允许使用已授权虚拟模型</small></div>
-        <div class="metric"><span>Token 使用</span><strong>{{ usageText(detail.quota.tokens_used, detail.quota.tokens_reserved, detail.quota.token_limit) }}</strong><small>已用与预占合并展示</small></div>
-        <div class="metric"><span>金额使用</span><strong>{{ amountText() }}</strong><small>按价格快照归属到本应用</small></div>
-      </div>
+      <nav class="detail-tabs" role="tablist" aria-label="应用详情页签">
+        <button
+          v-for="tab in tabs"
+          :key="tab.key"
+          type="button"
+          role="tab"
+          class="detail-tab"
+          :class="{ 'is-active': activeTab === tab.key }"
+          :aria-selected="activeTab === tab.key"
+          @click="selectTab(tab.key)"
+        >{{ tab.label }}</button>
+      </nav>
 
-      <div class="workspace-grid">
-        <div class="main-column">
-          <div class="lai-card">
-            <div class="card-heading"><h2 class="lai-card-title">接入信息</h2><span>OpenAI 兼容协议</span></div>
-            <div class="lai-summary-grid">
-              <div class="lai-summary-item"><span class="lai-summary-label">应用编码</span><span class="lai-cell-mono">{{ detail.code }}</span></div>
-              <div class="lai-summary-item"><span class="lai-summary-label">API 地址</span><span class="lai-cell-mono">/v1/chat/completions</span></div>
-              <div class="lai-summary-item"><span class="lai-summary-label">最近调用</span>{{ formatDateTime(detail.last_called_at, store.timezone, '尚未调用') }}</div>
-              <div class="lai-summary-item"><span class="lai-summary-label">活跃应用密钥</span>{{ detail.active_key_count }}</div>
-            </div>
-            <p class="card-note">业务系统只持有平台签发的应用密钥，不接触供应商 Key。应用密钥原文只应在创建或轮换成功时显示一次。</p>
-          </div>
-
-          <ApplicationKeyPanel
-            :application-id="detail.id"
-            :application-active="detail.status === 'ACTIVE'"
-            :application-models="detail.models.filter((item) => item.enabled)"
-            @changed="load"
-          />
-
-          <div class="lai-card">
-            <div class="card-heading">
-              <h2 class="lai-card-title">可用虚拟模型</h2>
-              <button v-if="canManageModels && detail.status !== 'ARCHIVED'" type="button" class="lai-btn lai-btn-small" @click="openModelDialog">管理授权</button>
-              <span v-else>{{ detail.models.filter((item) => item.enabled).length }} 个</span>
-            </div>
-            <div v-if="detail.models.length" class="model-list">
-              <div v-for="model in detail.models" :key="model.id" class="model-row">
-                <div><strong>{{ model.virtual_model_code || model.virtual_model_id }}</strong><small>请求 model 字段</small></div>
-                <div class="model-row-meta">
-                  <span v-if="modelConstraintText(model)">{{ modelConstraintText(model) }}</span>
-                  <span :class="model.enabled ? 'enabled-text' : 'disabled-text'">{{ model.enabled ? '已授权' : '已停用' }}</span>
-                </div>
-              </div>
-            </div>
-            <p v-else class="empty-inline">尚未授权虚拟模型，应用当前无法完成模型调用。</p>
-          </div>
-
-          <div class="lai-card">
-            <div class="card-heading"><h2 class="lai-card-title">调用与成本</h2></div>
-            <div class="shortcut-grid">
-              <RouterLink :to="{ path: '/ui/traces', query: { application: detail.code } }" class="shortcut"><strong>调用记录</strong><span>查看请求、Attempt、耗时、结果与错误原因</span></RouterLink>
-              <RouterLink :to="{ path: '/ui/usage', query: { application: detail.code } }" class="shortcut"><strong>用量与成本</strong><span>查看 Token、预算消耗和应用成本归属</span></RouterLink>
-            </div>
-          </div>
+      <div v-show="activeTab === 'overview'" role="tabpanel" aria-label="概览">
+        <div class="metric-grid">
+          <div class="metric"><span>活跃密钥</span><strong>{{ detail.active_key_count }}</strong><small>仅统计未撤销且有效的应用密钥</small></div>
+          <div class="metric"><span>授权模型</span><strong>{{ detail.models.filter((item) => item.enabled).length }}</strong><small>调用仅允许使用已授权虚拟模型</small></div>
+          <div class="metric"><span>Token 使用</span><strong>{{ usageText(detail.quota.tokens_used, detail.quota.tokens_reserved, detail.quota.token_limit) }}</strong><small>已用与预占合并展示</small></div>
+          <div class="metric"><span>金额使用</span><strong>{{ amountText() }}</strong><small>按价格快照归属到本应用</small></div>
         </div>
 
-        <aside>
-          <div class="lai-card">
-            <div class="card-heading">
-              <h2 class="lai-card-title">额度与速率</h2>
-              <div v-if="canManageQuota && detail.status !== 'ARCHIVED'" class="compact-actions">
-                <button type="button" class="lai-btn lai-btn-small" @click="openAdjustmentDialog">人工增减</button>
-                <button
-                  type="button"
-                  class="lai-btn lai-btn-small"
-                  :disabled="detail.quota.tokens_used <= 0 && Number(detail.quota.amount_used) <= 0"
-                  @click="openResetDialog"
-                >重置用量</button>
-                <button type="button" class="lai-btn lai-btn-small" @click="openQuotaDialog">编辑策略</button>
+        <div class="workspace-grid">
+          <div class="main-column">
+            <div class="lai-card">
+              <div class="card-heading">
+                <h2 class="lai-card-title">接入信息</h2>
+                <RouterLink :to="`/ui/applications/${detail.id}/integration`" class="lai-btn lai-btn-small">开发接入</RouterLink>
               </div>
+              <div class="lai-summary-grid">
+                <div class="lai-summary-item"><span class="lai-summary-label">应用编码</span><span class="lai-cell-mono">{{ detail.code }}</span></div>
+                <div class="lai-summary-item"><span class="lai-summary-label">API 地址</span><span class="lai-cell-mono">/v1/chat/completions</span></div>
+                <div class="lai-summary-item"><span class="lai-summary-label">最近调用</span>{{ formatDateTime(detail.last_called_at, store.timezone, '尚未调用') }}</div>
+                <div class="lai-summary-item"><span class="lai-summary-label">活跃应用密钥</span>{{ detail.active_key_count }}</div>
+              </div>
+              <p class="card-note">OpenAI 兼容协议。业务系统只持有平台签发的应用密钥，不接触供应商 Key。应用密钥原文只应在创建或轮换成功时显示一次。</p>
             </div>
-            <dl class="property-list">
-              <div><dt>Token 额度</dt><dd>{{ usageText(detail.quota.tokens_used, detail.quota.tokens_reserved, detail.quota.token_limit) }}</dd></div>
-              <div><dt>金额预算</dt><dd>{{ amountText() }}</dd></div>
-              <div><dt>RPM</dt><dd>{{ detail.quota.rpm ?? '不限' }}</dd></div>
-              <div><dt>TPM</dt><dd>{{ detail.quota.tpm == null ? '不限' : detail.quota.tpm.toLocaleString() }}</dd></div>
-              <div><dt>结算周期</dt><dd>{{ periodLabel[detail.quota.period_type] }}</dd></div>
-            </dl>
-            <div v-if="canViewQuota" class="adjustment-history">
-              <div class="history-heading">
-                <h3>最近额度流水</h3>
-                <button type="button" class="lai-btn lai-btn-text" :disabled="adjustmentsLoading" @click="loadAdjustments">刷新</button>
+
+            <div class="lai-card">
+              <div class="card-heading">
+                <h2 class="lai-card-title">{{ onboardingComplete ? '运行摘要' : '接入检查清单' }}</h2>
+                <button v-if="onboardingComplete" type="button" class="lai-btn lai-btn-small" :disabled="loading" @click="load">刷新</button>
               </div>
-              <p v-if="adjustmentsLoading" class="history-state">正在加载…</p>
-              <p v-else-if="adjustmentsLoadError" class="history-state error-text">流水加载失败，请重试。</p>
-              <ul v-else-if="adjustments.length" class="adjustment-list">
-                <li v-for="item in adjustments.slice(0, 5)" :key="item.id">
-                  <div><strong>{{ adjustmentLabel[item.dimension] }}</strong><time>{{ formatDateTime(item.effective_at, store.timezone) }} · {{ item.operator_id }}</time></div>
-                  <p><span class="lai-cell-mono">{{ item.before_value }} → {{ item.after_value }}</span><span>{{ item.reason }}</span></p>
+              <div v-if="onboardingComplete" class="lai-summary-grid">
+                <div class="lai-summary-item"><span class="lai-summary-label">最近调用</span>{{ formatDateTime(detail.last_called_at, store.timezone, '尚未调用') }}</div>
+                <div class="lai-summary-item"><span class="lai-summary-label">可用模型</span>{{ detail.models.filter((item) => item.enabled).length }} 个</div>
+                <div class="lai-summary-item"><span class="lai-summary-label">活跃密钥</span>{{ detail.active_key_count }} 个</div>
+                <div class="lai-summary-item"><span class="lai-summary-label">已用 Token</span>{{ detail.quota.tokens_used.toLocaleString() }}</div>
+              </div>
+              <ul v-else class="onboarding-list">
+                <li v-for="step in onboardingSteps" :key="step.label" :class="{ done: step.done }">
+                  <strong>{{ step.done ? '已完成' : '待完成' }} · {{ step.label }}</strong>
+                  <span>{{ step.hint }}</span>
                 </li>
               </ul>
-              <p v-else class="history-state">暂无额度调整或重置记录。</p>
             </div>
           </div>
-          <div class="lai-card">
-            <h2 class="lai-card-title">基本信息</h2>
-            <dl class="property-list">
-              <div><dt>负责人</dt><dd>{{ detail.owner_name }}（{{ detail.owner_id }}）</dd></div>
-              <div><dt>所属部门</dt><dd>{{ detail.department || '—' }}</dd></div>
-              <div><dt>创建时间</dt><dd>{{ formatDateTime(detail.created_at, store.timezone) }}</dd></div>
-              <div><dt>更新时间</dt><dd>{{ formatDateTime(detail.updated_at, store.timezone) }}</dd></div>
-              <div v-if="detail.description"><dt>说明</dt><dd>{{ detail.description }}</dd></div>
-            </dl>
+
+          <aside>
+            <div class="lai-card">
+              <h2 class="lai-card-title">基本信息</h2>
+              <dl class="property-list">
+                <div><dt>负责人</dt><dd>{{ detail.owner_name }}（{{ detail.owner_id }}）</dd></div>
+                <div><dt>所属部门</dt><dd>{{ detail.department || '—' }}</dd></div>
+                <div><dt>环境</dt><dd>{{ environmentLabel[detail.environment] }}</dd></div>
+                <div><dt>创建时间</dt><dd>{{ formatDateTime(detail.created_at, store.timezone) }}</dd></div>
+                <div><dt>更新时间</dt><dd>{{ formatDateTime(detail.updated_at, store.timezone) }}</dd></div>
+                <div v-if="detail.description"><dt>说明</dt><dd>{{ detail.description }}</dd></div>
+              </dl>
+            </div>
+            <div class="lai-card">
+              <div class="card-heading"><h2 class="lai-card-title">额度概览</h2></div>
+              <dl class="property-list">
+                <div><dt>Token 额度</dt><dd>{{ usageText(detail.quota.tokens_used, detail.quota.tokens_reserved, detail.quota.token_limit) }}</dd></div>
+                <div><dt>金额预算</dt><dd>{{ amountText() }}</dd></div>
+                <div><dt>RPM / TPM</dt><dd>{{ detail.quota.rpm ?? '不限' }} / {{ detail.quota.tpm == null ? '不限' : detail.quota.tpm.toLocaleString() }}</dd></div>
+              </dl>
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      <div v-show="activeTab === 'keys'" role="tabpanel" aria-label="接入密钥">
+        <ApplicationKeyPanel
+          :application-id="detail.id"
+          :application-active="detail.status === 'ACTIVE'"
+          :application-models="detail.models.filter((item) => item.enabled)"
+          @changed="load"
+        />
+      </div>
+
+      <div v-show="activeTab === 'models'" role="tabpanel" aria-label="可用模型">
+        <div class="lai-card">
+          <div class="card-heading">
+            <h2 class="lai-card-title">可用虚拟模型</h2>
+            <button v-if="canManageModels && detail.status !== 'ARCHIVED'" type="button" class="lai-btn lai-btn-small" @click="openModelDialog">管理授权</button>
+            <span v-else>{{ detail.models.filter((item) => item.enabled).length }} 个</span>
           </div>
-        </aside>
+          <div v-if="detail.models.length" class="model-list">
+            <div v-for="model in detail.models" :key="model.id" class="model-row">
+              <div><strong>{{ model.virtual_model_code || model.virtual_model_id }}</strong><small>请求 model 字段</small></div>
+              <div class="model-row-meta">
+                <span v-if="modelConstraintText(model)">{{ modelConstraintText(model) }}</span>
+                <span :class="model.enabled ? 'enabled-text' : 'disabled-text'">{{ model.enabled ? '已授权' : '已停用' }}</span>
+              </div>
+            </div>
+          </div>
+          <p v-else class="empty-inline">尚未授权虚拟模型，应用当前无法完成模型调用。</p>
+          <p class="card-note">应用级参数上限只能收紧，不能突破虚拟模型与上游候选的能力边界；越界的显式参数在路由前被拒绝。</p>
+        </div>
+      </div>
+
+      <div v-show="activeTab === 'quota'" role="tabpanel" aria-label="额度与速率">
+        <div class="lai-card">
+          <div class="card-heading">
+            <h2 class="lai-card-title">额度与速率</h2>
+            <div v-if="canManageQuota && detail.status !== 'ARCHIVED'" class="compact-actions">
+              <button type="button" class="lai-btn lai-btn-small" @click="openAdjustmentDialog">人工增减</button>
+              <button
+                type="button"
+                class="lai-btn lai-btn-small"
+                :disabled="detail.quota.tokens_used <= 0 && Number(detail.quota.amount_used) <= 0"
+                @click="openResetDialog"
+              >重置用量</button>
+              <button type="button" class="lai-btn lai-btn-small" @click="openQuotaDialog">编辑策略</button>
+            </div>
+          </div>
+          <dl class="property-list">
+            <div><dt>Token 额度</dt><dd>{{ usageText(detail.quota.tokens_used, detail.quota.tokens_reserved, detail.quota.token_limit) }}</dd></div>
+            <div><dt>金额预算</dt><dd>{{ amountText() }}</dd></div>
+            <div><dt>RPM</dt><dd>{{ detail.quota.rpm ?? '不限' }}</dd></div>
+            <div><dt>TPM</dt><dd>{{ detail.quota.tpm == null ? '不限' : detail.quota.tpm.toLocaleString() }}</dd></div>
+            <div><dt>结算周期</dt><dd>{{ periodLabel[detail.quota.period_type] }}</dd></div>
+          </dl>
+          <div v-if="canViewQuota" class="adjustment-history">
+            <div class="history-heading">
+              <h3>最近额度流水</h3>
+              <button type="button" class="lai-btn lai-btn-text" :disabled="adjustmentsLoading" @click="loadAdjustments">刷新</button>
+            </div>
+            <p v-if="adjustmentsLoading" class="history-state">正在加载…</p>
+            <p v-else-if="adjustmentsLoadError" class="history-state error-text">流水加载失败，请重试。</p>
+            <ul v-else-if="adjustments.length" class="adjustment-list">
+              <li v-for="item in adjustments" :key="item.id">
+                <div><strong>{{ adjustmentLabel[item.dimension] }}</strong><time>{{ formatDateTime(item.effective_at, store.timezone) }} · {{ item.operator_id }}</time></div>
+                <p><span class="lai-cell-mono">{{ item.before_value }} → {{ item.after_value }}</span><span>{{ item.reason }}</span></p>
+              </li>
+            </ul>
+            <p v-else class="history-state">暂无额度调整或重置记录。</p>
+          </div>
+        </div>
+      </div>
+
+      <div v-show="activeTab === 'calls'" role="tabpanel" aria-label="调用记录">
+        <div class="lai-card">
+          <div class="card-heading">
+            <h2 class="lai-card-title">调用记录</h2>
+            <RouterLink :to="{ path: '/ui/traces', query: { application: detail.code } }" class="lai-btn lai-btn-small">查看全部</RouterLink>
+          </div>
+          <dl class="property-list">
+            <div><dt>最近调用</dt><dd>{{ formatDateTime(detail.last_called_at, store.timezone, '尚未调用') }}</dd></div>
+            <div><dt>应用编码</dt><dd class="lai-cell-mono">{{ detail.code }}</dd></div>
+            <div><dt>活跃密钥</dt><dd>{{ detail.active_key_count }} 个</dd></div>
+          </dl>
+          <p class="card-note">调用记录按 request_id 展示准入、路由、每次 Attempt、恢复动作与结算结果；应用负责人只能查看本应用。</p>
+        </div>
+      </div>
+
+      <div v-show="activeTab === 'usage'" role="tabpanel" aria-label="用量成本">
+        <div class="lai-card">
+          <div class="card-heading">
+            <h2 class="lai-card-title">用量与成本</h2>
+            <RouterLink :to="{ path: '/ui/usage', query: { application: detail.code } }" class="lai-btn lai-btn-small">查看全部</RouterLink>
+          </div>
+          <dl class="property-list">
+            <div><dt>Token 使用</dt><dd>{{ usageText(detail.quota.tokens_used, detail.quota.tokens_reserved, detail.quota.token_limit) }}</dd></div>
+            <div><dt>金额使用</dt><dd>{{ amountText() }}</dd></div>
+            <div><dt>结算周期</dt><dd>{{ periodLabel[detail.quota.period_type] }}</dd></div>
+          </dl>
+          <p class="card-note">成本按请求发生时的价格快照归属到本应用；供应商未返回 Usage 时按估算标记，不与实际值混淆。</p>
+        </div>
+      </div>
+
+      <div v-show="activeTab === 'members'" role="tabpanel" aria-label="成员与审计">
+        <div class="lai-card">
+          <div class="card-heading">
+            <h2 class="lai-card-title">应用成员</h2>
+            <button type="button" class="lai-btn lai-btn-small" :disabled="membersLoading" @click="loadMembers">刷新</button>
+          </div>
+          <p v-if="membersLoading" class="history-state">正在加载…</p>
+          <p v-else-if="membersLoadError" class="history-state error-text">成员加载失败，请重试。</p>
+          <div v-else-if="members.length" class="model-list">
+            <div v-for="member in members" :key="member.id" class="model-row">
+              <div><strong>{{ member.subject_name }}</strong><small>{{ member.subject_id }}</small></div>
+              <span class="member-role">{{ memberRoleLabel[member.role] || member.role }}</span>
+            </div>
+          </div>
+          <p v-else class="empty-inline">该应用暂无成员记录。</p>
+          <p class="card-note">成员来源于企业身份系统。成员维护方式仍在产品待确认范围内，当前平台只提供查看。</p>
+        </div>
+        <div class="lai-card">
+          <div class="card-heading">
+            <h2 class="lai-card-title">应用审计</h2>
+            <RouterLink :to="{ path: '/ui/audit-logs', query: { target: detail.id } }" class="lai-btn lai-btn-small">查看审计</RouterLink>
+          </div>
+          <p class="card-note">密钥创建、轮换、撤销、模型授权、额度调整、状态变更与成员变更均写入审计，日志不包含密钥原文。</p>
+        </div>
       </div>
     </template>
 
@@ -740,6 +911,17 @@ onMounted(load)
 .status-reason { width: 100%; max-width: none; height: auto; margin-top: 6px; padding: 8px 10px; resize: vertical; }
 .lai-btn-small { min-height: 30px; padding: 4px 10px; font-size: 12px; }
 .compact-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.detail-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid #e6eaf0; }
+.detail-tab { padding: 8px 12px; font-size: 13px; color: #667085; background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer; }
+.detail-tab:hover { color: #172033; }
+.detail-tab.is-active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 500; }
+.onboarding-list { padding: 0; margin: 0; list-style: none; }
+.onboarding-list li { display: flex; flex-direction: column; gap: 4px; padding: 11px 0; border-bottom: 1px solid #e6eaf0; }
+.onboarding-list li:last-child { border-bottom: 0; }
+.onboarding-list li strong { font-size: 13px; color: #b45309; }
+.onboarding-list li.done strong { color: #166534; }
+.onboarding-list li span { color: #667085; font-size: 12px; }
+.member-role { font-size: 12px; color: #667085; }
 .adjustment-history { padding-top: 14px; margin-top: 14px; border-top: 1px solid #e6eaf0; }
 .history-heading, .adjustment-list li > div, .adjustment-list li p { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .history-heading h3 { margin: 0; font-size: 13px; color: #344054; }

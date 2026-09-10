@@ -350,4 +350,75 @@ describe('Application pages（V2 应用中心）', () => {
         reason: '增加备用模型',
       })
   })
+
+  it('详情页签切换写入 URL 并按需加载应用成员', async () => {
+    stub = installJsonFetchStub(({ url, method }) => {
+      if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}`)) return dataEnvelope(application)
+      if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}/keys`)) return dataEnvelope([])
+      if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}/quota/adjustments`)) return dataEnvelope([])
+      if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}/members`)) {
+        return dataEnvelope([
+          { id: 'member-1', subject_id: 'user-admin', subject_name: '系统管理员', role: 'OWNER' },
+        ])
+      }
+      return undefined
+    })
+    const { wrapper, router } = await mountPage(`/ui/applications/${application.id}`)
+
+    expect(wrapper.findAll('.detail-tab').map((tab) => tab.text())).toEqual([
+      '概览', '接入密钥', '可用模型', '额度与速率', '调用记录', '用量成本', '成员与审计',
+    ])
+
+    const membersTab = wrapper.findAll('.detail-tab').find((tab) => tab.text() === '成员与审计')!
+    await membersTab.trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.query.tab).toBe('members')
+    expect(wrapper.text()).toContain('系统管理员')
+    expect(wrapper.text()).toContain('负责人')
+    expect(stub.calls.some((call) => call.method === 'GET' && call.url.endsWith('/members'))).toBe(true)
+  })
+
+  it('应用内开发接入页只列出该应用已授权的虚拟模型', async () => {
+    stub = installJsonFetchStub(({ url, method }) => {
+      if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}`)) return dataEnvelope(application)
+      if (method === 'GET' && url.pathname.endsWith('/admin/developer-access/context')) {
+        return dataEnvelope({
+          runtime_mode: 'STANDALONE_SERVER',
+          api_base_url: 'https://gateway.example.com',
+          authentication_type: 'BEARER_TOKEN',
+          sdk_version: '0.1.0',
+          server_version: '0.1.0',
+          current_snapshot_no: 7,
+          selected_alias_id: 'alias-1',
+          available_models: [
+            {
+              alias_id: 'alias-1', alias: 'chat-default', display_name: '默认对话',
+              support_stream: true, support_system_message: true,
+              context_window: 8000, max_output_tokens: 1024,
+            },
+            {
+              alias_id: 'alias-9', alias: 'not-granted', display_name: '未授权模型',
+              support_stream: true, support_system_message: true,
+              context_window: 8000, max_output_tokens: 1024,
+            },
+          ],
+        })
+      }
+      if (method === 'GET' && url.pathname.endsWith('/admin/developer-access/code-sample')) {
+        return dataEnvelope({
+          language: 'curl', filename: null, content: 'curl https://gateway.example.com',
+          alias_id: 'alias-1', mode: 'STANDALONE_CLIENT', sample_type: 'SYNC',
+        })
+      }
+      return undefined
+    })
+    const { wrapper } = await mountPage(`/ui/applications/${application.id}/integration`)
+
+    const modelSelect = wrapper.find('select[aria-label="选择应用已授权模型"]')
+    expect(modelSelect.findAll('option').map((option) => option.text())).toEqual(['默认对话（chat-default）'])
+    expect(wrapper.text()).toContain('https://gateway.example.com')
+    expect(wrapper.text()).toContain('APPLICATION_MODEL_CONSTRAINT_VIOLATED')
+    expect(wrapper.text()).not.toContain('未授权模型')
+  })
 })
