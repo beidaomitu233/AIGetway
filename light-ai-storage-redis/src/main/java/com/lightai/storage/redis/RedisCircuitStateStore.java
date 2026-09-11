@@ -241,13 +241,13 @@ public final class RedisCircuitStateStore implements CircuitStateStore, AutoClos
         }
     }
 
-    private String stateKey(CircuitKey key) { return prefix + "state:" + key.providerModelId() + ":" + key.credentialId(); }
-    private String probeKey(CircuitKey key) { return prefix + "probes:" + key.providerModelId() + ":" + key.credentialId(); }
+    private String stateKey(CircuitKey key) { return prefix + "state:" + key.upstreamModelId() + ":" + key.channelCredentialId(); }
+    private String probeKey(CircuitKey key) { return prefix + "probes:" + key.upstreamModelId() + ":" + key.channelCredentialId(); }
     private String indexKey() { return prefix + "states"; }
     private String lockKey() { return prefix + "lock"; }
     private static void requireKey(CircuitKey key) {
-        if (key == null || key.providerModelId() == null || key.credentialId() == null) {
-            throw new IllegalArgumentException("熔断键的 providerModelId/credentialId 不能为空");
+        if (key == null || key.upstreamModelId() == null || key.channelCredentialId() == null) {
+            throw new IllegalArgumentException("熔断键的 upstreamModelId/channelCredentialId 不能为空");
         }
     }
 
@@ -289,8 +289,8 @@ public final class RedisCircuitStateStore implements CircuitStateStore, AutoClos
 
         Map<String, String> values() {
             java.util.LinkedHashMap<String, String> values = new java.util.LinkedHashMap<>();
-            put(values, "circuit_id", circuitId); put(values, "model_id", key.providerModelId());
-            put(values, "credential_id", key.credentialId()); put(values, "state", state);
+            put(values, "circuit_id", circuitId); put(values, "model_id", key.upstreamModelId());
+            put(values, "channel_credential_id", key.channelCredentialId()); put(values, "state", state);
             put(values, "version", stateVersion); put(values, "window_at", windowStartedAt);
             put(values, "requests", requestCount); put(values, "failures", failureCount);
             put(values, "probe_inflight", probeInflight); put(values, "probe_success", probeSuccessCount);
@@ -303,7 +303,7 @@ public final class RedisCircuitStateStore implements CircuitStateStore, AutoClos
         static State from(Map<String, String> values) {
             State state = new State();
             state.circuitId = uuid(values.get("circuit_id"));
-            state.key = new CircuitKey(uuid(values.get("model_id")), uuid(values.get("credential_id")));
+            state.key = new CircuitKey(uuid(values.get("model_id")), uuid(values.get("channel_credential_id")));
             state.state = values.get("state"); state.stateVersion = number(values.get("version"));
             state.windowStartedAt = instant(values.get("window_at"));
             state.requestCount = (int) number(values.get("requests"));

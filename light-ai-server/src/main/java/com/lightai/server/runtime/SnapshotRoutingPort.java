@@ -68,7 +68,7 @@ public final class SnapshotRoutingPort implements RoutingPort {
         return candidates.stream()
                 .map(candidate -> new RouteCandidateView(
                         uuid(candidate.candidateId()), uuid(alias.aliasId()),
-                        uuid(candidate.modelPk()), uuid(candidate.poolId()),
+                        uuid(candidate.modelPk()), uuid(candidate.channelId()),
                         (int) Math.min(Integer.MAX_VALUE, candidate.priority()), candidate.weight(),
                         candidate.enabled(), candidate.supportStream(), candidate.supportSystem(),
                         candidate.contextWindow(),

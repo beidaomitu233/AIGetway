@@ -14,14 +14,14 @@ import java.util.UUID;
 
 /**
  * route_candidate JDBC 仓储（DATABASE_PLAN §7）。
- * (alias_id, provider_model_id, credential_pool_id) 活行唯一；
+ * (alias_id, upstream_model_id, channel_id) 活行唯一；
  * 更新不换 model；重排为同事务批量 version 校验后统一写入。
  * 支持 PostgreSQL 与 MySQL 5.7 / 8.0 双方言自适应。
  */
 public class JdbcCandidateRepository extends AbstractJdbcRepository {
 
     private static final String COLUMNS =
-            "id, alias_id, provider_model_id, credential_pool_id, priority, weight, enabled, "
+            "id, alias_id, upstream_model_id, channel_id, priority, weight, enabled, "
                     + "version, created_at, updated_at";
 
     public JdbcCandidateRepository(String schemaName, DatabaseDialect explicitDialect) {
@@ -45,8 +45,8 @@ public class JdbcCandidateRepository extends AbstractJdbcRepository {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, record.id());
             d.bindUuid(statement, 2, record.aliasId());
-            d.bindUuid(statement, 3, record.providerModelId());
-            d.bindUuid(statement, 4, record.credentialPoolId());
+            d.bindUuid(statement, 3, record.upstreamModelId());
+            d.bindUuid(statement, 4, record.channelId());
             statement.setInt(5, record.priority());
             statement.setInt(6, record.weight());
             statement.setBoolean(7, record.enabled());
@@ -85,16 +85,16 @@ public class JdbcCandidateRepository extends AbstractJdbcRepository {
         }
     }
 
-    public boolean existsTriple(Connection connection, UUID aliasId, UUID providerModelId,
-                                UUID credentialPoolId) {
+    public boolean existsTriple(Connection connection, UUID aliasId, UUID upstreamModelId,
+                                UUID channelId) {
         DatabaseDialect d = dialect(connection);
         String sql = "SELECT 1 FROM " + qualify(connection, "route_candidate")
-                + " WHERE alias_id = ? AND provider_model_id = ? AND credential_pool_id = ?"
+                + " WHERE alias_id = ? AND upstream_model_id = ? AND channel_id = ?"
                 + " AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, aliasId);
-            d.bindUuid(statement, 2, providerModelId);
-            d.bindUuid(statement, 3, credentialPoolId);
+            d.bindUuid(statement, 2, upstreamModelId);
+            d.bindUuid(statement, 3, channelId);
             try (ResultSet rs = statement.executeQuery()) {
                 return rs.next();
             }
@@ -195,12 +195,12 @@ public class JdbcCandidateRepository extends AbstractJdbcRepository {
     }
 
     /** 模型被引用数（BE-014 删除拦截）。 */
-    public long countLiveByProviderModel(Connection connection, UUID providerModelId) {
+    public long countLiveByProviderModel(Connection connection, UUID upstreamModelId) {
         DatabaseDialect d = dialect(connection);
         String sql = "SELECT count(*) FROM " + qualify(connection, "route_candidate")
-                + " WHERE provider_model_id = ? AND deleted_at IS NULL";
+                + " WHERE upstream_model_id = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            d.bindUuid(statement, 1, providerModelId);
+            d.bindUuid(statement, 1, upstreamModelId);
             try (ResultSet rs = statement.executeQuery()) {
                 rs.next();
                 return rs.getLong(1);
@@ -211,12 +211,12 @@ public class JdbcCandidateRepository extends AbstractJdbcRepository {
     }
 
     /** 按模型列出引用候选（影响分析）。 */
-    public List<CandidateRecord> findLiveByProviderModel(Connection connection, UUID providerModelId) {
+    public List<CandidateRecord> findLiveByProviderModel(Connection connection, UUID upstreamModelId) {
         DatabaseDialect d = dialect(connection);
         String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "route_candidate")
-                + " WHERE provider_model_id = ? AND deleted_at IS NULL ORDER BY id ASC";
+                + " WHERE upstream_model_id = ? AND deleted_at IS NULL ORDER BY id ASC";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            d.bindUuid(statement, 1, providerModelId);
+            d.bindUuid(statement, 1, upstreamModelId);
             try (ResultSet rs = statement.executeQuery()) {
                 List<CandidateRecord> records = new ArrayList<>();
                 while (rs.next()) {
@@ -233,8 +233,8 @@ public class JdbcCandidateRepository extends AbstractJdbcRepository {
         return new CandidateRecord(
                 d.readUuid(rs, "id"),
                 d.readUuid(rs, "alias_id"),
-                d.readUuid(rs, "provider_model_id"),
-                d.readUuid(rs, "credential_pool_id"),
+                d.readUuid(rs, "upstream_model_id"),
+                d.readUuid(rs, "channel_id"),
                 rs.getInt("priority"),
                 rs.getInt("weight"),
                 rs.getBoolean("enabled"),

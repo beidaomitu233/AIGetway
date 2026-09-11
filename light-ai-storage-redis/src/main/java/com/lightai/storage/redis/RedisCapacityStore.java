@@ -120,8 +120,8 @@ public final class RedisCapacityStore implements CapacityStore, AutoCloseable {
         Objects.requireNonNull(request, "request 不能为空");
         requireScopeIds(request);
         return reserveScopes(
-                new String[]{"alias", "provider_model", "credential"},
-                new UUID[]{request.aliasId(), request.providerModelId(), request.credentialId()},
+                new String[]{"alias", "upstream_model", "channel_credential"},
+                new UUID[]{request.aliasId(), request.upstreamModelId(), request.channelCredentialId()},
                 new ScopeLimit[]{request.aliasLimit(), request.providerModelLimit(), request.credentialLimit()},
                 request.estimatedTokens(), request.maxTokens());
     }
@@ -262,7 +262,7 @@ public final class RedisCapacityStore implements CapacityStore, AutoCloseable {
     }
 
     private static void requireScopeIds(ReserveRequest request) {
-        if (request.aliasId() == null || request.providerModelId() == null || request.credentialId() == null) {
+        if (request.aliasId() == null || request.upstreamModelId() == null || request.channelCredentialId() == null) {
             throw new IllegalArgumentException("容量预占三层 scope id 均不能为空");
         }
     }

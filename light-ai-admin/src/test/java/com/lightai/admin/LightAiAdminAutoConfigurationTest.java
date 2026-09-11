@@ -66,8 +66,8 @@ class LightAiAdminAutoConfigurationTest {
             assertThat(context).hasBean("lightAiAuditRepository");
             assertThat(context).hasBean("lightAiDraftWriteService");
             assertThat(context).hasBean("lightAiManagementStateReader");
-            assertThat(context).hasBean("lightAiCredentialService");
-            assertThat(context).hasBean("lightAiProviderModelService");
+            assertThat(context).hasBean("lightAiChannelCredentialService");
+            assertThat(context).hasBean("lightAiUpstreamModelService");
             assertThat(context).hasBean("lightAiModelAliasController");
             assertThat(context).hasBean("lightAiSecretCipher");
         });

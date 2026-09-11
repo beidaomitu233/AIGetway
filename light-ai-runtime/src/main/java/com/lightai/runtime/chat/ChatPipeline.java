@@ -182,7 +182,7 @@ public class ChatPipeline {
             boolean attemptFinished = false;
             try {
                 CredentialSecretPort.ResolvedCredential credential =
-                        credentialPort.resolve(candidate.poolId(), credentialIndex);
+                        credentialPort.resolve(candidate.channelId(), credentialIndex);
                 long estimatedInput = estimatedInput(requestChars(parsed.request()));
                 reservation = reserveCapacity(parsed, candidate, credential, estimatedInput,
                         traceId(handle), signal, started);
@@ -316,7 +316,7 @@ public class ChatPipeline {
             String attemptId = null;
             try {
                 CredentialSecretPort.ResolvedCredential credential =
-                        credentialPort.resolve(candidate.poolId(), credentialIndex);
+                        credentialPort.resolve(candidate.channelId(), credentialIndex);
                 long estimatedInput = estimatedInput(requestChars(parsed.request()));
                 reservation = reserveCapacity(parsed, candidate, credential, estimatedInput,
                         traceId(handle), signal, started);
@@ -712,10 +712,10 @@ public class ChatPipeline {
             ParsedRequest parsed, CandidateView candidate,
             CredentialSecretPort.ResolvedCredential credential, long estimatedInput, long maxTokens) {
         return capacityPort.reserve(parsed.aliasView().aliasId(), candidate.modelPk(),
-                credential.credentialId(), estimatedInput, maxTokens,
+                credential.channelCredentialId(), estimatedInput, maxTokens,
                 parsed.snapshot().capacityLimit("MODEL_ALIAS", parsed.aliasView().aliasId()),
                 parsed.snapshot().capacityLimit("PROVIDER_MODEL", candidate.modelPk()),
-                parsed.snapshot().capacityLimit("CREDENTIAL", credential.credentialId()));
+                parsed.snapshot().capacityLimit("CREDENTIAL", credential.channelCredentialId()));
     }
 
     private CapacityPort.Reservation awaitCapacity(
@@ -772,7 +772,7 @@ public class ChatPipeline {
         return switch (scopeType.toUpperCase(java.util.Locale.ROOT)) {
             case "ALIAS", "MODEL_ALIAS" -> parsed.aliasView().aliasId();
             case "PROVIDER_MODEL" -> candidate.modelPk();
-            case "CREDENTIAL" -> credential.credentialId();
+            case "CREDENTIAL" -> credential.channelCredentialId();
             default -> null;
         };
     }
@@ -780,8 +780,8 @@ public class ChatPipeline {
     private CircuitAttempt acquireCircuit(ParsedRequest parsed, CandidateView candidate,
                                           CredentialSecretPort.ResolvedCredential credential) {
         if (circuitStateStore == null) return null;
-        CircuitKey key = new CircuitKey(uuid(candidate.modelPk()), uuid(credential.credentialId()));
-        if (key.providerModelId() == null || key.credentialId() == null) return null;
+        CircuitKey key = new CircuitKey(uuid(candidate.modelPk()), uuid(credential.channelCredentialId()));
+        if (key.upstreamModelId() == null || key.channelCredentialId() == null) return null;
         CircuitPolicy policy = parsed.snapshot().circuitPolicy(parsed.aliasView().aliasId());
         CircuitSnapshot snapshot = circuitStateStore.snapshot(key, policy, Instant.now());
         if (CircuitSnapshot.STATE_OPEN.equals(snapshot.state())) {

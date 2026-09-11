@@ -41,8 +41,8 @@ public final class TraceListQueryParser {
             OffsetDateTime endAt,
             List<String> applications,
             List<String> aliasIds,
-            List<String> providerIds,
-            List<String> providerModelIds,
+            List<String> channelIds,
+            List<String> upstreamModelIds,
             List<String> statuses,
             List<String> projects,
             List<String> tenants,
@@ -50,7 +50,7 @@ public final class TraceListQueryParser {
             String tagValue,
             List<String> sourceModes,
             List<String> accessCredentialIds,
-            List<String> credentialIds,
+            List<String> channelCredentialIds,
             String requestUser,
             String clientIp,
             List<String> attemptTypes,
@@ -106,14 +106,14 @@ public final class TraceListQueryParser {
 
         List<String> applications = multi(params, "application", issues);
         List<String> aliasIds = multi(params, "alias_id", issues);
-        List<String> providerIds = multi(params, "provider_id", issues);
-        List<String> providerModelIds = multi(params, "provider_model_id", issues);
+        List<String> channelIds = multi(params, "channel_id", issues);
+        List<String> upstreamModelIds = multi(params, "upstream_model_id", issues);
         List<String> statuses = multiEnum(params, "status", STATUSES, issues);
         List<String> projects = multi(params, "project", issues);
         List<String> tenants = multi(params, "tenant", issues);
         List<String> sourceModes = multiEnum(params, "source_mode", SOURCE_MODES, issues);
         List<String> accessCredentialIds = multi(params, "access_credential_id", issues);
-        List<String> credentialIds = multi(params, "credential_id", issues);
+        List<String> channelCredentialIds = multi(params, "channel_credential_id", issues);
         List<String> attemptTypes = multiEnum(params, "attempt_type", ATTEMPT_TYPES, issues);
         List<String> errorCodes = multi(params, "error_code", issues);
         List<String> usageSources = multiEnum(params, "usage_source", USAGE_SOURCES, issues);
@@ -168,9 +168,9 @@ public final class TraceListQueryParser {
 
         return new TraceListQuery(
                 null, startAt, endAt,
-                applications, aliasIds, providerIds, providerModelIds, statuses, projects, tenants,
+                applications, aliasIds, channelIds, upstreamModelIds, statuses, projects, tenants,
                 hasKey ? tagKey.strip() : null, hasValue ? tagValue.strip() : null,
-                sourceModes, accessCredentialIds, credentialIds, requestUser, clientIp,
+                sourceModes, accessCredentialIds, channelCredentialIds, requestUser, clientIp,
                 attemptTypes, errorCodes, requestedStream, usageSources,
                 hasRetry, hasCredentialFailover, hasFallback, minTotalMs, maxTotalMs,
                 anomalousRunning, page);

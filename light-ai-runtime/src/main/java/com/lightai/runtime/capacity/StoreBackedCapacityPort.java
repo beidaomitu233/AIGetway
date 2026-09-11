@@ -16,21 +16,21 @@ public final class StoreBackedCapacityPort implements CapacityPort {
     }
 
     @Override
-    public Reservation reserve(String aliasId, String modelId, String credentialId, long estimatedTokens) {
-        return reserve(aliasId, modelId, credentialId,
+    public Reservation reserve(String aliasId, String modelId, String channelCredentialId, long estimatedTokens) {
+        return reserve(aliasId, modelId, channelCredentialId,
                 estimatedTokens, 0, null, null, null);
     }
 
     @Override
-    public Reservation reserve(String aliasId, String modelId, String credentialId,
+    public Reservation reserve(String aliasId, String modelId, String channelCredentialId,
                                long estimatedTokens, long maxTokens,
                                CapacityStore.ScopeLimit aliasLimit,
                                CapacityStore.ScopeLimit modelLimit,
                                CapacityStore.ScopeLimit credentialLimit) {
         CapacityStore.ReservationHandle handle = store.reserve(new CapacityStore.ReserveRequest(
-                uuid(aliasId), uuid(modelId), uuid(credentialId), estimatedTokens, maxTokens,
+                uuid(aliasId), uuid(modelId), uuid(channelCredentialId), estimatedTokens, maxTokens,
                 aliasLimit, modelLimit, credentialLimit));
-        return new Reservation(handle.reservationId().toString(), aliasId, modelId, credentialId);
+        return new Reservation(handle.reservationId().toString(), aliasId, modelId, channelCredentialId);
     }
 
     @Override

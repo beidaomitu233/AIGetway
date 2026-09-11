@@ -159,10 +159,9 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
             }
 
             UUID routeCandidateUuid = parseUuidSafe(candidateId);
-            UUID providerUuid = routeCandidateUuid != null ? routeCandidateUuid : UUID.randomUUID();
-            UUID providerModelUuid = providerUuid;
-            UUID poolUuid = providerUuid;
-            UUID credentialUuid = providerUuid;
+            UUID channelUuid = routeCandidateUuid != null ? routeCandidateUuid : UUID.randomUUID();
+            UUID upstreamModelUuid = channelUuid;
+            UUID credentialUuid = channelUuid;
 
             String pType = (providerType != null && !providerType.isBlank()) ? providerType : "UNKNOWN";
             String mId = (modelId != null && !modelId.isBlank()) ? modelId : "UNKNOWN";
@@ -171,14 +170,14 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
 
             String sql = "INSERT INTO " + qualify(conn, "attempt") + " ("
                     + "id, created_at, updated_at, trace_id, " + d.quoteColumn("sequence") + ", attempt_type, "
-                    + "route_candidate_id, provider_id, provider_model_id, credential_pool_id, credential_id, "
-                    + "provider_name_snapshot, provider_model_name_snapshot, model_id_snapshot, credential_name_snapshot, "
+                    + "route_candidate_id, channel_id, upstream_model_id, channel_credential_id, "
+                    + "channel_name_snapshot, upstream_model_name_snapshot, model_id_snapshot, channel_credential_name_snapshot, "
                     + "status, started_at, endpoint_host, response_committed, retryable, "
                     + "resolved_parameters, input_tokens, output_tokens, total_tokens, "
                     + "input_price, output_price, price_unit, currency, input_cost, output_cost, total_cost"
                     + ") VALUES (?, " + d.nowFunction() + ", " + d.nowFunction() + ", ?, ?, ?, "
                     + "?, ?, ?, ?, ?, "
-                    + "?, ?, ?, ?, "
+                    + "?, ?, ?, "
                     + "'RUNNING', ?, 'api.provider', 0, 0, "
                     + d.jsonPlaceholder() + ", 0, 0, 0, "
                     + "0, 0, 1000, 'USD', 0, 0, 0)";
@@ -189,16 +188,15 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
                 ps.setInt(3, sequence);
                 ps.setString(4, attemptType);
                 d.bindUuid(ps, 5, routeCandidateUuid);
-                d.bindUuid(ps, 6, providerUuid);
-                d.bindUuid(ps, 7, providerModelUuid);
-                d.bindUuid(ps, 8, poolUuid);
-                d.bindUuid(ps, 9, credentialUuid);
-                ps.setString(10, pType);
+                d.bindUuid(ps, 6, channelUuid);
+                d.bindUuid(ps, 7, upstreamModelUuid);
+                d.bindUuid(ps, 8, credentialUuid);
+                ps.setString(9, pType);
+                ps.setString(10, mId);
                 ps.setString(11, mId);
-                ps.setString(12, mId);
-                ps.setString(13, "default");
-                ps.setObject(14, now);
-                d.bindJson(ps, 15, "{}");
+                ps.setString(12, "default");
+                ps.setObject(13, now);
+                d.bindJson(ps, 14, "{}");
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
@@ -364,14 +362,14 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
             BigDecimal totalCost = BigDecimal.ZERO;
             String usageSource = null;
             UUID finalAttemptId = null;
-            UUID finalProviderId = null;
-            UUID finalProviderModelId = null;
-            UUID finalCredentialId = null;
-            String finalProviderName = null;
-            String finalProviderModelName = null;
+            UUID finalChannelId = null;
+            UUID finalUpstreamModelId = null;
+            UUID finalChannelCredentialId = null;
+            String finalChannelName = null;
+            String finalUpstreamModelName = null;
 
-            String attemptsSql = "SELECT id, provider_id, provider_model_id, credential_id, "
-                    + "provider_name_snapshot, provider_model_name_snapshot, status, "
+            String attemptsSql = "SELECT id, channel_id, upstream_model_id, channel_credential_id, "
+                    + "channel_name_snapshot, upstream_model_name_snapshot, status, "
                     + "input_tokens, output_tokens, total_tokens, total_cost, usage_source, currency "
                     + "FROM " + qualify(conn, "attempt")
                     + " WHERE trace_id = ? ORDER BY " + d.quoteColumn("sequence") + " ASC";
@@ -382,11 +380,11 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
                     while (rs.next()) {
                         attemptCount++;
                         finalAttemptId = d.readUuid(rs, "id");
-                        finalProviderId = d.readUuid(rs, "provider_id");
-                        finalProviderModelId = d.readUuid(rs, "provider_model_id");
-                        finalCredentialId = d.readUuid(rs, "credential_id");
-                        finalProviderName = rs.getString("provider_name_snapshot");
-                        finalProviderModelName = rs.getString("provider_model_name_snapshot");
+                        finalChannelId = d.readUuid(rs, "channel_id");
+                        finalUpstreamModelId = d.readUuid(rs, "upstream_model_id");
+                        finalChannelCredentialId = d.readUuid(rs, "channel_credential_id");
+                        finalChannelName = rs.getString("channel_name_snapshot");
+                        finalUpstreamModelName = rs.getString("upstream_model_name_snapshot");
                         long aIn = rs.getLong("input_tokens");
                         long aOut = rs.getLong("output_tokens");
                         long aTot = rs.getLong("total_tokens");
@@ -423,8 +421,8 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
                     + "input_tokens = ?, output_tokens = ?, total_tokens = ?, "
                     + "response_input_tokens = ?, response_output_tokens = ?, response_total_tokens = ?, "
                     + "total_cost = ?, currency = ?, usage_source = ?, "
-                    + "final_attempt_id = ?, final_provider_id = ?, final_provider_model_id = ?, final_credential_id = ?, "
-                    + "final_provider_name = ?, final_provider_model_name = ?, "
+                    + "final_attempt_id = ?, final_channel_id = ?, final_upstream_model_id = ?, final_channel_credential_id = ?, "
+                    + "final_channel_name = ?, final_upstream_model_name = ?, "
                     + "updated_at = " + d.nowFunction() + " "
                     + "WHERE trace_id = ?";
 
@@ -443,11 +441,11 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
                 ps.setString(12, traceCurrency);
                 ps.setString(13, usageSource != null ? usageSource : "ACTUAL");
                 d.bindUuid(ps, 14, finalAttemptId);
-                d.bindUuid(ps, 15, finalProviderId);
-                d.bindUuid(ps, 16, finalProviderModelId);
-                d.bindUuid(ps, 17, finalCredentialId);
-                ps.setString(18, finalProviderName);
-                ps.setString(19, finalProviderModelName);
+                d.bindUuid(ps, 15, finalChannelId);
+                d.bindUuid(ps, 16, finalUpstreamModelId);
+                d.bindUuid(ps, 17, finalChannelCredentialId);
+                ps.setString(18, finalChannelName);
+                ps.setString(19, finalUpstreamModelName);
                 ps.setString(20, traceId);
                 ps.executeUpdate();
             }

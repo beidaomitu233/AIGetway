@@ -47,14 +47,14 @@ public interface CapacityStore {
         return 0;
     }
 
-    record ReserveRequest(UUID aliasId, UUID providerModelId, UUID credentialId,
+    record ReserveRequest(UUID aliasId, UUID upstreamModelId, UUID channelCredentialId,
                           long estimatedTokens, long maxTokens,
                           ScopeLimit aliasLimit, ScopeLimit providerModelLimit,
                           ScopeLimit credentialLimit) {
 
-        public ReserveRequest(UUID aliasId, UUID providerModelId, UUID credentialId,
+        public ReserveRequest(UUID aliasId, UUID upstreamModelId, UUID channelCredentialId,
                               long estimatedTokens, long maxTokens) {
-            this(aliasId, providerModelId, credentialId, estimatedTokens, maxTokens,
+            this(aliasId, upstreamModelId, channelCredentialId, estimatedTokens, maxTokens,
                     null, null, null);
         }
     }

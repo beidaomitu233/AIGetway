@@ -235,7 +235,7 @@ public class UsageService {
     /** 权限、保留期、桶对齐与 fingerprint 的公共前置。 */
     public ResolvedQuery prepare(RequestContext context, UsageQuery query) {
         RequestPermissions.require(context, Permissions.USAGE_VIEW);
-        if ((!query.credentialPoolIds().isEmpty() || !query.credentialIds().isEmpty())
+        if ((!query.channelIds().isEmpty() || !query.channelCredentialIds().isEmpty())
                 && !RequestPermissions.has(context, Permissions.CREDENTIAL_VIEW)) {
             throw new LightAiException(ErrorCode.ACCESS_DENIED, "无权使用凭证维度筛选");
         }
@@ -276,10 +276,10 @@ public class UsageService {
         appendMulti(canonical, "project", query.projects());
         appendMulti(canonical, "tenant", query.tenants());
         appendMulti(canonical, "alias_id", query.aliasIds());
-        appendMulti(canonical, "provider_id", query.providerIds());
-        appendMulti(canonical, "provider_model_id", query.providerModelIds());
-        appendMulti(canonical, "credential_pool_id", query.credentialPoolIds());
-        appendMulti(canonical, "credential_id", query.credentialIds());
+        appendMulti(canonical, "channel_id", query.channelIds());
+        appendMulti(canonical, "upstream_model_id", query.upstreamModelIds());
+        appendMulti(canonical, "channel_id", query.channelIds());
+        appendMulti(canonical, "channel_credential_id", query.channelCredentialIds());
         appendMulti(canonical, "trace_status", query.traceStatuses());
         appendMulti(canonical, "error_code", query.errorCodes());
         appendMulti(canonical, "usage_source", query.usageSources());
@@ -309,8 +309,8 @@ public class UsageService {
     private AggregateFilter filterOf(ResolvedQuery resolved, UsageQuery query) {
         return new AggregateFilter(query.granularity(), resolved.startAt(), resolved.endAt(),
                 query.applications(), query.projects(), query.tenants(), query.aliasIds(),
-                query.providerIds(), query.providerModelIds(), query.credentialPoolIds(),
-                query.credentialIds(), query.traceStatuses(), query.errorCodes(),
+                query.channelIds(), query.upstreamModelIds(),
+                query.channelCredentialIds(), query.traceStatuses(), query.errorCodes(),
                 query.usageSources(), query.requestedStream(), query.currency());
     }
 
@@ -320,10 +320,10 @@ public class UsageService {
             case "PROJECT" -> "project";
             case "TENANT" -> "tenant";
             case "ALIAS" -> "alias_id";
-            case "PROVIDER" -> "provider_id";
-            case "PROVIDER_MODEL" -> "provider_model_id";
-            case "CREDENTIAL_POOL" -> "credential_pool_id";
-            case "CREDENTIAL" -> "credential_id";
+            case "PROVIDER" -> "channel_id";
+            case "PROVIDER_MODEL" -> "upstream_model_id";
+            case "CREDENTIAL_POOL" -> "channel_id";
+            case "CREDENTIAL" -> "channel_credential_id";
             case "TRACE_STATUS" -> "trace_status";
             case "ERROR_CODE" -> "error_code";
             case "USAGE_SOURCE" -> "usage_source";
@@ -332,8 +332,8 @@ public class UsageService {
     }
 
     private static final Map<String, String> DIMENSION_NAME_KEYS = Map.of(
-            "ALIAS", "alias", "PROVIDER", "provider", "PROVIDER_MODEL", "provider_model",
-            "CREDENTIAL_POOL", "credential_pool", "CREDENTIAL", "credential");
+            "ALIAS", "alias", "PROVIDER", "channel", "PROVIDER_MODEL", "upstream_model",
+            "CREDENTIAL_POOL", "credential_pool", "CREDENTIAL", "channel_credential");
 
     private UsageGroupRow toGroupRow(UsageQuery query, GroupRow row, long totalRequest,
                                      long totalTokens, BigDecimal totalCost) {

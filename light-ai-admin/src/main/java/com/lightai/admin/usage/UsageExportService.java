@@ -96,8 +96,8 @@ public class UsageExportService {
     private AggregateFilter filterOf(ResolvedQuery resolved, UsageQuery query) {
         return new AggregateFilter(query.granularity(), resolved.startAt(), resolved.endAt(),
                 query.applications(), query.projects(), query.tenants(), query.aliasIds(),
-                query.providerIds(), query.providerModelIds(), query.credentialPoolIds(),
-                query.credentialIds(), query.traceStatuses(), query.errorCodes(),
+                query.channelIds(), query.upstreamModelIds(),
+                query.channelCredentialIds(), query.traceStatuses(), query.errorCodes(),
                 query.usageSources(), query.requestedStream(), query.currency());
     }
 
@@ -160,13 +160,13 @@ public class UsageExportService {
             case "ALIAS" -> row.dimensionNames() == null ? null
                     : row.dimensionNames().get("alias");
             case "PROVIDER" -> row.dimensionNames() == null ? null
-                    : row.dimensionNames().get("provider");
+                    : row.dimensionNames().get("channel");
             case "PROVIDER_MODEL" -> row.dimensionNames() == null ? null
-                    : row.dimensionNames().get("provider_model");
+                    : row.dimensionNames().get("upstream_model");
             case "CREDENTIAL_POOL" -> row.dimensionNames() == null ? null
                     : row.dimensionNames().get("credential_pool");
             case "CREDENTIAL" -> row.dimensionNames() == null ? null
-                    : row.dimensionNames().get("credential");
+                    : row.dimensionNames().get("channel_credential");
             default -> row.dimensionValue();
         };
         return name == null || name.isBlank() ? "未设置" : name;

@@ -211,21 +211,21 @@ public class OverviewService {
                                 circuit.modelName() == null ? "circuit" : circuit.modelName(),
                                 circuit.state(), null, circuit.lastReason(),
                                 circuit.occurrenceCount(), circuit.latestAt(),
-                                circuit.providerName(), circuit.modelName(), null)));
+                                circuit.channelName(), circuit.modelName(), null)));
             }
             if (unavailableCandidates > 0) {
                 statsRepository.unavailableCandidateItems(connection).forEach(candidate ->
                         items.add(new OverviewExceptionItem("CANDIDATE", candidate.id().toString(),
                                 candidate.modelName() == null ? "candidate" : candidate.modelName(),
                                 "UNAVAILABLE", null, null, 1, candidate.latestAt(),
-                                candidate.providerName(), candidate.modelName(),
+                                candidate.channelName(), candidate.modelName(),
                                 candidate.aliasName())));
             }
             if (credentialFields && invalidCredentials > 0) {
                 statsRepository.invalidCredentialItems(connection).forEach(credential ->
-                        items.add(new OverviewExceptionItem("CREDENTIAL", credential.id().toString(),
+                        items.add(new OverviewExceptionItem("CHANNEL_CREDENTIAL", credential.id().toString(),
                                 credential.name(), "INVALID", null, credential.lastReason(),
-                                1, credential.latestAt(), credential.providerName(), null, null)));
+                                1, credential.latestAt(), credential.channelName(), null, null)));
             }
             if (recentFailures > 0) {
                 statsRepository.failureTraceItems(connection, filter, EXCEPTION_ITEM_LIMIT)
@@ -239,7 +239,7 @@ public class OverviewService {
                     .comparingInt((OverviewExceptionItem item) -> switch (item.itemType()) {
                         case "CIRCUIT" -> "OPEN".equals(item.status()) ? 0 : 1;
                         case "CANDIDATE" -> 2;
-                        case "CREDENTIAL" -> 3;
+                        case "CHANNEL_CREDENTIAL" -> 3;
                         default -> 4;
                     })
                     .thenComparing(Comparator
@@ -273,7 +273,7 @@ public class OverviewService {
                 ? (application == null ? List.of() : List.of(application))
                 : (application == null ? scope : List.of(application));
         UUID alias = parseUuid(query.aliasId());
-        UUID provider = parseUuid(query.providerId());
+        UUID provider = parseUuid(query.channelId());
         return new OverviewFilter(query.startAt(), query.endAt(), applications, alias, provider);
     }
 

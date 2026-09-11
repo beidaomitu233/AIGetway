@@ -176,8 +176,8 @@ public class CircuitManagementService {
                     snapshot.circuitId(), "UNKNOWN", snapshot.state(), commandAction.name(),
                     commandId, null, reason, OffsetDateTime.now());
             circuitRepository.completeCommand(connection, commandId, "SUCCEEDED", null);
-            circuitRepository.upsertState(connection, snapshot.circuitId(), key.providerModelId(),
-                    key.credentialId(), snapshot.state(), snapshot.stateVersion(),
+            circuitRepository.upsertState(connection, snapshot.circuitId(), key.upstreamModelId(),
+                    key.channelCredentialId(), snapshot.state(), snapshot.stateVersion(),
                     "{}", snapshot.openSource(), reason);
             auditService.recordSuccess(connection, AuditRecord.succeeded(
                     UUID.randomUUID(), requestId, context.authContext().userId(),
@@ -202,16 +202,16 @@ public class CircuitManagementService {
     }
 
     private CircuitStateDetail pendingDetail(UUID circuitId, CircuitKey key, UUID commandId) {
-        return new CircuitStateDetail(circuitId.toString(), key.providerModelId().toString(),
-                key.credentialId().toString(), "****", "PENDING_APPLY", 0, "{}",
+        return new CircuitStateDetail(circuitId.toString(), key.upstreamModelId().toString(),
+                key.channelCredentialId().toString(), "****", "PENDING_APPLY", 0, "{}",
                 null, 0, 0, 0, 0, null, null, null, null, null, false, null,
                 new CircuitStateDetail.PendingCommand(commandId.toString(), "PENDING", null));
     }
 
     private CircuitStateDetail detailById(CircuitSnapshot snapshot) {
         return new CircuitStateDetail(snapshot.circuitId().toString(),
-                snapshot.key().providerModelId().toString(),
-                snapshot.key().credentialId().toString(), "****", snapshot.state(),
+                snapshot.key().upstreamModelId().toString(),
+                snapshot.key().channelCredentialId().toString(), "****", snapshot.state(),
                 snapshot.stateVersion(), "{}", snapshot.windowStartedAt(),
                 snapshot.requestCount(), snapshot.failureCount(), snapshot.probeInflight(),
                 snapshot.probeSuccessCount(), snapshot.openedAt(), snapshot.nextProbeAt(),
@@ -221,8 +221,8 @@ public class CircuitManagementService {
     private CircuitStateDetail toDetail(JdbcCircuitRepository.StateRow row,
                                         CircuitStateDetail.PendingCommand pendingCommand) {
         return new CircuitStateDetail(row.id().toString(),
-                row.providerModelId() == null ? null : row.providerModelId().toString(),
-                row.credentialId() == null ? null : row.credentialId().toString(),
+                row.upstreamModelId() == null ? null : row.upstreamModelId().toString(),
+                row.channelCredentialId() == null ? null : row.channelCredentialId().toString(),
                 "****", row.state(), row.stateVersion(), row.policySnapshot(),
                 null, 0, 0, 0, 0, null, null, row.openSource(), row.lastReason(),
                 null, false, row.updatedAt(), pendingCommand);
@@ -240,7 +240,7 @@ public class CircuitManagementService {
     private CircuitKey keyOf(UUID circuitId) {
         try (Connection connection = dataSource.getConnection()) {
             var row = findStateRow(connection, circuitId);
-            return new CircuitKey(row.providerModelId(), row.credentialId());
+            return new CircuitKey(row.upstreamModelId(), row.channelCredentialId());
         } catch (LightAiException e) {
             throw e;
         } catch (Exception e) {

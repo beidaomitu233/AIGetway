@@ -12,8 +12,8 @@ import com.lightai.client.management.ImpactConfirmCommand;
 import com.lightai.client.management.ManagementOperationResult;
 import com.lightai.client.management.VersionCommand;
 import com.lightai.client.paging.PageResult;
-import com.lightai.client.provider.ProviderCheckCommand;
-import com.lightai.client.provider.ProviderCheckRecord;
+import com.lightai.client.channel.ChannelCheckCommand;
+import com.lightai.client.channel.ChannelCheckRecord;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -136,7 +136,7 @@ public class ModelAliasController {
     @PostMapping("/admin/route-candidates/{id}/check")
     public ResponseEntity<String> checkCandidate(@PathVariable String id, @RequestBody String body,
                                                  HttpServletRequest request) {
-        ProviderCheckCommand command = CommandBodies.parse(body, ProviderCheckCommand.class);
+        ChannelCheckCommand command = CommandBodies.parse(body, ChannelCheckCommand.class);
         return json(ManagementResponses.ok(candidateService.probe(context(request), id, command)));
     }
 

@@ -187,9 +187,9 @@ public final class JdbcConfigSnapshotPortAdapter extends AbstractJdbcRepository 
             for (Object item : credentials) {
                 if (!(item instanceof Map<?, ?> raw)) continue;
                 @SuppressWarnings("unchecked") Map<String, Object> credential = (Map<String, Object>) raw;
-                String credentialId = toString(credential.get("id"));
-                if (credentialId == null) continue;
-                String key = "CREDENTIAL:" + credentialId;
+                String channelCredentialId = toString(credential.get("id"));
+                if (channelCredentialId == null) continue;
+                String key = "CREDENTIAL:" + channelCredentialId;
                 result.put(key, stricter(result.get(key), readLimit(credential)));
             }
         }
@@ -248,7 +248,7 @@ public final class JdbcConfigSnapshotPortAdapter extends AbstractJdbcRepository 
     private List<AliasView> parseAliases(Map<String, Object> content) {
         Object aliasesObj = content.get("model_aliases");
         Object candidatesObj = content.get("route_candidates");
-        Object modelsObj = content.get("provider_models");
+        Object modelsObj = content.get("upstream_models");
         Object providersObj = content.get("providers");
         if (!(aliasesObj instanceof List<?> aliasList)) {
             return List.of();
@@ -309,13 +309,13 @@ public final class JdbcConfigSnapshotPortAdapter extends AbstractJdbcRepository 
         if (!(modelsObj instanceof List<?>)) {
             return null;
         }
-        String providerModelId = toString(candidate.get("provider_model_id"));
-        Map<String, Object> model = findModel((List<?>) modelsObj, providerModelId);
+        String upstreamModelId = toString(candidate.get("upstream_model_id"));
+        Map<String, Object> model = findModel((List<?>) modelsObj, upstreamModelId);
         if (model == null) {
             return null;
         }
-        String providerId = toString(model.get("provider_id"));
-        Map<String, Object> provider = providersById.get(providerId);
+        String channelId = toString(model.get("channel_id"));
+        Map<String, Object> provider = providersById.get(channelId);
         String providerType = provider == null ? null : toString(provider.get("type"));
         if (provider == null) {
             return null;
@@ -325,11 +325,10 @@ public final class JdbcConfigSnapshotPortAdapter extends AbstractJdbcRepository 
         Map<String, String> defaultHeaders = readDefaultHeaders(provider.get("default_headers"));
         return new CandidateView(
                 toString(candidate.get("id")),
-                providerId,
+                channelId,
                 providerType,
-                providerModelId,
+                upstreamModelId,
                 toString(model.get("model_id")),
-                toString(candidate.get("credential_pool_id")),
                 toLong(candidate.get("priority")),
                 toInt(candidate.get("weight")),
                 Boolean.TRUE.equals(toBoolOrNull(candidate.get("enabled"))),

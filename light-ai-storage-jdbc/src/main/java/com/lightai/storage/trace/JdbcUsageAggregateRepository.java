@@ -42,10 +42,9 @@ public class JdbcUsageAggregateRepository extends AbstractJdbcRepository {
             String project,
             String tenant,
             UUID aliasId,
-            UUID providerId,
-            UUID providerModelId,
-            UUID credentialPoolId,
-            UUID credentialId,
+            UUID channelId,
+            UUID upstreamModelId,
+            UUID channelCredentialId,
             String traceStatus,
             String errorCode,
             String usageSource,
@@ -96,7 +95,7 @@ public class JdbcUsageAggregateRepository extends AbstractJdbcRepository {
     private static final String PG_UPSERT_SQL = """
             INSERT INTO %s.usage_aggregate
               (id, granularity, bucket_start, bucket_end, dimension_key, application, project, tenant,
-               alias_id, provider_id, provider_model_id, credential_pool_id, credential_id,
+               alias_id, channel_id, upstream_model_id, channel_credential_id,
                trace_status, error_code, usage_source, requested_stream, currency, dimension_names,
                request_count, success_count, failure_count, cancelled_count, stream_interrupted_count,
                queued_count, stream_count, attempt_count, initial_count, retry_count,
@@ -157,46 +156,45 @@ public class JdbcUsageAggregateRepository extends AbstractJdbcRepository {
                 statement.setString(7, c.project());
                 statement.setString(8, c.tenant());
                 statement.setObject(9, c.aliasId());
-                statement.setObject(10, c.providerId());
-                statement.setObject(11, c.providerModelId());
-                statement.setObject(12, c.credentialPoolId());
-                statement.setObject(13, c.credentialId());
-                statement.setString(14, c.traceStatus());
-                statement.setString(15, c.errorCode());
-                statement.setString(16, c.usageSource());
-                statement.setBoolean(17, c.requestedStream());
-                statement.setString(18, c.currency());
-                statement.setString(19, toJson(c.dimensionNames()));
-                statement.setLong(20, c.requestCount());
-                statement.setLong(21, c.successCount());
-                statement.setLong(22, c.failureCount());
-                statement.setLong(23, c.cancelledCount());
-                statement.setLong(24, c.streamInterruptedCount());
-                statement.setLong(25, c.queuedCount());
-                statement.setLong(26, c.streamCount());
-                statement.setLong(27, c.attemptCount());
-                statement.setLong(28, c.initialCount());
-                statement.setLong(29, c.retryCount());
-                statement.setLong(30, c.credentialFailoverCount());
-                statement.setLong(31, c.fallbackCount());
-                statement.setLong(32, c.halfOpenProbeCount());
-                statement.setLong(33, c.inputTokens());
-                statement.setLong(34, c.outputTokens());
-                statement.setLong(35, c.totalTokens());
-                statement.setLong(36, c.actualInputTokens());
-                statement.setLong(37, c.actualOutputTokens());
-                statement.setLong(38, c.estimatedInputTokens());
-                statement.setLong(39, c.estimatedOutputTokens());
-                statement.setBigDecimal(40, c.inputCost());
-                statement.setBigDecimal(41, c.outputCost());
-                statement.setBigDecimal(42, c.totalCost());
-                statement.setLong(43, c.totalMsSum());
-                statement.setLong(44, c.totalMsCount());
-                statement.setLong(45, c.firstTokenMsSum());
-                statement.setLong(46, c.firstTokenMsCount());
-                statement.setLong(47, c.queuedMsSum());
-                statement.setString(48, toJsonNumberKeys(c.latencyHistogram()));
-                statement.setString(49, toJsonNumberKeys(c.firstTokenHistogram()));
+                statement.setObject(10, c.channelId());
+                statement.setObject(11, c.upstreamModelId());
+                statement.setObject(12, c.channelCredentialId());
+                statement.setString(13, c.traceStatus());
+                statement.setString(14, c.errorCode());
+                statement.setString(15, c.usageSource());
+                statement.setBoolean(16, c.requestedStream());
+                statement.setString(17, c.currency());
+                statement.setString(18, toJson(c.dimensionNames()));
+                statement.setLong(19, c.requestCount());
+                statement.setLong(20, c.successCount());
+                statement.setLong(21, c.failureCount());
+                statement.setLong(22, c.cancelledCount());
+                statement.setLong(23, c.streamInterruptedCount());
+                statement.setLong(24, c.queuedCount());
+                statement.setLong(25, c.streamCount());
+                statement.setLong(26, c.attemptCount());
+                statement.setLong(27, c.initialCount());
+                statement.setLong(28, c.retryCount());
+                statement.setLong(29, c.credentialFailoverCount());
+                statement.setLong(30, c.fallbackCount());
+                statement.setLong(31, c.halfOpenProbeCount());
+                statement.setLong(32, c.inputTokens());
+                statement.setLong(33, c.outputTokens());
+                statement.setLong(34, c.totalTokens());
+                statement.setLong(35, c.actualInputTokens());
+                statement.setLong(36, c.actualOutputTokens());
+                statement.setLong(37, c.estimatedInputTokens());
+                statement.setLong(38, c.estimatedOutputTokens());
+                statement.setBigDecimal(39, c.inputCost());
+                statement.setBigDecimal(40, c.outputCost());
+                statement.setBigDecimal(41, c.totalCost());
+                statement.setLong(42, c.totalMsSum());
+                statement.setLong(43, c.totalMsCount());
+                statement.setLong(44, c.firstTokenMsSum());
+                statement.setLong(45, c.firstTokenMsCount());
+                statement.setLong(46, c.queuedMsSum());
+                statement.setString(47, toJsonNumberKeys(c.latencyHistogram()));
+                statement.setString(48, toJsonNumberKeys(c.firstTokenHistogram()));
                 statement.executeUpdate();
             } catch (SQLException e) {
                 throw translate("聚合贡献写入失败", e);
@@ -305,7 +303,7 @@ public class JdbcUsageAggregateRepository extends AbstractJdbcRepository {
         } else {
             String insertSql = "INSERT INTO " + table
                     + " (id, granularity, bucket_start, bucket_end, dimension_key, application, project, tenant, "
-                    + "  alias_id, provider_id, provider_model_id, credential_pool_id, credential_id, "
+                    + "  alias_id, channel_id, upstream_model_id, channel_credential_id, "
                     + "  trace_status, error_code, usage_source, requested_stream, currency, dimension_names, "
                     + "  request_count, success_count, failure_count, cancelled_count, stream_interrupted_count, "
                     + "  queued_count, stream_count, attempt_count, initial_count, retry_count, "
@@ -316,7 +314,7 @@ public class JdbcUsageAggregateRepository extends AbstractJdbcRepository {
                     + "  total_ms_sum, total_ms_count, first_token_ms_sum, first_token_ms_count, queued_ms_sum, "
                     + "  latency_histogram, first_token_histogram, created_at, updated_at) "
                     + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                    + "        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                    + "        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
                     + "        ?, ?, " + d.nowFunction() + ", " + d.nowFunction() + ")";
             try (PreparedStatement ins = connection.prepareStatement(insertSql)) {
                 d.bindUuid(ins, 1, UUID.randomUUID());
@@ -328,46 +326,45 @@ public class JdbcUsageAggregateRepository extends AbstractJdbcRepository {
                 ins.setString(7, c.project());
                 ins.setString(8, c.tenant());
                 d.bindUuid(ins, 9, c.aliasId());
-                d.bindUuid(ins, 10, c.providerId());
-                d.bindUuid(ins, 11, c.providerModelId());
-                d.bindUuid(ins, 12, c.credentialPoolId());
-                d.bindUuid(ins, 13, c.credentialId());
-                ins.setString(14, c.traceStatus());
-                ins.setString(15, c.errorCode());
-                ins.setString(16, c.usageSource());
-                ins.setBoolean(17, c.requestedStream());
-                ins.setString(18, c.currency());
-                d.bindJson(ins, 19, toJson(c.dimensionNames()));
-                ins.setLong(20, c.requestCount());
-                ins.setLong(21, c.successCount());
-                ins.setLong(22, c.failureCount());
-                ins.setLong(23, c.cancelledCount());
-                ins.setLong(24, c.streamInterruptedCount());
-                ins.setLong(25, c.queuedCount());
-                ins.setLong(26, c.streamCount());
-                ins.setLong(27, c.attemptCount());
-                ins.setLong(28, c.initialCount());
-                ins.setLong(29, c.retryCount());
-                ins.setLong(30, c.credentialFailoverCount());
-                ins.setLong(31, c.fallbackCount());
-                ins.setLong(32, c.halfOpenProbeCount());
-                ins.setLong(33, c.inputTokens());
-                ins.setLong(34, c.outputTokens());
-                ins.setLong(35, c.totalTokens());
-                ins.setLong(36, c.actualInputTokens());
-                ins.setLong(37, c.actualOutputTokens());
-                ins.setLong(38, c.estimatedInputTokens());
-                ins.setLong(39, c.estimatedOutputTokens());
-                ins.setBigDecimal(40, c.inputCost());
-                ins.setBigDecimal(41, c.outputCost());
-                ins.setBigDecimal(42, c.totalCost());
-                ins.setLong(43, c.totalMsSum());
-                ins.setLong(44, c.totalMsCount());
-                ins.setLong(45, c.firstTokenMsSum());
-                ins.setLong(46, c.firstTokenMsCount());
-                ins.setLong(47, c.queuedMsSum());
-                d.bindJson(ins, 48, toJsonNumberKeys(c.latencyHistogram()));
-                d.bindJson(ins, 49, toJsonNumberKeys(c.firstTokenHistogram()));
+                d.bindUuid(ins, 10, c.channelId());
+                d.bindUuid(ins, 11, c.upstreamModelId());
+                d.bindUuid(ins, 12, c.channelCredentialId());
+                ins.setString(13, c.traceStatus());
+                ins.setString(14, c.errorCode());
+                ins.setString(15, c.usageSource());
+                ins.setBoolean(16, c.requestedStream());
+                ins.setString(17, c.currency());
+                d.bindJson(ins, 18, toJson(c.dimensionNames()));
+                ins.setLong(19, c.requestCount());
+                ins.setLong(20, c.successCount());
+                ins.setLong(21, c.failureCount());
+                ins.setLong(22, c.cancelledCount());
+                ins.setLong(23, c.streamInterruptedCount());
+                ins.setLong(24, c.queuedCount());
+                ins.setLong(25, c.streamCount());
+                ins.setLong(26, c.attemptCount());
+                ins.setLong(27, c.initialCount());
+                ins.setLong(28, c.retryCount());
+                ins.setLong(29, c.credentialFailoverCount());
+                ins.setLong(30, c.fallbackCount());
+                ins.setLong(31, c.halfOpenProbeCount());
+                ins.setLong(32, c.inputTokens());
+                ins.setLong(33, c.outputTokens());
+                ins.setLong(34, c.totalTokens());
+                ins.setLong(35, c.actualInputTokens());
+                ins.setLong(36, c.actualOutputTokens());
+                ins.setLong(37, c.estimatedInputTokens());
+                ins.setLong(38, c.estimatedOutputTokens());
+                ins.setBigDecimal(39, c.inputCost());
+                ins.setBigDecimal(40, c.outputCost());
+                ins.setBigDecimal(41, c.totalCost());
+                ins.setLong(42, c.totalMsSum());
+                ins.setLong(43, c.totalMsCount());
+                ins.setLong(44, c.firstTokenMsSum());
+                ins.setLong(45, c.firstTokenMsCount());
+                ins.setLong(46, c.queuedMsSum());
+                d.bindJson(ins, 47, toJsonNumberKeys(c.latencyHistogram()));
+                d.bindJson(ins, 48, toJsonNumberKeys(c.firstTokenHistogram()));
                 ins.executeUpdate();
             } catch (SQLException e) {
                 String state = e.getSQLState() == null ? "" : e.getSQLState();
@@ -412,10 +409,9 @@ public class JdbcUsageAggregateRepository extends AbstractJdbcRepository {
             List<String> projects,
             List<String> tenants,
             List<String> aliasIds,
-            List<String> providerIds,
-            List<String> providerModelIds,
-            List<String> credentialPoolIds,
-            List<String> credentialIds,
+            List<String> channelIds,
+            List<String> upstreamModelIds,
+            List<String> channelCredentialIds,
             List<String> traceStatuses,
             List<String> errorCodes,
             List<String> usageSources,
@@ -775,10 +771,9 @@ public class JdbcUsageAggregateRepository extends AbstractJdbcRepository {
         appendIn(sql, params, "project", filter.projects());
         appendIn(sql, params, "tenant", filter.tenants());
         appendIn(sql, params, "alias_id", filter.aliasIds());
-        appendIn(sql, params, "provider_id", filter.providerIds());
-        appendIn(sql, params, "provider_model_id", filter.providerModelIds());
-        appendIn(sql, params, "credential_pool_id", filter.credentialPoolIds());
-        appendIn(sql, params, "credential_id", filter.credentialIds());
+        appendIn(sql, params, "channel_id", filter.channelIds());
+        appendIn(sql, params, "upstream_model_id", filter.upstreamModelIds());
+        appendIn(sql, params, "channel_credential_id", filter.channelCredentialIds());
         appendIn(sql, params, "trace_status", filter.traceStatuses());
         appendIn(sql, params, "error_code", filter.errorCodes());
         appendIn(sql, params, "usage_source", filter.usageSources());

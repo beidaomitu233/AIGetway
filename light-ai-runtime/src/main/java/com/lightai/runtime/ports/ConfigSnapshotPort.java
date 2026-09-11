@@ -128,14 +128,13 @@ public interface ConfigSnapshotPort {
         }
     }
 
-    /** 候选运行视图：模型能力、默认值、价格与 Provider 连接信息一并装配（BE-030 价格快照来源）。 */
+    /** 候选运行视图：模型能力、默认值、价格与渠道连接信息一并装配（BE-030 价格快照来源）。 */
     record CandidateView(
             String candidateId,
-            String providerId,
+            String channelId,
             String providerType,
             String modelPk,
             String modelId,
-            String poolId,
             long priority,
             int weight,
             boolean enabled,

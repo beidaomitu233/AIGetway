@@ -564,7 +564,7 @@ public final class JdbcApplicationQuotaPort extends AbstractJdbcRepository
     }
 
     private static String priceSnapshotJson(Settlement settlement) {
-        return "{\"provider_model_id\":\"" + escape(settlement.providerModelId())
+        return "{\"upstream_model_id\":\"" + escape(settlement.upstreamModelId())
                 + "\",\"input_price\":\"" + escape(settlement.inputPrice())
                 + "\",\"output_price\":\"" + escape(settlement.outputPrice())
                 + "\",\"price_unit\":" + settlement.priceUnit()

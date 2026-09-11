@@ -1,11 +1,11 @@
 package com.lightai.admin.alias;
 
-import com.lightai.admin.check.ProviderCheckService;
+import com.lightai.admin.check.ChannelCheckService;
 import com.lightai.admin.draft.DraftEntityChange;
 import com.lightai.admin.draft.DraftWriteCommand;
 import com.lightai.admin.draft.DraftWriteResult;
 import com.lightai.admin.draft.DraftWriteService;
-import com.lightai.admin.provider.ProviderService;
+import com.lightai.admin.channel.ChannelService;
 import com.lightai.admin.web.RequestContext;
 import com.lightai.admin.web.RequestPermissions;
 import com.lightai.client.alias.ReorderCommand;
@@ -16,19 +16,17 @@ import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.FieldIssue;
 import com.lightai.client.error.LightAiException;
 import com.lightai.client.management.ManagementOperationResult;
-import com.lightai.client.model.ProviderModelDetail;
-import com.lightai.client.model.ProviderModelSaveCommand;
+import com.lightai.client.upstream.UpstreamModelDetail;
+import com.lightai.client.upstream.UpstreamModelSaveCommand;
 import com.lightai.client.protocol.Permissions;
 import com.lightai.storage.alias.AliasRecord;
 import com.lightai.storage.alias.CandidateRecord;
 import com.lightai.storage.alias.JdbcAliasRepository;
 import com.lightai.storage.alias.JdbcCandidateRepository;
-import com.lightai.storage.model.JdbcProviderModelRepository;
-import com.lightai.storage.model.ProviderModelRecord;
-import com.lightai.storage.pool.JdbcPoolRepository;
-import com.lightai.storage.pool.PoolRecord;
-import com.lightai.storage.provider.JdbcProviderRepository;
-import com.lightai.storage.provider.ProviderRecord;
+import com.lightai.storage.upstream.JdbcUpstreamModelRepository;
+import com.lightai.storage.upstream.UpstreamModelRecord;
+import com.lightai.storage.channel.JdbcChannelRepository;
+import com.lightai.storage.channel.ChannelRecord;
 import java.sql.Connection;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -51,26 +49,23 @@ public class RouteCandidateService {
     private final DataSource dataSource;
     private final JdbcCandidateRepository candidateRepository;
     private final JdbcAliasRepository aliasRepository;
-    private final JdbcProviderModelRepository modelRepository;
-    private final JdbcPoolRepository poolRepository;
-    private final JdbcProviderRepository providerRepository;
+    private final JdbcUpstreamModelRepository modelRepository;
+    private final JdbcChannelRepository channelRepository;
     private final DraftWriteService draftWriteService;
-    private final ProviderCheckService providerCheckService;
+    private final ChannelCheckService providerCheckService;
     private final String sourceMode;
 
     public RouteCandidateService(DataSource dataSource, JdbcCandidateRepository candidateRepository,
                                  JdbcAliasRepository aliasRepository,
-                                 JdbcProviderModelRepository modelRepository,
-                                 JdbcPoolRepository poolRepository,
-                                 JdbcProviderRepository providerRepository,
+                                 JdbcUpstreamModelRepository modelRepository,
+                                 JdbcChannelRepository channelRepository,
                                  DraftWriteService draftWriteService,
-                                 ProviderCheckService providerCheckService, String sourceMode) {
+                                 ChannelCheckService providerCheckService, String sourceMode) {
         this.dataSource = dataSource;
         this.candidateRepository = candidateRepository;
         this.aliasRepository = aliasRepository;
         this.modelRepository = modelRepository;
-        this.poolRepository = poolRepository;
-        this.providerRepository = providerRepository;
+        this.channelRepository = channelRepository;
         this.draftWriteService = draftWriteService;
         this.providerCheckService = providerCheckService;
         this.sourceMode = sourceMode;
@@ -109,29 +104,29 @@ public class RouteCandidateService {
                 "CREATE", ENTITY_TYPE.toLowerCase(), aliasId.toString(), 0, null,
                 connection -> {
                     aliasRepository.findLiveById(connection, aliasId).orElseThrow(this::notFound);
-                    ProviderModelRecord model = modelRepository.findLiveById(connection,
-                            command.providerModelId())
-                            .orElseThrow(() -> referenceInvalid("provider_model_id"));
-                    PoolRecord pool = poolRepository.findLiveById(connection, command.credentialPoolId())
-                            .orElseThrow(() -> referenceInvalid("credential_pool_id"));
-                    // 同 Provider 约束：保存阶段拒绝（发布阶段由快照校验再拦截）
-                    if (!model.providerId().equals(pool.providerId())) {
+                    UpstreamModelRecord model = modelRepository.findLiveById(connection,
+                            command.upstreamModelId())
+                            .orElseThrow(() -> referenceInvalid("upstream_model_id"));
+                    ChannelRecord channel = channelRepository.findLiveById(connection, command.channelId())
+                            .orElseThrow(() -> referenceInvalid("channel_id"));
+                    // 归属约束：上游模型必须属于该渠道（发布阶段由快照校验再拦截）
+                    if (!model.channelId().equals(channel.id())) {
                         throw new LightAiException(ErrorCode.OBJECT_REFERENCE_INVALID,
-                                "模型与凭证池必须属于同一 Provider");
+                                "上游模型必须属于所选渠道");
                     }
                     if (candidateRepository.existsTriple(connection, aliasId,
-                            command.providerModelId(), command.credentialPoolId())) {
+                            command.upstreamModelId(), command.channelId())) {
                         throw new LightAiException(ErrorCode.DUPLICATE_ROUTE_CANDIDATE,
                                 "该 Alias 下已存在相同模型与凭证池组合");
                     }
                     CandidateRecord record = new CandidateRecord(id, aliasId,
-                            command.providerModelId(), command.credentialPoolId(),
+                            command.upstreamModelId(), command.channelId(),
                             command.priority(), command.weight(), command.enabled(), 1L,
                             OffsetDateTime.now(), OffsetDateTime.now());
                     candidateRepository.insert(connection, record);
                     return new DraftEntityChange(ENTITY_TYPE.toLowerCase(), id, "candidate",
-                            "CREATE", 1L, List.of(FieldChange.changed("provider_model_id",
-                                    null, command.providerModelId().toString())));
+                            "CREATE", 1L, List.of(FieldChange.changed("upstream_model_id",
+                                    null, command.upstreamModelId().toString())));
                 }));
 
         try (Connection connection = dataSource.getConnection()) {
@@ -163,8 +158,8 @@ public class RouteCandidateService {
                     CandidateRecord current = candidateRepository.lockLiveById(connection, id)
                             .orElseThrow(this::notFound);
                     CandidateRecord saved = candidateRepository.update(connection, new CandidateRecord(
-                            current.id(), current.aliasId(), current.providerModelId(),
-                            current.credentialPoolId(), command.priority(), command.weight(),
+                            current.id(), current.aliasId(), current.upstreamModelId(),
+                            current.channelId(), command.priority(), command.weight(),
                             command.enabled(), current.version(), current.createdAt(),
                             current.updatedAt()));
                     return new DraftEntityChange(ENTITY_TYPE.toLowerCase(), id, "candidate",
@@ -256,7 +251,7 @@ public class RouteCandidateService {
                         }
                         CandidateRecord saved = candidateRepository.update(connection,
                                 new CandidateRecord(current.id(), current.aliasId(),
-                                        current.providerModelId(), current.credentialPoolId(),
+                                        current.upstreamModelId(), current.channelId(),
                                         item.priority(), current.weight(), current.enabled(),
                                         current.version(), current.createdAt(), current.updatedAt()));
                         // 占位使用，实际写入以上一条 UPDATE 为准
@@ -279,8 +274,8 @@ public class RouteCandidateService {
     }
 
     /** 候选探测：复用检测编排，目标锁定候选的模型与池。 */
-    public com.lightai.client.provider.ProviderCheckRecord probe(RequestContext context, String rawId,
-                                                                 com.lightai.client.provider.ProviderCheckCommand command) {
+    public com.lightai.client.channel.ChannelCheckRecord probe(RequestContext context, String rawId,
+                                                                 com.lightai.client.channel.ChannelCheckCommand command) {
         RequestPermissions.require(context, Permissions.PROVIDER_CHECK);
         UUID id = parseId(rawId);
         CandidateRecord candidate;
@@ -293,50 +288,46 @@ public class RouteCandidateService {
             throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "候选读取失败");
         }
         // 探测目标固定为候选的模型与池凭证
-        ProviderModelRecord model;
+        UpstreamModelRecord model;
         try (Connection connection = dataSource.getConnection()) {
-            model = modelRepository.findLiveById(connection, candidate.providerModelId())
-                    .orElseThrow(() -> referenceInvalid("provider_model_id"));
+            model = modelRepository.findLiveById(connection, candidate.upstreamModelId())
+                    .orElseThrow(() -> referenceInvalid("upstream_model_id"));
         } catch (LightAiException e) {
             throw e;
         } catch (Exception e) {
             throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "候选模型读取失败");
         }
-        return providerCheckService.check(context, model.providerId().toString(),
-                new com.lightai.client.provider.ProviderCheckCommand(
-                        null, model.id().toString(), candidate.credentialPoolId().toString(),
+        return providerCheckService.check(context, model.channelId().toString(),
+                new com.lightai.client.channel.ChannelCheckCommand(
+                        null, model.id().toString(), candidate.channelId().toString(),
                         command.resolvedMode(), command.resolvedTimeoutMs()));
     }
 
     private RouteCandidateDetail toDetail(Connection connection, CandidateRecord record) {
-        ProviderModelRecord model = modelRepository.findLiveById(connection,
-                record.providerModelId()).orElse(null);
-        PoolRecord pool = poolRepository.findLiveById(connection, record.credentialPoolId()).orElse(null);
-        String providerName = model == null ? "" : providerRepository
-                .findLiveById(connection, model.providerId())
-                .map(ProviderRecord::name).orElse("");
+        UpstreamModelRecord model = modelRepository.findLiveById(connection,
+                record.upstreamModelId()).orElse(null);
+        ChannelRecord channel = channelRepository.findLiveById(connection, record.channelId()).orElse(null);
+        String channelName = channel == null ? "" : channel.name();
         String runtimeStatus;
         String excludedReason = null;
         if (!record.enabled()) {
             runtimeStatus = RouteCandidateDetail.STATUS_DISABLED;
             excludedReason = "候选已停用";
-        } else if (model == null || pool == null) {
+        } else if (model == null || channel == null) {
             runtimeStatus = RouteCandidateDetail.STATUS_UNAVAILABLE;
-            excludedReason = "引用的模型或凭证池不可用";
-        } else if (!model.enabled() || !pool.enabled()) {
+            excludedReason = "引用的上游模型或渠道不可用";
+        } else if (!model.enabled() || !channel.enabled()) {
             runtimeStatus = RouteCandidateDetail.STATUS_UNAVAILABLE;
-            excludedReason = "模型或凭证池已停用";
+            excludedReason = "上游模型或渠道已停用";
         } else {
             runtimeStatus = RouteCandidateDetail.STATUS_AVAILABLE;
         }
         return new RouteCandidateDetail(
                 record.id().toString(), record.aliasId().toString(),
-                model == null ? null : model.providerId().toString(), providerName,
-                record.providerModelId().toString(),
+                record.upstreamModelId().toString(),
                 model == null ? "" : model.displayName(),
                 model == null ? "" : model.modelId(),
-                record.credentialPoolId().toString(),
-                pool == null ? "" : pool.name(),
+                record.channelId().toString(), channelName,
                 record.priority(), record.weight(), record.enabled(),
                 model == null ? null : model.supportStream(),
                 model == null ? null : model.supportSystemMessage(),

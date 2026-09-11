@@ -128,7 +128,7 @@ public class JdbcTraceDetailRepository extends AbstractJdbcRepository {
 
     public List<RecoveryDecisionRow> recoveryDecisions(Connection connection, String traceId) {
         String sql = "SELECT id, trace_id, sequence, source_attempt_id, action, reason_code, "
-                + "scheduled_delay_ms, target_route_candidate_id, target_credential_id, retries_used, "
+                + "scheduled_delay_ms, target_route_candidate_id, target_channel_credential_id, retries_used, "
                 + "credential_failovers_used, fallbacks_used, remaining_timeout_ms, created_at FROM "
                 + qualify(connection, "recovery_decision") + " WHERE trace_id = ? ORDER BY sequence ASC";
         return query(connection, sql, traceId, (rs, dl) -> new RecoveryDecisionRow(
@@ -140,7 +140,7 @@ public class JdbcTraceDetailRepository extends AbstractJdbcRepository {
                 rs.getString("reason_code"),
                 rs.getInt("scheduled_delay_ms"),
                 dl.readUuid(rs, "target_route_candidate_id"),
-                dl.readUuid(rs, "target_credential_id"),
+                dl.readUuid(rs, "target_channel_credential_id"),
                 rs.getInt("retries_used"),
                 rs.getInt("credential_failovers_used"),
                 rs.getInt("fallbacks_used"),
@@ -186,24 +186,24 @@ public class JdbcTraceDetailRepository extends AbstractJdbcRepository {
 
     /** 当前掩码查询（Credential 只显示名称与当前 masked_value，FE-027）；缺失凭证返回空。 */
     public Map<UUID, String> maskedValuesByCredentialIds(Connection connection,
-                                                         java.util.Collection<UUID> credentialIds) {
-        if (credentialIds == null || credentialIds.isEmpty()) {
+                                                         java.util.Collection<UUID> channelCredentialIds) {
+        if (channelCredentialIds == null || channelCredentialIds.isEmpty()) {
             return Map.of();
         }
         DatabaseDialect d = dialect(connection);
-        StringBuilder sql = new StringBuilder("SELECT credential_id, masked_value FROM ")
-                .append(qualify(connection, "credential_secret")).append(" WHERE credential_id IN (")
-                .append(inPlaceholders(credentialIds.size()))
+        StringBuilder sql = new StringBuilder("SELECT channel_credential_id, masked_value FROM ")
+                .append(qualify(connection, "credential_secret")).append(" WHERE channel_credential_id IN (")
+                .append(inPlaceholders(channelCredentialIds.size()))
                 .append(")");
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
             int index = 1;
-            for (UUID id : credentialIds) {
+            for (UUID id : channelCredentialIds) {
                 d.bindUuid(statement, index++, id);
             }
             try (ResultSet rs = statement.executeQuery()) {
                 Map<UUID, String> masks = new HashMap<>();
                 while (rs.next()) {
-                    masks.put(d.readUuid(rs, "credential_id"), rs.getString("masked_value"));
+                    masks.put(d.readUuid(rs, "channel_credential_id"), rs.getString("masked_value"));
                 }
                 return Map.copyOf(masks);
             }

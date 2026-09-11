@@ -51,8 +51,8 @@ class UsageServiceContractTest {
     void dimensionColumnMappingCoversAllGroupDimensions() {
         assertThat(UsageService.dimensionColumn("APPLICATION")).isEqualTo("application");
         assertThat(UsageService.dimensionColumn("ALIAS")).isEqualTo("alias_id");
-        assertThat(UsageService.dimensionColumn("PROVIDER_MODEL")).isEqualTo("provider_model_id");
-        assertThat(UsageService.dimensionColumn("CREDENTIAL_POOL")).isEqualTo("credential_pool_id");
+        assertThat(UsageService.dimensionColumn("PROVIDER_MODEL")).isEqualTo("upstream_model_id");
+        assertThat(UsageService.dimensionColumn("CREDENTIAL_POOL")).isEqualTo("channel_id");
         assertThat(UsageService.dimensionColumn("TRACE_STATUS")).isEqualTo("trace_status");
         assertThat(UsageService.dimensionColumn("USAGE_SOURCE")).isEqualTo("usage_source");
     }

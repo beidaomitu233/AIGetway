@@ -30,7 +30,7 @@ public final class OverviewQueryParser {
             OffsetDateTime endAt,
             String application,
             String aliasId,
-            String providerId,
+            String channelId,
             String currency,
             String granularity) {
     }
@@ -60,7 +60,7 @@ public final class OverviewQueryParser {
 
         String application = first(params, "application");
         String aliasId = uuid(params, "alias_id", issues);
-        String providerId = uuid(params, "provider_id", issues);
+        String channelId = uuid(params, "channel_id", issues);
         String currency = first(params, "currency");
         if (currency != null && currency.isBlank()) {
             currency = null;
@@ -92,7 +92,7 @@ public final class OverviewQueryParser {
         if (!issues.isEmpty()) {
             throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "概览查询参数不合法", issues);
         }
-        return new OverviewQuery(startAt, endAt, application, aliasId, providerId, currency,
+        return new OverviewQuery(startAt, endAt, application, aliasId, channelId, currency,
                 granularity);
     }
 

@@ -39,7 +39,7 @@ class TimelineBuilderTest {
                                OffsetDateTime endedAt) {
         return new AttemptRow(
                 UUID.randomUUID(), "trace-1", 1, "INITIAL", null, UUID.randomUUID(),
-                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), UUID.randomUUID(),
                 "p", "pm", "mid", "cred", "SUCCEEDED", startedAt, null, null,
                 firstToken, endedAt, null, null, null, null, "host", 200, null,
                 false, "stop", null, null, null, null, false, null, Map.of(),

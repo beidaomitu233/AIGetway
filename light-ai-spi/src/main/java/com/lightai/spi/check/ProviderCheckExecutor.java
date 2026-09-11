@@ -1,6 +1,6 @@
 package com.lightai.spi.check;
 
-import com.lightai.client.provider.UsageSummary;
+import com.lightai.client.channel.UsageSummary;
 import java.util.Map;
 import java.util.UUID;
 
@@ -33,14 +33,14 @@ public interface ProviderCheckExecutor {
             boolean succeeded,
             int totalMs,
             UsageSummary usage,
-            String providerRequestId,
+            String channelRequestId,
             String traceId,
             String attemptId,
             String errorCode,
             String errorSummary) {
 
-        public static CheckOutcome success(int totalMs, UsageSummary usage, String providerRequestId) {
-            return new CheckOutcome(true, totalMs, usage, providerRequestId, null, null, null, null);
+        public static CheckOutcome success(int totalMs, UsageSummary usage, String channelRequestId) {
+            return new CheckOutcome(true, totalMs, usage, channelRequestId, null, null, null, null);
         }
 
         public static CheckOutcome failure(int totalMs, String errorCode, String safeSummary) {

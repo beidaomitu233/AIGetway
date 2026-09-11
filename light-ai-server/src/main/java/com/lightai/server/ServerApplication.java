@@ -13,7 +13,6 @@ import com.lightai.runtime.route.RouteService;
 import com.lightai.runtime.trace.InMemoryTraceStore;
 import com.lightai.runtime.trace.TraceStore;
 import com.lightai.server.runtime.DeploymentAuthContextProvider;
-import com.lightai.storage.credential.JdbcCredentialSecretPort;
 import com.lightai.server.runtime.ServerAuthProperties;
 import com.lightai.server.runtime.SnapshotRoutingPort;
 import com.lightai.runtime.capacity.StoreBackedCapacityPort;
@@ -147,10 +146,10 @@ public class ServerApplication {
     @Bean
     public com.lightai.runtime.ports.CredentialSecretPort credentialSecretPort(
             javax.sql.DataSource dataSource,
-            com.lightai.storage.credential.JdbcCredentialRepository credentialRepository,
-            com.lightai.storage.credential.JdbcCredentialSecretRepository secretRepository,
+            com.lightai.storage.channel.JdbcChannelCredentialRepository credentialRepository,
             com.lightai.spi.secret.SecretCipher secretCipher) {
-        return new JdbcCredentialSecretPort(dataSource, credentialRepository, secretRepository, secretCipher);
+        return new com.lightai.storage.channel.JdbcChannelCredentialSecretPort(
+                dataSource, credentialRepository, secretCipher);
     }
 
     /** 运行参数端口（C-010）：default_alias_id 读取自 runtime_config。 */

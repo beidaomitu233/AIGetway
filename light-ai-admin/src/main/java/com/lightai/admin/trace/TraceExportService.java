@@ -43,8 +43,8 @@ public class TraceExportService {
 
     private static final List<String> HEADERS = List.of(
             "started_at", "trace_id", "source_mode", "access_credential_name", "application",
-            "project", "tenant", "alias", "requested_stream", "final_provider_name",
-            "final_provider_model_name", "status", "attempt_count", "retry_count",
+            "project", "tenant", "alias", "requested_stream", "final_channel_name",
+            "final_upstream_model_name", "status", "attempt_count", "retry_count",
             "credential_failover_count", "fallback_count", "queued_ms", "first_token_ms",
             "total_ms", "usage_source", "input_tokens", "output_tokens", "total_tokens",
             "total_cost", "currency", "error_code");
@@ -130,8 +130,8 @@ public class TraceExportService {
             cells.add(CsvStreamWriter.text(row.tenant()));
             cells.add(CsvStreamWriter.text(row.alias()));
             cells.add(String.valueOf(row.requestedStream()));
-            cells.add(CsvStreamWriter.text(row.finalProviderName()));
-            cells.add(CsvStreamWriter.text(row.finalProviderModelName()));
+            cells.add(CsvStreamWriter.text(row.finalChannelName()));
+            cells.add(CsvStreamWriter.text(row.finalUpstreamModelName()));
             cells.add(CsvStreamWriter.text(row.status()));
             cells.add(String.valueOf(row.attemptCount()));
             cells.add(String.valueOf(row.retryCount()));

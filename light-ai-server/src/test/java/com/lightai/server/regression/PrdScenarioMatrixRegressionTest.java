@@ -51,7 +51,7 @@ public class PrdScenarioMatrixRegressionTest {
 
     private static CandidateView candidate(String id, String provider, String model, long priority) {
         return new CandidateView(id, provider.toLowerCase(), provider, "pk-" + id, model,
-                "pool-1", priority, 100, true, "cl100k", 8192L, 4096L,
+                priority, 100, true, "cl100k", 8192L, 4096L,
                 true, true, true, true, true,
                 BigDecimal.ZERO, BigDecimal.valueOf(2), BigDecimal.ZERO, BigDecimal.ONE, 4,
                 BigDecimal.ONE, BigDecimal.ONE, 1024L,
@@ -100,7 +100,7 @@ public class PrdScenarioMatrixRegressionTest {
         };
 
         AtomicInteger credentialIndex = new AtomicInteger(0);
-        CredentialSecretPort credentialPort = (poolId, failoverIdx) -> {
+        CredentialSecretPort credentialPort = (channelId, failoverIdx) -> {
             credentialIndex.set(failoverIdx);
             return new CredentialSecretPort.ResolvedCredential("cred-key-" + failoverIdx, () -> "sk-test".toCharArray());
         };
@@ -208,7 +208,7 @@ public class PrdScenarioMatrixRegressionTest {
             return Optional.empty();
         };
 
-        CredentialSecretPort credentialPort = (poolId, failoverIdx) ->
+        CredentialSecretPort credentialPort = (channelId, failoverIdx) ->
                 new CredentialSecretPort.ResolvedCredential("cred-1", () -> "sk-test".toCharArray());
 
         RoutingPort routingPort = (alias, request, estimatedInputTokens) ->
@@ -269,7 +269,7 @@ public class PrdScenarioMatrixRegressionTest {
         };
 
         AdapterRegistryPort registry = type -> Optional.of(interruptedAdapter);
-        CredentialSecretPort credentialPort = (poolId, failoverIdx) ->
+        CredentialSecretPort credentialPort = (channelId, failoverIdx) ->
                 new CredentialSecretPort.ResolvedCredential("cred-1", () -> "sk-test".toCharArray());
         RoutingPort routingPort = (alias, request, estimatedInputTokens) ->
                 new RoutingPort.RoutingResult(alias.enabledCandidates(), false, false);
@@ -340,8 +340,8 @@ public class PrdScenarioMatrixRegressionTest {
 
     private static class MockCapacityPort implements CapacityPort {
         @Override
-        public Reservation reserve(String aliasId, String modelId, String credentialId, long estimatedTokens) {
-            return new Reservation(UUID.randomUUID().toString(), aliasId, modelId, credentialId);
+        public Reservation reserve(String aliasId, String modelId, String channelCredentialId, long estimatedTokens) {
+            return new Reservation(UUID.randomUUID().toString(), aliasId, modelId, channelCredentialId);
         }
 
         @Override

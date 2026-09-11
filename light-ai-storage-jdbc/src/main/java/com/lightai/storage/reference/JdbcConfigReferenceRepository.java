@@ -16,7 +16,7 @@ import java.util.UUID;
 
 /**
  * 配置引用关系查询（BE-010/BE-012 影响分析与引用计数）。
- * 涉及 provider_model、credential、route_candidate 表（迁移由 DB-P02/P03 提供）；
+ * V2 资源域：涉及 upstream_model、channel_credential、route_candidate 表；
  * 历史对象使用逻辑 ID，不级联配置清理。
  */
 public class JdbcConfigReferenceRepository extends AbstractJdbcRepository {
@@ -33,25 +33,26 @@ public class JdbcConfigReferenceRepository extends AbstractJdbcRepository {
         super();
     }
 
-    public long countProviderModels(Connection connection, UUID providerId) {
-        String sql = "SELECT count(*) FROM " + qualify(connection, "provider_model")
-                + " WHERE provider_id = ? AND deleted_at IS NULL";
-        return count(connection, sql, providerId);
+    public long countUpstreamModels(Connection connection, UUID channelId) {
+        String sql = "SELECT count(*) FROM " + qualify(connection, "upstream_model")
+                + " WHERE channel_id = ? AND deleted_at IS NULL";
+        return count(connection, sql, channelId);
     }
 
-    public long countPools(Connection connection, UUID providerId) {
-        String sql = "SELECT count(*) FROM " + qualify(connection, "credential_pool")
-                + " WHERE provider_id = ? AND deleted_at IS NULL";
-        return count(connection, sql, providerId);
+    /** 渠道下渠道 Key 数（V2 无凭证池中间层）。 */
+    public long countChannelCredentials(Connection connection, UUID channelId) {
+        String sql = "SELECT count(*) FROM " + qualify(connection, "channel_credential")
+                + " WHERE channel_id = ? AND deleted_at IS NULL";
+        return count(connection, sql, channelId);
     }
 
-    /** 池内凭证明细：总数与启用数（健康计数由 object_runtime_state 组合）。 */
-    public CredentialCounts countCredentialsByPool(Connection connection, UUID poolId) {
+    /** 渠道内 Key 明细：总数与启用数（健康计数由 object_runtime_state 组合）。 */
+    public CredentialCounts countCredentialsByChannel(Connection connection, UUID channelId) {
         DatabaseDialect d = dialect(connection);
-        String sql = "SELECT count(*) AS total, COUNT(CASE WHEN enabled = true THEN 1 END) AS enabled_count "
-                + "FROM " + qualify(connection, "credential") + " WHERE pool_id = ? AND deleted_at IS NULL";
+        String sql = "SELECT count(*) AS total, COUNT(CASE WHEN status = 'ACTIVE' THEN 1 END) AS enabled_count "
+                + "FROM " + qualify(connection, "channel_credential") + " WHERE channel_id = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            d.bindUuid(statement, 1, poolId);
+            d.bindUuid(statement, 1, channelId);
             try (ResultSet rs = statement.executeQuery()) {
                 rs.next();
                 return new CredentialCounts(rs.getLong("total"), rs.getLong("enabled_count"));
@@ -61,28 +62,28 @@ public class JdbcConfigReferenceRepository extends AbstractJdbcRepository {
         }
     }
 
-    public long countRouteCandidates(Connection connection, UUID poolId) {
+    public long countRouteCandidates(Connection connection, UUID channelId) {
         String sql = "SELECT count(*) FROM " + qualify(connection, "route_candidate")
-                + " WHERE credential_pool_id = ? AND deleted_at IS NULL";
-        return count(connection, sql, poolId);
+                + " WHERE channel_id = ? AND deleted_at IS NULL";
+        return count(connection, sql, channelId);
     }
 
-    /** 池被引用的不同 Alias 数（BE-012 model_alias_count）。 */
-    public long countAliasesByPool(Connection connection, UUID poolId) {
+    /** 渠道被引用的不同 Alias 数（BE-012 model_alias_count）。 */
+    public long countAliasesByChannel(Connection connection, UUID channelId) {
         String sql = "SELECT count(DISTINCT alias_id) FROM " + qualify(connection, "route_candidate")
-                + " WHERE credential_pool_id = ? AND deleted_at IS NULL";
-        return count(connection, sql, poolId);
+                + " WHERE channel_id = ? AND deleted_at IS NULL";
+        return count(connection, sql, channelId);
     }
 
-    /** Provider 被引用的 Alias 集合（经模型候选推导，BE-010 affected_alias_ids）。 */
-    public List<UUID> aliasIdsByProvider(Connection connection, UUID providerId) {
+    /** 渠道被引用的 Alias 集合（经模型候选推导，BE-010 affected_alias_ids）。 */
+    public List<UUID> aliasIdsByChannel(Connection connection, UUID channelId) {
         DatabaseDialect d = dialect(connection);
         String sql = "SELECT DISTINCT rc.alias_id FROM "
                 + qualify(connection, "route_candidate") + " rc JOIN "
-                + qualify(connection, "provider_model") + " pm ON pm.id = rc.provider_model_id AND pm.deleted_at IS NULL "
-                + "WHERE pm.provider_id = ? AND rc.deleted_at IS NULL";
+                + qualify(connection, "upstream_model") + " pm ON pm.id = rc.upstream_model_id AND pm.deleted_at IS NULL "
+                + "WHERE pm.channel_id = ? AND rc.deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            d.bindUuid(statement, 1, providerId);
+            d.bindUuid(statement, 1, channelId);
             try (ResultSet rs = statement.executeQuery()) {
                 List<UUID> aliasIds = new ArrayList<>();
                 while (rs.next()) {
@@ -95,23 +96,17 @@ public class JdbcConfigReferenceRepository extends AbstractJdbcRepository {
         }
     }
 
-    /** 引用明细：id → 名称，用于 ImpactAnalysis.references。 */
-    public Map<UUID, String> poolNamesByProvider(Connection connection, UUID providerId) {
-        String sql = "SELECT id, name FROM " + qualify(connection, "credential_pool")
-                + " WHERE provider_id = ? AND deleted_at IS NULL ORDER BY name";
-        return nameMap(connection, sql, providerId);
+    public Map<UUID, String> upstreamModelNamesByChannel(Connection connection, UUID channelId) {
+        String sql = "SELECT id, display_name FROM " + qualify(connection, "upstream_model")
+                + " WHERE channel_id = ? AND deleted_at IS NULL ORDER BY display_name";
+        return nameMap(connection, sql, channelId);
     }
 
-    public Map<UUID, String> providerModelNamesByProvider(Connection connection, UUID providerId) {
-        String sql = "SELECT id, display_name FROM " + qualify(connection, "provider_model")
-                + " WHERE provider_id = ? AND deleted_at IS NULL ORDER BY display_name";
-        return nameMap(connection, sql, providerId);
-    }
-
-    public Map<UUID, String> credentialNamesByPool(Connection connection, UUID poolId) {
-        String sql = "SELECT id, name FROM " + qualify(connection, "credential")
-                + " WHERE pool_id = ? AND deleted_at IS NULL ORDER BY name";
-        return nameMap(connection, sql, poolId);
+    /** 渠道 Key 引用明细：id → 名称，用于 ImpactAnalysis.references。 */
+    public Map<UUID, String> credentialNamesByChannel(Connection connection, UUID channelId) {
+        String sql = "SELECT id, name FROM " + qualify(connection, "channel_credential")
+                + " WHERE channel_id = ? AND deleted_at IS NULL ORDER BY name";
+        return nameMap(connection, sql, channelId);
     }
 
     private Map<UUID, String> nameMap(Connection connection, String sql, UUID id) {
@@ -131,22 +126,22 @@ public class JdbcConfigReferenceRepository extends AbstractJdbcRepository {
     }
 
     /** 批量计数（列表组合引用数，避免 N+1）。 */
-    public Map<UUID, Long> countProviderModelsByProviders(Connection connection, List<UUID> providerIds) {
-        return countGrouped(connection, "provider_model", "provider_id", providerIds);
+    public Map<UUID, Long> countUpstreamModelsByChannels(Connection connection, List<UUID> channelIds) {
+        return countGrouped(connection, "upstream_model", "channel_id", channelIds);
     }
 
-    public Map<UUID, Long> countPoolsByProviders(Connection connection, List<UUID> providerIds) {
-        return countGrouped(connection, "credential_pool", "provider_id", providerIds);
+    public Map<UUID, Long> countCredentialsByChannels(Connection connection, List<UUID> channelIds) {
+        return countGrouped(connection, "channel_credential", "channel_id", channelIds);
     }
 
-    /** 检测命令目标解析：Provider 下的模型（BE-009）。 */
-    public Optional<UUID> findModelIdByProviderAndModelId(Connection connection, UUID providerId,
-                                                          String externalModelId) {
+    /** 检测命令目标解析：渠道下的上游模型（BE-009）。 */
+    public Optional<UUID> findModelIdByChannelAndModelId(Connection connection, UUID channelId,
+                                                        String externalModelId) {
         DatabaseDialect d = dialect(connection);
-        String sql = "SELECT id FROM " + qualify(connection, "provider_model")
-                + " WHERE provider_id = ? AND model_id = ? AND deleted_at IS NULL";
+        String sql = "SELECT id FROM " + qualify(connection, "upstream_model")
+                + " WHERE channel_id = ? AND model_id = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            d.bindUuid(statement, 1, providerId);
+            d.bindUuid(statement, 1, channelId);
             statement.setString(2, externalModelId);
             try (ResultSet rs = statement.executeQuery()) {
                 return rs.next() ? Optional.of(d.readUuid(rs, 1)) : Optional.empty();
@@ -156,32 +151,31 @@ public class JdbcConfigReferenceRepository extends AbstractJdbcRepository {
         }
     }
 
-    /** 检测命令目标解析：凭证须属于该 Provider 的池（BE-009）。 */
-    public boolean credentialBelongsToProvider(Connection connection, UUID credentialId, UUID providerId) {
+    /** 检测命令目标解析：渠道 Key 须直挂该渠道（BE-009）。 */
+    public boolean credentialBelongsToChannel(Connection connection, UUID channelCredentialId, UUID channelId) {
         DatabaseDialect d = dialect(connection);
-        String sql = "SELECT 1 FROM " + qualify(connection, "credential") + " c JOIN "
-                + qualify(connection, "credential_pool") + " p ON p.id = c.pool_id AND p.deleted_at IS NULL "
-                + "WHERE c.id = ? AND p.provider_id = ? AND c.deleted_at IS NULL";
+        String sql = "SELECT 1 FROM " + qualify(connection, "channel_credential")
+                + " WHERE id = ? AND channel_id = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            d.bindUuid(statement, 1, credentialId);
-            d.bindUuid(statement, 2, providerId);
+            d.bindUuid(statement, 1, channelCredentialId);
+            d.bindUuid(statement, 2, channelId);
             try (ResultSet rs = statement.executeQuery()) {
                 return rs.next();
             }
         } catch (SQLException e) {
-            throw new IllegalStateException("凭证归属检查失败：" + e.getClass().getSimpleName(), e);
+            throw new IllegalStateException("渠道 Key 归属检查失败：" + e.getClass().getSimpleName(), e);
         }
     }
 
-    /** 池候选引用明细：候选 id → Alias 名称（BE-012 blockers）。 */
-    public Map<UUID, String> candidateNamesByPool(Connection connection, UUID poolId) {
+    /** 渠道候选引用明细：候选 id → Alias 名称（BE-012 blockers）。 */
+    public Map<UUID, String> candidateNamesByChannel(Connection connection, UUID channelId) {
         DatabaseDialect d = dialect(connection);
         String castExpr = (d.databaseType() == DatabaseType.POSTGRESQL) ? "rc.id::text" : "CAST(rc.id AS CHAR)";
         String sql = "SELECT rc.id, COALESCE(ma.alias, ma.display_name, " + castExpr + ") AS name FROM "
                 + qualify(connection, "route_candidate") + " rc LEFT JOIN "
                 + qualify(connection, "model_alias") + " ma ON ma.id = rc.alias_id "
-                + "WHERE rc.credential_pool_id = ? AND rc.deleted_at IS NULL ORDER BY name";
-        return nameMap(connection, sql, poolId);
+                + "WHERE rc.channel_id = ? AND rc.deleted_at IS NULL ORDER BY name";
+        return nameMap(connection, sql, channelId);
     }
 
     private Map<UUID, Long> countGrouped(Connection connection, String tableName, String column, List<UUID> ids) {
@@ -239,4 +233,3 @@ public class JdbcConfigReferenceRepository extends AbstractJdbcRepository {
     public record CredentialCounts(long total, long enabledCount) {
     }
 }
-

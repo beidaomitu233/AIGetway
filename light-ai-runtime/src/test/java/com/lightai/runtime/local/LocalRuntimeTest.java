@@ -34,12 +34,11 @@ class LocalRuntimeTest {
     @Test
     void shouldExecuteEndToEndLocalRuntime() throws InterruptedException {
         LocalRuntimeDefinition def = LocalRuntimeDefinition.builder()
-                .addProvider(new LocalRuntimeDefinition.LocalProviderDefinition("p-openai", "OPENAI", "https://api.openai.com", 60000L))
-                .addPool(new LocalRuntimeDefinition.LocalPoolDefinition("pool-1", "p-openai", "PRIORITY"))
-                .addCredential(new LocalRuntimeDefinition.LocalCredentialDefinition("c-1", "pool-1", "p-openai", null))
-                .addModel(LocalRuntimeDefinition.LocalModelDefinition.simple("m-gpt4", "p-openai", "gpt-4o"))
+                .addChannel(new LocalRuntimeDefinition.LocalChannelDefinition("chan-openai", "OPENAI", "https://api.openai.com", 60000L))
+                .addCredential(new LocalRuntimeDefinition.LocalChannelCredentialDefinition("c-1", "chan-openai", null))
+                .addModel(LocalRuntimeDefinition.LocalUpstreamModelDefinition.simple("m-gpt4", "chan-openai", "gpt-4o"))
                 .addAlias(new LocalRuntimeDefinition.LocalAliasDefinition("a-1", "default", "Default Alias", true, List.of(
-                        LocalRuntimeDefinition.LocalCandidateDefinition.of("m-gpt4", "pool-1")
+                        LocalRuntimeDefinition.LocalCandidateDefinition.of("m-gpt4", "chan-openai")
                 )))
                 .build();
 
@@ -47,7 +46,7 @@ class LocalRuntimeTest {
 
         LightAiClient client = LightAiClient.builder()
                 .localRuntimeDefinition(def)
-                .credentialSecretSuppliers(Map.of("pool-1", () -> "sk-fake".toCharArray()))
+                .credentialSecretSuppliers(Map.of("chan-openai", () -> "sk-fake".toCharArray()))
                 .adapters(List.of(adapter))
                 .build();
 

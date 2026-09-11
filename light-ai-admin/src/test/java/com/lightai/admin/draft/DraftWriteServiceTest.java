@@ -69,7 +69,7 @@ class DraftWriteServiceTest {
         draftChanges.existing = false;
 
         DraftWriteResult result = service.execute(command(1, connection -> new DraftEntityChange(
-                "provider", UUID.randomUUID(), "OpenAI", "UPDATE", 2, List.of(
+                "channel", UUID.randomUUID(), "OpenAI", "UPDATE", 2, List.of(
                 FieldChange.changed("base_url", "https://a", "https://b")))));
 
         assertThat(result.draftRevision()).isEqualTo(6);
@@ -88,7 +88,7 @@ class DraftWriteServiceTest {
         AtomicBoolean writerInvoked = new AtomicBoolean(false);
         DraftWriteCommand command = new DraftWriteCommand(
                 "req-stale", "admin", "STANDALONE_SERVER", "203.0.113.*", "UPDATE",
-                "provider", "p-1", 1,
+                "channel", "p-1", 1,
                 connection -> 3L,
                 connection -> {
                     writerInvoked.set(true);
@@ -113,7 +113,7 @@ class DraftWriteServiceTest {
     void missingObjectIsRejectedAsObjectNotFound() {
         DraftWriteCommand command = new DraftWriteCommand(
                 "req-missing", "admin", "STANDALONE_SERVER", "203.0.113.*", "UPDATE",
-                "provider", "p-404", 1,
+                "channel", "p-404", 1,
                 connection -> null,
                 connection -> {
                     throw new AssertionError("writer 不应执行");
@@ -132,7 +132,7 @@ class DraftWriteServiceTest {
     void publishingStateRejectsDraftWrite() {
         draftState.status = DraftStatus.PUBLISHING;
         DraftWriteCommand command = command(1, connection -> new DraftEntityChange(
-                "provider", UUID.randomUUID(), "OpenAI", "UPDATE", 2, List.of()));
+                "channel", UUID.randomUUID(), "OpenAI", "UPDATE", 2, List.of()));
 
         assertThatThrownBy(() -> service.execute(command))
                 .isInstanceOf(LightAiException.class)
@@ -161,7 +161,7 @@ class DraftWriteServiceTest {
     void successAuditFailureRollsBackBusinessAndRaisesListener() {
         audits.failOnInsert = true;
         DraftWriteCommand command = command(1, connection -> new DraftEntityChange(
-                "provider", UUID.randomUUID(), "OpenAI", "UPDATE", 2, List.of()));
+                "channel", UUID.randomUUID(), "OpenAI", "UPDATE", 2, List.of()));
 
         assertThatThrownBy(() -> service.execute(command))
                 .isInstanceOf(IllegalStateException.class);
@@ -178,7 +178,7 @@ class DraftWriteServiceTest {
         draftChanges.existing = true;
 
         DraftWriteResult result = service.execute(command(1, connection -> new DraftEntityChange(
-                "provider", UUID.randomUUID(), "OpenAI", "UPDATE", 2, List.of())));
+                "channel", UUID.randomUUID(), "OpenAI", "UPDATE", 2, List.of())));
 
         assertThat(draftState.bumpDeltas).containsExactly(0);
         assertThat(result.draftRevision()).isEqualTo(6);
@@ -188,7 +188,7 @@ class DraftWriteServiceTest {
     void sensitiveFieldsAreRedactedBeforeDraftChangeAndAudit() {
         draftChanges.existing = false;
         service.execute(command(1, connection -> new DraftEntityChange(
-                "credential", UUID.randomUUID(), "sk-alias", "UPDATE", 2, List.of(
+                "channel_credential", UUID.randomUUID(), "sk-alias", "UPDATE", 2, List.of(
                 FieldChange.changed("secret_ref", "vault://a", "vault://b"),
                 FieldChange.changed("display_name", "旧名", "新名")))));
 
@@ -229,7 +229,7 @@ class DraftWriteServiceTest {
 
     private DraftWriteCommand command(long expectedVersion, DraftEntityChange.Writer writer) {
         return new DraftWriteCommand("req-" + UUID.randomUUID(), "admin", "STANDALONE_SERVER",
-                "203.0.113.*", "UPDATE", "provider", "p-1", expectedVersion,
+                "203.0.113.*", "UPDATE", "channel", "p-1", expectedVersion,
                 connection -> 1L, writer);
     }
 

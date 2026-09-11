@@ -9,8 +9,8 @@ import java.util.UUID;
 @JsonInclude(JsonInclude.Include.ALWAYS)
 public record CircuitStateDetail(
         String id,
-        String providerModelId,
-        String credentialId,
+        String upstreamModelId,
+        String channelCredentialId,
         String credentialMasked,
         String state,
         long stateVersion,

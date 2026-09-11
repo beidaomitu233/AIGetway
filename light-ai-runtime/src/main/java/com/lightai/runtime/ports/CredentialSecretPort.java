@@ -12,15 +12,15 @@ import java.util.function.Supplier;
 public interface CredentialSecretPort {
 
     /** 解析池内一个可用凭证的秘密句柄；failoverIndex 供凭证级 Failover 选择下一凭证。 */
-    ResolvedCredential resolve(String poolId, int failoverIndex);
+    ResolvedCredential resolve(String channelId, int failoverIndex);
 
-    record ResolvedCredential(String credentialId, SecretHandle secretHandle) {
+    record ResolvedCredential(String channelCredentialId, SecretHandle secretHandle) {
     }
 
     static CredentialSecretPort inMemory(java.util.Map<String, String> poolSecrets) {
-        return (poolId, failoverIndex) -> new ResolvedCredential(poolId + "-credential-" + failoverIndex,
+        return (channelId, failoverIndex) -> new ResolvedCredential(channelId + "-credential-" + failoverIndex,
                 () -> {
-                    String secret = poolSecrets.get(poolId);
+                    String secret = poolSecrets.get(channelId);
                     if (secret == null) {
                         throw new LightAiException(ErrorCode.CREDENTIAL_NOT_AVAILABLE, "当前候选的凭证池没有可用 Credential");
                     }

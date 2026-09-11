@@ -67,8 +67,8 @@ class ChatPipelineTest {
         adapter = new StubAdapter();
         AdapterRegistryPort registry = type ->
                 Optional.ofNullable("OPENAI".equals(type) || "DEEPSEEK".equals(type) ? adapter : null);
-        CredentialSecretPort credentials = (poolId, failoverIndex) ->
-                new CredentialSecretPort.ResolvedCredential(poolId + "-c" + failoverIndex,
+        CredentialSecretPort credentials = (channelId, failoverIndex) ->
+                new CredentialSecretPort.ResolvedCredential(channelId + "-c" + failoverIndex,
                         () -> "sk-test".toCharArray());
         pipeline = new ChatPipeline(snapshot(), () -> Optional.<String>empty(), routing(),
                 capacity, credentials, registry, traceStore, () -> ReliabilityBudgets.DEFAULT, 30_000);
@@ -198,8 +198,8 @@ class ChatPipelineTest {
                 "ACTUAL", "provider-request");
         RecordingApplicationQuota quota = new RecordingApplicationQuota();
         AdapterRegistryPort registry = type -> Optional.of(adapter);
-        CredentialSecretPort credentials = (poolId, failoverIndex) ->
-                new CredentialSecretPort.ResolvedCredential(poolId + "-c" + failoverIndex,
+        CredentialSecretPort credentials = (channelId, failoverIndex) ->
+                new CredentialSecretPort.ResolvedCredential(channelId + "-c" + failoverIndex,
                         () -> "sk-test".toCharArray());
         ChatPipeline quotaPipeline = new ChatPipeline(snapshot(), () -> Optional.empty(), routing(),
                 capacity, null, credentials, null, registry, traceStore, quota,
@@ -224,8 +224,8 @@ class ChatPipelineTest {
         quota.reject = ErrorCode.APPLICATION_TOKEN_QUOTA_EXHAUSTED;
         ChatPipeline quotaPipeline = new ChatPipeline(snapshot(), () -> Optional.empty(), routing(),
                 capacity, null,
-                (poolId, index) -> new CredentialSecretPort.ResolvedCredential(
-                        "credential", () -> "sk-test".toCharArray()), null,
+                (channelId, index) -> new CredentialSecretPort.ResolvedCredential(
+                        "channel_credential", () -> "sk-test".toCharArray()), null,
                 type -> Optional.of(adapter), traceStore, quota,
                 () -> ReliabilityBudgets.DEFAULT, 30_000);
         var principal = AccessTokenPort.Principal.enterprise("app-1", List.of("assistant"),
@@ -244,10 +244,10 @@ class ChatPipelineTest {
     void sharedCircuitOpensAfterProviderFailureAndRejectsNextExternalAttempt() {
         String aliasId = java.util.UUID.randomUUID().toString();
         String modelPk = java.util.UUID.randomUUID().toString();
-        String credentialId = java.util.UUID.randomUUID().toString();
+        String channelCredentialId = java.util.UUID.randomUUID().toString();
         CandidateView candidate = new CandidateView(
                 java.util.UUID.randomUUID().toString(), java.util.UUID.randomUUID().toString(),
-                "OPENAI", modelPk, "model-circuit", java.util.UUID.randomUUID().toString(),
+                "OPENAI", modelPk, "model-circuit",
                 1, 1, true, "FAKE", 8000L, 512L, true, true, true, true, true,
                 null, null, null, null, 4, null, null, 32L,
                 "0", "0", 1000, "USD", "https://provider.test/v1", null,
@@ -262,8 +262,8 @@ class ChatPipelineTest {
         ChatPipeline circuitPipeline = new ChatPipeline(
                 snapshots, () -> Optional.empty(), routing(), new RecordingCapacity(),
                 new com.lightai.runtime.circuit.InMemoryCircuitStore(),
-                (poolId, index) -> new CredentialSecretPort.ResolvedCredential(
-                        credentialId, () -> "sk-test".toCharArray()),
+                (channelId, index) -> new CredentialSecretPort.ResolvedCredential(
+                        channelCredentialId, () -> "sk-test".toCharArray()),
                 type -> Optional.of(failingAdapter), new InMemoryTraceStore(),
                 () -> new ReliabilityBudgets(0, 0, 0), 30_000);
 
@@ -283,10 +283,10 @@ class ChatPipelineTest {
     void capacityOverflowQueuesAndRetriesFromSharedFifoHead() {
         String aliasId = java.util.UUID.randomUUID().toString();
         String modelPk = java.util.UUID.randomUUID().toString();
-        String credentialId = java.util.UUID.randomUUID().toString();
+        String channelCredentialId = java.util.UUID.randomUUID().toString();
         CandidateView candidate = new CandidateView(
                 java.util.UUID.randomUUID().toString(), java.util.UUID.randomUUID().toString(),
-                "OPENAI", modelPk, "model-queued", java.util.UUID.randomUUID().toString(),
+                "OPENAI", modelPk, "model-queued",
                 1, 1, true, "FAKE", 8000L, 512L, true, true, true, true, true,
                 null, null, null, null, 4, null, null, 32L,
                 "0", "0", 1000, "USD", "https://provider.test/v1", null,
@@ -325,8 +325,8 @@ class ChatPipelineTest {
                 1L, 1L, 2L, "ACTUAL", "queued-request");
         ChatPipeline queuedPipeline = new ChatPipeline(
                 snapshots, () -> Optional.empty(), routing(), initiallyLimited, null,
-                (poolId, index) -> new CredentialSecretPort.ResolvedCredential(
-                        credentialId, () -> "sk-test".toCharArray()),
+                (channelId, index) -> new CredentialSecretPort.ResolvedCredential(
+                        channelCredentialId, () -> "sk-test".toCharArray()),
                 queue, type -> Optional.of(queuedAdapter), new InMemoryTraceStore(),
                 () -> new ReliabilityBudgets(0, 0, 0), 5_000);
 
@@ -458,7 +458,7 @@ class ChatPipelineTest {
                 });
             }
         };
-        CredentialSecretPort credentials = (poolId, index) ->
+        CredentialSecretPort credentials = (channelId, index) ->
                 new CredentialSecretPort.ResolvedCredential("cred-1", () -> "sk-test".toCharArray());
         ChatPipeline asyncPipeline = new ChatPipeline(snapshot(), () -> Optional.empty(), routing(),
                 capacity, credentials, type -> Optional.of(asyncAdapter), traceStore,
@@ -516,9 +516,9 @@ class ChatPipelineTest {
         final List<String> released = new java.util.ArrayList<>();
 
         @Override
-        public Reservation reserve(String aliasId, String modelId, String credentialId, long estimatedTokens) {
+        public Reservation reserve(String aliasId, String modelId, String channelCredentialId, long estimatedTokens) {
             reserved.incrementAndGet();
-            return new Reservation("r-" + reserved.get(), aliasId, modelId, credentialId);
+            return new Reservation("r-" + reserved.get(), aliasId, modelId, channelCredentialId);
         }
 
         @Override
@@ -683,7 +683,7 @@ class ChatPipelineTest {
 
     private static CandidateView candidate(String id, String providerType, String modelId, long priority,
                                            String inputPrice, String outputPrice) {
-        return new CandidateView(id, "provider-1", providerType, "pk-" + id, modelId, "pool-1",
+        return new CandidateView(id, "provider-1", providerType, "pk-" + id, modelId,
                 priority, 1, true, "FAKE", 8000L, 512L, true, true, true, true, true,
                 null, null, null, null, 4, null, null, null,
                 inputPrice, outputPrice, 1000, "USD",

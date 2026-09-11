@@ -33,7 +33,7 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
     }
 
     /** 检测/调用结束后的 Provider 状态收敛（幂等 upsert）。 */
-    public void upsertProviderState(Connection connection, UUID providerId, String connectionStatus,
+    public void upsertProviderState(Connection connection, UUID channelId, String connectionStatus,
                                     OffsetDateTime checkedAt, String errorCode, String errorSummary) {
         DatabaseDialect d = dialect(connection);
         String sql;
@@ -42,7 +42,7 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
                     INSERT INTO %s
                       (id, entity_type, entity_id, connection_status, last_checked_at,
                        last_error_code, last_error_summary, state_version, created_at, updated_at)
-                    VALUES (?, 'PROVIDER', ?, ?, ?, ?, ?, 1, %s, %s)
+                    VALUES (?, 'CHANNEL', ?, ?, ?, ?, ?, 1, %s, %s)
                     ON CONFLICT (entity_type, entity_id) DO UPDATE SET
                       connection_status = EXCLUDED.connection_status,
                       last_checked_at = EXCLUDED.last_checked_at,
@@ -60,7 +60,7 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
                     INSERT INTO %s
                       (id, entity_type, entity_id, connection_status, last_checked_at,
                        last_error_code, last_error_summary, state_version, created_at, updated_at)
-                    VALUES (?, 'PROVIDER', ?, ?, ?, ?, ?, 1, %s, %s)
+                    VALUES (?, 'CHANNEL', ?, ?, ?, ?, ?, 1, %s, %s)
                     ON DUPLICATE KEY UPDATE
                       connection_status = VALUES(connection_status),
                       last_checked_at = VALUES(last_checked_at),
@@ -75,7 +75,7 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
         }
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, UUID.randomUUID());
-            d.bindUuid(statement, 2, providerId);
+            d.bindUuid(statement, 2, channelId);
             statement.setString(3, connectionStatus);
             statement.setObject(4, checkedAt == null ? Timestamp.from(java.time.Instant.now()) : checkedAt);
             statement.setString(5, errorCode);
@@ -87,7 +87,7 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
     }
 
     /** 检测/调用结束后的 Credential 健康收敛（幂等 upsert）。 */
-    public void upsertCredentialHealth(Connection connection, UUID credentialId, String healthStatus,
+    public void upsertCredentialHealth(Connection connection, UUID channelCredentialId, String healthStatus,
                                        OffsetDateTime checkedAt, String errorCode, String errorSummary) {
         DatabaseDialect d = dialect(connection);
         String sql;
@@ -96,7 +96,7 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
                     INSERT INTO %s
                       (id, entity_type, entity_id, health_status, last_checked_at,
                        last_error_code, last_error_summary, state_version, created_at, updated_at)
-                    VALUES (?, 'CREDENTIAL', ?, ?, ?, ?, ?, 1, %s, %s)
+                    VALUES (?, 'CHANNEL_CREDENTIAL', ?, ?, ?, ?, ?, 1, %s, %s)
                     ON CONFLICT (entity_type, entity_id) DO UPDATE SET
                       health_status = EXCLUDED.health_status,
                       last_checked_at = EXCLUDED.last_checked_at,
@@ -114,7 +114,7 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
                     INSERT INTO %s
                       (id, entity_type, entity_id, health_status, last_checked_at,
                        last_error_code, last_error_summary, state_version, created_at, updated_at)
-                    VALUES (?, 'CREDENTIAL', ?, ?, ?, ?, ?, 1, %s, %s)
+                    VALUES (?, 'CHANNEL_CREDENTIAL', ?, ?, ?, ?, ?, 1, %s, %s)
                     ON DUPLICATE KEY UPDATE
                       health_status = VALUES(health_status),
                       last_checked_at = VALUES(last_checked_at),
@@ -129,7 +129,7 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
         }
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, UUID.randomUUID());
-            d.bindUuid(statement, 2, credentialId);
+            d.bindUuid(statement, 2, channelCredentialId);
             statement.setString(3, healthStatus);
             statement.setObject(4, checkedAt == null ? Timestamp.from(java.time.Instant.now()) : checkedAt);
             statement.setString(5, errorCode);

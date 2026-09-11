@@ -34,8 +34,8 @@ public class ServerHealthAndDrainingTest {
         capacityReleased = new AtomicBoolean(false);
         CapacityPort capacityPort = new CapacityPort() {
             @Override
-            public Reservation reserve(String aliasId, String modelId, String credentialId, long estimatedTokens) {
-                return new Reservation("res-1", aliasId, modelId, credentialId);
+            public Reservation reserve(String aliasId, String modelId, String channelCredentialId, long estimatedTokens) {
+                return new Reservation("res-1", aliasId, modelId, channelCredentialId);
             }
 
             @Override

@@ -13,7 +13,7 @@ import com.lightai.runtime.ports.ConfigSnapshotPort;
 import com.lightai.runtime.ports.CredentialSecretPort;
 import com.lightai.spi.auth.AuthContext;
 import com.lightai.spi.auth.AuthContextProvider;
-import com.lightai.storage.credential.JdbcCredentialSecretPort;
+import com.lightai.storage.channel.JdbcChannelCredentialSecretPort;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
@@ -108,7 +108,7 @@ class LightAiReactiveAutoConfigurationTest {
                     assertThat(context).hasSingleBean(ConfigSnapshotPort.class);
                     assertThat(context).hasSingleBean(CredentialSecretPort.class);
                     assertThat(context.getBean(CredentialSecretPort.class))
-                            .isInstanceOf(JdbcCredentialSecretPort.class);
+                            .isInstanceOf(JdbcChannelCredentialSecretPort.class);
                     assertThat(context).hasSingleBean(ChatPipeline.class);
                     assertThat(context).hasSingleBean(LightAiClient.class);
                     assertThat(context).doesNotHaveBean(BootstrapController.class);

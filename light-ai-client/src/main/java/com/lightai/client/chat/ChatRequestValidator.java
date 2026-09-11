@@ -29,7 +29,7 @@ public final class ChatRequestValidator {
     private static final Pattern TRACE_ID_PATTERN = Pattern.compile("^[A-Za-z0-9._\\-]+$");
 
     private static final Set<String> SENSITIVE_TAG_KEYS = Set.of(
-            "authorization", "token", "secret", "password", "api_key", "apikey", "credential");
+            "authorization", "token", "secret", "password", "api_key", "apikey", "channel_credential");
 
     private ChatRequestValidator() {
     }

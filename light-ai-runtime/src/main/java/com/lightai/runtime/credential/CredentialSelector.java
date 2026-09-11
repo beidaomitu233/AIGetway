@@ -2,7 +2,7 @@ package com.lightai.runtime.credential;
 
 import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
-import com.lightai.client.pool.SelectionStrategy;
+import com.lightai.client.channel.SelectionStrategy;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.List;
@@ -19,12 +19,12 @@ import java.util.random.RandomGenerator;
 public class CredentialSelector {
 
     /** 候选凭证视图（只读）。 */
-    public record CredentialView(UUID id, UUID poolId, int weight, String healthStatus,
+    public record CredentialView(UUID id, UUID channelId, int weight, String healthStatus,
                                  Instant rateLimitResetAt, boolean enabled, long currentConcurrency) {
     }
 
     /** 选中的短期句柄：调用结束必须 clear。 */
-    public record CredentialHandle(UUID credentialId) {
+    public record CredentialHandle(UUID channelCredentialId) {
     }
 
     public interface HandleCleaner {

@@ -18,20 +18,20 @@ class InMemoryCapacityStoreTest {
     private InMemoryCapacityStore store;
     private final UUID aliasId = UUID.randomUUID();
     private final UUID modelId = UUID.randomUUID();
-    private final UUID credentialId = UUID.randomUUID();
+    private final UUID channelCredentialId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
         store = new InMemoryCapacityStore();
         store.registerLimit("alias", aliasId, new InMemoryCapacityStore.ScopeLimit(10L, 10000L, null));
-        store.registerLimit("provider_model", modelId,
+        store.registerLimit("upstream_model", modelId,
                 new InMemoryCapacityStore.ScopeLimit(10L, 10000L, null));
-        store.registerLimit("credential", credentialId,
+        store.registerLimit("channel_credential", channelCredentialId,
                 new InMemoryCapacityStore.ScopeLimit(10L, 10000L, 5));
     }
 
     private CapacityStore.ReserveRequest request(long tokens) {
-        return new CapacityStore.ReserveRequest(aliasId, modelId, credentialId, tokens, 0);
+        return new CapacityStore.ReserveRequest(aliasId, modelId, channelCredentialId, tokens, 0);
     }
 
     @Test
@@ -39,14 +39,14 @@ class InMemoryCapacityStoreTest {
         var handle = store.reserve(request(100));
         assertThat(handle.reservedTokens()).isEqualTo(100);
         assertThat(store.usage("alias", aliasId).rpmReserved()).isEqualTo(1);
-        assertThat(store.usage("provider_model", modelId).tpmReserved()).isEqualTo(100);
-        assertThat(store.usage("credential", credentialId).concurrentActive()).isEqualTo(1);
+        assertThat(store.usage("upstream_model", modelId).tpmReserved()).isEqualTo(100);
+        assertThat(store.usage("channel_credential", channelCredentialId).concurrentActive()).isEqualTo(1);
     }
 
     @Test
     void tpmReservationIncludesEffectiveMaxTokens() {
         var handle = store.reserve(new CapacityStore.ReserveRequest(
-                aliasId, modelId, credentialId, 100, 50));
+                aliasId, modelId, channelCredentialId, 100, 50));
         assertThat(handle.reservedTokens()).isEqualTo(150);
         assertThat(store.usage("alias", aliasId).tpmReserved()).isEqualTo(150);
     }
@@ -64,15 +64,15 @@ class InMemoryCapacityStoreTest {
                 .extracting(e -> ((LightAiException) e).code())
                 .isEqualTo(ErrorCode.CAPACITY_LIMITED);
         assertThat(store.usage("alias", aliasId).rpmReserved()).isEqualTo(aliasRpmBefore);
-        assertThat(store.usage("credential", credentialId).concurrentActive()).isEqualTo(5);
+        assertThat(store.usage("channel_credential", channelCredentialId).concurrentActive()).isEqualTo(5);
     }
 
     @Test
     void settleAdjustsTpmInOriginalWindowAndReleasesConcurrency() {
         var handle = store.reserve(request(100));
         store.settle(handle.reservationId(), 40, true);
-        assertThat(store.usage("credential", credentialId).tpmReserved()).isEqualTo(40);
-        assertThat(store.usage("credential", credentialId).concurrentActive()).isZero();
+        assertThat(store.usage("channel_credential", channelCredentialId).tpmReserved()).isEqualTo(40);
+        assertThat(store.usage("channel_credential", channelCredentialId).concurrentActive()).isZero();
         // RPM 已发送：不退还
         assertThat(store.usage("alias", aliasId).rpmReserved()).isEqualTo(1);
     }
@@ -90,7 +90,7 @@ class InMemoryCapacityStoreTest {
         store.release(handle.reservationId());
         assertThat(store.usage("alias", aliasId).rpmReserved()).isZero();
         assertThat(store.usage("alias", aliasId).tpmReserved()).isZero();
-        assertThat(store.usage("credential", credentialId).concurrentActive()).isZero();
+        assertThat(store.usage("channel_credential", channelCredentialId).concurrentActive()).isZero();
         // 重复释放幂等
         store.release(handle.reservationId());
         store.settle(handle.reservationId(), 10, true);

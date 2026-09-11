@@ -11,6 +11,8 @@ import java.util.stream.Collectors;
 /**
  * Local Runtime 离线静态校验器（BE-050，4.6.2.3）：
  * 纯内存离线校验，引用完整性、能力边界与价格，校验失败立即抛出异常阻止客户端创建。
+ *
+ * V2 资源域：渠道直挂渠道 Key 与上游模型；候选绑定「渠道 + 上游模型」。
  */
 public final class LocalRuntimeValidator {
 
@@ -22,22 +24,22 @@ public final class LocalRuntimeValidator {
             throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "LocalRuntimeDefinition 不能为空");
         }
 
-        Map<String, LocalRuntimeDefinition.LocalProviderDefinition> providers = def.providers().stream()
-                .collect(Collectors.toMap(LocalRuntimeDefinition.LocalProviderDefinition::providerId, p -> p, (a, b) -> a));
+        Map<String, LocalRuntimeDefinition.LocalChannelDefinition> channels = def.channels().stream()
+                .collect(Collectors.toMap(LocalRuntimeDefinition.LocalChannelDefinition::channelId, c -> c, (a, b) -> a));
 
-        Map<String, LocalRuntimeDefinition.LocalPoolDefinition> pools = def.pools().stream()
-                .collect(Collectors.toMap(LocalRuntimeDefinition.LocalPoolDefinition::poolId, p -> p, (a, b) -> a));
+        Map<String, LocalRuntimeDefinition.LocalUpstreamModelDefinition> models = def.models().stream()
+                .collect(Collectors.toMap(LocalRuntimeDefinition.LocalUpstreamModelDefinition::upstreamModelId, m -> m, (a, b) -> a));
 
-        Map<String, LocalRuntimeDefinition.LocalModelDefinition> models = def.models().stream()
-                .collect(Collectors.toMap(LocalRuntimeDefinition.LocalModelDefinition::modelId, m -> m, (a, b) -> a));
-
-        // 校验 Model 与 Provider 关联
-        for (LocalRuntimeDefinition.LocalModelDefinition model : def.models()) {
+        // 校验上游模型与渠道关联
+        for (LocalRuntimeDefinition.LocalUpstreamModelDefinition model : def.models()) {
+            if (model.upstreamModelId() == null || model.upstreamModelId().isBlank()) {
+                throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "upstreamModelId 不能为空", "upstream_model_id");
+            }
             if (model.modelId() == null || model.modelId().isBlank()) {
                 throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "modelId 不能为空", "model_id");
             }
-            if (!providers.containsKey(model.providerId())) {
-                throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "模型 " + model.modelId() + " 关联的 provider " + model.providerId() + " 不存在", "provider_id");
+            if (!channels.containsKey(model.channelId())) {
+                throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "上游模型 " + model.modelId() + " 关联的渠道 " + model.channelId() + " 不存在", "channel_id");
             }
             if (model.contextWindow() != null && model.maxOutputTokens() != null) {
                 if (model.contextWindow() < model.maxOutputTokens()) {
@@ -49,23 +51,10 @@ public final class LocalRuntimeValidator {
             }
         }
 
-        // 校验 Pool 与 Provider 关联
-        for (LocalRuntimeDefinition.LocalPoolDefinition pool : def.pools()) {
-            if (!providers.containsKey(pool.providerId())) {
-                throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "凭证池 " + pool.poolId() + " 关联的 provider " + pool.providerId() + " 不存在", "provider_id");
-            }
-        }
-
-        // 校验 Credential
-        for (LocalRuntimeDefinition.LocalCredentialDefinition cred : def.credentials()) {
-            if (cred.poolId() != null && !pools.containsKey(cred.poolId())) {
-                throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "凭证 " + cred.credentialId() + " 关联的凭证池 " + cred.poolId() + " 不存在", "pool_id");
-            }
-            if (cred.poolId() != null) {
-                LocalRuntimeDefinition.LocalPoolDefinition pool = pools.get(cred.poolId());
-                if (!pool.providerId().equals(cred.providerId())) {
-                    throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "凭证 " + cred.credentialId() + " 的 providerId 与关联池的 providerId 不一致");
-                }
+        // 校验渠道 Key
+        for (LocalRuntimeDefinition.LocalChannelCredentialDefinition cred : def.credentials()) {
+            if (cred.channelId() != null && !channels.containsKey(cred.channelId())) {
+                throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "渠道 Key " + cred.channelCredentialId() + " 关联的渠道 " + cred.channelId() + " 不存在", "channel_id");
             }
         }
 
@@ -87,17 +76,13 @@ public final class LocalRuntimeValidator {
             }
 
             for (LocalRuntimeDefinition.LocalCandidateDefinition cand : alias.candidates()) {
-                if (!models.containsKey(cand.modelId())) {
-                    throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "Alias " + alias.alias() + " 候选模型 " + cand.modelId() + " 不存在", "model_id");
+                if (!models.containsKey(cand.upstreamModelId())) {
+                    throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "Alias " + alias.alias() + " 候选上游模型 " + cand.upstreamModelId() + " 不存在", "upstream_model_id");
                 }
-                if (cand.poolId() != null && !pools.containsKey(cand.poolId())) {
-                    throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "Alias " + alias.alias() + " 候选引用的凭证池 " + cand.poolId() + " 不存在", "pool_id");
-                }
-                if (cand.poolId() != null) {
-                    LocalRuntimeDefinition.LocalModelDefinition m = models.get(cand.modelId());
-                    LocalRuntimeDefinition.LocalPoolDefinition p = pools.get(cand.poolId());
-                    if (!m.providerId().equals(p.providerId())) {
-                        throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "Alias " + alias.alias() + " 候选模型与凭证池的 provider 不一致");
+                if (cand.channelId() != null) {
+                    LocalRuntimeDefinition.LocalUpstreamModelDefinition m = models.get(cand.upstreamModelId());
+                    if (!cand.channelId().equals(m.channelId())) {
+                        throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "Alias " + alias.alias() + " 候选绑定的渠道与上游模型的渠道不一致");
                     }
                 }
             }

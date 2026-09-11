@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 
 /**
  * 候选详情（BACKEND_PLAN 4.2.9.4；字段对齐 FE-018）。
+ * V2 语义：候选路径绑定「渠道 + 上游模型」，不再存在凭证池中间层。
  * runtime_status 由配置与运行状态派生（容量与熔断维度由 BE-P04 补全），
  * 不进入可写 DTO。
  */
@@ -12,13 +13,11 @@ import java.time.OffsetDateTime;
 public record RouteCandidateDetail(
         String id,
         String aliasId,
-        String providerId,
-        String providerName,
-        String providerModelId,
-        String providerModelDisplayName,
-        String providerModelIdLabel,
-        String credentialPoolId,
-        String credentialPoolName,
+        String upstreamModelId,
+        String upstreamModelName,
+        String upstreamModelIdLabel,
+        String channelId,
+        String channelName,
         int priority,
         int weight,
         boolean enabled,

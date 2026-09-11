@@ -17,13 +17,12 @@ import java.util.UUID;
  */
 public final class JdbcDraftDependencyRepository extends AbstractJdbcRepository implements DraftDependencyRepository {
 
-    /** 引用关系：引用表.引用列 → 被引用实体类型。 */
+    /** 引用关系：引用表.引用列 → 被引用实体类型。V2：渠道直挂 Key / 上游模型 / 候选。 */
     private static final List<Relation> RELATIONS = List.of(
-            new Relation("provider", "credential_pool", "provider_id"),
-            new Relation("provider", "provider_model", "provider_id"),
-            new Relation("credential_pool", "credential", "pool_id"),
-            new Relation("credential_pool", "route_candidate", "credential_pool_id"),
-            new Relation("provider_model", "route_candidate", "provider_model_id"),
+            new Relation("channel", "channel_credential", "channel_id"),
+            new Relation("channel", "upstream_model", "channel_id"),
+            new Relation("channel", "route_candidate", "channel_id"),
+            new Relation("upstream_model", "route_candidate", "upstream_model_id"),
             new Relation("model_alias", "route_candidate", "alias_id"));
 
     public JdbcDraftDependencyRepository(String schemaName) {

@@ -1,7 +1,7 @@
 package com.lightai.admin.publish;
 
 import com.lightai.admin.audit.AuditService;
-import com.lightai.admin.provider.ProviderTypeRegistry;
+import com.lightai.admin.channel.ProviderTypeRegistry;
 import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.FieldIssue;
 import com.lightai.client.error.LightAiException;
@@ -9,7 +9,7 @@ import com.lightai.client.publish.ConfigValidateCommand;
 import com.lightai.client.publish.ConfigValidationIssueView;
 import com.lightai.client.publish.ConfigValidationResultView;
 import com.lightai.storage.audit.AuditRecord;
-import com.lightai.storage.check.JdbcProviderCheckRecordRepository;
+import com.lightai.storage.check.JdbcChannelCheckRecordRepository;
 import com.lightai.storage.draft.DraftChangeQueryRepository;
 import com.lightai.storage.draft.DraftStateRepository;
 import com.lightai.storage.draft.DraftStateSnapshot;
@@ -59,7 +59,7 @@ public class ConfigValidationService {
     private final ConfigValidationRepository validationRepository;
     private final RuntimeInstanceRepository runtimeInstanceRepository;
     private final ProviderTypeRegistry providerTypeRegistry;
-    private final JdbcProviderCheckRecordRepository checkRecordRepository;
+    private final JdbcChannelCheckRecordRepository checkRecordRepository;
     private final AuditService auditService;
     private final String timezone;
     private final String sourceMode;
@@ -72,7 +72,7 @@ public class ConfigValidationService {
                                    ConfigValidationRepository validationRepository,
                                    RuntimeInstanceRepository runtimeInstanceRepository,
                                    ProviderTypeRegistry providerTypeRegistry,
-                                   JdbcProviderCheckRecordRepository checkRecordRepository,
+                                   JdbcChannelCheckRecordRepository checkRecordRepository,
                                    AuditService auditService, String timezone, String sourceMode) {
         this.dataSource = dataSource;
         this.transaction = new TransactionTemplate(transactionManager);
@@ -154,7 +154,7 @@ public class ConfigValidationService {
         Map<String, Map<String, Object>> providers = index(content, "providers");
         Map<String, Map<String, Object>> pools = index(content, "credential_pools");
         Map<String, Map<String, Object>> credentials = index(content, "credentials");
-        Map<String, Map<String, Object>> models = index(content, "provider_models");
+        Map<String, Map<String, Object>> models = index(content, "upstream_models");
         Map<String, Map<String, Object>> aliases = index(content, "model_aliases");
         Map<String, Map<String, Object>> candidates = index(content, "route_candidates");
 
@@ -165,7 +165,7 @@ public class ConfigValidationService {
             String type = text(provider.get("type"));
             if (type != null && !providerTypeRegistry.isRegistered(type)) {
                 issues.add(issue(validationId, ConfigValidationIssueView.SEVERITY_ERROR,
-                        "ADAPTER_UNAVAILABLE", "provider", provider, null,
+                        "ADAPTER_UNAVAILABLE", "channel", provider, null,
                         "Provider 类型 " + type + " 没有已注册 Adapter",
                         "确认 Adapter 已部署，或改用已加载的 Provider 类型"));
             }
@@ -179,30 +179,30 @@ public class ConfigValidationService {
             BigDecimal maxOutput = decimal(model.get("max_output_tokens"));
             if (text(model.get("tokenizer_family")) == null || context == null || context.signum() <= 0) {
                 issues.add(issue(validationId, ConfigValidationIssueView.SEVERITY_ERROR,
-                        "MODEL_CAPABILITY_INVALID", "provider_model", model, "context_window",
+                        "MODEL_CAPABILITY_INVALID", "upstream_model", model, "context_window",
                         "启用模型缺少 tokenizer 或上下文配置", "补全 tokenizer_family 与 context_window"));
             } else if (maxOutput != null && context.compareTo(maxOutput) <= 0) {
                 issues.add(issue(validationId, ConfigValidationIssueView.SEVERITY_ERROR,
-                        "MODEL_CAPABILITY_INVALID", "provider_model", model, "context_window",
+                        "MODEL_CAPABILITY_INVALID", "upstream_model", model, "context_window",
                         "context_window 必须大于 max_output_tokens", "调整上下文或最大输出配置"));
             }
             if (decimal(model.get("input_price")) == null || decimal(model.get("output_price")) == null
                     || text(model.get("price_unit")) == null || text(model.get("currency")) == null) {
                 issues.add(issue(validationId, ConfigValidationIssueView.SEVERITY_ERROR,
-                        "PRICE_CONFIGURATION_INVALID", "provider_model", model, "input_price",
+                        "PRICE_CONFIGURATION_INVALID", "upstream_model", model, "input_price",
                         "启用模型缺少价格或币种配置", "补全 input_price、output_price、price_unit 与 currency"));
             }
-            if (!checkRecordRepository.existsSuccessSince(connection, "PROVIDER_MODEL",
+            if (!checkRecordRepository.existsSuccessSince(connection, "UPSTREAM_MODEL",
                     uuid(model.get("id")), now.minus(CHECK_STALE))) {
                 issues.add(issue(validationId, ConfigValidationIssueView.SEVERITY_WARNING,
-                        "CONNECTION_CHECK_STALE", "provider_model", model, null,
+                        "CONNECTION_CHECK_STALE", "upstream_model", model, null,
                         "模型最近 24 小时无成功检测记录", "发布前执行一次模型检测确认连接可用"));
             }
         }
 
         for (Map<String, Object> candidate : candidates.values()) {
-            Map<String, Object> model = models.get(text(candidate.get("provider_model_id")));
-            Map<String, Object> pool = pools.get(text(candidate.get("credential_pool_id")));
+            Map<String, Object> model = models.get(text(candidate.get("upstream_model_id")));
+            Map<String, Object> pool = pools.get(text(candidate.get("channel_id")));
             if (model == null || pool == null) {
                 issues.add(issue(validationId, ConfigValidationIssueView.SEVERITY_ERROR,
                         "REFERENCE_INVALID", "route_candidate", candidate, null,
@@ -214,8 +214,8 @@ public class ConfigValidationService {
                         "REFERENCE_INVALID", "route_candidate", candidate, null,
                         "候选引用的模型或凭证池已停用", "启用引用对象或调整候选"));
             }
-            String modelProviderId = text(model.get("provider_id"));
-            String poolProviderId = text(pool.get("provider_id"));
+            String modelProviderId = text(model.get("channel_id"));
+            String poolProviderId = text(pool.get("channel_id"));
             if (modelProviderId == null || !modelProviderId.equals(poolProviderId)) {
                 issues.add(issue(validationId, ConfigValidationIssueView.SEVERITY_ERROR,
                         "PROVIDER_RELATION_INVALID", "route_candidate", candidate, null,
@@ -228,7 +228,7 @@ public class ConfigValidationService {
             if (!truthy(candidate.get("enabled"))) {
                 continue;
             }
-            Map<String, Object> model = models.get(text(candidate.get("provider_model_id")));
+            Map<String, Object> model = models.get(text(candidate.get("upstream_model_id")));
             String currency = model == null ? null : text(model.get("currency"));
             if (currency != null) {
                 String previous = aliasCurrency.putIfAbsent(text(candidate.get("alias_id")), currency);
@@ -262,11 +262,11 @@ public class ConfigValidationService {
             if (!truthy(credential.get("enabled"))) {
                 continue;
             }
-            enabledCredentialsByPool.merge(text(credential.get("pool_id")), 1L, Long::sum);
-            if (!checkRecordRepository.existsSuccessSince(connection, "CREDENTIAL",
+            enabledCredentialsByPool.merge(text(credential.get("channel_id")), 1L, Long::sum);
+            if (!checkRecordRepository.existsSuccessSince(connection, "CHANNEL_CREDENTIAL",
                     uuid(credential.get("id")), now.minus(CHECK_STALE))) {
                 issues.add(issue(validationId, ConfigValidationIssueView.SEVERITY_WARNING,
-                        "CONNECTION_CHECK_STALE", "credential", credential, null,
+                        "CONNECTION_CHECK_STALE", "channel_credential", credential, null,
                         "凭证最近 24 小时无成功检测记录", "发布前执行一次凭证检测确认连接可用"));
             }
         }

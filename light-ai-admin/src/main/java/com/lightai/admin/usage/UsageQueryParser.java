@@ -45,10 +45,9 @@ public final class UsageQueryParser {
             List<String> projects,
             List<String> tenants,
             List<String> aliasIds,
-            List<String> providerIds,
-            List<String> providerModelIds,
-            List<String> credentialPoolIds,
-            List<String> credentialIds,
+            List<String> channelIds,
+            List<String> upstreamModelIds,
+            List<String> channelCredentialIds,
             List<String> traceStatuses,
             List<String> errorCodes,
             List<String> usageSources,
@@ -102,10 +101,9 @@ public final class UsageQueryParser {
         List<String> projects = multi(params, "project", null, issues);
         List<String> tenants = multi(params, "tenant", null, issues);
         List<String> aliasIds = multi(params, "alias_id", null, issues);
-        List<String> providerIds = multi(params, "provider_id", null, issues);
-        List<String> providerModelIds = multi(params, "provider_model_id", null, issues);
-        List<String> credentialPoolIds = multi(params, "credential_pool_id", null, issues);
-        List<String> credentialIds = multi(params, "credential_id", null, issues);
+        List<String> channelIds = multi(params, "channel_id", null, issues);
+        List<String> upstreamModelIds = multi(params, "upstream_model_id", null, issues);
+        List<String> channelCredentialIds = multi(params, "channel_credential_id", null, issues);
         List<String> traceStatuses = multi(params, "trace_status", TRACE_STATUSES, issues);
         List<String> errorCodes = multi(params, "error_code", null, issues);
         List<String> usageSources = multi(params, "usage_source", USAGE_SOURCES, issues);
@@ -150,7 +148,7 @@ public final class UsageQueryParser {
         }
 
         return new UsageQuery(startAt, endAt, granularity, applications, projects, tenants,
-                aliasIds, providerIds, providerModelIds, credentialPoolIds, credentialIds,
+                aliasIds, channelIds, upstreamModelIds, channelCredentialIds,
                 traceStatuses, errorCodes, usageSources, requestedStream, currency,
                 trendMetric == null ? null : trendMetric.strip(), groupBy, groupPage);
     }

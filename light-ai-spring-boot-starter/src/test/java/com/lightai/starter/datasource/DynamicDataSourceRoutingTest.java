@@ -5,7 +5,7 @@ import com.lightai.storage.dialect.AbstractJdbcRepository;
 import com.lightai.storage.dialect.DatabaseDialect;
 import com.lightai.storage.dialect.DatabaseType;
 import com.lightai.storage.dialect.DialectResolver;
-import com.lightai.storage.provider.JdbcProviderRepository;
+import com.lightai.storage.channel.JdbcChannelRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -81,7 +81,7 @@ class DynamicDataSourceRoutingTest {
         try (Connection conn = routingDataSource.getConnection()) {
             DatabaseDialect dialect = repository.inspectDialect(conn);
             assertThat(dialect.databaseType()).isEqualTo(DatabaseType.POSTGRESQL);
-            assertThat(dialect.qualify("light_ai", "provider")).isEqualTo("light_ai.provider");
+            assertThat(dialect.qualify("light_ai", "channel")).isEqualTo("light_ai.channel");
             assertThat(dialect.nowFunction()).isEqualTo("now()");
             assertThat(dialect.supportsArrayType()).isTrue();
             assertThat(dialect.supportsReturning()).isTrue();
@@ -93,14 +93,14 @@ class DynamicDataSourceRoutingTest {
         try (Connection conn = routingDataSource.getConnection()) {
             DatabaseDialect dialect = repository.inspectDialect(conn);
             assertThat(dialect.databaseType()).isEqualTo(DatabaseType.MYSQL);
-            assertThat(dialect.qualify("light_ai", "provider")).isEqualTo("`provider`");
+            assertThat(dialect.qualify("light_ai", "channel")).isEqualTo("`channel`");
             assertThat(dialect.nowFunction()).isEqualTo("now(6)");
             assertThat(dialect.supportsArrayType()).isFalse();
             assertThat(dialect.supportsReturning()).isFalse();
             // MySQL 5.7 兼容：FOR UPDATE 无 SKIP LOCKED
             assertThat(dialect.forUpdateSkipLockedClause()).isEqualTo("FOR UPDATE");
-            assertThat(dialect.insertIgnoreSql("`provider`", "id, code", "?, ?", "code"))
-                    .isEqualTo("INSERT IGNORE INTO `provider` (id, code) VALUES (?, ?)");
+            assertThat(dialect.insertIgnoreSql("`channel`", "id, code", "?, ?", "code"))
+                    .isEqualTo("INSERT IGNORE INTO `channel` (id, code) VALUES (?, ?)");
         }
 
         // 3. 退出 MySQL 作用域，回到 PostgreSQL 栈

@@ -45,7 +45,6 @@ class ContributionCalculatorTest {
         return new AttemptRow(
                 UUID.randomUUID(), "trace-1", sequence, type, UUID.randomUUID(),
                 UUID.nameUUIDFromBytes(provider.getBytes()), UUID.randomUUID(), UUID.randomUUID(),
-                UUID.randomUUID(),
                 provider, "model-" + provider, "model-id", "cred-" + provider,
                 status, STARTED.plusSeconds(sequence * 10L), null, null, null,
                 STARTED.plusSeconds(sequence * 10L + 5), 100, null, 400, 500,
@@ -77,12 +76,12 @@ class ContributionCalculatorTest {
         assertThat(request.successCount()).isEqualTo(1);
         assertThat(request.streamCount()).isEqualTo(1);
         assertThat(request.traceStatus()).isEqualTo("SUCCEEDED");
-        assertThat(request.dimensionNames().get("provider")).isEqualTo("provider-b");
+        assertThat(request.dimensionNames().get("channel")).isEqualTo("provider-b");
 
         // 执行贡献：失败路径保留 Token 与费用且 request_count=0（RV-018）
         Contribution failedExecution = hourContributions.stream()
                 .filter(c -> c.requestCount() == 0
-                        && "provider-a".equals(c.dimensionNames().get("provider")))
+                        && "provider-a".equals(c.dimensionNames().get("channel")))
                 .findFirst().orElseThrow();
         assertThat(failedExecution.attemptCount()).isEqualTo(1);
         assertThat(failedExecution.initialCount()).isEqualTo(1);
@@ -91,7 +90,7 @@ class ContributionCalculatorTest {
 
         Contribution successExecution = hourContributions.stream()
                 .filter(c -> c.requestCount() == 0
-                        && "provider-b".equals(c.dimensionNames().get("provider")))
+                        && "provider-b".equals(c.dimensionNames().get("channel")))
                 .findFirst().orElseThrow();
         assertThat(successExecution.fallbackCount()).isEqualTo(1);
         assertThat(successExecution.totalTokens()).isEqualTo(300);
@@ -110,7 +109,7 @@ class ContributionCalculatorTest {
         // 估算 Attempt 进入 estimated_*，不进入 actual_*
         Contribution estimated = contributions.stream()
                 .filter(c -> c.requestCount() == 0
-                        && "provider-b".equals(c.dimensionNames().get("provider")))
+                        && "provider-b".equals(c.dimensionNames().get("channel")))
                 .findFirst().orElseThrow();
         assertThat(estimated.estimatedInputTokens()).isEqualTo(100);
         assertThat(estimated.estimatedOutputTokens()).isEqualTo(200);
@@ -150,10 +149,10 @@ class ContributionCalculatorTest {
         base.put("project", "");
         base.put("tenant", null);
         base.put("alias_id", "11111111-1111-1111-1111-111111111111");
-        base.put("provider_id", null);
-        base.put("provider_model_id", null);
-        base.put("credential_pool_id", null);
-        base.put("credential_id", null);
+        base.put("channel_id", null);
+        base.put("upstream_model_id", null);
+        base.put("channel_id", null);
+        base.put("channel_credential_id", null);
         base.put("trace_status", "SUCCEEDED");
         base.put("error_code", null);
         base.put("usage_source", "ACTUAL");
@@ -208,7 +207,7 @@ class ContributionCalculatorTest {
                 .filter(c -> "HOUR".equals(c.granularity())).findFirst().orElseThrow();
         assertThat(request.requestCount()).isEqualTo(1);
         assertThat(request.failureCount()).isEqualTo(1);
-        assertThat(request.dimensionNames().get("provider")).isNull();
+        assertThat(request.dimensionNames().get("channel")).isNull();
         assertThat(request.usageSource()).isNull();
         assertThat(request.currency()).isEqualTo("USD");
         assertThat(request.errorCode()).isEqualTo("MODEL_CAPABILITY_NOT_SUPPORTED");

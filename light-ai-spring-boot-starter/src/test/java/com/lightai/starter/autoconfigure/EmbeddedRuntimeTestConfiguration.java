@@ -32,7 +32,6 @@ class EmbeddedRuntimeTestConfiguration {
                 "MOCK",
                 "00000000-0000-0000-0000-000000000003",
                 "mock-model",
-                "00000000-0000-0000-0000-000000000006",
                 1L,
                 100,
                 true,
@@ -72,7 +71,7 @@ class EmbeddedRuntimeTestConfiguration {
 
     @Bean
     CredentialSecretPort embeddedTestCredentialSecretPort() {
-        return (poolId, failoverIndex) -> new CredentialSecretPort.ResolvedCredential(
+        return (channelId, failoverIndex) -> new CredentialSecretPort.ResolvedCredential(
                 CREDENTIAL_ID,
                 () -> "sk-test".toCharArray());
     }

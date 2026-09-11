@@ -130,14 +130,14 @@ public class JdbcCircuitRepository extends AbstractJdbcRepository {
     }
 
     /** 运行状态行同步（upsert，state_version 随共享存储推进）。 */
-    public void upsertState(Connection connection, UUID circuitId, UUID providerModelId,
-                            UUID credentialId, String state, long stateVersion,
+    public void upsertState(Connection connection, UUID circuitId, UUID upstreamModelId,
+                            UUID channelCredentialId, String state, long stateVersion,
                             String policySnapshotJson, String openSource, String reason) {
         DatabaseDialect d = dialect(connection);
         String sql;
         if (d.databaseType() == DatabaseType.MYSQL) {
             sql = "INSERT INTO " + qualify(connection, "circuit_state")
-                    + " (id, provider_model_id, credential_id, state, state_version, policy_snapshot, open_source, last_reason, created_at, updated_at) "
+                    + " (id, upstream_model_id, credential_id, state, state_version, policy_snapshot, open_source, last_reason, created_at, updated_at) "
                     + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, " + d.nowFunction() + ", " + d.nowFunction() + ") "
                     + "ON DUPLICATE KEY UPDATE "
                     + "state = VALUES(state), state_version = VALUES(state_version), "
@@ -145,17 +145,17 @@ public class JdbcCircuitRepository extends AbstractJdbcRepository {
                     + "last_reason = VALUES(last_reason), updated_at = " + d.nowFunction();
         } else {
             sql = "INSERT INTO " + qualify(connection, "circuit_state")
-                    + " (id, provider_model_id, credential_id, state, state_version, policy_snapshot, open_source, last_reason, created_at, updated_at) "
+                    + " (id, upstream_model_id, credential_id, state, state_version, policy_snapshot, open_source, last_reason, created_at, updated_at) "
                     + "VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, ?, now(), now()) "
-                    + "ON CONFLICT (provider_model_id, credential_id) DO UPDATE SET "
+                    + "ON CONFLICT (upstream_model_id, credential_id) DO UPDATE SET "
                     + "state = EXCLUDED.state, state_version = EXCLUDED.state_version, "
                     + "policy_snapshot = EXCLUDED.policy_snapshot, open_source = EXCLUDED.open_source, "
                     + "last_reason = EXCLUDED.last_reason, updated_at = now()";
         }
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, circuitId);
-            d.bindUuid(statement, 2, providerModelId);
-            d.bindUuid(statement, 3, credentialId);
+            d.bindUuid(statement, 2, upstreamModelId);
+            d.bindUuid(statement, 3, channelCredentialId);
             statement.setString(4, state);
             statement.setLong(5, stateVersion);
             statement.setString(6, policySnapshotJson);
@@ -169,7 +169,7 @@ public class JdbcCircuitRepository extends AbstractJdbcRepository {
 
     public List<StateRow> listStates(Connection connection, String state, int limit, int offset) {
         DatabaseDialect d = dialect(connection);
-        StringBuilder sql = new StringBuilder("SELECT id, provider_model_id, credential_id, state, "
+        StringBuilder sql = new StringBuilder("SELECT id, upstream_model_id, credential_id, state, "
                 + "state_version, policy_snapshot, open_source, last_reason, updated_at FROM ")
                 .append(qualify(connection, "circuit_state"));
         List<Object> params = new ArrayList<>();
@@ -188,7 +188,7 @@ public class JdbcCircuitRepository extends AbstractJdbcRepository {
                 while (rs.next()) {
                     rows.add(new StateRow(
                             d.readUuid(rs, "id"),
-                            d.readUuid(rs, "provider_model_id"),
+                            d.readUuid(rs, "upstream_model_id"),
                             d.readUuid(rs, "credential_id"),
                             rs.getString("state"),
                             rs.getLong("state_version"),
@@ -268,7 +268,7 @@ public class JdbcCircuitRepository extends AbstractJdbcRepository {
                              String operatorId, String status, String errorCode) {
     }
 
-    public record StateRow(UUID id, UUID providerModelId, UUID credentialId, String state,
+    public record StateRow(UUID id, UUID upstreamModelId, UUID channelCredentialId, String state,
                            long stateVersion, String policySnapshot, String openSource,
                            String lastReason, OffsetDateTime updatedAt) {
     }

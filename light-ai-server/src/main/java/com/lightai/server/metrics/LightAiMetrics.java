@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * 轻享 AI 运行时低基数指标采集器（PRD 5.5，BE-057）：
  * 1. 采集请求量、错误率、耗时分位数、首 Token 耗时、Token、费用（分币种）、重试、Failover、Fallback、熔断与容量使用率。
- * 2. 严格低基数约束：严禁将 trace_id、attempt_id、credential_id 或 access_token 作为指标 Tag。
+ * 2. 严格低基数约束：严禁将 trace_id、attempt_id、channel_credential_id 或 access_token 作为指标 Tag。
  */
 @Component
 public class LightAiMetrics {
@@ -28,7 +28,7 @@ public class LightAiMetrics {
     private static final Set<String> FORBIDDEN_TAG_KEYS = Set.of(
             "trace_id", "traceid", "x-trace-id",
             "attempt_id", "attemptid",
-            "credential_id", "credentialid",
+            "channel_credential_id", "credentialid",
             "token", "access_token", "secret"
     );
 

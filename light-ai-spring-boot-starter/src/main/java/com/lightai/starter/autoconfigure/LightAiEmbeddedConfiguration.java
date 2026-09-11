@@ -80,8 +80,7 @@ public class LightAiEmbeddedConfiguration {
     @Bean
     @ConditionalOnBean({
             javax.sql.DataSource.class,
-            com.lightai.storage.credential.JdbcCredentialRepository.class,
-            com.lightai.storage.credential.JdbcCredentialSecretRepository.class,
+            com.lightai.storage.channel.JdbcChannelCredentialRepository.class,
             com.lightai.spi.secret.SecretCipher.class
     })
     @ConditionalOnMissingBean({
@@ -90,11 +89,10 @@ public class LightAiEmbeddedConfiguration {
     })
     public com.lightai.runtime.ports.CredentialSecretPort embeddedCredentialSecretPort(
             javax.sql.DataSource dataSource,
-            com.lightai.storage.credential.JdbcCredentialRepository credentialRepository,
-            com.lightai.storage.credential.JdbcCredentialSecretRepository secretRepository,
+            com.lightai.storage.channel.JdbcChannelCredentialRepository credentialRepository,
             com.lightai.spi.secret.SecretCipher secretCipher) {
-        return new com.lightai.storage.credential.JdbcCredentialSecretPort(
-                dataSource, credentialRepository, secretRepository, secretCipher);
+        return new com.lightai.storage.channel.JdbcChannelCredentialSecretPort(
+                dataSource, credentialRepository, secretCipher);
     }
 
     @Bean
@@ -115,7 +113,7 @@ public class LightAiEmbeddedConfiguration {
         com.lightai.runtime.ports.ConfigSnapshotPort snapshotPort =
                 snapshotPortProvider.getIfAvailable(com.lightai.runtime.ports.ConfigSnapshotPort::empty);
         com.lightai.runtime.ports.CredentialSecretPort credentialPort =
-                credentialPortProvider.getIfAvailable(() -> (poolId, failoverIndex) -> {
+                credentialPortProvider.getIfAvailable(() -> (channelId, failoverIndex) -> {
                     throw new LightAiException(ErrorCode.CREDENTIAL_NOT_AVAILABLE,
                             "Embedded Runtime 未配置 CredentialSecretPort");
                 });

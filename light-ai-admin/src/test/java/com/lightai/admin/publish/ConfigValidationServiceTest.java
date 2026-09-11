@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.lightai.admin.audit.AuditService;
-import com.lightai.admin.provider.ProviderTypeRegistry;
+import com.lightai.admin.channel.ProviderTypeRegistry;
 import com.lightai.client.bootstrap.AdapterDeclaration;
 import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
@@ -49,7 +49,7 @@ class ConfigValidationServiceTest {
     private ConfigValidationService service;
 
     /** 检测记录桩：默认近期有成功检测（无 CONNECTION_CHECK_STALE 警告）。 */
-    static final class StubCheckRecordRepository extends com.lightai.storage.check.JdbcProviderCheckRecordRepository {
+    static final class StubCheckRecordRepository extends com.lightai.storage.check.JdbcChannelCheckRecordRepository {
         boolean recentSuccess = true;
 
         @Override
@@ -83,7 +83,7 @@ class ConfigValidationServiceTest {
                 registry, checkRecords, auditService, "Asia/Shanghai", "STANDALONE_SERVER");
         recording.onCommit = draftState::commit;
         recording.onRollback = draftState::rollback;
-        changes.add("provider", "OpenAI", "UPDATE", 2);
+        changes.add("channel", "OpenAI", "UPDATE", 2);
     }
 
     @Test
@@ -100,7 +100,7 @@ class ConfigValidationServiceTest {
         assertThat(view.targetSnapshotNo()).isEqualTo(1);
         assertThat(Duration.between(view.validatedAt(), view.expiresAt()))
                 .isEqualTo(Duration.ofMinutes(10));
-        assertThat(view.changeSummary()).contains("provider");
+        assertThat(view.changeSummary()).contains("channel");
         assertThat(validations.lastRecord.status()).isEqualTo(ConfigValidationRecord.STATUS_PASSED);
         assertThat(audits.inserted).hasSize(1);
         assertThat(recording.calls).endsWith("insert-validation", "audit-insert", "commit");
@@ -134,7 +134,7 @@ class ConfigValidationServiceTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> candidate = (Map<String, Object>)
                 ((List<?>) invalid.get("route_candidates")).get(0);
-        candidate.put("credential_pool_id", "pool-other");
+        candidate.put("channel_id", "pool-other");
         invalid.put("credential_pools", List.of(enabledPool("pool-1", "p-1"),
                 enabledPool("pool-other", "p-other")));
         invalid.put("providers", List.of(enabledProvider("p-1"), enabledProvider("p-other")));
@@ -170,7 +170,7 @@ class ConfigValidationServiceTest {
     void numericJdbcFlagsAreAcceptedAsEnabled() {
         Map<String, Object> numeric = validContent();
         for (String key : List.of("providers", "credential_pools", "credentials",
-                "provider_models", "model_aliases", "route_candidates")) {
+                "upstream_models", "model_aliases", "route_candidates")) {
             @SuppressWarnings("unchecked")
             Map<String, Object> row = (Map<String, Object>) ((List<?>) numeric.get(key)).get(0);
             row.put("enabled", 1);
@@ -230,7 +230,7 @@ class ConfigValidationServiceTest {
     static Map<String, Object> validContent() {
         Map<String, Object> model = new java.util.LinkedHashMap<>();
         model.put("id", "m-1");
-        model.put("provider_id", "p-1");
+        model.put("channel_id", "p-1");
         model.put("display_name", "GPT Test");
         model.put("tokenizer_family", "O200K");
         model.put("context_window", 8000);
@@ -244,8 +244,8 @@ class ConfigValidationServiceTest {
         Map<String, Object> candidate = new java.util.LinkedHashMap<>();
         candidate.put("id", "c-1");
         candidate.put("alias_id", "a-1");
-        candidate.put("provider_model_id", "m-1");
-        candidate.put("credential_pool_id", "pool-1");
+        candidate.put("upstream_model_id", "m-1");
+        candidate.put("channel_id", "pool-1");
         candidate.put("enabled", true);
 
         Map<String, Object> tree = new java.util.LinkedHashMap<>();
@@ -253,7 +253,7 @@ class ConfigValidationServiceTest {
         tree.put("providers", List.of(enabledProvider("p-1")));
         tree.put("credential_pools", List.of(enabledPool("pool-1", "p-1")));
         tree.put("credentials", List.of(enabledCredential()));
-        tree.put("provider_models", List.of(model));
+        tree.put("upstream_models", List.of(model));
         tree.put("model_aliases", List.of(alias));
         tree.put("route_candidates", List.of(candidate));
         tree.put("limit_policies", List.of());
@@ -271,10 +271,10 @@ class ConfigValidationServiceTest {
         return provider;
     }
 
-    static Map<String, Object> enabledPool(String id, String providerId) {
+    static Map<String, Object> enabledPool(String id, String channelId) {
         Map<String, Object> pool = new java.util.LinkedHashMap<>();
         pool.put("id", id);
-        pool.put("provider_id", providerId);
+        pool.put("channel_id", channelId);
         pool.put("name", "Pool " + id);
         pool.put("enabled", true);
         return pool;
@@ -283,7 +283,7 @@ class ConfigValidationServiceTest {
     static Map<String, Object> enabledCredential() {
         Map<String, Object> credential = new java.util.LinkedHashMap<>();
         credential.put("id", "cred-1");
-        credential.put("pool_id", "pool-1");
+        credential.put("channel_id", "pool-1");
         credential.put("name", "sk-***");
         credential.put("enabled", true);
         return credential;

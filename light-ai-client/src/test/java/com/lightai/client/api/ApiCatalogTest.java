@@ -40,7 +40,7 @@ class ApiCatalogTest {
 
     @Test
     void normalizesTemplateVariableNames() {
-        assertThat(ApiCatalog.normalize("/admin/credential-pools/{poolId}/credentials"))
+        assertThat(ApiCatalog.normalize("/admin/credential-pools/{channelId}/credentials"))
                 .isEqualTo("/admin/credential-pools/{}/credentials");
     }
 }

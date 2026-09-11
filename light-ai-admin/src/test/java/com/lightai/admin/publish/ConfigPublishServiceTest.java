@@ -194,7 +194,7 @@ class ConfigPublishServiceTest {
     void missingWarningAcknowledgementIsRejected() {
         ConfigValidationRecord validation = seedValidation();
         validations.lastIssues.add(new ConfigValidationIssueRecord(validation.validationId(),
-                ConfigValidationIssueViewSeverity(), "CONNECTION_CHECK_STALE", "credential",
+                ConfigValidationIssueViewSeverity(), "CONNECTION_CHECK_STALE", "channel_credential",
                 UUID.randomUUID(), "sk-***", null, "凭证最近 24 小时无成功检测记录",
                 "发布前执行一次凭证检测", List.of()));
         validations.lastRecord = withCounts(validation, 0, 1);

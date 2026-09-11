@@ -70,7 +70,7 @@ class PublishWebTest {
                 "STANDALONE_SERVER");
         var validationService = new ConfigValidationService(recording.dataSource(), transactionManager,
                 java.time.Clock.systemUTC(), draftState, changes, snapshots, content, validations,
-                instances, new com.lightai.admin.provider.ProviderTypeRegistry(
+                instances, new com.lightai.admin.channel.ProviderTypeRegistry(
                         (com.lightai.spi.adapter.AdapterMetadataSource) List::of),
                 new ConfigValidationServiceTest.StubCheckRecordRepository(), auditService,
                 "Asia/Shanghai", "STANDALONE_SERVER");
@@ -116,7 +116,7 @@ class PublishWebTest {
         String body = "{\"version\":1,\"draft_revision\":5,\"reason\":\"撤销\"}";
         // 系统管理员可撤销；对象不存在时返回 OBJECT_NOT_FOUND（权限已通过）
         MvcResult adminResult = mockMvc.perform(post(
-                        "/admin/config/draft-changes/provider/" + UUID.randomUUID() + "/revert")
+                        "/admin/config/draft-changes/channel/" + UUID.randomUUID() + "/revert")
                         .header(ROLE_HEADER, "SYSTEM_ADMIN").header(USER_HEADER, "admin")
                         .contentType("application/json").content(body))
                 .andExpect(status().isNotFound())
@@ -126,7 +126,7 @@ class PublishWebTest {
         // 运维/开发/只读无 draft.revert
         for (String role : List.of("OPERATOR", "DEVELOPER", "VIEWER")) {
             MvcResult result = mockMvc.perform(post(
-                            "/admin/config/draft-changes/provider/" + UUID.randomUUID() + "/revert")
+                            "/admin/config/draft-changes/channel/" + UUID.randomUUID() + "/revert")
                             .header(ROLE_HEADER, role).header(USER_HEADER, "user-" + role)
                             .contentType("application/json").content(body))
                     .andExpect(status().isForbidden())

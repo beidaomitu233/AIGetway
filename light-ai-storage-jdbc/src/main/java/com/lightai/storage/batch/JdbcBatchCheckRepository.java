@@ -63,13 +63,13 @@ public class JdbcBatchCheckRepository extends AbstractJdbcRepository {
         DatabaseDialect d = dialect(connection);
         String nowFn = d.nowFunction();
         String sql = "INSERT INTO " + qualify(connection, "batch_check_item")
-                + " (id, job_id, provider_model_id, sequence, status, check_record_id, started_at, "
+                + " (id, job_id, upstream_model_id, sequence, status, check_record_id, started_at, "
                 + "ended_at, error_code, created_at, updated_at) "
                 + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, " + nowFn + ", " + nowFn + ")";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, item.id());
             d.bindUuid(statement, 2, item.jobId());
-            d.bindUuid(statement, 3, item.providerModelId());
+            d.bindUuid(statement, 3, item.upstreamModelId());
             statement.setInt(4, item.sequence());
             statement.setString(5, item.status());
             d.bindUuid(statement, 6, item.checkRecordId());
@@ -97,7 +97,7 @@ public class JdbcBatchCheckRepository extends AbstractJdbcRepository {
 
     public List<BatchItemRecord> findItemsByJob(Connection connection, UUID jobId) {
         DatabaseDialect d = dialect(connection);
-        String sql = "SELECT id, job_id, provider_model_id, sequence, status, check_record_id, "
+        String sql = "SELECT id, job_id, upstream_model_id, sequence, status, check_record_id, "
                 + "started_at, ended_at, error_code FROM " + qualify(connection, "batch_check_item")
                 + " WHERE job_id = ? ORDER BY sequence ASC";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -247,7 +247,7 @@ public class JdbcBatchCheckRepository extends AbstractJdbcRepository {
         return new BatchItemRecord(
                 d.readUuid(rs, "id"),
                 d.readUuid(rs, "job_id"),
-                d.readUuid(rs, "provider_model_id"),
+                d.readUuid(rs, "upstream_model_id"),
                 rs.getInt("sequence"),
                 rs.getString("status"),
                 d.readUuid(rs, "check_record_id"),

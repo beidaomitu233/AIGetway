@@ -414,10 +414,10 @@ final class PublishTestSupport {
         @Override
         public String contentKeyOf(String entityType) {
             return switch (entityType) {
-                case "provider" -> "providers";
+                case "channel" -> "providers";
                 case "credential_pool" -> "credential_pools";
-                case "credential" -> "credentials";
-                case "provider_model" -> "provider_models";
+                case "channel_credential" -> "credentials";
+                case "upstream_model" -> "upstream_models";
                 case "model_alias" -> "model_aliases";
                 case "route_candidate" -> "route_candidates";
                 case "limit_policy" -> "limit_policies";

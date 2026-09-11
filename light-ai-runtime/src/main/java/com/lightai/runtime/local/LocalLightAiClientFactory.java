@@ -90,31 +90,31 @@ public final class LocalLightAiClientFactory {
 
         // 凭证端口（BE-050 / BE-053）
         Map<String, String> credSecretRefs = new HashMap<>();
-        for (LocalRuntimeDefinition.LocalCredentialDefinition cred : definition.credentials()) {
+        for (LocalRuntimeDefinition.LocalChannelCredentialDefinition cred : definition.credentials()) {
             if (cred.secretRef() != null) {
-                credSecretRefs.put(cred.poolId(), cred.secretRef());
-                credSecretRefs.put(cred.credentialId(), cred.secretRef());
+                credSecretRefs.put(cred.channelId(), cred.secretRef());
+                credSecretRefs.put(cred.channelCredentialId(), cred.secretRef());
             }
         }
 
-        CredentialSecretPort credentialPort = (poolId, failoverIndex) -> {
+        CredentialSecretPort credentialPort = (channelId, failoverIndex) -> {
             // 优先从 suppliers 读取
-            Supplier<char[]> supplier = safeSuppliers.get(poolId);
+            Supplier<char[]> supplier = safeSuppliers.get(channelId);
             if (supplier == null) {
-                supplier = safeSuppliers.get(poolId + "-credential-" + failoverIndex);
+                supplier = safeSuppliers.get(channelId + "-credential-" + failoverIndex);
             }
             if (supplier != null) {
-                return new CredentialSecretPort.ResolvedCredential(poolId + "-credential-" + failoverIndex, supplier::get);
+                return new CredentialSecretPort.ResolvedCredential(channelId + "-credential-" + failoverIndex, supplier::get);
             }
 
             // 尝试通过 SecretManager 解析 secret_ref
-            String ref = credSecretRefs.get(poolId);
+            String ref = credSecretRefs.get(channelId);
             if (ref != null && secretManager.hasProvider()) {
                 ResolvedSecret resolved = secretManager.resolveSync(ref);
-                return new CredentialSecretPort.ResolvedCredential(poolId + "-credential-" + failoverIndex, resolved::secret);
+                return new CredentialSecretPort.ResolvedCredential(channelId + "-credential-" + failoverIndex, resolved::secret);
             }
 
-            throw new LightAiException(ErrorCode.CREDENTIAL_NOT_AVAILABLE, "凭证池 " + poolId + " 无可用密钥供给 (credentialSecretSuppliers 或 SecretProvider)");
+            throw new LightAiException(ErrorCode.CREDENTIAL_NOT_AVAILABLE, "渠道 " + channelId + " 无可用密钥供给 (credentialSecretSuppliers 或 SecretProvider)");
         };
 
         // 适配器注册端口
@@ -157,30 +157,29 @@ public final class LocalLightAiClientFactory {
     }
 
     private static ActiveSnapshot assembleSnapshot(LocalRuntimeDefinition def) {
-        Map<String, LocalRuntimeDefinition.LocalModelDefinition> modelMap = new HashMap<>();
-        for (LocalRuntimeDefinition.LocalModelDefinition m : def.models()) {
-            modelMap.put(m.modelId(), m);
+        Map<String, LocalRuntimeDefinition.LocalUpstreamModelDefinition> modelMap = new HashMap<>();
+        for (LocalRuntimeDefinition.LocalUpstreamModelDefinition m : def.models()) {
+            modelMap.put(m.upstreamModelId(), m);
         }
 
-        Map<String, LocalRuntimeDefinition.LocalProviderDefinition> provMap = new HashMap<>();
-        for (LocalRuntimeDefinition.LocalProviderDefinition p : def.providers()) {
-            provMap.put(p.providerId(), p);
+        Map<String, LocalRuntimeDefinition.LocalChannelDefinition> provMap = new HashMap<>();
+        for (LocalRuntimeDefinition.LocalChannelDefinition p : def.channels()) {
+            provMap.put(p.channelId(), p);
         }
 
         List<AliasView> aliasViews = new ArrayList<>();
         for (LocalRuntimeDefinition.LocalAliasDefinition aliasDef : def.aliases()) {
             List<CandidateView> candidateViews = new ArrayList<>();
             for (LocalRuntimeDefinition.LocalCandidateDefinition cand : aliasDef.candidates()) {
-                LocalRuntimeDefinition.LocalModelDefinition model = modelMap.get(cand.modelId());
-                LocalRuntimeDefinition.LocalProviderDefinition prov = provMap.get(model.providerId());
+                LocalRuntimeDefinition.LocalUpstreamModelDefinition model = modelMap.get(cand.upstreamModelId());
+                LocalRuntimeDefinition.LocalChannelDefinition prov = provMap.get(model.channelId());
 
                 candidateViews.add(new CandidateView(
-                        aliasDef.alias() + "-" + cand.modelId(),
-                        prov.providerId(),
+                        aliasDef.alias() + "-" + cand.upstreamModelId(),
+                        prov.channelId(),
                         prov.providerType(),
-                        cand.modelId(),
-                        model.providerModelId(),
-                        cand.poolId(),
+                        cand.upstreamModelId(),
+                        model.modelId(),
                         cand.priority(),
                         cand.weight(),
                         true,

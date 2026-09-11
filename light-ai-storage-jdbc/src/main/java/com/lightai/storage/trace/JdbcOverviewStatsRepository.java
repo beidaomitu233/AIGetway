@@ -26,7 +26,7 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
             OffsetDateTime endAt,
             List<String> applications,
             UUID aliasId,
-            UUID providerId) {
+            UUID channelId) {
     }
 
     public record TraceTotals(
@@ -209,9 +209,9 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
             sql.append(" AND alias_id = ?");
             params.add(filter.aliasId());
         }
-        if (filter.providerId() != null) {
-            sql.append(" AND final_provider_id = ?");
-            params.add(filter.providerId());
+        if (filter.channelId() != null) {
+            sql.append(" AND final_channel_id = ?");
+            params.add(filter.channelId());
         }
     }
 
@@ -305,7 +305,7 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
     public record CircuitItem(
             UUID id,
             String state,
-            String providerName,
+            String channelName,
             String modelName,
             long occurrenceCount,
             OffsetDateTime latestAt,
@@ -315,22 +315,22 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
     public List<CircuitItem> circuitItems(Connection connection) {
         String sql = """
                 SELECT cs.id, cs.state, cs.updated_at, cs.last_reason,
-                       p.name AS provider_name, pm.display_name AS model_name,
+                       p.name AS channel_name, pm.display_name AS model_name,
                        (SELECT count(*) FROM %s ce WHERE ce.circuit_id = cs.id) AS occurrence_count
                   FROM %s cs
-                  LEFT JOIN %s pm ON pm.id = cs.provider_model_id
-                  LEFT JOIN %s p ON p.id = pm.provider_id
+                  LEFT JOIN %s pm ON pm.id = cs.upstream_model_id
+                  LEFT JOIN %s p ON p.id = pm.channel_id
                  WHERE cs.state IN ('OPEN','HALF_OPEN')
                  ORDER BY CASE cs.state WHEN 'OPEN' THEN 0 ELSE 1 END,
                           occurrence_count DESC, cs.updated_at DESC
                 """.strip().formatted(
                         qualify(connection, "circuit_event"),
                         qualify(connection, "circuit_state"),
-                        qualify(connection, "provider_model"),
-                        qualify(connection, "provider"));
+                        qualify(connection, "upstream_model"),
+                        qualify(connection, "channel"));
         return queryList(connection, sql, List.of(), (rs, dl) -> new CircuitItem(
                 dl.readUuid(rs, "id"), rs.getString("state"),
-                rs.getString("provider_name"), rs.getString("model_name"),
+                rs.getString("channel_name"), rs.getString("model_name"),
                 rs.getLong("occurrence_count"), dl.readOffsetDateTime(rs, "updated_at"),
                 rs.getString("last_reason")));
     }
@@ -339,7 +339,7 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
         String sql = """
                 SELECT count(*) FROM %s rc
                   JOIN %s s
-                    ON s.entity_type = 'PROVIDER_MODEL' AND s.entity_id = rc.provider_model_id
+                    ON s.entity_type = 'UPSTREAM_MODEL' AND s.entity_id = rc.upstream_model_id
                  WHERE rc.enabled AND s.connection_status = 'UNAVAILABLE'
                 """.strip().formatted(
                         qualify(connection, "route_candidate"),
@@ -350,32 +350,32 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
     public record UnavailableCandidateItem(
             UUID id,
             String aliasName,
-            String providerName,
+            String channelName,
             String modelName,
             OffsetDateTime latestAt) {
     }
 
     public List<UnavailableCandidateItem> unavailableCandidateItems(Connection connection) {
         String sql = """
-                SELECT rc.id, ma.alias AS alias_name, p.name AS provider_name,
+                SELECT rc.id, ma.alias AS alias_name, p.name AS channel_name,
                        pm.display_name AS model_name, s.updated_at
                   FROM %s rc
-                  JOIN %s pm ON pm.id = rc.provider_model_id
+                  JOIN %s pm ON pm.id = rc.upstream_model_id
                   JOIN %s ma ON ma.id = rc.alias_id
-                  LEFT JOIN %s p ON p.id = pm.provider_id
+                  LEFT JOIN %s p ON p.id = pm.channel_id
                   JOIN %s s
-                    ON s.entity_type = 'PROVIDER_MODEL' AND s.entity_id = rc.provider_model_id
+                    ON s.entity_type = 'UPSTREAM_MODEL' AND s.entity_id = rc.upstream_model_id
                  WHERE rc.enabled AND s.connection_status = 'UNAVAILABLE'
                  ORDER BY s.updated_at DESC
                 """.strip().formatted(
                         qualify(connection, "route_candidate"),
-                        qualify(connection, "provider_model"),
+                        qualify(connection, "upstream_model"),
                         qualify(connection, "model_alias"),
-                        qualify(connection, "provider"),
+                        qualify(connection, "channel"),
                         qualify(connection, "object_runtime_state"));
         return queryList(connection, sql, List.of(), (rs, dl) -> new UnavailableCandidateItem(
                 dl.readUuid(rs, "id"), rs.getString("alias_name"),
-                rs.getString("provider_name"), rs.getString("model_name"),
+                rs.getString("channel_name"), rs.getString("model_name"),
                 dl.readOffsetDateTime(rs, "updated_at")));
     }
 
@@ -383,10 +383,10 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
         String sql = """
                 SELECT count(*) FROM %s c
                   JOIN %s s
-                    ON s.entity_type = 'CREDENTIAL' AND s.entity_id = c.id
+                    ON s.entity_type = 'CHANNEL_CREDENTIAL' AND s.entity_id = c.id
                  WHERE c.deleted_at IS NULL AND s.health_status = 'INVALID'
                 """.strip().formatted(
-                        qualify(connection, "credential"),
+                        qualify(connection, "channel_credential"),
                         qualify(connection, "object_runtime_state"));
         return count(connection, sql);
     }
@@ -394,30 +394,28 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
     public record InvalidCredentialItem(
             UUID id,
             String name,
-            String providerName,
+            String channelName,
             OffsetDateTime latestAt,
             String lastReason) {
     }
 
     public List<InvalidCredentialItem> invalidCredentialItems(Connection connection) {
         String sql = """
-                SELECT c.id, c.name, p.name AS provider_name, s.updated_at,
+                SELECT c.id, c.name, ch.name AS channel_name, s.updated_at,
                        s.last_error_summary AS last_reason
                   FROM %s c
                   JOIN %s s
-                    ON s.entity_type = 'CREDENTIAL' AND s.entity_id = c.id
-                  LEFT JOIN %s cp ON cp.id = c.pool_id
-                  LEFT JOIN %s p ON p.id = cp.provider_id
+                    ON s.entity_type = 'CHANNEL_CREDENTIAL' AND s.entity_id = c.id
+                  LEFT JOIN %s ch ON ch.id = c.channel_id
                  WHERE c.deleted_at IS NULL AND s.health_status = 'INVALID'
                  ORDER BY s.updated_at DESC
                 """.strip().formatted(
-                        qualify(connection, "credential"),
+                        qualify(connection, "channel_credential"),
                         qualify(connection, "object_runtime_state"),
-                        qualify(connection, "credential_pool"),
-                        qualify(connection, "provider"));
+                        qualify(connection, "channel"));
         return queryList(connection, sql, List.of(), (rs, dl) -> new InvalidCredentialItem(
                 dl.readUuid(rs, "id"), rs.getString("name"),
-                rs.getString("provider_name"), dl.readOffsetDateTime(rs, "updated_at"),
+                rs.getString("channel_name"), dl.readOffsetDateTime(rs, "updated_at"),
                 rs.getString("last_reason")));
     }
 
@@ -503,7 +501,7 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
     }
 
     public List<OptionRef> providerOptions(Connection connection) {
-        String sql = "SELECT id, name FROM " + qualify(connection, "provider")
+        String sql = "SELECT id, name FROM " + qualify(connection, "channel")
                 + " WHERE deleted_at IS NULL ORDER BY name ASC";
         return queryList(connection, sql, List.of(), (rs, dl) -> new OptionRef(
                 dl.readUuid(rs, "id"), rs.getString("name")));
@@ -514,14 +512,14 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
         String sql = """
                 SELECT DISTINCT p.id, p.name
                   FROM %s rc
-                  JOIN %s pm ON pm.id = rc.provider_model_id
-                  JOIN %s p ON p.id = pm.provider_id
+                  JOIN %s pm ON pm.id = rc.upstream_model_id
+                  JOIN %s p ON p.id = pm.channel_id
                  WHERE rc.alias_id = ?
                  ORDER BY p.name ASC
                 """.strip().formatted(
                         qualify(connection, "route_candidate"),
-                        qualify(connection, "provider_model"),
-                        qualify(connection, "provider"));
+                        qualify(connection, "upstream_model"),
+                        qualify(connection, "channel"));
         return queryList(connection, sql, List.<Object>of(aliasId), (rs, dl) -> new OptionRef(
                 dl.readUuid(rs, "id"), rs.getString("name")));
     }

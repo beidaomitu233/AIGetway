@@ -18,9 +18,9 @@ class DatabaseDialectTest {
         DatabaseDialect dialect = PostgresDialect.INSTANCE;
 
         assertThat(dialect.databaseType()).isEqualTo(DatabaseType.POSTGRESQL);
-        assertThat(dialect.qualify("light_ai", "provider")).isEqualTo("light_ai.provider");
-        assertThat(dialect.qualify("", "provider")).isEqualTo("provider");
-        assertThat(dialect.qualify(null, "provider")).isEqualTo("provider");
+        assertThat(dialect.qualify("light_ai", "channel")).isEqualTo("light_ai.channel");
+        assertThat(dialect.qualify("", "channel")).isEqualTo("channel");
+        assertThat(dialect.qualify(null, "channel")).isEqualTo("channel");
         assertThat(dialect.jsonPlaceholder()).isEqualTo("?::jsonb");
         assertThat(dialect.nowFunction()).isEqualTo("now()");
         assertThat(dialect.intervalSecondsBeforeNow(120)).isEqualTo("now() - interval '120 seconds'");
@@ -37,10 +37,10 @@ class DatabaseDialectTest {
         DatabaseDialect dialect = MySqlDialect.INSTANCE;
 
         assertThat(dialect.databaseType()).isEqualTo(DatabaseType.MYSQL);
-        assertThat(dialect.qualify("light_ai", "provider")).isEqualTo("`provider`");
-        assertThat(dialect.qualify("custom_db", "provider")).isEqualTo("`custom_db`.`provider`");
-        assertThat(dialect.qualify("", "provider")).isEqualTo("`provider`");
-        assertThat(dialect.qualify(null, "provider")).isEqualTo("`provider`");
+        assertThat(dialect.qualify("light_ai", "channel")).isEqualTo("`channel`");
+        assertThat(dialect.qualify("custom_db", "channel")).isEqualTo("`custom_db`.`channel`");
+        assertThat(dialect.qualify("", "channel")).isEqualTo("`channel`");
+        assertThat(dialect.qualify(null, "channel")).isEqualTo("`channel`");
         assertThat(dialect.jsonPlaceholder()).isEqualTo("?");
         assertThat(dialect.nowFunction()).isEqualTo("now(6)");
         assertThat(dialect.intervalSecondsBeforeNow(120)).isEqualTo("TIMESTAMPADD(SECOND, -120, now(6))");

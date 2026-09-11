@@ -45,7 +45,7 @@ public class PerformanceAndFaultRecoveryTest {
         traceStore = new InMemoryTraceStore();
         candidateView = new CandidateView(
                 "cand-perf", "openai", "OPENAI", "pk-perf", "gpt-4o",
-                "pool-perf", 10, 100, true, "cl100k", 8192L, 4096L,
+                10, 100, true, "cl100k", 8192L, 4096L,
                 true, true, true, true, true,
                 BigDecimal.ZERO, BigDecimal.valueOf(2), BigDecimal.ZERO, BigDecimal.ONE, 4,
                 BigDecimal.ONE, BigDecimal.ONE, 1024L,
@@ -67,7 +67,7 @@ public class PerformanceAndFaultRecoveryTest {
 
         ProviderAdapter streamAdapter = new FastStreamAdapter(10); // 每个流产生 10 个数据块
         AdapterRegistryPort registry = type -> Optional.of(streamAdapter);
-        CredentialSecretPort credentialPort = (poolId, failoverIdx) ->
+        CredentialSecretPort credentialPort = (channelId, failoverIdx) ->
                 new CredentialSecretPort.ResolvedCredential("cred-perf", () -> "sk-test".toCharArray());
         RoutingPort routingPort = (alias, request, estimatedInputTokens) ->
                 new RoutingPort.RoutingResult(alias.enabledCandidates(), false, false);
@@ -130,7 +130,7 @@ public class PerformanceAndFaultRecoveryTest {
     void testPipelineOverheadP95Under20Ms() {
         ProviderAdapter zeroLatencyAdapter = new StubFastAdapter();
         AdapterRegistryPort registry = type -> Optional.of(zeroLatencyAdapter);
-        CredentialSecretPort credentialPort = (poolId, failoverIdx) ->
+        CredentialSecretPort credentialPort = (channelId, failoverIdx) ->
                 new CredentialSecretPort.ResolvedCredential("cred-perf", () -> "sk-test".toCharArray());
         RoutingPort routingPort = (alias, request, estimatedInputTokens) ->
                 new RoutingPort.RoutingResult(alias.enabledCandidates(), false, false);
@@ -180,11 +180,11 @@ public class PerformanceAndFaultRecoveryTest {
 
         CapacityPort failClosedCapacityPort = new CapacityPort() {
             @Override
-            public Reservation reserve(String aliasId, String modelId, String credentialId, long estimatedTokens) {
+            public Reservation reserve(String aliasId, String modelId, String channelCredentialId, long estimatedTokens) {
                 if (!capacityAvailable.get()) {
                     throw new LightAiException(ErrorCode.CAPACITY_STATE_UNAVAILABLE, "共享容量存储不可用，Fail-closed");
                 }
-                return new Reservation(UUID.randomUUID().toString(), aliasId, modelId, credentialId);
+                return new Reservation(UUID.randomUUID().toString(), aliasId, modelId, channelCredentialId);
             }
 
             @Override
@@ -215,7 +215,7 @@ public class PerformanceAndFaultRecoveryTest {
                 snapshotPort, () -> Optional.empty(),
                 (alias, request, estimatedInputTokens) -> new RoutingPort.RoutingResult(alias.enabledCandidates(), false, false),
                 failClosedCapacityPort,
-                (poolId, failoverIdx) -> new CredentialSecretPort.ResolvedCredential("cred-1", () -> "sk-test".toCharArray()),
+                (channelId, failoverIdx) -> new CredentialSecretPort.ResolvedCredential("cred-1", () -> "sk-test".toCharArray()),
                 type -> Optional.of(adapter), traceStore, () -> ReliabilityBudgets.DEFAULT, 30000
         );
 

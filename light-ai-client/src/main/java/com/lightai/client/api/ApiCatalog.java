@@ -38,7 +38,7 @@ public final class ApiCatalog {
         return conflicts;
     }
 
-    /** 归一化路径：将 {任意变量} 替换为 {}，使 /{poolId}/credentials 与 /{id}/credentials 可比。 */
+    /** 归一化路径：将 {任意变量} 替换为 {}，使 /{channelId}/credentials 与 /{id}/credentials 可比。 */
     public static String normalize(String path) {
         return path.replaceAll("\\{[^}]+}", "{}");
     }
@@ -68,8 +68,8 @@ public final class ApiCatalog {
         add(list, "POOL", "POST", "/admin/credential-pools/{id}/disable");
 
         // Credential（BE-P03）
-        add(list, "CREDENTIAL", "GET", "/admin/credential-pools/{poolId}/credentials");
-        add(list, "CREDENTIAL", "POST", "/admin/credential-pools/{poolId}/credentials");
+        add(list, "CREDENTIAL", "GET", "/admin/credential-pools/{channelId}/credentials");
+        add(list, "CREDENTIAL", "POST", "/admin/credential-pools/{channelId}/credentials");
         add(list, "CREDENTIAL", "GET", "/admin/credentials/{id}");
         add(list, "CREDENTIAL", "PUT", "/admin/credentials/{id}");
         add(list, "CREDENTIAL", "DELETE", "/admin/credentials/{id}");

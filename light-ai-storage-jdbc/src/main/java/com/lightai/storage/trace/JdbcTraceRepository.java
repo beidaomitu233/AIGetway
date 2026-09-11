@@ -31,8 +31,8 @@ public class JdbcTraceRepository extends AbstractJdbcRepository {
                     + "alias_id, alias, config_snapshot_no, requested_stream, response_committed, status, "
                     + "started_at, deadline_at, ended_at, total_ms, first_token_ms, queued_ms, "
                     + "attempt_count, retry_count, credential_failover_count, fallback_count, "
-                    + "final_attempt_id, final_provider_id, final_provider_model_id, final_credential_id, "
-                    + "access_credential_id, final_provider_name, final_provider_model_name, "
+                    + "final_attempt_id, final_channel_id, final_upstream_model_id, final_channel_credential_id, "
+                    + "access_credential_id, final_channel_name, final_upstream_model_name, "
                     + "access_credential_name, input_tokens, output_tokens, total_tokens, "
                     + "response_input_tokens, response_output_tokens, response_total_tokens, usage_source, "
                     + "input_cost, output_cost, total_cost, currency, finish_reason, "
@@ -47,8 +47,8 @@ public class JdbcTraceRepository extends AbstractJdbcRepository {
             List<String> applications,
             List<String> scopeApplications,
             List<String> aliasIds,
-            List<String> providerIds,
-            List<String> providerModelIds,
+            List<String> channelIds,
+            List<String> upstreamModelIds,
             List<String> statuses,
             List<String> projects,
             List<String> tenants,
@@ -56,7 +56,7 @@ public class JdbcTraceRepository extends AbstractJdbcRepository {
             String tagValue,
             List<String> sourceModes,
             List<String> accessCredentialIds,
-            List<String> credentialIds,
+            List<String> channelCredentialIds,
             String requestUser,
             String clientIp,
             List<String> attemptTypes,
@@ -222,14 +222,14 @@ public class JdbcTraceRepository extends AbstractJdbcRepository {
             appendIn(sql, params, "application", scope, d);
         }
         appendIn(sql, params, "alias_id", filter.aliasIds(), d);
-        appendIn(sql, params, "final_provider_id", filter.providerIds(), d);
-        appendIn(sql, params, "final_provider_model_id", filter.providerModelIds(), d);
+        appendIn(sql, params, "final_channel_id", filter.channelIds(), d);
+        appendIn(sql, params, "final_upstream_model_id", filter.upstreamModelIds(), d);
         appendIn(sql, params, "status", filter.statuses(), d);
         appendIn(sql, params, "project", filter.projects(), d);
         appendIn(sql, params, "tenant", filter.tenants(), d);
         appendIn(sql, params, "source_mode", filter.sourceModes(), d);
         appendIn(sql, params, "access_credential_id", filter.accessCredentialIds(), d);
-        appendIn(sql, params, "final_credential_id", filter.credentialIds(), d);
+        appendIn(sql, params, "final_channel_credential_id", filter.channelCredentialIds(), d);
         if (filter.tagKey() != null && !filter.tagKey().isBlank()) {
             if (d.databaseType() == DatabaseType.MYSQL) {
                 sql.append(" AND JSON_UNQUOTE(JSON_EXTRACT(tags, CONCAT('$.', ?))) = ?");
@@ -320,12 +320,12 @@ public class JdbcTraceRepository extends AbstractJdbcRepository {
     }
 
     private static final String ATTEMPT_COLUMNS =
-            "id, trace_id, sequence, attempt_type, route_candidate_id, provider_id, provider_model_id, "
-                    + "credential_pool_id, credential_id, provider_name_snapshot, "
-                    + "provider_model_name_snapshot, model_id_snapshot, credential_name_snapshot, status, "
-                    + "started_at, provider_started_at, response_headers_at, first_token_at, ended_at, "
+            "id, trace_id, sequence, attempt_type, route_candidate_id, channel_id, upstream_model_id, "
+                    + "channel_credential_id, channel_name_snapshot, "
+                    + "upstream_model_name_snapshot, model_id_snapshot, channel_credential_name_snapshot, status, "
+                    + "started_at, channel_started_at, response_headers_at, first_token_at, ended_at, "
                     + "dispatch_ms, response_header_ms, first_token_ms, total_ms, endpoint_host, "
-                    + "http_status, provider_request_id, response_committed, finish_reason, "
+                    + "http_status, channel_request_id, response_committed, finish_reason, "
                     + "error_code, error_category, error_stage, error_summary, retryable, retry_after_ms, "
                     + "resolved_parameters, input_tokens, output_tokens, total_tokens, usage_source, "
                     + "input_price, output_price, price_unit, currency, input_cost, output_cost, "
@@ -358,12 +358,12 @@ public class JdbcTraceRepository extends AbstractJdbcRepository {
                 rs.getInt("credential_failover_count"),
                 rs.getInt("fallback_count"),
                 d.readUuid(rs, "final_attempt_id"),
-                d.readUuid(rs, "final_provider_id"),
-                d.readUuid(rs, "final_provider_model_id"),
-                d.readUuid(rs, "final_credential_id"),
+                d.readUuid(rs, "final_channel_id"),
+                d.readUuid(rs, "final_upstream_model_id"),
+                d.readUuid(rs, "final_channel_credential_id"),
                 d.readUuid(rs, "access_credential_id"),
-                rs.getString("final_provider_name"),
-                rs.getString("final_provider_model_name"),
+                rs.getString("final_channel_name"),
+                rs.getString("final_upstream_model_name"),
                 rs.getString("access_credential_name"),
                 rs.getLong("input_tokens"),
                 rs.getLong("output_tokens"),
@@ -395,17 +395,16 @@ public class JdbcTraceRepository extends AbstractJdbcRepository {
                 rs.getInt("sequence"),
                 rs.getString("attempt_type"),
                 d.readUuid(rs, "route_candidate_id"),
-                d.readUuid(rs, "provider_id"),
-                d.readUuid(rs, "provider_model_id"),
-                d.readUuid(rs, "credential_pool_id"),
-                d.readUuid(rs, "credential_id"),
-                rs.getString("provider_name_snapshot"),
-                rs.getString("provider_model_name_snapshot"),
+                d.readUuid(rs, "channel_id"),
+                d.readUuid(rs, "upstream_model_id"),
+                d.readUuid(rs, "channel_credential_id"),
+                rs.getString("channel_name_snapshot"),
+                rs.getString("upstream_model_name_snapshot"),
                 rs.getString("model_id_snapshot"),
-                rs.getString("credential_name_snapshot"),
+                rs.getString("channel_credential_name_snapshot"),
                 rs.getString("status"),
                 d.readOffsetDateTime(rs, "started_at"),
-                d.readOffsetDateTime(rs, "provider_started_at"),
+                d.readOffsetDateTime(rs, "channel_started_at"),
                 d.readOffsetDateTime(rs, "response_headers_at"),
                 d.readOffsetDateTime(rs, "first_token_at"),
                 d.readOffsetDateTime(rs, "ended_at"),
@@ -415,7 +414,7 @@ public class JdbcTraceRepository extends AbstractJdbcRepository {
                 getIntOrNull(rs, "total_ms"),
                 rs.getString("endpoint_host"),
                 getIntOrNull(rs, "http_status"),
-                rs.getString("provider_request_id"),
+                rs.getString("channel_request_id"),
                 rs.getBoolean("response_committed"),
                 rs.getString("finish_reason"),
                 rs.getString("error_code"),

@@ -53,8 +53,8 @@ public class TraceService {
         if (!query.accessCredentialIds().isEmpty() && !credentialFields) {
             throw new LightAiException(ErrorCode.ACCESS_DENIED, "无权使用 access_credential_id 筛选");
         }
-        if (!query.credentialIds().isEmpty() && !credentialFields) {
-            throw new LightAiException(ErrorCode.ACCESS_DENIED, "无权使用 credential_id 筛选");
+        if (!query.channelCredentialIds().isEmpty() && !credentialFields) {
+            throw new LightAiException(ErrorCode.ACCESS_DENIED, "无权使用 channel_credential_id 筛选");
         }
         if (query.clientIp() != null && !diagnostics) {
             throw new LightAiException(ErrorCode.ACCESS_DENIED, "无权使用 client_ip 筛选");
@@ -106,10 +106,10 @@ public class TraceService {
                                                     List<String> scopeApplications) {
         return new JdbcTraceRepository.TraceFilter(
                 query.exactTraceId(), query.startAt(), query.endAt(),
-                query.applications(), scopeApplications, query.aliasIds(), query.providerIds(),
-                query.providerModelIds(), query.statuses(), query.projects(), query.tenants(),
+                query.applications(), scopeApplications, query.aliasIds(), query.channelIds(),
+                query.upstreamModelIds(), query.statuses(), query.projects(), query.tenants(),
                 query.tagKey(), query.tagValue(), query.sourceModes(), query.accessCredentialIds(),
-                query.credentialIds(), query.requestUser(), query.clientIp(), query.attemptTypes(),
+                query.channelCredentialIds(), query.requestUser(), query.clientIp(), query.attemptTypes(),
                 query.errorCodes(), query.requestedStream(), query.usageSources(),
                 query.hasRetry(), query.hasCredentialFailover(), query.hasFallback(),
                 query.minTotalMs(), query.maxTotalMs(), query.anomalousRunning());
@@ -127,7 +127,7 @@ public class TraceService {
         return new TraceListItem(
                 row.traceId(), row.startedAt(), row.sourceMode(), row.accessCredentialName(),
                 row.application(), row.project(), row.tenant(), row.alias(),
-                row.finalProviderName(), row.finalProviderModelName(), row.requestedStream(),
+                row.finalChannelName(), row.finalUpstreamModelName(), row.requestedStream(),
                 row.status(), anomalous, row.attemptCount(), row.retryCount(),
                 row.credentialFailoverCount(), row.fallbackCount(), row.queuedMs(),
                 row.firstTokenMs() == null ? null : row.firstTokenMs().longValue(),

@@ -33,8 +33,8 @@ public final class ContributionCalculator {
 
     /** dimension_key 输入的固定维度顺序（DATABASE_PLAN 4.2）。 */
     private static final String[] DIMENSION_ORDER = {
-            "application", "project", "tenant", "alias_id", "provider_id", "provider_model_id",
-            "credential_pool_id", "credential_id", "trace_status", "error_code", "usage_source",
+            "application", "project", "tenant", "alias_id", "channel_id", "upstream_model_id",
+            "channel_id", "channel_credential_id", "trace_status", "error_code", "usage_source",
             "requested_stream"};
 
     private ContributionCalculator() {
@@ -147,12 +147,10 @@ public final class ContributionCalculator {
 
         String usageSource = usageSourceAttempt == null ? null : usageSourceAttempt.usageSource();
         String errorCode = errorCodeSource == null ? trace.errorCode() : errorCodeSource.errorCode();
-        String providerId = pathAttempt == null ? null : pathAttempt.providerId().toString();
-        String providerModelId = pathAttempt == null ? null
-                : pathAttempt.providerModelId().toString();
-        String credentialPoolId = pathAttempt == null ? null
-                : pathAttempt.credentialPoolId().toString();
-        String credentialId = pathAttempt == null ? null : pathAttempt.credentialId().toString();
+        String channelId = pathAttempt == null ? null : pathAttempt.channelId().toString();
+        String upstreamModelId = pathAttempt == null ? null
+                : pathAttempt.upstreamModelId().toString();
+        String channelCredentialId = pathAttempt == null ? null : pathAttempt.channelCredentialId().toString();
         boolean streaming = trace.requestedStream();
 
         Map<String, String> dimensionValues = new LinkedHashMap<>();
@@ -160,10 +158,9 @@ public final class ContributionCalculator {
         dimensionValues.put("project", trace.project());
         dimensionValues.put("tenant", trace.tenant());
         dimensionValues.put("alias_id", trace.aliasId() == null ? null : trace.aliasId().toString());
-        dimensionValues.put("provider_id", providerId);
-        dimensionValues.put("provider_model_id", providerModelId);
-        dimensionValues.put("credential_pool_id", credentialPoolId);
-        dimensionValues.put("credential_id", credentialId);
+        dimensionValues.put("channel_id", channelId);
+        dimensionValues.put("upstream_model_id", upstreamModelId);
+        dimensionValues.put("channel_credential_id", channelCredentialId);
         dimensionValues.put("trace_status", trace.status());
         dimensionValues.put("error_code", errorCode);
         dimensionValues.put("usage_source", usageSource);
@@ -172,20 +169,19 @@ public final class ContributionCalculator {
 
         Map<String, String> dimensionNames = new HashMap<>();
         dimensionNames.put("alias", trace.alias());
-        dimensionNames.put("provider", pathAttempt == null ? trace.finalProviderName()
-                : pathAttempt.providerNameSnapshot());
-        dimensionNames.put("provider_model", pathAttempt == null ? trace.finalProviderModelName()
-                : pathAttempt.providerModelNameSnapshot());
+        dimensionNames.put("channel", pathAttempt == null ? trace.finalChannelName()
+                : pathAttempt.channelNameSnapshot());
+        dimensionNames.put("upstream_model", pathAttempt == null ? trace.finalUpstreamModelName()
+                : pathAttempt.upstreamModelNameSnapshot());
         dimensionNames.put("credential_pool", null);
-        dimensionNames.put("credential",
-                pathAttempt == null ? null : pathAttempt.credentialNameSnapshot());
+        dimensionNames.put("channel_credential",
+                pathAttempt == null ? null : pathAttempt.channelCredentialNameSnapshot());
 
         return new Contribution(granularity, bucketStart, bucketEnd, dimensionKey,
                 trace.application(), trace.project(), trace.tenant(), trace.aliasId(),
-                pathAttempt == null ? null : pathAttempt.providerId(),
-                pathAttempt == null ? null : pathAttempt.providerModelId(),
-                pathAttempt == null ? null : pathAttempt.credentialPoolId(),
-                pathAttempt == null ? null : pathAttempt.credentialId(),
+                pathAttempt == null ? null : pathAttempt.channelId(),
+                pathAttempt == null ? null : pathAttempt.upstreamModelId(),
+                pathAttempt == null ? null : pathAttempt.channelCredentialId(),
                 trace.status(), errorCode, usageSource, streaming, trace.currency(),
                 dimensionNames,
                 requestCount, successCount, failureCount, cancelledCount,

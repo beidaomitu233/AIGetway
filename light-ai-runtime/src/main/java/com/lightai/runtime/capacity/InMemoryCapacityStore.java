@@ -77,8 +77,8 @@ public class InMemoryCapacityStore implements CapacityStore {
     @Override
     public synchronized ReservationHandle reserve(ReserveRequest request) {
         return reserveScopes(
-                new String[]{"alias", "provider_model", "credential"},
-                new UUID[]{request.aliasId(), request.providerModelId(), request.credentialId()},
+                new String[]{"alias", "upstream_model", "channel_credential"},
+                new UUID[]{request.aliasId(), request.upstreamModelId(), request.channelCredentialId()},
                 new CapacityStore.ScopeLimit[]{request.aliasLimit(), request.providerModelLimit(), request.credentialLimit()},
                 request.estimatedTokens(), request.maxTokens());
     }

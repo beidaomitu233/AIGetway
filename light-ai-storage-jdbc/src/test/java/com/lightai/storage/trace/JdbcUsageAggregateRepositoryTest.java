@@ -19,7 +19,7 @@ class JdbcUsageAggregateRepositoryTest {
         OffsetDateTime start = OffsetDateTime.of(2026, 9, 8, 0, 0, 0, 0, ZoneOffset.UTC);
         var contribution = new JdbcUsageAggregateRepository.Contribution(
                 "HOUR", start, start.plusHours(1), "dimension-key", "orders", null, null,
-                null, null, null, null, null, "SUCCEEDED", null, "ACTUAL", false, "USD", Map.of(),
+                null, null, null, null, "SUCCEEDED", null, "ACTUAL", false, "USD", Map.of(),
                 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0,
                 10, 2, 12, 10, 2, 0, 0,
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,

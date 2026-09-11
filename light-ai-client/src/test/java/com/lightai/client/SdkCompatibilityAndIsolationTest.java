@@ -78,8 +78,8 @@ public class SdkCompatibilityAndIsolationTest {
                         "source": "ACTUAL"
                     },
                     "light_ai": {
-                        "provider": "OPENAI",
-                        "provider_model": "gpt-4o",
+                        "channel": "OPENAI",
+                        "upstream_model": "gpt-4o",
                         "trace_id": "trace-12345",
                         "usage_source": "ACTUAL",
                         "snapshot_no": 1,

@@ -256,16 +256,9 @@ public class LightAiAdminAutoConfiguration {
 
         @Bean
         @ConditionalOnMissingBean
-        public com.lightai.storage.provider.JdbcProviderRepository lightAiProviderRepository(
+        public com.lightai.storage.channel.JdbcChannelRepository lightAiProviderRepository(
                 StorageProperties properties) {
-            return new com.lightai.storage.provider.JdbcProviderRepository(properties.getSchemaName());
-        }
-
-        @Bean
-        @ConditionalOnMissingBean
-        public com.lightai.storage.pool.JdbcPoolRepository lightAiPoolRepository(
-                StorageProperties properties) {
-            return new com.lightai.storage.pool.JdbcPoolRepository(properties.getSchemaName());
+            return new com.lightai.storage.channel.JdbcChannelRepository(properties.getSchemaName());
         }
 
         @Bean
@@ -291,21 +284,21 @@ public class LightAiAdminAutoConfiguration {
 
         @Bean
         @ConditionalOnMissingBean
-        public com.lightai.storage.check.JdbcProviderCheckRecordRepository lightAiProviderCheckRecordRepository(
+        public com.lightai.storage.check.JdbcChannelCheckRecordRepository lightAiChannelCheckRecordRepository(
                 StorageProperties properties) {
-            return new com.lightai.storage.check.JdbcProviderCheckRecordRepository(properties.getSchemaName());
+            return new com.lightai.storage.check.JdbcChannelCheckRecordRepository(properties.getSchemaName());
         }
 
         @Bean
-        public com.lightai.admin.provider.ProviderTypeRegistry lightAiProviderTypeRegistry(
+        public com.lightai.admin.channel.ProviderTypeRegistry lightAiProviderTypeRegistry(
                 ObjectProvider<AdapterMetadataSource> adapterMetadataSource) {
-            return new com.lightai.admin.provider.ProviderTypeRegistry(adapterMetadataSource.getIfAvailable());
+            return new com.lightai.admin.channel.ProviderTypeRegistry(adapterMetadataSource.getIfAvailable());
         }
 
         @Bean
-        public com.lightai.admin.provider.TargetUrlPolicy lightAiTargetUrlPolicy(
+        public com.lightai.admin.channel.TargetUrlPolicy lightAiTargetUrlPolicy(
                 AdminProperties properties) {
-            return new com.lightai.admin.provider.TargetUrlPolicy(properties.isAllowedProviderInternalNetworks());
+            return new com.lightai.admin.channel.TargetUrlPolicy(properties.isAllowedProviderInternalNetworks());
         }
 
         @Bean
@@ -316,20 +309,20 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
-        public com.lightai.admin.provider.ProviderService lightAiProviderService(
+        public com.lightai.admin.channel.ChannelService lightAiChannelService(
                 DataSource dataSource,
-                com.lightai.storage.provider.JdbcProviderRepository providerRepository,
+                com.lightai.storage.channel.JdbcChannelRepository providerRepository,
                 com.lightai.storage.reference.JdbcConfigReferenceRepository referenceRepository,
                 com.lightai.storage.runtime.JdbcObjectRuntimeStateRepository runtimeStateRepository,
                 com.lightai.storage.runtime.JdbcRuntimeStateWriter runtimeStateWriter,
-                com.lightai.storage.check.JdbcProviderCheckRecordRepository checkRecordRepository,
+                com.lightai.storage.check.JdbcChannelCheckRecordRepository checkRecordRepository,
                 DraftChangeRepository draftChangeRepository,
                 com.lightai.admin.draft.DraftWriteService draftWriteService,
                 com.lightai.admin.impact.ImpactService impactService,
-                com.lightai.admin.provider.ProviderTypeRegistry typeRegistry,
-                com.lightai.admin.provider.TargetUrlPolicy targetUrlPolicy,
+                com.lightai.admin.channel.ProviderTypeRegistry typeRegistry,
+                com.lightai.admin.channel.TargetUrlPolicy targetUrlPolicy,
                 Clock clock, AdminProperties properties) {
-            return new com.lightai.admin.provider.ProviderService(dataSource, providerRepository,
+            return new com.lightai.admin.channel.ChannelService(dataSource, providerRepository,
                     referenceRepository, runtimeStateRepository, runtimeStateWriter,
                     checkRecordRepository, draftChangeRepository,
                     draftWriteService, impactService, typeRegistry, targetUrlPolicy,
@@ -337,68 +330,39 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
-        public com.lightai.admin.pool.PoolService lightAiPoolService(
+        public com.lightai.admin.check.ChannelCheckService lightAiChannelCheckService(
                 DataSource dataSource,
-                com.lightai.storage.pool.JdbcPoolRepository poolRepository,
+                com.lightai.storage.channel.JdbcChannelRepository providerRepository,
                 com.lightai.storage.reference.JdbcConfigReferenceRepository referenceRepository,
-                DraftChangeRepository draftChangeRepository,
-                com.lightai.admin.draft.DraftWriteService draftWriteService,
-                com.lightai.admin.impact.ImpactService impactService,
-                Clock clock, AdminProperties properties, StorageProperties storageProperties) {
-            return new com.lightai.admin.pool.PoolService(dataSource, poolRepository,
-                    referenceRepository, draftChangeRepository, draftWriteService, impactService,
-                    new com.lightai.admin.query.PageResultFactory(clock), properties.getRuntimeMode(),
-                    storageProperties.getSchemaName());
-        }
-
-        @Bean
-        public com.lightai.admin.check.ProviderCheckService lightAiProviderCheckService(
-                DataSource dataSource,
-                com.lightai.storage.provider.JdbcProviderRepository providerRepository,
-                com.lightai.storage.reference.JdbcConfigReferenceRepository referenceRepository,
-                com.lightai.storage.check.JdbcProviderCheckRecordRepository checkRecordRepository,
+                com.lightai.storage.check.JdbcChannelCheckRecordRepository checkRecordRepository,
                 com.lightai.storage.runtime.JdbcRuntimeStateWriter runtimeStateWriter,
                 org.springframework.beans.factory.ObjectProvider<com.lightai.spi.check.ProviderCheckExecutor> executors,
                 AdminProperties properties) {
-            return new com.lightai.admin.check.ProviderCheckService(dataSource, providerRepository,
+            return new com.lightai.admin.check.ChannelCheckService(dataSource, providerRepository,
                     referenceRepository, checkRecordRepository, runtimeStateWriter,
                     executors.orderedStream().toList(), properties.getRuntimeMode());
         }
 
         @Bean
         @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-        public com.lightai.admin.provider.ProviderController lightAiProviderController(
-                com.lightai.admin.provider.ProviderService providerService,
-                com.lightai.admin.check.ProviderCheckService providerCheckService) {
-            return new com.lightai.admin.provider.ProviderController(providerService, providerCheckService);
-        }
-
-        @Bean
-        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-        public com.lightai.admin.pool.PoolController lightAiPoolController(
-                com.lightai.admin.pool.PoolService poolService) {
-            return new com.lightai.admin.pool.PoolController(poolService);
+        public com.lightai.admin.channel.ChannelController lightAiChannelController(
+                com.lightai.admin.channel.ChannelService providerService,
+                com.lightai.admin.check.ChannelCheckService providerCheckService) {
+            return new com.lightai.admin.channel.ChannelController(providerService, providerCheckService);
         }
 
         @Bean
         @ConditionalOnMissingBean
-        public com.lightai.storage.credential.JdbcCredentialRepository lightAiCredentialRepository(
+        public com.lightai.storage.channel.JdbcChannelCredentialRepository lightAiCredentialRepository(
                 StorageProperties properties) {
-            return new com.lightai.storage.credential.JdbcCredentialRepository(properties.getSchemaName());
+            return new com.lightai.storage.channel.JdbcChannelCredentialRepository(properties.getSchemaName());
         }
 
         @Bean
         @ConditionalOnMissingBean
-        public com.lightai.storage.credential.JdbcCredentialSecretRepository lightAiCredentialSecretRepository(
+        public com.lightai.storage.upstream.JdbcUpstreamModelRepository lightAiProviderModelRepository(
                 StorageProperties properties) {
-            return new com.lightai.storage.credential.JdbcCredentialSecretRepository(properties.getSchemaName());
-        }
-
-        @Bean
-        @ConditionalOnMissingBean
-        public com.lightai.storage.model.JdbcProviderModelRepository lightAiProviderModelRepository(
-                StorageProperties properties) {
-            return new com.lightai.storage.model.JdbcProviderModelRepository(properties.getSchemaName());
+            return new com.lightai.storage.upstream.JdbcUpstreamModelRepository(properties.getSchemaName());
         }
 
         @Bean
@@ -436,23 +400,21 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
-        public com.lightai.admin.credential.CredentialService lightAiCredentialService(
+        public com.lightai.admin.channel.ChannelCredentialService lightAiChannelCredentialService(
                 DataSource dataSource,
-                com.lightai.storage.credential.JdbcCredentialRepository credentialRepository,
-                com.lightai.storage.credential.JdbcCredentialSecretRepository secretRepository,
-                com.lightai.storage.pool.JdbcPoolRepository poolRepository,
-                com.lightai.storage.provider.JdbcProviderRepository providerRepository,
+                com.lightai.storage.channel.JdbcChannelCredentialRepository credentialRepository,
+                com.lightai.storage.channel.JdbcChannelRepository channelRepository,
                 com.lightai.storage.runtime.JdbcObjectRuntimeStateRepository runtimeStateRepository,
                 DraftChangeRepository draftChangeRepository,
                 com.lightai.admin.draft.DraftWriteService draftWriteService,
                 com.lightai.spi.secret.SecretCipher secretCipher,
                 Clock clock, AdminProperties properties,
                 com.lightai.storage.reference.JdbcConfigReferenceRepository referenceRepository,
-                com.lightai.storage.check.JdbcProviderCheckRecordRepository checkRecordRepository,
+                com.lightai.storage.check.JdbcChannelCheckRecordRepository checkRecordRepository,
                 com.lightai.storage.runtime.JdbcRuntimeStateWriter runtimeStateWriter,
                 org.springframework.beans.factory.ObjectProvider<com.lightai.spi.check.ProviderCheckExecutor> executors) {
-            return new com.lightai.admin.credential.CredentialService(dataSource, credentialRepository,
-                    secretRepository, poolRepository, providerRepository, runtimeStateRepository,
+            return new com.lightai.admin.channel.ChannelCredentialService(dataSource, credentialRepository,
+                    channelRepository, runtimeStateRepository,
                     draftChangeRepository, draftWriteService, secretCipher,
                     new com.lightai.admin.query.PageResultFactory(clock), properties.getRuntimeMode(),
                     referenceRepository, checkRecordRepository, runtimeStateWriter,
@@ -461,26 +423,26 @@ public class LightAiAdminAutoConfiguration {
 
         @Bean
         @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-        public com.lightai.admin.credential.CredentialController lightAiCredentialController(
-                com.lightai.admin.credential.CredentialService credentialService) {
-            return new com.lightai.admin.credential.CredentialController(credentialService);
+        public com.lightai.admin.channel.ChannelCredentialController lightAiChannelCredentialController(
+                com.lightai.admin.channel.ChannelCredentialService credentialService) {
+            return new com.lightai.admin.channel.ChannelCredentialController(credentialService);
         }
 
         @Bean
-        public com.lightai.admin.model.ProviderModelService lightAiProviderModelService(
+        public com.lightai.admin.upstream.UpstreamModelService lightAiUpstreamModelService(
                 DataSource dataSource,
-                com.lightai.storage.model.JdbcProviderModelRepository modelRepository,
-                com.lightai.storage.provider.JdbcProviderRepository providerRepository,
+                com.lightai.storage.upstream.JdbcUpstreamModelRepository modelRepository,
+                com.lightai.storage.channel.JdbcChannelRepository providerRepository,
                 com.lightai.storage.alias.JdbcCandidateRepository candidateRepository,
                 com.lightai.storage.runtime.JdbcObjectRuntimeStateRepository runtimeStateRepository,
                 DraftChangeRepository draftChangeRepository,
                 com.lightai.admin.draft.DraftWriteService draftWriteService,
                 com.lightai.admin.impact.ImpactService impactService,
                 Clock clock, AdminProperties properties,
-                com.lightai.storage.check.JdbcProviderCheckRecordRepository checkRecordRepository,
+                com.lightai.storage.check.JdbcChannelCheckRecordRepository checkRecordRepository,
                 com.lightai.storage.runtime.JdbcRuntimeStateWriter runtimeStateWriter,
                 org.springframework.beans.factory.ObjectProvider<com.lightai.spi.check.ProviderCheckExecutor> executors) {
-            return new com.lightai.admin.model.ProviderModelService(dataSource, modelRepository,
+            return new com.lightai.admin.upstream.UpstreamModelService(dataSource, modelRepository,
                     providerRepository, candidateRepository, runtimeStateRepository,
                     draftChangeRepository, draftWriteService, impactService,
                     new com.lightai.admin.query.PageResultFactory(clock), properties.getRuntimeMode(),
@@ -488,25 +450,25 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
-        public com.lightai.admin.model.ModelImportService lightAiModelImportService(
+        public com.lightai.admin.upstream.ModelImportService lightAiModelImportService(
                 DataSource dataSource,
-                com.lightai.storage.provider.JdbcProviderRepository providerRepository,
-                com.lightai.storage.model.JdbcProviderModelRepository modelRepository,
+                com.lightai.storage.channel.JdbcChannelRepository providerRepository,
+                com.lightai.storage.upstream.JdbcUpstreamModelRepository modelRepository,
                 com.lightai.admin.draft.DraftWriteService draftWriteService,
                 com.lightai.storage.batch.JdbcBatchCheckRepository batchCheckRepository,
                 org.springframework.beans.factory.ObjectProvider<com.lightai.spi.check.ProviderCheckExecutor> executors,
                 AdminProperties properties) {
-            return new com.lightai.admin.model.ModelImportService(dataSource, providerRepository,
+            return new com.lightai.admin.upstream.ModelImportService(dataSource, providerRepository,
                     modelRepository, draftWriteService, batchCheckRepository,
                     executors.orderedStream().toList(), properties.getRuntimeMode());
         }
 
         @Bean
         @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-        public com.lightai.admin.model.ProviderModelController lightAiProviderModelController(
-                com.lightai.admin.model.ProviderModelService modelService,
-                com.lightai.admin.model.ModelImportService importService) {
-            return new com.lightai.admin.model.ProviderModelController(modelService, importService);
+        public com.lightai.admin.upstream.UpstreamModelController lightAiUpstreamModelController(
+                com.lightai.admin.upstream.UpstreamModelService modelService,
+                com.lightai.admin.upstream.ModelImportService importService) {
+            return new com.lightai.admin.upstream.UpstreamModelController(modelService, importService);
         }
 
         @Bean
@@ -528,14 +490,13 @@ public class LightAiAdminAutoConfiguration {
                 DataSource dataSource,
                 com.lightai.storage.alias.JdbcCandidateRepository candidateRepository,
                 com.lightai.storage.alias.JdbcAliasRepository aliasRepository,
-                com.lightai.storage.model.JdbcProviderModelRepository modelRepository,
-                com.lightai.storage.pool.JdbcPoolRepository poolRepository,
-                com.lightai.storage.provider.JdbcProviderRepository providerRepository,
+                com.lightai.storage.upstream.JdbcUpstreamModelRepository modelRepository,
+                com.lightai.storage.channel.JdbcChannelRepository channelRepository,
                 com.lightai.admin.draft.DraftWriteService draftWriteService,
-                com.lightai.admin.check.ProviderCheckService providerCheckService,
+                com.lightai.admin.check.ChannelCheckService providerCheckService,
                 AdminProperties properties) {
             return new com.lightai.admin.alias.RouteCandidateService(dataSource, candidateRepository,
-                    aliasRepository, modelRepository, poolRepository, providerRepository,
+                    aliasRepository, modelRepository, channelRepository,
                     draftWriteService, providerCheckService, properties.getRuntimeMode());
         }
 
@@ -873,8 +834,8 @@ public class LightAiAdminAutoConfiguration {
                 com.lightai.storage.publish.SnapshotContentRepository snapshotContentRepository,
                 com.lightai.storage.publish.ConfigValidationRepository validationRepository,
                 com.lightai.storage.publish.RuntimeInstanceRepository runtimeInstanceRepository,
-                com.lightai.admin.provider.ProviderTypeRegistry providerTypeRegistry,
-                com.lightai.storage.check.JdbcProviderCheckRecordRepository checkRecordRepository,
+                com.lightai.admin.channel.ProviderTypeRegistry providerTypeRegistry,
+                com.lightai.storage.check.JdbcChannelCheckRecordRepository checkRecordRepository,
                 com.lightai.admin.audit.AuditService auditService,
                 AdminProperties properties) {
             return new com.lightai.admin.publish.ConfigValidationService(dataSource, transactionManager,

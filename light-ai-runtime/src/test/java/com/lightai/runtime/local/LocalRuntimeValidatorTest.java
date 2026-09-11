@@ -15,12 +15,11 @@ class LocalRuntimeValidatorTest {
     @Test
     void shouldPassValidDefinition() {
         LocalRuntimeDefinition def = LocalRuntimeDefinition.builder()
-                .addProvider(new LocalRuntimeDefinition.LocalProviderDefinition("p-openai", "OPENAI", "https://api.openai.com", 60000L))
-                .addPool(new LocalRuntimeDefinition.LocalPoolDefinition("pool-1", "p-openai", "PRIORITY"))
-                .addCredential(new LocalRuntimeDefinition.LocalCredentialDefinition("c-1", "pool-1", "p-openai", "sec-ref-1"))
-                .addModel(LocalRuntimeDefinition.LocalModelDefinition.simple("m-gpt4", "p-openai", "gpt-4o"))
+                .addChannel(new LocalRuntimeDefinition.LocalChannelDefinition("chan-openai", "OPENAI", "https://api.openai.com", 60000L))
+                .addCredential(new LocalRuntimeDefinition.LocalChannelCredentialDefinition("c-1", "chan-openai", "sec-ref-1"))
+                .addModel(LocalRuntimeDefinition.LocalUpstreamModelDefinition.simple("m-gpt4", "chan-openai", "gpt-4o"))
                 .addAlias(new LocalRuntimeDefinition.LocalAliasDefinition("a-1", "default", "Default Alias", true, List.of(
-                        LocalRuntimeDefinition.LocalCandidateDefinition.of("m-gpt4", "pool-1")
+                        LocalRuntimeDefinition.LocalCandidateDefinition.of("m-gpt4", "chan-openai")
                 )))
                 .build();
 
@@ -28,9 +27,9 @@ class LocalRuntimeValidatorTest {
     }
 
     @Test
-    void shouldRejectWhenModelProviderDoesNotExist() {
+    void shouldRejectWhenModelChannelDoesNotExist() {
         LocalRuntimeDefinition def = LocalRuntimeDefinition.builder()
-                .addModel(LocalRuntimeDefinition.LocalModelDefinition.simple("m-gpt4", "non-existent-prov", "gpt-4o"))
+                .addModel(LocalRuntimeDefinition.LocalUpstreamModelDefinition.simple("m-gpt4", "non-existent-chan", "gpt-4o"))
                 .addAlias(new LocalRuntimeDefinition.LocalAliasDefinition("a-1", "default", "Default", true, List.of(
                         LocalRuntimeDefinition.LocalCandidateDefinition.of("m-gpt4", null)
                 )))
@@ -43,8 +42,8 @@ class LocalRuntimeValidatorTest {
 
     @Test
     void shouldRejectWhenContextWindowLessThanMaxOutputTokens() {
-        LocalRuntimeDefinition.LocalModelDefinition invalidModel = new LocalRuntimeDefinition.LocalModelDefinition(
-                "m-gpt4", "p-openai", "gpt-4o",
+        LocalRuntimeDefinition.LocalUpstreamModelDefinition invalidModel = new LocalRuntimeDefinition.LocalUpstreamModelDefinition(
+                "m-gpt4", "chan-openai", "gpt-4o",
                 1000L, 4000L, true, true, true, true, true,
                 BigDecimal.ZERO, BigDecimal.valueOf(2.0),
                 BigDecimal.ZERO, BigDecimal.ONE, 4,
@@ -53,7 +52,7 @@ class LocalRuntimeValidatorTest {
         );
 
         LocalRuntimeDefinition def = LocalRuntimeDefinition.builder()
-                .addProvider(new LocalRuntimeDefinition.LocalProviderDefinition("p-openai", "OPENAI", "https://api.openai.com", 60000L))
+                .addChannel(new LocalRuntimeDefinition.LocalChannelDefinition("chan-openai", "OPENAI", "https://api.openai.com", 60000L))
                 .addModel(invalidModel)
                 .addAlias(new LocalRuntimeDefinition.LocalAliasDefinition("a-1", "default", "Default", true, List.of(
                         LocalRuntimeDefinition.LocalCandidateDefinition.of("m-gpt4", null)
@@ -70,15 +69,14 @@ class LocalRuntimeValidatorTest {
     }
 
     @Test
-    void shouldRejectWhenCandidatePoolMismatchProvider() {
+    void shouldRejectWhenCandidateChannelMismatchModel() {
         LocalRuntimeDefinition def = LocalRuntimeDefinition.builder()
-                .addProvider(new LocalRuntimeDefinition.LocalProviderDefinition("p-openai", "OPENAI", "https://api.openai.com", 60000L))
-                .addProvider(new LocalRuntimeDefinition.LocalProviderDefinition("p-anthropic", "ANTHROPIC", "https://api.anthropic.com", 60000L))
-                .addPool(new LocalRuntimeDefinition.LocalPoolDefinition("pool-anthropic", "p-anthropic", "PRIORITY"))
-                .addModel(LocalRuntimeDefinition.LocalModelDefinition.simple("m-gpt4", "p-openai", "gpt-4o"))
+                .addChannel(new LocalRuntimeDefinition.LocalChannelDefinition("chan-openai", "OPENAI", "https://api.openai.com", 60000L))
+                .addChannel(new LocalRuntimeDefinition.LocalChannelDefinition("chan-anthropic", "ANTHROPIC", "https://api.anthropic.com", 60000L))
+                .addModel(LocalRuntimeDefinition.LocalUpstreamModelDefinition.simple("m-gpt4", "chan-openai", "gpt-4o"))
                 .addAlias(new LocalRuntimeDefinition.LocalAliasDefinition("a-1", "default", "Default", true, List.of(
-                        // Model is OpenAI, but pool is Anthropic!
-                        LocalRuntimeDefinition.LocalCandidateDefinition.of("m-gpt4", "pool-anthropic")
+                        // 模型属于 OpenAI 渠道，但候选绑定的是 Anthropic 渠道
+                        LocalRuntimeDefinition.LocalCandidateDefinition.of("m-gpt4", "chan-anthropic")
                 )))
                 .build();
 
@@ -87,7 +85,7 @@ class LocalRuntimeValidatorTest {
                 .satisfies(e -> {
                     LightAiException lae = (LightAiException) e;
                     assertThat(lae.code()).isEqualTo(ErrorCode.FIELD_VALIDATION_FAILED);
-                    assertThat(lae.getMessage()).contains("provider 不一致");
+                    assertThat(lae.getMessage()).contains("渠道不一致");
                 });
     }
 

@@ -33,7 +33,7 @@ public class LightAiMetricsAndLoggingTest {
                 LightAiMetrics.validateTagCardinality(List.of(Tag.of("attempt_id", "attempt-999"))));
 
         assertThrows(IllegalArgumentException.class, () ->
-                LightAiMetrics.validateTagCardinality(List.of(Tag.of("credential_id", "cred-abc"))));
+                LightAiMetrics.validateTagCardinality(List.of(Tag.of("channel_credential_id", "cred-abc"))));
 
         assertThrows(IllegalArgumentException.class, () ->
                 LightAiMetrics.validateTagCardinality(List.of(Tag.of("access_token", "token-xyz"))));

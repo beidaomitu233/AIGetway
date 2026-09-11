@@ -18,6 +18,7 @@ import java.util.UUID;
 
 /**
  * 引用影响分析（BE-010/BE-012）。
+ * V2 资源域：渠道的直接引用为上游模型、渠道 Key 与路由候选；
  * impact_version 由当前引用关系摘要哈希计算，不落库：
  * 确认时以相同算法重算并比对，引用变化即返回 IMPACT_ANALYSIS_EXPIRED，
  * 页面重新展示影响内容。
@@ -28,41 +29,29 @@ public class ImpactService {
     public static final String OPERATION_DELETE = "DELETE";
 
     private final JdbcConfigReferenceRepository referenceRepository;
-    private final String schemaName;
 
     public ImpactService(JdbcConfigReferenceRepository referenceRepository, String schemaName) {
         this.referenceRepository = referenceRepository;
-        this.schemaName = schemaName;
     }
 
     public ImpactService(JdbcConfigReferenceRepository referenceRepository) {
         this(referenceRepository, com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME);
     }
 
-    public ImpactAnalysis analyzeProvider(Connection connection, UUID providerId, String providerName) {
+    public ImpactAnalysis analyzeChannel(Connection connection, UUID channelId, String channelName) {
         List<ImpactReference> references = new ArrayList<>();
-        Map<UUID, String> pools = referenceRepository.poolNamesByProvider(connection, providerId);
-        pools.forEach((id, name) -> references.add(
-                new ImpactReference("credential_pool", id.toString(), name, "CHILD_CREDENTIAL_POOL")));
-        Map<UUID, String> models = referenceRepository.providerModelNamesByProvider(connection, providerId);
-        models.forEach((id, name) -> references.add(
-                new ImpactReference("provider_model", id.toString(), name, "CHILD_PROVIDER_MODEL")));
-
-        List<UUID> affectedAliases = referenceRepository.aliasIdsByProvider(connection, providerId);
-        return build("provider", providerId, providerName, references, affectedAliases);
-    }
-
-    public ImpactAnalysis analyzePool(Connection connection, UUID poolId, String poolName) {
-        List<ImpactReference> references = new ArrayList<>();
-        Map<UUID, String> credentials = referenceRepository.credentialNamesByPool(connection, poolId);
+        Map<UUID, String> credentials = referenceRepository.credentialNamesByChannel(connection, channelId);
         credentials.forEach((id, name) -> references.add(
-                new ImpactReference("credential", id.toString(), name, "CHILD_CREDENTIAL")));
-        Map<UUID, String> candidates = referenceRepository.candidateNamesByPool(connection, poolId);
+                new ImpactReference("channel_credential", id.toString(), name, "CHILD_CHANNEL_CREDENTIAL")));
+        Map<UUID, String> models = referenceRepository.upstreamModelNamesByChannel(connection, channelId);
+        models.forEach((id, name) -> references.add(
+                new ImpactReference("upstream_model", id.toString(), name, "CHILD_UPSTREAM_MODEL")));
+        Map<UUID, String> candidates = referenceRepository.candidateNamesByChannel(connection, channelId);
         candidates.forEach((id, name) -> references.add(
                 new ImpactReference("route_candidate", id.toString(), name, "ROUTE_REFERENCE")));
 
-        List<UUID> affectedAliases = aliasIdsOfPool(connection, poolId);
-        return build("credential_pool", poolId, poolName, references, affectedAliases);
+        List<UUID> affectedAliases = referenceRepository.aliasIdsByChannel(connection, channelId);
+        return build("channel", channelId, channelName, references, affectedAliases);
     }
 
     /** 停用/删除前的引用摘要比对；不一致抛 IMPACT_ANALYSIS_EXPIRED。 */
@@ -107,27 +96,5 @@ public class ImpactService {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 不可用", e);
         }
-    }
-
-    private List<UUID> aliasIdsOfPool(Connection connection, UUID poolId) {
-        // 池关联的 Alias 集合：候选关系去重
-        String sql = "SELECT DISTINCT alias_id FROM " + com.lightai.storage.dialect.SqlNames.table(schemaQualifier(), "route_candidate")
-                + " WHERE credential_pool_id = ? AND deleted_at IS NULL";
-        try (var statement = connection.prepareStatement(sql)) {
-            statement.setString(1, poolId.toString());
-            try (var rs = statement.executeQuery()) {
-                List<UUID> aliasIds = new ArrayList<>();
-                while (rs.next()) {
-                    aliasIds.add(rs.getObject(1, UUID.class));
-                }
-                return List.copyOf(aliasIds);
-            }
-        } catch (Exception e) {
-            throw new IllegalStateException("Alias引用查询失败", e);
-        }
-    }
-
-    private String schemaQualifier() {
-        return schemaName;
     }
 }

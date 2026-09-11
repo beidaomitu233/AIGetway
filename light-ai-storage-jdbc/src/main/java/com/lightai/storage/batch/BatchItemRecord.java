@@ -7,7 +7,7 @@ import java.util.UUID;
 public record BatchItemRecord(
         UUID id,
         UUID jobId,
-        UUID providerModelId,
+        UUID upstreamModelId,
         int sequence,
         String status,
         UUID checkRecordId,

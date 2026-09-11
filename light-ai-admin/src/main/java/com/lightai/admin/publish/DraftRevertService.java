@@ -38,7 +38,7 @@ public class DraftRevertService {
 
     private static final int MAX_ERROR_SUMMARY = 1000;
     private static final Set<String> REVERTABLE_TYPES = Set.of(
-            "provider", "credential_pool", "credential", "provider_model",
+            "channel", "channel_credential", "upstream_model",
             "model_alias", "route_candidate", "limit_policy", "reliability_policy");
 
     private final DataSource dataSource;

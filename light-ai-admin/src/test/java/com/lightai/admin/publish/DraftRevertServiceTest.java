@@ -57,7 +57,7 @@ class DraftRevertServiceTest {
     }
 
     private DraftChangeFixture change(String changeType) {
-        DraftChangeFixture fixture = new DraftChangeFixture("provider", UUID.randomUUID());
+        DraftChangeFixture fixture = new DraftChangeFixture("channel", UUID.randomUUID());
         changes.rows.add(new com.lightai.storage.draft.DraftChangeRow(
                 UUID.randomUUID(), fixture.entityType(), fixture.entityId(), "OpenAI", changeType,
                 List.of(), "admin", 2, 5, OffsetDateTime.now(), OffsetDateTime.now()));
@@ -110,7 +110,7 @@ class DraftRevertServiceTest {
     @Test
     void revertBlockedWhenOtherCreateDraftReferencesTarget() {
         DraftChangeFixture fixture = change("CREATE");
-        dependencies.block("provider", "候选引用 OpenAI");
+        dependencies.block("channel", "候选引用 OpenAI");
 
         assertThatThrownBy(() -> service.revertOne("req-1", "admin", "203.0.113.*",
                 fixture.entityType(), fixture.entityId().toString(), new RevertDraftCommand(2, 5, "撤销")))

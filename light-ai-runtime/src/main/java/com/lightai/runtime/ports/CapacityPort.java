@@ -11,15 +11,15 @@ import com.lightai.runtime.capacity.CapacityStore;
 public interface CapacityPort {
 
     /** Alias/Model/Credential 同维度预占；部分失败全不计数。 */
-    Reservation reserve(String aliasId, String modelId, String credentialId, long estimatedTokens);
+    Reservation reserve(String aliasId, String modelId, String channelCredentialId, long estimatedTokens);
 
     /** 使用当前 Trace 已固定快照中的三层限额预占。 */
-    default Reservation reserve(String aliasId, String modelId, String credentialId,
+    default Reservation reserve(String aliasId, String modelId, String channelCredentialId,
                                 long estimatedTokens, long maxTokens,
                                 CapacityStore.ScopeLimit aliasLimit,
                                 CapacityStore.ScopeLimit modelLimit,
                                 CapacityStore.ScopeLimit credentialLimit) {
-        return reserve(aliasId, modelId, credentialId, estimatedTokens);
+        return reserve(aliasId, modelId, channelCredentialId, estimatedTokens);
     }
 
     /** 结算在原预占窗口；调用结束（成功/失败按实际或估算用量）。 */
@@ -28,14 +28,14 @@ public interface CapacityPort {
     /** 释放（未发出请求、取消、排队失败）；并发各终止路径只释放一次。 */
     void release(String reservationId);
 
-    record Reservation(String reservationId, String aliasId, String modelId, String credentialId) {
+    record Reservation(String reservationId, String aliasId, String modelId, String channelCredentialId) {
     }
 
     static CapacityPort unlimited() {
         return new CapacityPort() {
             @Override
-            public Reservation reserve(String aliasId, String modelId, String credentialId, long estimatedTokens) {
-                return new Reservation(java.util.UUID.randomUUID().toString(), aliasId, modelId, credentialId);
+            public Reservation reserve(String aliasId, String modelId, String channelCredentialId, long estimatedTokens) {
+                return new Reservation(java.util.UUID.randomUUID().toString(), aliasId, modelId, channelCredentialId);
             }
 
             @Override

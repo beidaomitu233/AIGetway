@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
-import com.lightai.client.pool.SelectionStrategy;
+import com.lightai.client.channel.SelectionStrategy;
 import com.lightai.runtime.credential.CredentialSelector.CredentialView;
 import java.time.Instant;
 import java.util.UUID;
@@ -65,12 +65,12 @@ class CredentialSelectorTest {
                 view("RATE_LIMITED", true, NOW.plusSeconds(60), 0),
                 view("HEALTHY", true, null, 0));
         var handle = selector.select(pool, SelectionStrategy.LEAST_CONCURRENT, NOW);
-        assertThat(handle.credentialId()).isEqualTo(pool.get(1).id());
+        assertThat(handle.channelCredentialId()).isEqualTo(pool.get(1).id());
         // 复位时间已过：RATE_LIMITED 重新可用
         List<CredentialView> onlyThrottled = List.of(
                 view("RATE_LIMITED", true, NOW.minusSeconds(1), 0));
         var recovered = selector.select(onlyThrottled, SelectionStrategy.LEAST_CONCURRENT, NOW);
-        assertThat(recovered.credentialId()).isEqualTo(onlyThrottled.get(0).id());
+        assertThat(recovered.channelCredentialId()).isEqualTo(onlyThrottled.get(0).id());
     }
 
     @Test
@@ -80,7 +80,7 @@ class CredentialSelectorTest {
                 view("HEALTHY", true, null, 5),
                 view("HEALTHY", true, null, 1));
         var handle = selector.select(pool, SelectionStrategy.LEAST_CONCURRENT, NOW);
-        assertThat(handle.credentialId()).isEqualTo(pool.get(1).id());
+        assertThat(handle.channelCredentialId()).isEqualTo(pool.get(1).id());
     }
 
     @Test
@@ -90,7 +90,7 @@ class CredentialSelectorTest {
                 view("HEALTHY", true, null, 0), view("HEALTHY", true, null, 0));
         var first = selector.select(pool, SelectionStrategy.ROUND_ROBIN, NOW);
         var second = selector.select(pool, SelectionStrategy.ROUND_ROBIN, NOW);
-        assertThat(first.credentialId()).isNotEqualTo(second.credentialId());
+        assertThat(first.channelCredentialId()).isNotEqualTo(second.channelCredentialId());
     }
 
     @Test
@@ -100,6 +100,6 @@ class CredentialSelectorTest {
                 view("UNKNOWN", true, null, 0),
                 view("HEALTHY", true, null, 0));
         var handle = selector.select(pool, SelectionStrategy.WEIGHTED_RANDOM, NOW);
-        assertThat(handle.credentialId()).isEqualTo(pool.get(1).id());
+        assertThat(handle.channelCredentialId()).isEqualTo(pool.get(1).id());
     }
 }

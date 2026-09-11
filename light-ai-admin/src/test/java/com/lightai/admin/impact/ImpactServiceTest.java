@@ -24,8 +24,8 @@ class ImpactServiceTest {
     void impactVersionIsStableForSameReferenceSet() {
         List<ImpactReference> references = List.of(
                 new ImpactReference("credential_pool", UUID.randomUUID().toString(), "池A", "CHILD"));
-        String first = ImpactService.computeVersion("provider", ENTITY_ID, references, List.of());
-        String second = ImpactService.computeVersion("provider", ENTITY_ID, references, List.of());
+        String first = ImpactService.computeVersion("channel", ENTITY_ID, references, List.of());
+        String second = ImpactService.computeVersion("channel", ENTITY_ID, references, List.of());
         assertThat(first).isEqualTo(second).hasSize(64);
     }
 
@@ -35,16 +35,16 @@ class ImpactServiceTest {
                 new ImpactReference("credential_pool", UUID.randomUUID().toString(), "池A", "CHILD"));
         List<ImpactReference> after = List.of(
                 new ImpactReference("credential_pool", before.get(0).id(), "池A", "CHILD"),
-                new ImpactReference("provider_model", UUID.randomUUID().toString(), "gpt4o", "CHILD"));
-        String beforeVersion = ImpactService.computeVersion("provider", ENTITY_ID, before, List.of());
-        String afterVersion = ImpactService.computeVersion("provider", ENTITY_ID, after, List.of());
+                new ImpactReference("upstream_model", UUID.randomUUID().toString(), "gpt4o", "CHILD"));
+        String beforeVersion = ImpactService.computeVersion("channel", ENTITY_ID, before, List.of());
+        String afterVersion = ImpactService.computeVersion("channel", ENTITY_ID, after, List.of());
         assertThat(beforeVersion).isNotEqualTo(afterVersion);
     }
 
     @Test
     void confirmMismatchExpires() {
         ImpactService service = new ImpactService(new com.lightai.storage.reference.JdbcConfigReferenceRepository());
-        ImpactAnalysis fresh = new ImpactAnalysis("ticket-1", "provider", ENTITY_ID.toString(),
+        ImpactAnalysis fresh = new ImpactAnalysis("ticket-1", "channel", ENTITY_ID.toString(),
                 List.of(new ImpactReference("credential_pool", UUID.randomUUID().toString(), "池A", "CHILD")),
                 List.of(), false, List.of("credential_pool:池A"));
         assertThatCode(() -> service.verifyConfirmedImpact("ticket-1", fresh))

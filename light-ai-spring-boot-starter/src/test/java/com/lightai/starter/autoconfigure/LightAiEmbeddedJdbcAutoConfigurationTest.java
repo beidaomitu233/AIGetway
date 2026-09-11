@@ -4,7 +4,7 @@ import com.lightai.admin.LightAiAdminAutoConfiguration;
 import com.lightai.client.LightAiClient;
 import com.lightai.runtime.chat.ChatPipeline;
 import com.lightai.runtime.ports.CredentialSecretPort;
-import com.lightai.storage.credential.JdbcCredentialSecretPort;
+import com.lightai.storage.channel.JdbcChannelCredentialSecretPort;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
@@ -35,7 +35,7 @@ class LightAiEmbeddedJdbcAutoConfigurationTest {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(CredentialSecretPort.class);
                     assertThat(context.getBean(CredentialSecretPort.class))
-                            .isInstanceOf(JdbcCredentialSecretPort.class);
+                            .isInstanceOf(JdbcChannelCredentialSecretPort.class);
                     assertThat(context).hasSingleBean(ChatPipeline.class);
                     assertThat(context).hasSingleBean(LightAiClient.class);
                 });

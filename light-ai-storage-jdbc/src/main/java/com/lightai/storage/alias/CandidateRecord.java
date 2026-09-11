@@ -7,8 +7,8 @@ import java.util.UUID;
 public record CandidateRecord(
         UUID id,
         UUID aliasId,
-        UUID providerModelId,
-        UUID credentialPoolId,
+        UUID upstreamModelId,
+        UUID channelId,
         int priority,
         int weight,
         boolean enabled,

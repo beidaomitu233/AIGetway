@@ -12,27 +12,27 @@ class JdbcConfigSnapshotPortAdapterTest {
     @Test
     void shouldReadEnabledSnapshotLimitsAndMergeCredentialDirectLimitByMinimum() {
         String aliasId = UUID.randomUUID().toString();
-        String credentialId = UUID.randomUUID().toString();
+        String channelCredentialId = UUID.randomUUID().toString();
         Map<String, Object> content = Map.of(
                 "limit_policies", List.of(
                         Map.of("scope_type", "MODEL_ALIAS", "scope_id", aliasId,
                                 "rpm_limit", 10, "tpm_limit", 1000, "enabled", true),
-                        Map.of("scope_type", "CREDENTIAL", "scope_id", credentialId,
+                        Map.of("scope_type", "CREDENTIAL", "scope_id", channelCredentialId,
                                 "rpm_limit", 20, "tpm_limit", 2000,
                                 "concurrent_limit", 8, "enabled", true),
                         Map.of("scope_type", "PROVIDER_MODEL", "scope_id", UUID.randomUUID().toString(),
                                 "rpm_limit", 1, "enabled", false)),
                 "credentials", List.of(
-                        Map.of("id", credentialId, "rpm_limit", 15,
+                        Map.of("id", channelCredentialId, "rpm_limit", 15,
                                 "tpm_limit", 3000, "concurrent_limit", 5)));
 
         JdbcConfigSnapshotPortAdapter adapter = new JdbcConfigSnapshotPortAdapter("light_ai", () -> null);
         var limits = adapter.parseCapacityLimits(content);
 
         assertThat(limits.get("MODEL_ALIAS:" + aliasId).rpmLimit()).isEqualTo(10L);
-        assertThat(limits.get("CREDENTIAL:" + credentialId).rpmLimit()).isEqualTo(15L);
-        assertThat(limits.get("CREDENTIAL:" + credentialId).tpmLimit()).isEqualTo(2000L);
-        assertThat(limits.get("CREDENTIAL:" + credentialId).concurrentLimit()).isEqualTo(5);
+        assertThat(limits.get("CREDENTIAL:" + channelCredentialId).rpmLimit()).isEqualTo(15L);
+        assertThat(limits.get("CREDENTIAL:" + channelCredentialId).tpmLimit()).isEqualTo(2000L);
+        assertThat(limits.get("CREDENTIAL:" + channelCredentialId).concurrentLimit()).isEqualTo(5);
         assertThat(limits).hasSize(2);
     }
 

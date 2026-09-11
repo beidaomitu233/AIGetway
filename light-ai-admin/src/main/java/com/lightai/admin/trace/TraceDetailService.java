@@ -107,7 +107,7 @@ public class TraceDetailService {
 
             Map<UUID, String> masks = credentialFields
                     ? detailRepository.maskedValuesByCredentialIds(connection,
-                            attemptRows.stream().map(ObservationRows.AttemptRow::credentialId).toList())
+                            attemptRows.stream().map(ObservationRows.AttemptRow::channelCredentialId).toList())
                     : Map.of();
 
             return assemble(row, attemptRows, routeRows, queueRows, reservationRows,
@@ -189,7 +189,7 @@ public class TraceDetailService {
         List<TraceAttemptItem> attempts = new ArrayList<>(attemptRows.size());
         for (ObservationRows.AttemptRow attempt : attemptRows) {
             attempts.add(toAttemptItem(attempt, credentialFields, diagnostics,
-                    masks.get(attempt.credentialId())));
+                    masks.get(attempt.channelCredentialId())));
         }
         List<RouteDecisionItem> routeDecisions = routeRows.stream().map(r -> new RouteDecisionItem(
                 r.sequence(), idOrNull(r.routeCandidateId()), r.decision(), r.reasonCode(),
@@ -292,15 +292,15 @@ public class TraceDetailService {
                 ? Map.of() : attempt.resolvedParameters();
         return new TraceAttemptItem(
                 attempt.sequence(), attempt.attemptType(), attempt.status(),
-                attempt.providerNameSnapshot(), attempt.providerModelNameSnapshot(),
+                attempt.channelNameSnapshot(), attempt.upstreamModelNameSnapshot(),
                 attempt.modelIdSnapshot(),
-                credentialFields ? attempt.credentialNameSnapshot() : null,
+                credentialFields ? attempt.channelCredentialNameSnapshot() : null,
                 credentialFields ? maskedValue : null,
-                attempt.startedAt(), attempt.providerStartedAt(), attempt.responseHeadersAt(),
+                attempt.startedAt(), attempt.channelStartedAt(), attempt.responseHeadersAt(),
                 attempt.firstTokenAt(), attempt.endedAt(), attempt.dispatchMs(),
                 attempt.responseHeaderMs(), attempt.firstTokenMs(), attempt.totalMs(),
                 attempt.endpointHost(), attempt.httpStatus(),
-                diagnostics ? attempt.providerRequestId() : null,
+                diagnostics ? attempt.channelRequestId() : null,
                 attempt.responseCommitted(), attempt.finishReason(),
                 attempt.errorCode(), attempt.errorCategory(), attempt.errorStage(),
                 attempt.errorSummary(), attempt.retryable(), attempt.retryAfterMs(),

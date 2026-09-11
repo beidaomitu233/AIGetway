@@ -31,37 +31,33 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
 
     /** 实体类型 → (存储表, JSON 键, 白名单列)。顺序即快照键序。 */
     private static final List<EntityColumns> ENTITIES = List.of(
-            new EntityColumns("provider", "providers",
-                    "id, name, type, base_url, proxy_url, connect_timeout_ms, read_timeout_ms, "
-                            + "default_headers, enabled, version",
+            new EntityColumns("channel", "channels",
+                    "id, provider_id, name, base_url, proxy_url, connect_timeout_ms, read_timeout_ms, "
+                            + "stream_idle_timeout_ms, default_headers, priority, weight, status, version",
                     Set.of("default_headers"),
-                    Set.of()),
-            new EntityColumns("credential_pool", "credential_pools",
-                    "id, provider_id, name, selection_strategy, enabled, version",
-                    Set.of(),
                     Set.of("provider_id")),
-            new EntityColumns("credential", "credentials",
-                    "id, pool_id, name, secret_source, weight, rpm_limit, tpm_limit, concurrent_limit, "
-                            + "enabled, version",
+            new EntityColumns("channel_credential", "channel_credentials",
+                    "id, channel_id, name, masked_value, priority, weight, rpm_limit, tpm_limit, concurrent_limit, "
+                            + "status, version",
                     Set.of(),
-                    Set.of("pool_id")),
-            new EntityColumns("provider_model", "provider_models",
-                    "id, provider_id, model_id, display_name, model_type, tokenizer_family, context_window, "
+                    Set.of("channel_id")),
+            new EntityColumns("upstream_model", "upstream_models",
+                    "id, channel_id, model_id, display_name, model_type, tokenizer_family, context_window, "
                             + "max_output_tokens, support_stream, support_system_message, support_temperature, "
                             + "support_top_p, support_stop, temperature_min, temperature_max, top_p_min, top_p_max, "
                             + "max_stop_sequences, max_stop_length, default_temperature, default_top_p, "
                             + "default_max_tokens, default_stop, input_price, output_price, price_unit, currency, "
-                            + "enabled, import_source, import_adapter_version, version",
+                            + "status, import_source, import_adapter_version, version",
                     Set.of(),
-                    Set.of("provider_id")),
+                    Set.of("channel_id")),
             new EntityColumns("model_alias", "model_aliases",
                     "id, alias, display_name, description, route_strategy, enabled, version",
                     Set.of(),
                     Set.of()),
             new EntityColumns("route_candidate", "route_candidates",
-                    "id, alias_id, provider_model_id, credential_pool_id, priority, weight, enabled, version",
+                    "id, alias_id, upstream_model_id, channel_id, priority, weight, enabled, version",
                     Set.of(),
-                    Set.of("alias_id", "provider_model_id", "credential_pool_id")),
+                    Set.of("alias_id", "upstream_model_id", "channel_id")),
             new EntityColumns("limit_policy", "limit_policies",
                     "id, name, scope_type, scope_id, rpm_limit, tpm_limit, concurrent_limit, "
                             + "overflow_strategy, queue_timeout_ms, queue_max_size, enabled, version",

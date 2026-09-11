@@ -41,7 +41,7 @@ class DraftStateQueryServiceTest {
 
     @Test
     void stateMapsSnapshotAndModifiedRange() {
-        changes.add("provider", "OpenAI", "UPDATE", 3);
+        changes.add("channel", "OpenAI", "UPDATE", 3);
 
         ConfigDraftState state = service().state(context());
 
@@ -62,8 +62,8 @@ class DraftStateQueryServiceTest {
 
     @Test
     void summaryAggregatesByTypeAndEntity() {
-        changes.add("provider", "OpenAI", "CREATE", 1);
-        changes.add("provider", "OpenAI-2", "UPDATE", 2);
+        changes.add("channel", "OpenAI", "CREATE", 1);
+        changes.add("channel", "OpenAI-2", "UPDATE", 2);
         changes.add("model_alias", "gpt-alias", "CREATE", 1);
 
         DraftChangeSummary summary = service().summary(context());
@@ -71,15 +71,15 @@ class DraftStateQueryServiceTest {
         assertThat(summary.totalCount()).isEqualTo(3);
         assertThat(summary.createCount()).isEqualTo(2);
         assertThat(summary.updateCount()).isEqualTo(1);
-        assertThat(summary.byEntityType().get("provider")).isEqualTo(2);
+        assertThat(summary.byEntityType().get("channel")).isEqualTo(2);
         assertThat(summary.byEntityType().get("model_alias")).isEqualTo(1);
     }
 
     @Test
     void draftChangesMapsSensitiveFieldsAndBlockers() {
-        dependencies.block("provider", "候选引用 OpenAI");
+        dependencies.block("channel", "候选引用 OpenAI");
         changes.rows.add(new com.lightai.storage.draft.DraftChangeRow(
-                UUID.randomUUID(), "provider", UUID.randomUUID(), "OpenAI",
+                UUID.randomUUID(), "channel", UUID.randomUUID(), "OpenAI",
                 "UPDATE", List.of(
                 FieldChange.sensitiveChanged("secret_ref"),
                 FieldChange.changed("base_url", "https://a", "https://b")),
@@ -92,7 +92,7 @@ class DraftStateQueryServiceTest {
         assertThat(page.page()).isEqualTo(1);
         assertThat(page.sort()).isEqualTo("updated_at desc");
         DraftChangeItem item = page.items().get(0);
-        assertThat(item.entityType()).isEqualTo("provider");
+        assertThat(item.entityType()).isEqualTo("channel");
         assertThat(item.entityVersion()).isEqualTo(3);
         assertThat(item.modifiedByName()).isEqualTo("admin");
         assertThat(item.changedFields()).anySatisfy(change -> {
