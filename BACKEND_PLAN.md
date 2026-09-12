@@ -247,7 +247,7 @@ Windows、Temurin Java 17.0.19，Maven 使用 `D:/IntelliJ IDEA 2025.2.3/plugins
 
 - 新增 DUPLICATE_APPLICATION_CODE：HTTP 409、retryable=false、details.field=code。唯一约束并发冲突映射此码；格式非法仍为 FIELD_VALIDATION_FAILED/400。跨应用范围检查先于详情与影响读取。
 - 保留 page/page_size，默认 1/20，page_size 最大 100。keyword、status、environment、owner_id 保留；新增 department（精确匹配）、budget_status（NORMAL/EXHAUSTED/UNLIMITED）。任一有限维度 used+reserved>=limit 为 EXHAUSTED；两维都无限制为 UNLIMITED；其余 NORMAL。总数与分页使用相同权限和筛选条件。
-- 列表保留已明确基础字段，补 budget_status、requests_24h（非负整数）、success_rate_24h（0～1 decimal 字符串，无请求为 null）；model_count 表示授权且运行可用模型数。按 last_called_at desc、id asc 稳定排序，空最后调用时间排末尾；其他排序必须白名单。
+- 列表保留已明确基础字段，补 budget_status、requests_24h（非负十进制整数字符串）、success_rate_24h（0～1 decimal 字符串，无请求为 null）；model_count 表示授权且运行可用模型数。按 last_called_at desc、id asc 稳定排序，空最后调用时间排末尾；其他排序必须白名单。
 - 统一 query_started_at 为本页统计时间，24h 区间为 [query_started_at-24h,query_started_at)。先分页取应用，再按本页 ID 集合批量查模型、Key、额度和运行摘要；禁止逐应用查询。聚合失败返回明确错误，不填成功零值。
 - 归档只允许 DISABLED 且无运行请求/有效预占；存在占用返回 OBJECT_IN_USE/409。归档事务与准入登记统一锁定 application 行：准入在锁内复核 ACTIVE 并创建 Reservation，归档在锁内复核状态及占用；不能先查运行数后无锁写状态。旧请求通过 Reservation 持有占用直到终态，回收完成前阻止归档。
 - DB-201 提供按应用范围分页/批量摘要查询及归档互斥所需存储操作；后端可先实现端口与测试，真实并发须双数据库验收。
@@ -287,3 +287,12 @@ Windows、Temurin Java 17.0.19，Maven 使用 `D:/IntelliJ IDEA 2025.2.3/plugins
 - 成员读取可继续；成员写入方式、OIDC/SAML/可信网关头的最终选择仍待 BP-001/002 决策。允许通过既有 AuthContextProvider 端口完成权限单测，不能据此验收企业登录。
 - 跨应用拒绝返回 ACCESS_DENIED/403，审计只记 actor、action、target_id、request_id、result=DENIED；不得带出他人应用名称、Key 或请求正文。
 - BE-205 企业身份验收、真实 Provider 和应用首调 E2E 保持未验收；迁移、真实存储、权限和联调证据满足后由原负责人提请审查，任务表才能变更状态。
+
+### FE-P20 新交付补充契约（适用于原 BE-201/203/205，不新增领取）
+
+- 管理应用域的 64 位 Token 限额/用量/预占/剩余、Token delta、请求计数和 version/quota_version/policy_version/snapshot_no 统一使用十进制整数字符串传输，拒绝科学计数、带小数和越界值；非负字段范围为 0～9223372036854775807，有符号 delta 另校验最终值非负。页号、page_size、max_output_tokens 等有明确 32 位上限的字段仍为 JSON number；金额继续 decimal 字符串。只修改这些管理 DTO 契约，不全局更改序列化器或 OpenAI 兼容响应。前后端同批切换，并测试 9007199254740991、9007199254740992、9223372036854775807 的精确往返。
+- 应用列表首期 24h 摘要仅 requests_24h、success_rate_24h、last_called_at，峰值不在本轮列表契约中，不补虚假零值。若需要峰值，先在观测包确认采样窗口与聚合口径。
+- 新增创建表单候选 GET /admin/applications/model-options（尚无应用 ID），返回与 /{id}/model-options 相同结构；必须有创建权限且按操作者可授权模型集合裁剪，不能为准备创建越权读取全部资源。
+- 新增 POST /admin/applications/{id}/impact：body 为 version、action=STATUS_CHANGE/MODEL_PERMISSION_CHANGE；前者携带 target_status，后者携带 removed_model_ids。返回 data={application_id,version,snapshot_no,generated_at,affected_key_count,affected_key_ids,has_more_keys,requests_24h,running_requests,blockers}；Key ID 最多 50 个，计数为整数字符串，blockers 仅含 code/message。先验证当前操作者对目标动作的权限与应用范围，再查影响；不返回密钥原文/他人数据。预览不是写入许可，最终状态/模型命令仍重验版本、范围及占用。
+- 新增 GET /admin/applications/{id}/audit：page/page_size、action、result、from、to；响应 data.items/total/page/page_size，行含 id、operator_id、action、target_type、target_id、result、request_id、created_at、before_digest、after_digest。按 created_at desc/id desc；服务器按明确 application_id 关系限制范围，禁止靠全局关键字模糊筛选；数据无关联时返回真实可查范围并标明 legacy_partial，不拼造历史归属。审计读取权限与应用范围均须满足，依赖 DB-201 与 BE-P23 审计读取端口；端口由当前后端负责人协调，不接管别包文件。
+- 验收补充：创建前候选不泄露未授权模型；影响查询 403、版本冲突、超过 50 个 Key 截断及写入前竞态；应用审计隔离、空态、时间分页和遗留部分覆盖；上述端点实际未交付前保持对应任务未勾选。

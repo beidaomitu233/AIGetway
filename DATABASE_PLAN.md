@@ -204,6 +204,7 @@ JSON 字段必须给出稳定 schema、最大长度和脱敏要求。MySQL 5.7 �
 |---|---|---|
 | DB-201 application | 复用 code VARCHAR(64) 唯一、owner_id VARCHAR(128)、department VARCHAR(128) 可空、status/version | API owner_id 映射现有列；不新增同义 owner_subject_id。按状态/调用时间/ID 分页；应用成员范围在 SQL 限定。补索引前检查已有索引和查询计划。 |
 | DB-201 budget_reservation | 复用 application_id、status、expires_at、terminal_at | 补 (application_id,status) 索引供归档占用检查。所有受管理请求包括无限额/零成本请求均需登记，以应用行锁串行化准入与归档；过期行必须先完成取消/幂等回收，不能仅按 expires_at 忽略仍运行的请求。 |
+| DB-201 audit_log | 新增或复用 application_id ID 可空，逻辑关联 application；仅应用域事件必填，非应用事件/无法证明归属的遗留事件可空 | 索引 (application_id,created_at,id)；记录应用与其 Key/额度/授权操作的明确归属。升级只按可证明关系回填，禁止模糊匹配事件文案；服务读取遗留缺口输出 legacy_partial。用于 /applications/{id}/audit，与 BE-P23 审计端口协调。 |
 | DB-202 application_key | 新增 replaced_by_key_id ID 可空、grace_expires_at 时间可空；key_prefix、key_digest、masked_value 复用 | replaced_by_key_id 关联同应用新 Key；摘要仍唯一。名称是代际显示标签，取消本计划旧的 application_id+name 逻辑唯一建议。旧 Key 不删，历史调用仍指向原 ID。 |
 | DB-202 application_key_operation（新增） | id ID PK；application_id ID、operation VARCHAR(16)、target_key VARCHAR(36)、idempotency_key VARCHAR(128)、request_hash VARCHAR(64)、result_key_id ID、result_json JSON、created_at 时间均必填 | 唯一(application_id,operation,target_key,idempotency_key)；创建 target_key 固定空串，轮换为旧 Key ID。结果只含非敏感元数据，禁止保存 secret。与 Key 写入同事务；唯一冲突后读取原结果/校验 hash。 |
 | DB-203 application_quota_policy | 复用当前行和 version；新增 current_period_id ID、policy_version BIGINT，回填完成后必填 | 保持 application_id 唯一，作为当前策略入口；已用/预占可保留为当前周期投影，必须同事务更新。 |

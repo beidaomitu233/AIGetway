@@ -14,12 +14,12 @@
 
 | 任务包 | 编号 | 负责人/分支 | 修改范围 | 状态 | 依赖与入口 |
 |---|---|---|---|---|---|
-| FE-P20 | FE-201～FE-205 | 前端执行模型 codex-0912 / feature/frontend-p20-codex-0912 | light-ai-admin-ui/src/pages/applications/**、src/api/applications.ts、src/app/router.ts、应用测试与相关共用状态；FRONTEND_PLAN.md、COMMUNICATION.md | 进行中 | 2026-09-12 领取；BE-201/202 契约待收口，按已明确规则推进；独立 worktree .worktrees/frontend-p20-baseline |
+| FE-P20 | FE-201～FE-205 | 前端执行模型 codex-0912 / feature/frontend-p20-codex-0912 | 应用页面/API/测试；FRONTEND_PLAN.md、COMMUNICATION.md；暂停后续写入 | 阻塞 | 2026-09-12：418218d、ef8a972 前端子项及 56347c7 文档已合入远程 dev（5b0b55d）；typecheck/build 通过，199 测试通过，lint 0 error/81 历史 warning。FE-P20-001～004/BE-P20-001～005 待契约与真实联调；五项未勾选，保留负责人，未解除占用 |
 | FE-P21 | FE-211～FE-215 | 未领取 | light-ai-admin-ui | 待领取 | 可领取；对应 BE/DB 契约联调后验收 |
 | FE-P22 | FE-221～FE-225 | 未领取 | light-ai-admin-ui | 待领取 | 可领取；对应 BE/DB 契约联调后验收 |
 | FE-P23 | FE-231～FE-235 | 未领取 | light-ai-admin-ui | 待领取 | 可领取；对应 BE/DB 契约联调后验收 |
 | BE-P20 | BE-201～BE-205 | 后端执行模型 codex-be-0912 / feature/backend-p20-codex-be-0912 | light-ai-admin 应用/API/权限与测试、light-ai-client/application、必要 server/runtime 应用鉴权测试；BACKEND_PLAN.md、COMMUNICATION.md；不修改前端和数据库迁移 | 阻塞 | 2026-09-12：bd95691 已合入远程 dev；data 包装/GET 子资源/校验与 API 测试已交付；BE-P20-001～004 技术处理已确认，005 权限边界已明确、企业身份选型待确认；DB-P20 迁移/真实存储、真实 Provider、企业身份及首调 E2E 未验收；五项未勾选，保留原负责人及占用，整体维持阻塞；仅原负责人可推进无依赖子项，见 COMMUNICATION 第 8 节 |
-| BE-P21 | BE-211～BE-215 | 未领取 | client/admin/runtime/server/spi | 待领取 | 可领取；迁移与 DB 协调 |
+| BE-P21 | BE-211～BE-215 | 后端执行模型 codex-be-0912 / feature/backend-p21-codex-be-0912 | light-ai-admin/channel、upstream、alias、check、同步与权限映射；相关 client DTO、runtime/route 零权重排除、server 装配与后端测试；BACKEND_PLAN.md、COMMUNICATION.md；不修改前端和数据库迁移 | 进行中 | 2026-09-12 领取；渠道/上游/虚拟模型/嵌套路由契约与服务回归；独立 worktree .worktrees/backend-p21-codex-0912 |
 | BE-P22 | BE-221～BE-225 | 未领取 | client/admin/runtime/server/spi | 待领取 | 可领取；迁移与 DB 协调 |
 | BE-P23 | BE-231～BE-235 | 未领取 | client/admin/runtime/server/spi | 待领取 | 可领取；迁移与 DB 协调 |
 | DB-P20 | DB-201～DB-205 | 未领取 | storage-jdbc/storage-redis、版本迁移 | 待领取 | 可领取；先复核现有 V2/V3/V4 迁移，不重复建表 |

@@ -208,7 +208,7 @@
 
 原负责人 codex-0912 与原文件占用保持不变。后台契约的目标定义见 BACKEND_PLAN.md「BE-P20 架构处理结论」；下面是待实现接口，不能当作当前服务已返回的字段。
 
-- FE-201/202：新增 department、budget_status 筛选；分页沿用 page_size；DUPLICATE_APPLICATION_CODE/409 在 code 处提示并保留输入。requests_24h 为整数，success_rate_24h 为 0～1 字符串，无请求为 null；预算不足不与聚合加载失败混淆。
+- FE-201/202：新增 department、budget_status 筛选；分页沿用 page_size；DUPLICATE_APPLICATION_CODE/409 在 code 处提示并保留输入。requests_24h 为十进制整数字符串，success_rate_24h 为 0～1 字符串，无请求为 null；预算不足不与聚合加载失败混淆。列表峰值暂不展示，见 BACKEND_PLAN 补充契约。
 - FE-204：目标原文字段统一 secret，普通读取仅 key_prefix/masked_value。创建/轮换传同一逻辑提交的 idempotency_key；用户改变表单后生成新键，网络重试复用原键。secret_available=false 时只显示操作已生效但原文无法重取，不能显示复制按钮。宽限上限未配置时只开放立即轮换。
 - FE-205：allow_stream 替代 stream_allowed，null 表示继承；GET /model-options 用于授权候选，GET /models 用于已配置权限（可能失效），不得混用。取消授权仍需展示影响。
 - 额度展示 tokens_remaining、amount_remaining、period_id、policy_version、timezone、reset_at；null 上限显示无限制。降低至已用/预占以下允许提交，必须确认保存后停止新准入。SCHEDULED 只提示已预约，APPLIED 才提示已生效。
@@ -216,3 +216,27 @@
 - 企业身份、真实 Provider 和首次真实调用 E2E 保持未验收。同步契约改动必须由当前负责人合入，待前后端共同切换后移除旧字段使用，不增加长期双字段兼容。
 
 原负责人可按契约准备组件与接口夹具；只有真实接口及对应验收通过才能勾选 FE-201～205。
+
+数值、路径与新增读取接口的执行说明：
+
+- 64 位 Token/计数/版本按 BACKEND_PLAN 使用字符串；前端用 BigInt 或既有精确整数工具运算，提交仍为字符串，禁止先 Number 再转回。验证大于 JS 安全整数的值、最大 long、负数/越界和小数。
+- PRD 中 /applications 等仍是 V2 目标页面路径，当前实现 /ui/applications 是过渡现状。P20 不自行切换全站根路径；根路径/登录入口统一由 FE-P23/BE-205 交付并验收深链刷新、静态资源和返回地址。401 当前只清理身份/敏感状态并显示会话失效，身份源入口未确认前不跳转猜测的登录地址；路径和登录闭环继续列为待验收。
+- 创建使用无应用 ID 的 GET /admin/applications/model-options；已有应用用 /{id}/model-options。状态/取消授权前调 /{id}/impact 展示影响和阻止原因，提示预览时间；不得用预览替代最终 409 处理。应用审计使用 /{id}/audit，legacy_partial 要明确显示历史覆盖不完整。依赖端点未交付时仅准备夹具，不能称真实成功。
+
+## FE-P20 前端部分交付（2026-09-12）
+
+负责人：前端执行模型 codex-0912；分支 feature/frontend-p20-codex-0912。领取 7e6c6dc；前端实现 418218d、ef8a972，已同步后端 bd95691。以下仅为已实现并经前端测试验证的子项；FE-201～FE-205 的主勾选框全部保持未勾选，完整验收依赖 COMMUNICATION.md 的 BE-P20-001～005 和 FE-P20-001～004。
+
+| 任务 | 本次前端结果 | 待验收/阻塞 |
+|---|---|---|
+| FE-201 | 负责人筛选、最近调用默认排序、URL 还原、刷新/空态/403、身份切换清理；金额定点运算 | 部门/预算筛选、24h/峰值字段和范围真实联调，见 BE-P20-001 |
+| FE-202 | 显式填写额度、整数/decimal/币种/周期校验、无限制警告、保存摘要、编辑加载隔离、409 对比后保留输入 | code 冲突最终错误码、已发布可路由模型目录、企业身份权限与真实保存联调 |
+| FE-203 | 页签 URL 同步与权限、切换应用中止旧请求、局部错误重试、保留详情刷新、未知状态禁止写入 | 应用审计/影响接口、归档运行请求检查、最终页面路径与会话失效入口 |
+| FE-204 | 密钥级 RPM/TPM/模型子集/IP/CIDR/有效期校验；防重提交；一次性弹窗拆分、复制失败提示、离开清理与切换确认 | 新记录轮换/宽限/幂等与最终 secret/key_prefix 字段，见 BE-P20-002；现有立即轮换不等于 V2 全量验收 |
+| FE-205 | 已用/预占/剩余额度明细、精确金额、调整预览、低于用量警告、成员与流水局部错误、写权限检查 | 授权影响与能力交集、应用审计、降低额度后端仍拒绝、周期/重置字段与真实账本一致性 |
+
+验证环境：Windows、Node 20.19.6、npm 10.8.2，独立 worktree；npm ci 使用既有锁文件，无新增依赖。最终代码 ef8a972：npm run typecheck 通过；npm run lint（JSON 报告）0 error/81 warning，警告仅来自未修改的 ApplicationIntegrationPage.vue（44）、AuditDetailPage.vue（36）、AuditListPage.vue（1）；npm test 24 个文件/199 项通过、0 失败/0 跳过（本包新增 31 项，应用相关合计 39 项）；npm run build 通过；git diff --check 通过。
+
+浏览器验证：Playwright CLI + 本机 Vite + 明确标记的网络夹具，应用列表/详情/表单各在 1280×1080、1920×1080 检查；document 与 main 无额外横向溢出，表格容器内滚动。已查看三张 1280 截图，修复列表标题间距并复测几何。截图与原始日志仅存本地 output/playwright，不提交临时产物。此项不是实际后端或真实业务首调验收。
+
+未执行：真实企业登录、真实数据库/Redis/上游联调、应用密钥首调 E2E、宽限轮换、真实预算结算/归档互斥与性能。后端的 H2/MockMvc 结果为其独立证据，不冒称本次前端真实 E2E 通过。
