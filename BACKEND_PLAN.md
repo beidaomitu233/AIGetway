@@ -296,3 +296,25 @@ Windows、Temurin Java 17.0.19，Maven 使用 `D:/IntelliJ IDEA 2025.2.3/plugins
 - 新增 POST /admin/applications/{id}/impact：body 为 version、action=STATUS_CHANGE/MODEL_PERMISSION_CHANGE；前者携带 target_status，后者携带 removed_model_ids。返回 data={application_id,version,snapshot_no,generated_at,affected_key_count,affected_key_ids,has_more_keys,requests_24h,running_requests,blockers}；Key ID 最多 50 个，计数为整数字符串，blockers 仅含 code/message。先验证当前操作者对目标动作的权限与应用范围，再查影响；不返回密钥原文/他人数据。预览不是写入许可，最终状态/模型命令仍重验版本、范围及占用。
 - 新增 GET /admin/applications/{id}/audit：page/page_size、action、result、from、to；响应 data.items/total/page/page_size，行含 id、operator_id、action、target_type、target_id、result、request_id、created_at、before_digest、after_digest。按 created_at desc/id desc；服务器按明确 application_id 关系限制范围，禁止靠全局关键字模糊筛选；数据无关联时返回真实可查范围并标明 legacy_partial，不拼造历史归属。审计读取权限与应用范围均须满足，依赖 DB-201 与 BE-P23 审计读取端口；端口由当前后端负责人协调，不接管别包文件。
 - 验收补充：创建前候选不泄露未授权模型；影响查询 403、版本冲突、超过 50 个 Key 截断及写入前竞态；应用审计隔离、空态、时间分页和遗留部分覆盖；上述端点实际未交付前保持对应任务未勾选。
+
+## BE-P21 本次执行与验收记录（2026-09-12）
+
+负责人 codex-be-0912；领取 BE-211～BE-215，领取提交 45ce9c9；runtime 与凭证 JDBC 修复范围已分别单独登记并普通推送。独立目录 .worktrees/backend-p21-codex-0912。本轮只修改后端和执行文档，无前端与数据库迁移。
+
+| 任务 | 本次交付 | 未满足验收，保持未勾选 |
+|---|---|---|
+| BE-211 | /admin/channels CRUD/状态/影响/检测路径收口；规范 UUID、鉴权、SSRF、敏感头和版本回归 | 精确 V2 DTO、即时状态/广播及运行影响契约 BE-P21-001 |
+| BE-212 | 嵌套 credentials 全操作校验渠道归属；加密插入 SQL 修复；轮换递增 version/secret_version、拒绝旧版本；掩码读取、更新校验和删除存储失败拒绝 | priority/冷却/最后可用 Key 与共享占用互斥 BE-P21-002；真实 Provider 未执行 |
+| BE-213 | /admin/upstream-models 和渠道 models；真实 model_id 必填、启用价格完整、路径不可暗换；批量 DTO/归属/事务/连接释放修复 | 同步预览/锁定字段与批量表冲突 BE-P21-003/006，当前合法批量请求明确返回 503 |
+| BE-214 | /admin/virtual-models 路径、ID/权限回归 | 能力交集、显式收紧和应用影响 BE-P21-004 |
+| BE-215 | 嵌套路由归属、不可更改渠道/模型、重复候选与参数校验；weight=0 保存且运行主选/回退均排除 | 活动快照、真实健康/容量和发布验收 BE-P21-005 |
+
+主要文件：admin 下 ChannelController/Service、ChannelCredentialController/Service、UpstreamModelController/Service、ModelImportService、ModelAliasController/Service、RouteCandidateService、ResourceIds；client/RouteCandidateSaveCommand；runtime/RouteService；storage-jdbc/JdbcChannelCredentialRepository；ResourceApiContractTest、RouteServiceTest。关联表 channel、channel_credential、upstream_model、virtual_model、route_candidate、draft_state、draft_change、audit_log、batch_check_job/item、object_runtime_state、channel_check_record、capacity_reservation_item；未改变表结构或 DATABASE_PLAN 执行状态。
+
+测试环境 Windows / Java 17.0.19 / 项目 Maven 与 JUnit5、MockMvc、H2 迁移、真实 JDBC/服务/AES-GCM。新增 11 项 API 测试及 1 项零权重运行测试，覆盖鉴权、只读角色、非法 ID/空请求、SSRF、敏感头、跨父资源、重复名称/路由、不可变字段、价格、加密轮换与旧版本、审计失败事务回滚、真实 schema 不可用时拒绝成功。
+
+功能目录执行 mvn -B verify：14 模块 BUILD SUCCESS；453 项中 437 通过、16 跳过，0 失败/错误。包含 Java 编译类型检查、单元/API 测试及构建。仓库无独立后端 lint 命令，使用 git diff --check 检查补丁格式，不能冒称独立 lint 通过。MySQL 2、PostgreSQL 3、Redis 11 环境测试因缺 LAI_IT_MYSQL_URL/LAI_IT_DB_URL/LAI_IT_REDIS_URI 跳过；真实 Provider、企业身份、前后端 E2E、多节点容量和性能未执行。H2 验证不能替代真实数据库验收。
+
+COMMUNICATION.md 已登记 BE-P21-001～006，均待确认。BE-211～215 均未达到整项完成标准，不勾选；仅交付以上已验证子项，整包阻塞并保留原负责人，避免其他 Agent 重复实现。后续数据库迁移与契约确认后由原负责人继续验收。
+
+集成交付：功能提交 c08d625，文档提交 36e1cbc；2304acf 保留最新架构与前端记录后合入独立本地 dev。独立集成目录再次 mvn -B verify：14 模块成功，453 项中 437 通过、16 环境跳过，0 失败/错误；git diff --check 通过。普通推送远程结果以 TASK_STATUS.md 最终记录为准。

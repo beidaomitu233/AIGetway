@@ -135,11 +135,12 @@ public class ChannelCredentialService {
         }
     }
 
-    public ChannelCredentialDetail detail(RequestContext context, String rawId) {
+    public ChannelCredentialDetail detail(RequestContext context, String rawChannelId, String rawId) {
         RequestPermissions.require(context, Permissions.CREDENTIAL_VIEW);
         UUID id = parseId(rawId);
+        UUID parentId = parseId(rawChannelId);
         try (Connection connection = dataSource.getConnection()) {
-            ChannelCredentialRecord record = requireCredentialLive(connection, id);
+            ChannelCredentialRecord record = requireInChannel(connection, parentId, requireCredentialLive(connection, id));
             return toDetail(connection, record);
         } catch (LightAiException e) {
             throw e;
@@ -202,12 +203,20 @@ public class ChannelCredentialService {
         }
     }
 
-    public ManagementOperationResult<ChannelCredentialDetail> update(RequestContext context, String rawId,
+    public ManagementOperationResult<ChannelCredentialDetail> update(RequestContext context, String rawChannelId, String rawId,
                                                                     ChannelCredentialUpdateCommand command) {
         RequestPermissions.require(context, Permissions.CREDENTIAL_MANAGE);
         UUID id = parseId(rawId);
+        UUID parentId = parseId(rawChannelId);
         if (command.version() == null || command.version() < 1) {
             throw fieldError("version", "REQUIRED", "编辑操作必须提交正整数 version");
+        }
+        if (command.name() == null || command.name().strip().length() < 2
+                || command.name().strip().length() > 64) {
+            throw fieldError("name", "INVALID", "name 长度必须为 2—64");
+        }
+        if (command.secretRef() != null) {
+            throw new LightAiException(ErrorCode.CONFIG_FIELD_IMMUTABLE, "秘密引用只能通过轮换修改");
         }
         String requestId = context.requestId();
 
@@ -215,18 +224,23 @@ public class ChannelCredentialService {
                 requestId, context.authContext().userId(), sourceMode, context.sourceIpMasked(),
                 "UPDATE", ENTITY_TYPE.toLowerCase(), id.toString(), command.version(),
                 connection -> credentialRepository.lockLiveById(connection, id)
-                        .map(ChannelCredentialRecord::version).orElse(null),
+                        .map(record -> requireInChannel(connection, parentId, record).version()).orElse(null),
                 connection -> {
-                    ChannelCredentialRecord current = credentialRepository.lockLiveById(connection, id)
-                            .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND,
-                                    "渠道 Key 不存在或已删除"));
+                    ChannelCredentialRecord current = requireInChannel(connection, parentId,
+                            credentialRepository.lockLiveById(connection, id)
+                                    .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND,
+                                            "渠道 Key 不存在或已删除")));
+                    if (!current.name().equals(command.name().strip())
+                            && credentialRepository.existsByLiveNameInChannel(connection, parentId, command.name().strip())) {
+                        throw nameConflict();
+                    }
                     if (command.weight() == null || command.weight() < ChannelCredentialCreateCommand.WEIGHT_MIN
                             || command.weight() > ChannelCredentialCreateCommand.WEIGHT_MAX) {
                         throw fieldError("weight", "OUT_OF_RANGE", "weight 范围 1—100");
                     }
                     validateLimits(command.rpmLimit(), command.tpmLimit(), command.concurrentLimit());
                     ChannelCredentialRecord updated = credentialRepository.update(connection, new ChannelCredentialRecord(
-                            current.id(), current.channelId(), command.name(),
+                            current.id(), current.channelId(), command.name().strip(),
                             current.secretCiphertext(), current.secretRefCiphertext(), current.keyId(),
                             current.maskedValue(), current.secretVersion(), current.rotatedAt(),
                             current.priority(), command.weight(), command.rpmLimit(),
@@ -241,7 +255,7 @@ public class ChannelCredentialService {
                 }));
 
         try (Connection connection = dataSource.getConnection()) {
-            ChannelCredentialRecord record = requireCredentialLive(connection, id);
+            ChannelCredentialRecord record = requireInChannel(connection, parentId, requireCredentialLive(connection, id));
             return new ManagementOperationResult<>(id.toString(), result.entityVersion(),
                     toDetail(connection, record), true, result.draftRevision(), requestId);
         } catch (LightAiException e) {
@@ -252,10 +266,11 @@ public class ChannelCredentialService {
     }
 
     /** 轮换（BE-013）：秘密独立于草稿事务即时生效；两次输入必须一致。 */
-    public ManagementOperationResult<ChannelCredentialDetail> rotate(RequestContext context, String rawId,
+    public ManagementOperationResult<ChannelCredentialDetail> rotate(RequestContext context, String rawChannelId, String rawId,
                                                                     ChannelCredentialRotateCommand command) {
         RequestPermissions.require(context, Permissions.CREDENTIAL_MANAGE);
         UUID id = parseId(rawId);
+        UUID parentId = parseId(rawChannelId);
         if (command.version() == null || command.version() < 1) {
             throw fieldError("version", "REQUIRED", "轮换操作必须提交正整数 version");
         }
@@ -273,13 +288,14 @@ public class ChannelCredentialService {
         // 轮换属于独立即时事务：不取草稿锁，不产生草稿差异，只写审计
         draftWriteService.executeStandalone(new DraftWriteCommand(
                 requestId, context.authContext().userId(), sourceMode, context.sourceIpMasked(),
-                "ROTATE", ENTITY_TYPE.toLowerCase(), id.toString(), command.version(),
+                "UPDATE", ENTITY_TYPE.toLowerCase(), id.toString(), command.version(),
                 connection -> credentialRepository.lockLiveById(connection, id)
-                        .map(ChannelCredentialRecord::version).orElse(null),
+                        .map(record -> requireInChannel(connection, parentId, record).version()).orElse(null),
                 connection -> {
-                    ChannelCredentialRecord current = credentialRepository.lockLiveById(connection, id)
-                            .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND,
-                                    "渠道 Key 不存在或已删除"));
+                    ChannelCredentialRecord current = requireInChannel(connection, parentId,
+                            credentialRepository.lockLiveById(connection, id)
+                                    .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND,
+                                            "渠道 Key 不存在或已删除")));
                     // secret_source 不可切换：只写入与既有来源对应的密文列
                     byte[] secret = current.secretRefCiphertext() != null ? null : ciphertext;
                     byte[] ref = current.secretRefCiphertext() != null ? ciphertext : null;
@@ -288,12 +304,12 @@ public class ChannelCredentialService {
                     credentialRepository.updateSecret(connection, id, secret, ref,
                             secretCipher.keyId(), masked);
                     return new DraftEntityChange(ENTITY_TYPE.toLowerCase(), id, current.name(),
-                            "ROTATE", current.version(),
+                            "UPDATE", current.version() + 1,
                             List.of(FieldChange.sensitiveChanged("secret_value")));
                 }));
 
         try (Connection connection = dataSource.getConnection()) {
-            ChannelCredentialRecord record = requireCredentialLive(connection, id);
+            ChannelCredentialRecord record = requireInChannel(connection, parentId, requireCredentialLive(connection, id));
             return new ManagementOperationResult<>(id.toString(), record.version(),
                     toDetail(connection, record), false, null, requestId);
         } catch (LightAiException e) {
@@ -303,10 +319,11 @@ public class ChannelCredentialService {
         }
     }
 
-    public ManagementOperationResult<ChannelCredentialDetail> setEnabled(RequestContext context, String rawId,
+    public ManagementOperationResult<ChannelCredentialDetail> setEnabled(RequestContext context, String rawChannelId, String rawId,
                                                                         boolean enabled, Long version) {
         RequestPermissions.require(context, Permissions.CREDENTIAL_MANAGE);
         UUID id = parseId(rawId);
+        UUID parentId = parseId(rawChannelId);
         if (version == null || version < 1) {
             throw fieldError("version", "REQUIRED", "version 必填");
         }
@@ -315,11 +332,12 @@ public class ChannelCredentialService {
                 requestId, context.authContext().userId(), sourceMode, context.sourceIpMasked(),
                 enabled ? "ENABLE" : "DISABLE", ENTITY_TYPE.toLowerCase(), id.toString(), version,
                 connection -> credentialRepository.lockLiveById(connection, id)
-                        .map(ChannelCredentialRecord::version).orElse(null),
+                        .map(record -> requireInChannel(connection, parentId, record).version()).orElse(null),
                 connection -> {
-                    ChannelCredentialRecord current = credentialRepository.lockLiveById(connection, id)
-                            .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND,
-                                    "渠道 Key 不存在或已删除"));
+                    ChannelCredentialRecord current = requireInChannel(connection, parentId,
+                            credentialRepository.lockLiveById(connection, id)
+                                    .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND,
+                                            "渠道 Key 不存在或已删除")));
                     ChannelCredentialRecord saved = credentialRepository.setEnabled(connection, id, enabled);
                     return new DraftEntityChange(ENTITY_TYPE.toLowerCase(), id, current.name(),
                             enabled ? "ENABLE" : "DISABLE", saved.version(),
@@ -327,7 +345,7 @@ public class ChannelCredentialService {
                 }));
 
         try (Connection connection = dataSource.getConnection()) {
-            ChannelCredentialRecord record = requireCredentialLive(connection, id);
+            ChannelCredentialRecord record = requireInChannel(connection, parentId, requireCredentialLive(connection, id));
             return new ManagementOperationResult<>(id.toString(), result.entityVersion(),
                     toDetail(connection, record), true, result.draftRevision(), requestId);
         } catch (LightAiException e) {
@@ -337,10 +355,11 @@ public class ChannelCredentialService {
         }
     }
 
-    public ManagementOperationResult<ChannelCredentialDetail> delete(RequestContext context, String rawId,
+    public ManagementOperationResult<ChannelCredentialDetail> delete(RequestContext context, String rawChannelId, String rawId,
                                                                     Long version) {
         RequestPermissions.require(context, Permissions.CREDENTIAL_MANAGE);
         UUID id = parseId(rawId);
+        UUID parentId = parseId(rawChannelId);
         if (version == null || version < 1) {
             throw fieldError("version", "REQUIRED", "version 必填");
         }
@@ -349,11 +368,12 @@ public class ChannelCredentialService {
                 requestId, context.authContext().userId(), sourceMode, context.sourceIpMasked(),
                 "DELETE", ENTITY_TYPE.toLowerCase(), id.toString(), version,
                 connection -> credentialRepository.lockLiveById(connection, id)
-                        .map(ChannelCredentialRecord::version).orElse(null),
+                        .map(record -> requireInChannel(connection, parentId, record).version()).orElse(null),
                 connection -> {
-                    ChannelCredentialRecord current = credentialRepository.lockLiveById(connection, id)
-                            .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND,
-                                    "渠道 Key 不存在或已删除"));
+                    ChannelCredentialRecord current = requireInChannel(connection, parentId,
+                            credentialRepository.lockLiveById(connection, id)
+                                    .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND,
+                                            "渠道 Key 不存在或已删除")));
                     // 运行占用检查：仍有并发 Attempt 占用时不能删除（容量运行时 BE-P04 提供判定）
                     long activeReservations = countActiveReservations(connection, id);
                     if (activeReservations > 0) {
@@ -372,15 +392,16 @@ public class ChannelCredentialService {
     // ---------- 内部 ----------
 
     /** 渠道 Key 检测（BE-013）：目标为所属渠道，检测记录 target_type=CHANNEL_CREDENTIAL。 */
-    public com.lightai.client.channel.ChannelCheckRecord check(RequestContext context, String rawId,
+    public com.lightai.client.channel.ChannelCheckRecord check(RequestContext context, String rawChannelId, String rawId,
                                                                com.lightai.client.channel.ChannelCheckCommand command) {
         RequestPermissions.require(context, Permissions.CREDENTIAL_CHECK);
         UUID id = parseId(rawId);
+        UUID parentId = parseId(rawChannelId);
         OffsetDateTime startedAt = OffsetDateTime.now();
         ChannelCredentialRecord credential;
         ChannelRecord channel;
         try (Connection connection = dataSource.getConnection()) {
-            credential = requireCredentialLive(connection, id);
+            credential = requireInChannel(connection, parentId, requireCredentialLive(connection, id));
             channel = channelRepository.findLiveById(connection, credential.channelId())
                     .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "渠道不存在或已删除"));
         } catch (LightAiException e) {
@@ -443,8 +464,7 @@ public class ChannelCredentialService {
                 return rs.getLong(1);
             }
         } catch (Exception e) {
-            // 容量存储尚未迁移（BE-P04）时按无占用处理，删除仍受草稿与审计保护
-            return 0;
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "无法确认渠道 Key 运行占用，拒绝删除");
         }
     }
 
@@ -491,11 +511,17 @@ public class ChannelCredentialService {
         if (record.secretRefCiphertext() == null) {
             return null;
         }
-        return secretCipher.decrypt(record.secretRefCiphertext())
-                .map(value -> SecretMasker.maskRef(new String(value)))
-                .orElse(null);
+        return maskedValueOf(record);
     }
 
+    private ChannelCredentialRecord requireInChannel(Connection connection, UUID parentId,
+                                                        ChannelCredentialRecord record) {
+        requireChannelLive(connection, parentId);
+        if (!parentId.equals(record.channelId())) {
+            throw new LightAiException(ErrorCode.OBJECT_REFERENCE_INVALID, "渠道 Key 不属于指定渠道");
+        }
+        return record;
+    }
     private void requireChannelLive(Connection connection, UUID channelId) {
         channelRepository.findLiveById(connection, channelId)
                 .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "渠道不存在或已删除"));
@@ -541,14 +567,7 @@ public class ChannelCredentialService {
     }
 
     public static UUID parseId(String rawId) {
-        if (rawId == null || rawId.isBlank()) {
-            throw new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "对象不存在或已删除");
-        }
-        try {
-            return UUID.fromString(rawId.strip());
-        } catch (IllegalArgumentException e) {
-            throw new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "对象不存在或已删除");
-        }
+        return com.lightai.admin.web.ResourceIds.parse(rawId);
     }
 
     private static LightAiException nameConflict() {

@@ -45,7 +45,7 @@ public class JdbcChannelCredentialRepository extends AbstractJdbcRepository {
 
     public void insert(Connection connection, ChannelCredentialRecord record) {
         DatabaseDialect d = dialect(connection);
-        String insertColumns = COLUMNS.substring(0, COLUMNS.lastIndexOf(", created_at"));
+        String insertColumns = COLUMNS;
         String placeholders = "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
                 + d.nowFunction() + ", " + d.nowFunction();
         String sql = "INSERT INTO " + qualify(connection, "channel_credential") + " (" + insertColumns + ") "
@@ -176,7 +176,8 @@ public class JdbcChannelCredentialRepository extends AbstractJdbcRepository {
         DatabaseDialect d = dialect(connection);
         String sql = "UPDATE " + qualify(connection, "channel_credential")
                 + " SET secret_ciphertext = ?, secret_ref_ciphertext = ?, key_id = ?, masked_value = ?, "
-                + "secret_version = secret_version + 1, rotated_at = " + d.nowFunction()
+                + "version = version + 1, secret_version = secret_version + 1, updated_at = " + d.nowFunction()
+                + ", rotated_at = " + d.nowFunction()
                 + " WHERE id = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setBytes(1, ciphertext);

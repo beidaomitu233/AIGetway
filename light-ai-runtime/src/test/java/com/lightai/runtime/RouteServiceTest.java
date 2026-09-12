@@ -41,6 +41,18 @@ class RouteServiceTest {
     };
 
     @Test
+    void zeroWeightNeverEntersPrimaryOrFallbackOrder() {
+        RouteService service = new RouteService(FIXED);
+        var zero = candidate(1, 0, true, true, 100000L);
+        var positive = candidate(20, 1, true, true, 100000L);
+        var requirement = new CapabilityRequirement(false, false, 10, 10);
+        var mixed = service.route(List.of(zero, positive), requirement);
+        assertThat(mixed.ordered()).containsExactly(positive);
+        assertThat(mixed.excluded()).extracting(CapabilityRequirement.ExcludedCandidate::reason)
+                .containsExactly("ZERO_WEIGHT");
+        assertThat(service.route(List.of(zero), requirement).ordered()).isEmpty();
+    }
+    @Test
     void streamRequirementFiltersNonStreamingCandidates() {
         RouteService service = new RouteService(FIXED);
         var decision = service.route(

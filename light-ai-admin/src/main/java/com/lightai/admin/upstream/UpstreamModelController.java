@@ -3,6 +3,7 @@ package com.lightai.admin.upstream;
 import com.lightai.admin.web.CommandBodies;
 import com.lightai.admin.web.ManagementResponses;
 import com.lightai.admin.web.RequestContext;
+import com.lightai.admin.web.ResourceIds;
 import com.lightai.client.management.ManagementOperationResult;
 import com.lightai.client.upstream.ImportResult;
 import com.lightai.client.upstream.UpstreamModelDetail;
@@ -40,14 +41,14 @@ public class UpstreamModelController {
         this.importService = importService;
     }
 
-    @GetMapping("/admin/provider-models")
+    @GetMapping("/admin/upstream-models")
     public ResponseEntity<String> listAll(HttpServletRequest request) {
         PageResult<UpstreamModelDetail> page = modelService.listAll(context(request), queryParams(request));
         return json(ManagementResponses.ok(page));
     }
 
-    @PostMapping("/admin/provider-models")
-    public ResponseEntity<String> createTopLevel(@RequestBody String body, HttpServletRequest request) {
+    @PostMapping("/admin/upstream-models")
+    public ResponseEntity<String> createTopLevel(@RequestBody(required = false) String body, HttpServletRequest request) {
         UpstreamModelSaveCommand command = CommandBodies.parse(body, UpstreamModelSaveCommand.class);
         String pid = command.channelId();
         if (pid == null || pid.isBlank()) {
@@ -59,47 +60,47 @@ public class UpstreamModelController {
                     "channel_id 为必填项", "channel_id");
         }
         ManagementOperationResult<UpstreamModelDetail> result = modelService.create(
-                context(request), java.util.UUID.fromString(pid), command);
+                context(request), ResourceIds.parse(pid), command);
         return json(ManagementResponses.ok(result));
     }
 
-    @GetMapping("/admin/providers/{channelId}/models")
+    @GetMapping("/admin/channels/{channelId}/models")
     public ResponseEntity<String> listByProvider(@PathVariable String channelId,
                                                  HttpServletRequest request) {
         PageResult<UpstreamModelDetail> page = modelService.listByProvider(context(request),
-                java.util.UUID.fromString(channelId), queryParams(request));
+                ResourceIds.parse(channelId), queryParams(request));
         return json(ManagementResponses.ok(page));
     }
 
-    @PostMapping("/admin/providers/{channelId}/models")
-    public ResponseEntity<String> create(@PathVariable String channelId, @RequestBody String body,
+    @PostMapping("/admin/channels/{channelId}/models")
+    public ResponseEntity<String> create(@PathVariable String channelId, @RequestBody(required = false) String body,
                                          HttpServletRequest request) {
         UpstreamModelSaveCommand command = CommandBodies.parse(body, UpstreamModelSaveCommand.class);
         ManagementOperationResult<UpstreamModelDetail> result = modelService.create(
-                context(request), java.util.UUID.fromString(channelId), command);
+                context(request), ResourceIds.parse(channelId), command);
         return json(ManagementResponses.ok(result));
     }
 
-    @GetMapping("/admin/provider-models/{id}")
+    @GetMapping("/admin/upstream-models/{id}")
     public ResponseEntity<String> detail(@PathVariable String id, HttpServletRequest request) {
         return json(ManagementResponses.ok(modelService.detail(context(request), id)));
     }
 
-    @PutMapping("/admin/provider-models/{id}")
-    public ResponseEntity<String> update(@PathVariable String id, @RequestBody String body,
+    @PutMapping("/admin/upstream-models/{id}")
+    public ResponseEntity<String> update(@PathVariable String id, @RequestBody(required = false) String body,
                                          HttpServletRequest request) {
         UpstreamModelSaveCommand command = CommandBodies.parse(body, UpstreamModelSaveCommand.class);
         return json(ManagementResponses.ok(modelService.update(context(request), id, command)));
     }
 
-    @GetMapping("/admin/provider-models/{id}/impact")
+    @GetMapping("/admin/upstream-models/{id}/impact")
     public ResponseEntity<String> impact(@PathVariable String id, HttpServletRequest request) {
         return json(ManagementResponses.ok(modelService.impact(context(request), id,
                 request.getParameter("operation"))));
     }
 
-    @PostMapping("/admin/provider-models/{id}/enable")
-    public ResponseEntity<String> enable(@PathVariable String id, @RequestBody String body,
+    @PostMapping("/admin/upstream-models/{id}/enable")
+    public ResponseEntity<String> enable(@PathVariable String id, @RequestBody(required = false) String body,
                                          HttpServletRequest request) {
         com.lightai.client.management.VersionCommand command =
                 CommandBodies.parse(body, com.lightai.client.management.VersionCommand.class);
@@ -107,8 +108,8 @@ public class UpstreamModelController {
                 context(request), id, true, command.version(), null)));
     }
 
-    @PostMapping("/admin/provider-models/{id}/disable")
-    public ResponseEntity<String> disable(@PathVariable String id, @RequestBody String body,
+    @PostMapping("/admin/upstream-models/{id}/disable")
+    public ResponseEntity<String> disable(@PathVariable String id, @RequestBody(required = false) String body,
                                           HttpServletRequest request) {
         com.lightai.client.management.ImpactConfirmCommand command =
                 CommandBodies.parse(body, com.lightai.client.management.ImpactConfirmCommand.class);
@@ -116,8 +117,8 @@ public class UpstreamModelController {
                 context(request), id, false, command.version(), command.confirmedImpactVersion())));
     }
 
-    @DeleteMapping("/admin/provider-models/{id}")
-    public ResponseEntity<String> delete(@PathVariable String id, @RequestBody String body,
+    @DeleteMapping("/admin/upstream-models/{id}")
+    public ResponseEntity<String> delete(@PathVariable String id, @RequestBody(required = false) String body,
                                          HttpServletRequest request) {
         com.lightai.client.management.ImpactConfirmCommand command =
                 CommandBodies.parse(body, com.lightai.client.management.ImpactConfirmCommand.class);
@@ -125,27 +126,27 @@ public class UpstreamModelController {
                 context(request), id, command.version(), command.confirmedImpactVersion())));
     }
 
-    @PostMapping("/admin/provider-models/{id}/check")
-    public ResponseEntity<String> check(@PathVariable String id, @RequestBody String body,
+    @PostMapping("/admin/upstream-models/{id}/check")
+    public ResponseEntity<String> check(@PathVariable String id, @RequestBody(required = false) String body,
                                         HttpServletRequest request) {
         ChannelCheckCommand command = CommandBodies.parse(body, ChannelCheckCommand.class);
         return json(ManagementResponses.ok(modelService.check(context(request), id, command)));
     }
 
-    @PostMapping("/admin/provider-models/import")
-    public ResponseEntity<String> importModels(@RequestBody String body, HttpServletRequest request) {
+    @PostMapping("/admin/upstream-models/import")
+    public ResponseEntity<String> importModels(@RequestBody(required = false) String body, HttpServletRequest request) {
         UpstreamModelImportCommand command =
                 CommandBodies.parse(body, UpstreamModelImportCommand.class);
         ImportResult result = importService.importModels(context(request), command);
         return json(ManagementResponses.ok(result));
     }
 
-    @PostMapping("/admin/provider-models/batch-check")
-    public ResponseEntity<String> batchCheck(@RequestBody String body, HttpServletRequest request) {
+    @PostMapping("/admin/upstream-models/batch-check")
+    public ResponseEntity<String> batchCheck(@RequestBody(required = false) String body, HttpServletRequest request) {
         BatchCheckBody command = CommandBodies.parse(body, BatchCheckBody.class);
         BatchJobRecord job = importService.createBatchCheck(context(request),
-                command.getProviderId(), command.getProviderModelIds(), command.getCredentialId(),
-                command.getMode(), command.getTimeoutMs());
+                command.channelId(), command.upstreamModelIds(), command.channelCredentialId(),
+                command.mode(), command.timeoutMs());
         return json(ManagementResponses.ok(new JobPayload(
                 job.id().toString(), job.status(), job.operatorId(), job.totalCount(),
                 job.completedCount(), job.successCount(), job.failureCount(), job.cancelledCount(),
@@ -176,33 +177,8 @@ public class UpstreamModelController {
     }
 
     /** 批量检测命令体（upstream_model_ids/channel_credential_id/mode/timeout_ms）。 */
-    static final class BatchCheckBody {
-        private java.util.UUID channelId;
-        private List<java.util.UUID> upstreamModelIds;
-        private java.util.UUID channelCredentialId;
-        private String mode;
-        private Integer timeoutMs;
-
-        public java.util.UUID getProviderId() {
-            return channelId;
-        }
-
-        public List<java.util.UUID> getProviderModelIds() {
-            return upstreamModelIds;
-        }
-
-        public java.util.UUID getCredentialId() {
-            return channelCredentialId;
-        }
-
-        public String getMode() {
-            return mode;
-        }
-
-        public Integer getTimeoutMs() {
-            return timeoutMs;
-        }
-    }
+    record BatchCheckBody(java.util.UUID channelId, List<java.util.UUID> upstreamModelIds,
+                          java.util.UUID channelCredentialId, String mode, Integer timeoutMs) { }
 
     record JobPayload(String id, String status, String operatorId, int totalCount,
                       int completedCount, int successCount, int failureCount, int cancelledCount,

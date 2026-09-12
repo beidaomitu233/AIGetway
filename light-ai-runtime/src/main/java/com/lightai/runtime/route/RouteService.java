@@ -36,6 +36,10 @@ public class RouteService {
                 excluded.add(new CapabilityRequirement.ExcludedCandidate(candidate, "DISABLED"));
                 continue;
             }
+            if (candidate.weight() <= 0) {
+                excluded.add(new CapabilityRequirement.ExcludedCandidate(candidate, "ZERO_WEIGHT"));
+                continue;
+            }
             if (candidate.circuitOpen()) {
                 excluded.add(new CapabilityRequirement.ExcludedCandidate(candidate, "CIRCUIT_OPEN"));
                 continue;

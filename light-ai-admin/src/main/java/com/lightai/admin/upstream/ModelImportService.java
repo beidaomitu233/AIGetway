@@ -142,25 +142,59 @@ public class ModelImportService {
                     List.of(new com.lightai.client.error.FieldIssue("upstream_model_ids", "INVALID",
                             "1—" + UpstreamModelImportCommand.MAX_BATCH + " 项")));
         }
+        String resolvedMode = mode == null ? "MINIMAL_CHAT" : mode;
+        int resolvedTimeout = timeoutMs == null ? 10000 : timeoutMs;
+        if (channelId == null || upstreamModelIds.contains(null)
+                || new java.util.HashSet<>(upstreamModelIds).size() != upstreamModelIds.size()
+                || !("MINIMAL_CHAT".equals(resolvedMode) || "CONNECTION_ONLY".equals(resolvedMode))
+                || resolvedTimeout < 100 || resolvedTimeout > 60000) {
+            throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "批量检测参数不合法");
+        }
         UUID jobId = UUID.randomUUID();
-        String commandJson = batchCommandJson(upstreamModelIds, channelCredentialId, mode, timeoutMs);
+        String commandJson = batchCommandJson(upstreamModelIds, channelCredentialId, resolvedMode, resolvedTimeout);
         try (Connection connection = dataSource.getConnection()) {
-            connection.setAutoCommit(true);
-            batchCheckRepository.insertJob(connection, new BatchJobRecord(
-                    jobId, BatchJobRecord.STATUS_PENDING, context.authContext().userId(),
-                    upstreamModelIds.size(), 0, 0, 0, 0, null, null, commandJson,
-                    OffsetDateTime.now(), OffsetDateTime.now()));
-            int sequence = 1;
-            for (UUID modelId : upstreamModelIds) {
-                batchCheckRepository.insertItem(connection, new BatchItemRecord(
-                        UUID.randomUUID(), jobId, modelId, sequence++,
-                        BatchItemRecord.STATUS_PENDING, null, null, null, null));
+            connection.setAutoCommit(false);
+            try {
+                providerRepository.lockLiveById(connection, channelId)
+                        .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_REFERENCE_INVALID, "渠道不存在"));
+                for (UUID modelId : upstreamModelIds) {
+                    UpstreamModelRecord model = modelRepository.findLiveById(connection, modelId)
+                            .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_REFERENCE_INVALID, "模型不存在"));
+                    if (!channelId.equals(model.channelId())) {
+                        throw new LightAiException(ErrorCode.OBJECT_REFERENCE_INVALID, "模型不属于指定渠道");
+                    }
+                }
+                if (channelCredentialId != null) {
+                    var credential = new com.lightai.storage.channel.JdbcChannelCredentialRepository()
+                            .findLiveById(connection, channelCredentialId)
+                            .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_REFERENCE_INVALID, "渠道 Key 不存在"));
+                    if (!channelId.equals(credential.channelId())) {
+                        throw new LightAiException(ErrorCode.OBJECT_REFERENCE_INVALID, "Key 不属于指定渠道");
+                    }
+                }
+                batchCheckRepository.insertJob(connection, new BatchJobRecord(
+                        jobId, BatchJobRecord.STATUS_PENDING, context.authContext().userId(),
+                        upstreamModelIds.size(), 0, 0, 0, 0, null, null, commandJson,
+                        OffsetDateTime.now(), OffsetDateTime.now()));
+                int sequence = 1;
+                for (UUID modelId : upstreamModelIds) {
+                    batchCheckRepository.insertItem(connection, new BatchItemRecord(
+                            UUID.randomUUID(), jobId, modelId, sequence++,
+                            BatchItemRecord.STATUS_PENDING, null, null, null, null));
+                }
+                BatchJobRecord job = batchCheckRepository.findJobById(connection, jobId)
+                        .orElseThrow(() -> new LightAiException(ErrorCode.INTERNAL_ERROR, "检测任务读取失败"));
+                connection.commit();
+                return job;
+            } catch (Exception e) {
+                connection.rollback();
+                throw e;
             }
+        } catch (LightAiException e) {
+            throw e;
         } catch (Exception e) {
             throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "检测任务创建失败");
         }
-        return batchCheckRepository.findJobById(openConnection(), jobId)
-                .orElseThrow(() -> new LightAiException(ErrorCode.INTERNAL_ERROR, "检测任务读取失败"));
     }
 
     public BatchJobRecord job(RequestContext context, String rawId) {
@@ -233,14 +267,6 @@ public class ModelImportService {
             return modelRepository.existsByProviderAndModelId(connection, channelId, modelId);
         } catch (Exception e) {
             throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "模型检查失败");
-        }
-    }
-
-    private Connection openConnection() {
-        try {
-            return dataSource.getConnection();
-        } catch (Exception e) {
-            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "数据源不可用");
         }
     }
 

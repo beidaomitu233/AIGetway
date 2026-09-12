@@ -17,7 +17,7 @@ public record RouteCandidateSaveCommand(
 
     public static final int PRIORITY_MIN = 1;
     public static final int PRIORITY_MAX = 100;
-    public static final int WEIGHT_MIN = 1;
+    public static final int WEIGHT_MIN = 0;
     public static final int WEIGHT_MAX = 100;
 
     public void validateForCreate() {
@@ -28,11 +28,12 @@ public record RouteCandidateSaveCommand(
     }
 
     public void validatePriorityWeight() {
-        if (priority != null && (priority < PRIORITY_MIN || priority > PRIORITY_MAX)) {
+        if (enabled == null) throw new IllegalArgumentException("enabled 必填");
+        if (priority == null || priority < PRIORITY_MIN || priority > PRIORITY_MAX) {
             throw new IllegalArgumentException("priority 范围 1—100");
         }
-        if (weight != null && (weight < WEIGHT_MIN || weight > WEIGHT_MAX)) {
-            throw new IllegalArgumentException("weight 范围 1—100");
+        if (weight == null || weight < WEIGHT_MIN || weight > WEIGHT_MAX) {
+            throw new IllegalArgumentException("weight 范围 0—100");
         }
     }
 }
