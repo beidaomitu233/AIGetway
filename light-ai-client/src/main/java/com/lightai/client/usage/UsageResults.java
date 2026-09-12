@@ -142,4 +142,45 @@ public final class UsageResults {
             return groups == null ? List.of() : groups;
         }
     }
+
+    /**
+     * 额度流水行（BE-232；PRD 9.8 /usage/adjustments）。
+     * source=QUOTA_ADJUSTMENT 为人工调整/重置/续期（dimension 取调整维度）；
+     * source=USAGE_LEDGER 为账本事件（event_type 取 event_key 前缀，如 SETTLEMENT）。
+     * 金额统一十进制字符串；多币种不混加；request_id 仅账本事件携带。
+     */
+    @JsonInclude(JsonInclude.Include.ALWAYS)
+    public record UsageAdjustmentItem(
+            String id,
+            OffsetDateTime occurredAt,
+            String source,
+            String eventType,
+            String requestId,
+            String applicationId,
+            String applicationCode,
+            String dimension,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String beforeValue,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String deltaValue,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String afterValue,
+            @JsonInclude(JsonInclude.Include.NON_NULL) Long inputTokens,
+            @JsonInclude(JsonInclude.Include.NON_NULL) Long outputTokens,
+            @JsonInclude(JsonInclude.Include.NON_NULL) Long tokenDelta,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String amountDelta,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String currency,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String usageSource,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String operatorId,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String reason,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String idempotencyKey) {
+    }
+
+    /** 额度流水分页结果：与列表类接口共用 page/page_size/total 与时间一致性字段。 */
+    @JsonInclude(JsonInclude.Include.ALWAYS)
+    public record UsageAdjustmentsResult(
+            long total,
+            int page,
+            int pageSize,
+            OffsetDateTime queryStartedAt,
+            OffsetDateTime dataUpdatedAt,
+            List<UsageAdjustmentItem> items) {
+    }
 }

@@ -131,8 +131,8 @@ public class TraceService {
                 row.status(), anomalous, row.attemptCount(), row.retryCount(),
                 row.credentialFailoverCount(), row.fallbackCount(), row.queuedMs(),
                 row.firstTokenMs() == null ? null : row.firstTokenMs().longValue(),
-                totalMs, row.usageSource(), row.totalTokens(),
-                noCost ? null : totalCost, row.currency(), row.errorCode());
+                totalMs, row.usageSource(), row.inputTokens(), row.outputTokens(),
+                row.totalTokens(), noCost ? null : totalCost, row.currency(), row.errorCode());
     }
 
     private OffsetDateTime now() {
