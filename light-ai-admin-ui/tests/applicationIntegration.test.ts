@@ -56,9 +56,9 @@ function applicationPayload(activeKeyCount: number) {
     active_key_count: activeKeyCount,
     quota: {
       id: 'quota-1',
-      token_limit: 1000000,
-      tokens_used: 200000,
-      tokens_reserved: 0,
+      token_limit: '1000000',
+      tokens_used: '200000',
+      tokens_reserved: '0',
       amount_limit: '100.00000000',
       amount_used: '12.50000000',
       amount_reserved: '0.00000000',
@@ -68,7 +68,7 @@ function applicationPayload(activeKeyCount: number) {
       period_type: 'MONTH',
       period_start: '2026-09-01T00:00:00Z',
       period_end: null,
-      version: 2,
+      version: '2',
     },
     models: [
       {
@@ -77,7 +77,7 @@ function applicationPayload(activeKeyCount: number) {
         virtual_model_code: 'chat-default',
         enabled: true,
         max_output_tokens: null,
-        stream_allowed: null,
+        allow_stream: null,
         version: 1,
       },
     ],

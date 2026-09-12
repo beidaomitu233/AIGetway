@@ -194,7 +194,7 @@ describe('FE-P20 页面边界（同契约夹具，非真实联调）', () => {
   })
   it('密钥非法 IP 和超应用 RPM 不能签发，复制失败保留一次性弹窗', async () => {
     const stub = installJsonFetchStub(({ url, method }) => {
-      if (url.pathname.endsWith('/keys') && method === 'POST') return dataEnvelope({ key_id: 'key-1', application_id: application.id, key_value: 'fixture-key-once', version: 1 })
+      if (url.pathname.endsWith('/keys') && method === 'POST') return dataEnvelope({ key_id: 'key-1', application_id: application.id, secret: 'fixture-key-once', key_prefix: 'lai_fix', masked_value: 'lai_****once', status: 'ACTIVE', issued_at: '2026-09-12T02:00:00Z', expires_at: null, rotation_generation: 1, version: 1 })
       if (url.pathname.endsWith('/keys') || url.pathname.endsWith('/quota/adjustments')) return dataEnvelope([])
       return dataEnvelope(application)
     })
@@ -290,7 +290,7 @@ describe('FE-P20 页面边界（同契约夹具，非真实联调）', () => {
     expect(posts).toBe(1)
     store.$patch({ userId: 'new-user', permissions: [Permission.applicationView] })
     await flushPromises()
-    finish!(json({ data: { key_value: 'late-fixture-secret', application_id: application.id, key_id: 'key-late' } }))
+    finish!(json({ data: { secret: 'late-fixture-secret', key_prefix: 'lai_lat', masked_value: 'lai_****cret', status: 'ACTIVE', issued_at: '2026-09-12T02:00:00Z', expires_at: null, application_id: application.id, key_id: 'key-late', rotation_generation: 1, version: 1 } }))
     await flushPromises()
     expect(wrapper.text()).not.toContain('late-fixture-secret')
     expect(wrapper.find('#application-secret-title').exists()).toBe(false)

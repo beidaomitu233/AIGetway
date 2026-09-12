@@ -10,9 +10,10 @@ export const application = {
   status: 'ACTIVE',
   active_key_count: 1,
   model_count: 1,
-  token_limit: 1_000_000,
-  tokens_used: 1200,
-  tokens_reserved: 100,
+  // 64 位计数与版本按后端契约以十进制字符串传输（BE-P20-102）
+  token_limit: '1000000',
+  tokens_used: '1200',
+  tokens_reserved: '100',
   amount_limit: '1000',
   amount_used: '12.5',
   amount_reserved: '0.5',
@@ -24,12 +25,14 @@ export const application = {
   updated_at: '2026-09-08T08:00:00Z',
   version: 2,
   quota: {
-    id: 'quota-1', token_limit: 1_000_000, tokens_used: 1200, tokens_reserved: 100,
+    id: 'quota-1', token_limit: '1000000', tokens_used: '1200', tokens_reserved: '100',
     amount_limit: '1000', amount_used: '12.5', amount_reserved: '0.5', currency: 'CNY',
-    rpm: 60, tpm: 100_000, period_type: 'MONTH', period_start: null, period_end: null, version: 1,
+    rpm: 60, tpm: 100_000, period_type: 'MONTH', period_start: null, period_end: null,
+    period_id: null, policy_version: null, timezone: null, reset_at: null,
+    tokens_remaining: '998700', amount_remaining: '987', admission_blocked: false, version: '1',
   },
   models: [{
     id: 'permission-1', virtual_model_id: 'alias-1', virtual_model_code: 'chat-default',
-    enabled: true, max_output_tokens: null, stream_allowed: null, version: 1,
+    enabled: true, max_output_tokens: null, allow_stream: null, version: 1,
   }],
 }

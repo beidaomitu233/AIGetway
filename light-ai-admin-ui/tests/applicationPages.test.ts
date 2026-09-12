@@ -170,8 +170,9 @@ describe('Application pages（V2 应用中心）', () => {
       }
       if (method === 'POST' && url.pathname.endsWith(`/admin/applications/${application.id}/keys`)) {
         return dataEnvelope({
-          key_id: 'key-new', application_id: application.id, key_value: 'lai_test-once',
-          masked_value: 'lai_****once', issued_at: '2026-09-09T02:00:00Z',
+          key_id: 'key-new', application_id: application.id, secret: 'lai_test-once',
+          key_prefix: 'lai_test', masked_value: 'lai_****once', status: 'ACTIVE',
+          issued_at: '2026-09-09T02:00:00Z', expires_at: null,
           rotation_generation: 1, version: 1,
         })
       }
@@ -217,7 +218,7 @@ describe('Application pages（V2 应用中心）', () => {
         return dataEnvelope({
           id: application.id,
           version: 2,
-          entity: { ...application, quota: { ...application.quota, token_limit: 2_000_000, version: 2 } },
+          entity: { ...application, quota: { ...application.quota, token_limit: '2000000', version: '2' } },
           draft_changed: false,
           draft_revision: null,
           request_id: 'req-quota',
@@ -239,7 +240,7 @@ describe('Application pages（V2 应用中心）', () => {
           version: 3,
           entity: {
             ...application,
-            quota: { ...application.quota, token_limit: 2_500_000, version: 3 },
+            quota: { ...application.quota, token_limit: '2500000', version: '3' },
           },
           draft_changed: false,
           draft_revision: null,
@@ -252,7 +253,7 @@ describe('Application pages（V2 应用中心）', () => {
           version: 4,
           entity: {
             ...application,
-            quota: { ...application.quota, token_limit: 2_500_000, tokens_used: 0, version: 4 },
+            quota: { ...application.quota, token_limit: '2500000', tokens_used: '0', version: '4' },
           },
           draft_changed: false,
           draft_revision: null,
@@ -316,7 +317,7 @@ describe('Application pages（V2 应用中心）', () => {
       .toMatchObject({
         virtual_model_ids: ['alias-1', 'alias-2'],
         constraints: [{
-          virtual_model_id: 'alias-2', max_output_tokens: 256, stream_allowed: false,
+          virtual_model_id: 'alias-2', max_output_tokens: 256, allow_stream: false,
         }],
         application_version: 2,
         reason: '增加备用模型',
