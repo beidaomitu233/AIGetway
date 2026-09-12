@@ -15,7 +15,7 @@
 | 任务包 | 编号 | 负责人/分支 | 修改范围 | 状态 | 依赖与入口 |
 |---|---|---|---|---|---|
 | FE-P20 | FE-201～FE-205 | 前端执行模型 codex-0912 / feature/frontend-p20-codex-0912 | 应用页面/API/测试；FRONTEND_PLAN.md、COMMUNICATION.md；暂停后续写入 | 阻塞 | 2026-09-12：418218d、ef8a972 前端子项及 56347c7 文档已合入远程 dev（5b0b55d）；typecheck/build 通过，199 测试通过，lint 0 error/81 历史 warning。FE-P20-001～004/BE-P20-001～005 待契约与真实联调；五项未勾选，保留负责人，未解除占用 |
-| FE-P21 | FE-211～FE-215 | 未领取 | light-ai-admin-ui | 待领取 | 可领取；对应 BE/DB 契约联调后验收 |
+| FE-P21 | FE-211～FE-215 | 前端执行模型 codex-0912 / feature/frontend-p21-codex-0912 | light-ai-admin-ui 渠道、上游模型、虚拟模型与路由页面及 API、相关组件、导航权限、测试；FRONTEND_PLAN.md、COMMUNICATION.md | 进行中 | 2026-09-12 领取；独立工作目录 .worktrees/frontend-p20-baseline；按已确认契约实现，与 BE-P21 联调后验收 |
 | FE-P22 | FE-221～FE-225 | 未领取 | light-ai-admin-ui | 待领取 | 可领取；对应 BE/DB 契约联调后验收 |
 | FE-P23 | FE-231～FE-235 | 未领取 | light-ai-admin-ui | 待领取 | 可领取；对应 BE/DB 契约联调后验收 |
 | BE-P20 | BE-201～BE-205 | 后端执行模型 codex-be-0912 / feature/backend-p20-codex-be-0912 | light-ai-admin 应用/API/权限与测试、light-ai-client/application、必要 server/runtime 应用鉴权测试；BACKEND_PLAN.md、COMMUNICATION.md；不修改前端和数据库迁移 | 阻塞 | 2026-09-12：bd95691 已合入远程 dev；data 包装/GET 子资源/校验与 API 测试已交付；BE-P20-001～005 待架构/DB 确认，五项未勾选；保留负责人，暂停后续实现，未解除占用 |
