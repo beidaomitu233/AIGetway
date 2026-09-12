@@ -316,3 +316,5 @@ Windows、Temurin Java 17.0.19，Maven 使用 `D:/IntelliJ IDEA 2025.2.3/plugins
 功能目录执行 mvn -B verify：14 模块 BUILD SUCCESS；453 项中 437 通过、16 跳过，0 失败/错误。包含 Java 编译类型检查、单元/API 测试及构建。仓库无独立后端 lint 命令，使用 git diff --check 检查补丁格式，不能冒称独立 lint 通过。MySQL 2、PostgreSQL 3、Redis 11 环境测试因缺 LAI_IT_MYSQL_URL/LAI_IT_DB_URL/LAI_IT_REDIS_URI 跳过；真实 Provider、企业身份、前后端 E2E、多节点容量和性能未执行。H2 验证不能替代真实数据库验收。
 
 COMMUNICATION.md 已登记 BE-P21-001～006，均待确认。BE-211～215 均未达到整项完成标准，不勾选；仅交付以上已验证子项，整包阻塞并保留原负责人，避免其他 Agent 重复实现。后续数据库迁移与契约确认后由原负责人继续验收。
+
+集成交付：功能提交 c08d625，文档提交 36e1cbc；2304acf 保留最新架构与前端记录后合入独立本地 dev。独立集成目录再次 mvn -B verify：14 模块成功，453 项中 437 通过、16 环境跳过，0 失败/错误；git diff --check 通过。普通推送远程结果以 TASK_STATUS.md 最终记录为准。
