@@ -470,3 +470,7 @@
 | RV-P20-005 | P2 | 后端已返回预算状态与 24h 摘要，前端未消费，FE-201 展示验收缺口。 | 补齐接口类型、预算标签、64 位请求计数格式化和成功率展示；页面夹具断言 `42 次`、`87.5%`。 | 已验证 |
 
 本轮前端验证命令：`npm run typecheck`、`npm test -- --run`（28 文件/248 项）、`npm run build`。未将 Mock 结果描述为真实业务成功；真实 Provider、真实 PostgreSQL/MySQL/Redis、企业身份四角色和首调 E2E 仍按既有报告待验收。密钥列表 N+1、`ip_allowlist` 域名解析策略登记为跨包待确认，不在本轮接管。
+
+### RV-P20 最终复验补记（2026-09-13）
+
+在上述提交之后，使用 IntelliJ Maven 运行时重新执行全仓 `mvn -B verify`，14 个模块全部 `BUILD SUCCESS`，退出码 0；真实 H2+Redis HTTP/Chromium 证据与应用域定向测试结果仍以 `INTEGRATION_REPORT.md` §12 为准。真实 PostgreSQL/MySQL/Provider、企业身份和生产级并发/恢复场景仍未验收。

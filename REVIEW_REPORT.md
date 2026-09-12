@@ -43,7 +43,7 @@
 
 已执行：
 
-- `npm run typecheck`：通过。
+- `npm run typecheck`：通过。\r\n- `npm run lint`：0 errors，37 条既有格式 warning；本次新增应用列表 warning 已清除。
 - `npm test -- --run`：28 个文件、248 项通过；保留既有 Vue Router/RouterLink 测试警告，无失败项。
 - `npm run build`：通过。
 - 应用域定向测试：`tests/applicationP20.test.ts` 与 `tests/applicationPages.test.ts` 共 43 项通过。
@@ -52,6 +52,7 @@
 未执行或未能在本环境复验：
 
 - 本会话默认 PATH 没有 `mvn` 或 `mvnw`，但并行联调线程通过 IntelliJ Maven 运行了发布校验 24 项、应用合约 7 项、仓储回归 1 项及全仓 `verify`（14 模块构建成功）；这些结果作为并行证据引用，不冒称为本会话重复执行。
+- 后续复验（2026-09-13）：使用 IntelliJ Maven 运行时在当前分支重新执行 mvn -B verify，14 个模块全部 BUILD SUCCESS，退出码 0。
 - 真实 PostgreSQL/MySQL、Provider 首次成功调用、企业身份四角色、浏览器点击级写操作和完整数据库升级/回滚/并发场景；H2+Redis、真实 HTTP 和 Chromium DOM 回放已由并行联调线程完成。
 
 ## 6. 文档、提交与后续
@@ -59,7 +60,7 @@
 - `COMMUNICATION.md` 已登记 FS-RV-P20-001/002 与 RV-P20-001～005；`INTEGRATION_REPORT.md` 已记录 H2+Redis、真实 HTTP 和页面回放证据。本报告补充统一问题统计和复验结论。
 - `FRONTEND_PLAN.md`、`BACKEND_PLAN.md`、`DATABASE_PLAN.md` 的主任务勾选未擅自改为完成，因真实环境门禁和包级验收仍阻塞。
 - `TASK_STATUS.md` 的 RV-P20 占用保留至本分支提交及远程回读完成。
-- 前端修复提交：`9a9454a`（RV-P20-001/003/004/005）；JSON 契约提交：`a320d8f`（RV-P20-002）；并行后端修复：`41e6635`；并行联调文档：`b7265bc`。审查报告提交：`fdbe546`；PR：[#1](https://github.com/beidaomitu233/AIGetway/pull/1)，已推送审查分支并完成远程哈希回读，待独立评审合并。
+- 前端修复提交：`9a9454a`、`a953dd2`（RV-P20-001/003/004/005）；JSON 契约提交：`a320d8f`（RV-P20-002）；并行后端修复：`41e6635`；并行联调文档：`b7265bc`。审查报告提交：`fdbe546`；PR：[#1](https://github.com/beidaomitu233/AIGetway/pull/1)，已推送审查分支并完成远程哈希回读，待独立评审合并。
 
 ## 7. 合并建议
 
