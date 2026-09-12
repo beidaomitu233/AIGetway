@@ -218,3 +218,33 @@ describe('ProviderFormPage（FE-008）', () => {
     expect(saveButton!.attributes('disabled')).toBeDefined()
   })
 })
+
+
+describe('FE-211/212 渠道异常状态', () => {
+  it('关联资源失败保持独立错误，不伪装为空数据', async () => {
+    const stub = installJsonFetchStub(({ url }) => {
+      if (url.pathname.endsWith('/providers/prov-1')) return dataEnvelope({ ...adminProvider, default_headers: {}, recent_check_records: [], connect_timeout_ms: 3000, read_timeout_ms: 120000 })
+      if (url.pathname.endsWith('/credential-pools')) return errorEnvelope(403, 'ACCESS_DENIED', '无渠道 Key 查看权限')
+      if (url.pathname.endsWith('/provider-models')) return errorEnvelope(503, 'UNAVAILABLE', '上游模型查询失败')
+      return undefined
+    })
+    try {
+      const { wrapper } = await mountPage('/ui/providers/prov-1', 'SYSTEM_ADMIN')
+      expect(wrapper.text()).toContain('无渠道 Key 查看权限')
+      expect(wrapper.text()).toContain('上游模型查询失败')
+      expect(wrapper.text()).not.toContain('暂无关联模型')
+      expect(wrapper.text()).not.toContain('暂无关联凭证池')
+      wrapper.unmount()
+    } finally { stub.restore() }
+  })
+  it('地址列表只显示主机，不展示地址中的凭证信息', async () => {
+    const stub = installJsonFetchStub(({ url }) => url.pathname.endsWith('/providers') ? pageEnvelope([{ ...adminProvider, base_url: 'https://user:fixture-password@example.com/v1?key=fixture-secret' }]) : undefined)
+    try {
+      const { wrapper } = await mountPage('/ui/providers', 'SYSTEM_ADMIN')
+      expect(wrapper.text()).toContain('example.com')
+      expect(wrapper.html()).not.toContain('fixture-password')
+      expect(wrapper.html()).not.toContain('fixture-secret')
+      wrapper.unmount()
+    } finally { stub.restore() }
+  })
+})

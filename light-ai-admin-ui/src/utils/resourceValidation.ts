@@ -21,3 +21,7 @@ export function headerRowError(row: HeaderRow, rows: HeaderRow[]): string {
 export function headersValid(rows: HeaderRow[]): boolean {
   return rows.length <= 20 && rows.every((row) => !headerRowError(row, rows))
 }
+
+export function resourceHost(raw: string): string {
+  try { return new URL(raw).host || '地址格式错误' } catch { return '地址格式错误' }
+}

@@ -31,6 +31,7 @@ const form = reactive({
   description: '',
   enabled: true,
 })
+const loadedEnabled = ref(true)
 const version = ref<number | null>(null)
 const baseline = ref('')
 const dirty = ref(false)
@@ -66,7 +67,7 @@ async function onSubmit(): Promise<void> {
       await updateModelAlias(aliasRecordId.value, {
         display_name: form.display_name.trim(),
         description,
-        enabled: form.enabled,
+        enabled: loadedEnabled.value,
         version: version.value!,
       })
       savedId = aliasRecordId.value
@@ -94,6 +95,7 @@ onMounted(async () => {
       form.display_name = detail.display_name
       form.description = detail.description ?? ''
       form.enabled = detail.enabled
+      loadedEnabled.value = detail.enabled
       version.value = detail.version
     }
     markClean()
@@ -179,9 +181,11 @@ onMounted(async () => {
         >
       </FormField>
 
+      <p v-if="isEdit" class="lai-form-hint">状态变更请返回列表核对影响后操作。</p>
       <label class="lai-switch">
         <input
           v-model="form.enabled"
+          :disabled="isEdit || submitting || !canManage"
           type="checkbox"
         >
         启用（发布时必须至少有一个启用且引用完整的候选）

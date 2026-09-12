@@ -160,7 +160,7 @@ async function save(): Promise<void> {
     connect_timeout_ms: form.connect_timeout_ms,
     read_timeout_ms: form.read_timeout_ms,
     default_headers: form.default_headers,
-    enabled: form.enabled,
+    enabled: editing ? loadedDetail.value!.enabled : form.enabled,
   }
   const outcome = await submit(async () => {
     if (editing) {
@@ -344,10 +344,11 @@ function fieldError(field: string): string | undefined {
       <FormField
         label="启用"
         for-id="provider-enabled"
-        hint="停用只改变草稿，发布后影响路由"
+        hint="修改已有渠道状态请返回详情，先核对影响；发布后影响路由"
       >
         <input
           id="provider-enabled"
+          :disabled="isEdit || submitting || !canManage"
           v-model="form.enabled"
           type="checkbox"
           class="lai-checkbox"

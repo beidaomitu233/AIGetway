@@ -15,8 +15,8 @@ import type { ProviderModelListItem } from '@/api/providerModels'
 import { useListActions } from '../listActions'
 
 const store = useBootstrapStore()
-const canManage = store.can(Permission.modelManage)
-const canCheck = store.can(Permission.providerCheck)
+const canManage = computed(() => store.can(Permission.modelManage))
+const canCheck = computed(() => store.can(Permission.providerCheck))
 
 const { state: query, items, total, page, pageSize, status, error, refreshing, dataUpdatedAt, applyFilters, applyPage, applyPageSize, refresh } =
   useListQuery<Record<string, FilterValue>, ProviderModelListItem>({

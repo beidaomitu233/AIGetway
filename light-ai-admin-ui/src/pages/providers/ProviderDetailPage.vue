@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import StatusText from '@/components/StatusText.vue'
@@ -43,33 +43,42 @@ const detail = ref<ProviderDetail | null>(null)
 const relatedPools = ref<Array<{ id: string; name: string; status: string }>>([])
 const relatedModels = ref<Array<{ id: string; display_name: string; model_id: string; connection_status: string }>>([])
 
+const poolsError = ref<unknown>(null)
+const modelsError = ref<unknown>(null)
+let loadSequence = 0
 let loadController: AbortController | null = null
 
 async function load(): Promise<void> {
+  const sequence = ++loadSequence
   loadController?.abort()
   loadController = new AbortController()
   state.value = 'loading'
   error.value = null
   try {
     const signal = loadController.signal
-    const [detailData, pools, models] = await Promise.all([
+    const [detailResult, pools, models] = await Promise.allSettled([
       getProvider(providerId.value, signal),
-      listPools({ provider_id: providerId.value, page: 1, page_size: 10 }, signal).catch(() => null),
-      listProviderModels({ provider_id: providerId.value, page: 1, page_size: 10 }, signal).catch(() => null),
+      listPools({ provider_id: providerId.value, page: 1, page_size: 10 }, signal),
+      listProviderModels({ provider_id: providerId.value, page: 1, page_size: 10 }, signal),
     ])
-    detail.value = detailData
-    relatedPools.value = pools ? pools.items : []
-    relatedModels.value = models ? models.items : []
+    if (sequence !== loadSequence) return
+    if (detailResult.status === 'rejected') throw detailResult.reason
+    detail.value = detailResult.value
+    poolsError.value = pools.status === 'rejected' ? pools.reason : null
+    modelsError.value = models.status === 'rejected' ? models.reason : null
+    relatedPools.value = pools.status === 'fulfilled' ? pools.value.items : []
+    relatedModels.value = models.status === 'fulfilled' ? models.value.items : []
     state.value = 'ready'
   } catch (e) {
-    if (isAbortError(e)) return
+    if (sequence !== loadSequence || isAbortError(e)) return
     error.value = e
     state.value = 'error'
   }
 }
 onMounted(load)
 onMounted(() => void store.refreshDraftSummary())
-watch(providerId, () => void load())
+watch(providerId, () => { detail.value = null; checkOpen.value = false; void load() })
+onUnmounted(() => { loadSequence++; loadController?.abort() })
 
 const lifecycle = useLifecycleActions({
   getImpact: getProviderImpact,
@@ -93,6 +102,7 @@ const checkTarget = computed(() => ({
 }))
 
 function openCheck(): void {
+  if (!canCheck.value || checkLoading.value) return
   checkResult.value = null
   checkErrorText.value = ''
   checkOpen.value = true
@@ -111,6 +121,7 @@ watch(
 )
 
 async function submitCheck(command: Parameters<typeof checkProvider>[1]): Promise<void> {
+  if (!canCheck.value || checkLoading.value) return
   checkLoading.value = true
   checkErrorText.value = ''
   try {
@@ -279,8 +290,9 @@ const headerRows = computed(() => Object.entries(detail.value?.default_headers ?
         <h2 class="lai-card-title">
           关联凭证池
         </h2>
+        <PageState v-if="poolsError" status="error" :error="poolsError" @retry="load" />
         <ul
-          v-if="relatedPools.length > 0"
+          v-else-if="relatedPools.length > 0"
           class="lai-related-list"
         >
           <li
@@ -320,8 +332,9 @@ const headerRows = computed(() => Object.entries(detail.value?.default_headers ?
         <h2 class="lai-card-title">
           关联模型
         </h2>
+        <PageState v-if="modelsError" status="error" :error="modelsError" @retry="load" />
         <ul
-          v-if="relatedModels.length > 0"
+          v-else-if="relatedModels.length > 0"
           class="lai-related-list"
         >
           <li

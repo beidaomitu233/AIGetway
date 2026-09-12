@@ -93,6 +93,7 @@ onMounted(() => {
   }, 10000)
 })
 onUnmounted(() => {
+  seq++
   if (refreshTimer !== null) clearInterval(refreshTimer)
   controller?.abort()
 })
@@ -127,6 +128,7 @@ async function submitForm(command: {
   enabled: boolean
   version?: number | undefined
 }): Promise<void> {
+  if (!props.canManage || formSubmitting.value) return
   formSubmitting.value = true
   formError.value = null
   try {
@@ -175,6 +177,7 @@ function openRotate(row: CredentialListItem): void {
 }
 
 async function submitRotate(command: { secret_value: string; secret_value_confirm: string; version: number }): Promise<void> {
+  if (!props.canManage || rotateSubmitting.value || !rotateTarget.value) return
   rotateSubmitting.value = true
   rotateError.value = null
   try {
@@ -220,6 +223,7 @@ async function submitCheck(command: {
   mode: 'MINIMAL_CHAT' | 'CONNECTION_ONLY'
   timeout_ms: number
 }): Promise<void> {
+  if (!props.canCheck || checkSubmitting.value) return
   checkSubmitting.value = true
   checkError.value = null
   try {
@@ -236,6 +240,7 @@ const actionBusy = ref('')
 const actionError = shallowRef<ApiErrorType | null>(null)
 
 async function toggleEnabled(row: CredentialListItem): Promise<void> {
+  if (!props.canManage) return
   actionBusy.value = row.id
   actionError.value = null
   try {
@@ -256,6 +261,7 @@ const deleteOpen = ref(false)
 const deleteTarget = ref<CredentialListItem | null>(null)
 
 async function submitDelete(): Promise<void> {
+  if (!props.canManage) return
   if (!deleteTarget.value) return
   actionBusy.value = deleteTarget.value.id
   actionError.value = null

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { resourceHost } from '@/utils/resourceValidation'
 import { useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import DataTable, { type TableColumn } from '@/components/DataTable.vue'
@@ -87,6 +88,7 @@ const lifecycle = useLifecycleActions({
 })
 
 function onToggleEnabled(row: ProviderListItem): void {
+  if (!canManage.value) return
   if (row.enabled) {
     void lifecycle.requestDisable(row.id, row.version)
   } else {
@@ -201,8 +203,8 @@ function onToggleEnabled(row: ProviderListItem): void {
         <template #base_url="{ row }">
           <span
             class="lai-ellipsis"
-            :title="row.base_url"
-          >{{ row.base_url }}</span>
+            :title="resourceHost(row.base_url)"
+          >{{ resourceHost(row.base_url) }}</span>
         </template>
         <template #connection_status="{ row }">
           <StatusText

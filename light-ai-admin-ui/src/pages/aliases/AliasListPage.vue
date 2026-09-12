@@ -3,6 +3,7 @@
 import PageState from '@/components/PageState.vue'
 import ListPager from '@/components/ListPager.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import { computed } from 'vue'
 import { useBootstrapStore } from '@/stores/bootstrap'
 import { Permission } from '@/app/permissions'
 import { useListQuery, type FilterValue } from '@/composables/useListQuery'
@@ -11,7 +12,7 @@ import { fetchModelAliases } from '@/api/modelAliases'
 import { useListActions } from '../listActions'
 
 const store = useBootstrapStore()
-const canManage = store.can(Permission.aliasManage)
+const canManage = computed(() => store.can(Permission.aliasManage))
 
 const { state: query, items, total, page, pageSize, status, error, refreshing, dataUpdatedAt, applyFilters, applyPage, applyPageSize, refresh } =
   useListQuery<Record<string, FilterValue>, ModelAliasListItem>({

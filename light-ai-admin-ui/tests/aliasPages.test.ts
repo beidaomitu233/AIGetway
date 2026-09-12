@@ -139,3 +139,37 @@ describe('AliasDetailPage 候选重排（FE-018）', () => {
     expect((reverted.element as HTMLInputElement).value).toBe('10')
   })
 })
+
+
+describe('FE-214/215 路由操作边界', () => {
+  it('越界优先级在发送前阻止', async () => {
+    const fetchMock = stubFetch(detailRoutes)
+    const { wrapper } = await mountAt('/ui/model-aliases/alias-1')
+    await wrapper.find('input[type="number"]').setValue('0')
+    await wrapper.findAll('button').find((button) => button.text() === '保存排序')!.trigger('click')
+    expect(wrapper.text()).toContain('优先级必须为 1—100 的整数')
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false)
+    wrapper.unmount()
+  })
+  it('权限撤销后移除编辑和排序输入', async () => {
+    stubFetch(detailRoutes)
+    const { wrapper } = await mountAt('/ui/model-aliases/alias-1')
+    useBootstrapStore().$patch({ permissions: [] })
+    await flushPromises()
+    expect(wrapper.find('input[type="number"]').exists()).toBe(false)
+    expect(wrapper.findAll('button').some((button) => button.text() === '编辑')).toBe(false)
+    wrapper.unmount()
+  })
+  it('虚拟模型只读用户不能触发表单写入', async () => {
+    const fetchMock = stubFetch([])
+    const { wrapper } = await mountAt('/ui/model-aliases/new')
+    await wrapper.findAll('input[type="text"]')[0]!.setValue('valid-model')
+    await wrapper.findAll('input[type="text"]')[1]!.setValue('有效模型')
+    useBootstrapStore().$patch({ permissions: [] })
+    await flushPromises()
+    await wrapper.find('form').trigger('submit')
+    expect(wrapper.find('button[type="submit"]').exists()).toBe(false)
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+    wrapper.unmount()
+  })
+})

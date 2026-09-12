@@ -2,7 +2,7 @@
 // Model Alias 详情与候选路由页（FE-018，附录 4.2.8）。
 // 候选按 priority 升序展示；优先级调整显式保存、任一版本冲突整批不变；
 // 探测选择池内一个可用凭证；运行摘要 30 秒刷新，页面离开停止。
-import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -31,8 +31,8 @@ const route = useRoute()
 const aliasId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''))
 
 const store = useBootstrapStore()
-const canManage = store.can(Permission.aliasManage)
-const canCheck = store.can(Permission.providerCheck)
+const canManage = computed(() => store.can(Permission.aliasManage))
+const canCheck = computed(() => store.can(Permission.providerCheck))
 
 const loading = ref(true)
 const loadError = ref<unknown>(null)
@@ -42,25 +42,37 @@ const candidates = shallowRef<RouteCandidateDetail[]>([])
 const SORT_INTERVAL_MS = 30000
 let summaryTimer: ReturnType<typeof setInterval> | null = null
 
+let loadSequence = 0
+let loadController: AbortController | null = null
 async function load(): Promise<void> {
+  const sequence = ++loadSequence
+  const targetId = aliasId.value
+  loadController?.abort()
+  loadController = new AbortController()
   try {
-    alias.value = await fetchModelAlias(aliasId.value)
-    candidates.value = await fetchCandidates(aliasId.value)
+    const [detail, rows] = await Promise.all([
+      fetchModelAlias(targetId, loadController.signal), fetchCandidates(targetId, loadController.signal),
+    ])
+    if (sequence !== loadSequence || targetId !== aliasId.value) return
+    alias.value = detail
+    candidates.value = rows
     loadError.value = null
   } catch (e) {
-    loadError.value = e
+    if (sequence === loadSequence) loadError.value = e
   } finally {
-    loading.value = false
+    if (sequence === loadSequence) loading.value = false
   }
 }
 
 onMounted(() => {
   void load()
   summaryTimer = setInterval(() => {
-    if (document.visibilityState === 'visible') void load()
+    if (document.visibilityState === 'visible' && !reorderDirty.value && !reorderSaving.value && !formOpen.value && !busyId.value) void load()
   }, SORT_INTERVAL_MS)
 })
 onUnmounted(() => {
+  loadSequence++
+  loadController?.abort()
   if (summaryTimer !== null) clearInterval(summaryTimer)
 })
 
@@ -82,7 +94,11 @@ function onPriorityInput(row: RouteCandidateDetail, value: number): void {
 const reorderDirty = computed(() => Object.keys(priorityEdits.value).length > 0)
 
 async function submitReorder(): Promise<void> {
-  if (!reorderDirty.value || reorderSaving.value) return
+  if (!canManage.value || !reorderDirty.value || reorderSaving.value) return
+  if (candidates.value.some((row) => !Number.isInteger(editedPriority(row)) || editedPriority(row) < 1 || editedPriority(row) > 100)) {
+    reorderMessage.value = '优先级必须为 1—100 的整数'
+    return
+  }
   reorderSaving.value = true
   reorderMessage.value = ''
   try {
@@ -94,7 +110,7 @@ async function submitReorder(): Promise<void> {
     const updated = await reorderCandidates(aliasId.value, items)
     candidates.value = updated
     priorityEdits.value = {}
-    reorderMessage.value = '排序已保存'
+    reorderMessage.value = '排序草稿已保存，发布后生效'
   } catch (e) {
     if (e instanceof ApiError && e.code === 'CONFIG_VERSION_CONFLICT') {
       // 整批不变：还原本地编辑并重新加载
@@ -132,12 +148,14 @@ async function loadModelGroups(): Promise<void> {
       groups.set(item.provider_name, group)
     }
     modelGroups.value = [...groups.values()]
-  } catch {
+  } catch (error) {
     modelGroups.value = []
+    formError.value = error
   }
 }
 
 async function openCreate(): Promise<void> {
+  if (!canManage.value || formSubmitting.value) return
   formTarget.value = null
   formError.value = null
   formOpen.value = true
@@ -145,6 +163,7 @@ async function openCreate(): Promise<void> {
 }
 
 async function openEdit(row: RouteCandidateDetail): Promise<void> {
+  if (!canManage.value || formSubmitting.value) return
   formTarget.value = row
   formError.value = null
   formOpen.value = true
@@ -163,6 +182,7 @@ async function submitForm(command: {
   enabled: boolean
   version?: number | undefined
 }): Promise<void> {
+  if (!canManage.value || formSubmitting.value) return
   formSubmitting.value = true
   formError.value = null
   try {
@@ -191,6 +211,7 @@ const deleteTarget = ref<RouteCandidateDetail | null>(null)
 const deleteOpen = ref(false)
 
 async function toggleCandidate(row: RouteCandidateDetail): Promise<void> {
+  if (!canManage.value || busyId.value) return
   busyId.value = row.id
   actionMessage.value = ''
   try {
@@ -211,7 +232,7 @@ async function toggleCandidate(row: RouteCandidateDetail): Promise<void> {
 }
 
 async function submitDelete(): Promise<void> {
-  if (!deleteTarget.value) return
+  if (!canManage.value || busyId.value || !deleteTarget.value) return
   busyId.value = deleteTarget.value.id
   try {
     await deleteCandidate(deleteTarget.value.id, deleteTarget.value.version)
@@ -234,6 +255,7 @@ const checkResult = shallowRef<ProviderCheckRecord | null>(null)
 const checkCredentialOptions = ref<{ id: string; label: string }[]>([])
 
 async function openProbe(row: RouteCandidateDetail): Promise<void> {
+  if (!canCheck.value || checkSubmitting.value) return
   checkTarget.value = row
   checkError.value = null
   checkResult.value = null
@@ -242,13 +264,13 @@ async function openProbe(row: RouteCandidateDetail): Promise<void> {
   try {
     const credentials = await fetchCredentials(row.credential_pool_id, { enabled: true, page_size: 100 })
     checkCredentialOptions.value = credentials.items.map((item) => ({ id: item.id, label: item.name }))
-  } catch {
-    // 选项加载失败时保持空列表
+  } catch (error) {
+    checkError.value = error
   }
 }
 
 async function submitProbe(command: ProviderCheckCommand): Promise<void> {
-  if (!checkTarget.value) return
+  if (!canCheck.value || checkSubmitting.value || !checkTarget.value) return
   checkSubmitting.value = true
   checkError.value = null
   try {
@@ -262,6 +284,18 @@ async function submitProbe(command: ProviderCheckCommand): Promise<void> {
     checkSubmitting.value = false
   }
 }
+watch(aliasId, () => {
+  loadSequence++
+  loadController?.abort()
+  alias.value = null
+  candidates.value = []
+  priorityEdits.value = {}
+  formOpen.value = false
+  checkOpen.value = false
+  deleteOpen.value = false
+  loading.value = true
+  void load()
+})
 </script>
 
 <template>

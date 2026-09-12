@@ -247,33 +247,20 @@ function removeStop(index: number): void {
 }
 
 async function reload(): Promise<void> {
-  if (!isEdit.value) return
   resetSubmit()
   loading.value = true
   loadError.value = null
   try {
-    applyDetail(await fetchProviderModel(modelId.value))
+    providers.value = await fetchProviderOptions()
+    if (isEdit.value) applyDetail(await fetchProviderModel(modelId.value))
+    else markClean()
   } catch (e) {
     loadError.value = e
   } finally {
     loading.value = false
   }
 }
-
-onMounted(async () => {
-  try {
-    providers.value = await fetchProviderOptions()
-    if (isEdit.value) {
-      await reload()
-    } else {
-      markClean()
-      loading.value = false
-    }
-  } catch (e) {
-    loadError.value = e
-    loading.value = false
-  }
-})
+onMounted(reload)
 </script>
 
 <template>
