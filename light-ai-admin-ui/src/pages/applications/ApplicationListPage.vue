@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import PageState from '@/components/PageState.vue'
 import ListPager from '@/components/ListPager.vue'
 import { useBootstrapStore } from '@/stores/bootstrap'
@@ -7,6 +7,8 @@ import { Permission } from '@/app/permissions'
 import { useListQuery, type FilterValue } from '@/composables/useListQuery'
 import { fetchApplications, type ApplicationListItem } from '@/api/applications'
 import { formatDateTime } from '@/app/display'
+import { ApiError } from '@/api/errors'
+import { amountUsage, applicationStatusLabels as statusLabel, applicationEnvironmentLabels as environmentLabel } from './applicationValues'
 
 const store = useBootstrapStore()
 const canManage = computed(() => store.can(Permission.applicationManage))
@@ -15,6 +17,9 @@ const {
   state,
   page,
   pageSize,
+  sort,
+  applySort,
+  dataUpdatedAt,
   items,
   total,
   status,
@@ -29,23 +34,21 @@ const {
     keyword: { default: '', url: true },
     status: { default: '', url: true },
     environment: { default: '', url: true },
+    owner_id: { default: '', url: true },
   },
-  defaultSort: 'updated_at desc',
-  fetcher: (params, signal) => fetchApplications(params, signal),
+  defaultSort: 'last_called_at desc',
+  fetcher: (params, signal) => {
+    if (!store.can(Permission.applicationView)) throw new ApiError(403, { code: 'ACCESS_DENIED', type: 'permission', message: '无权查看应用' }, 'local-permission')
+    return fetchApplications(params, signal).catch(error => {
+      if (error instanceof ApiError && [401, 403].includes(error.status)) { items.value = []; total.value = 0 }
+      throw error
+    })
+  },
 })
 
-const statusLabel: Record<string, string> = {
-  ACTIVE: '启用',
-  DISABLED: '已停用',
-  ARCHIVED: '已归档',
-}
+watch(() => [store.userId, store.permissions.join(','), store.applicationScope.join(',')], () => { items.value = []; total.value = 0; refresh() })
 
-const environmentLabel: Record<string, string> = {
-  DEV: '开发',
-  TEST: '测试',
-  STAGING: '预发布',
-  PROD: '生产',
-}
+const hasFilters = computed(() => Object.values(state).some(value => value !== ''))
 
 function ratio(used: number, reserved: number, limit: number | null): string {
   if (limit == null) return `${(used + reserved).toLocaleString()} / 不限`
@@ -54,11 +57,7 @@ function ratio(used: number, reserved: number, limit: number | null): string {
 }
 
 function amount(row: ApplicationListItem): string {
-  const used = Number(row.amount_used) + Number(row.amount_reserved)
-  const current = Number.isFinite(used) ? used.toFixed(2) : row.amount_used
-  return row.amount_limit == null
-    ? `${current} ${row.currency} / 不限`
-    : `${current} / ${Number(row.amount_limit).toFixed(2)} ${row.currency}`
+  return amountUsage(row.amount_used, row.amount_reserved, row.amount_limit, row.currency)
 }
 </script>
 
@@ -103,14 +102,19 @@ function amount(row: ApplicationListItem): string {
         <option value="STAGING">预发布</option>
         <option value="PROD">生产</option>
       </select>
+      <input class="lai-input" aria-label="负责人账号筛选" placeholder="负责人账号" :value="state.owner_id" @change="applyFilters({ owner_id: ($event.target as HTMLInputElement).value.trim() })">
+      <select class="lai-select" aria-label="排序" :value="sort" @change="applySort(($event.target as HTMLSelectElement).value)">
+        <option value="updated_at desc">最近更新</option><option value="name asc">应用名称升序</option><option value="last_called_at desc">最近调用</option>
+      </select>
       <button type="button" class="lai-btn" :disabled="refreshing" @click="refresh">
         {{ refreshing ? '刷新中…' : '刷新' }}
       </button>
     </div>
 
+    <p v-if="dataUpdatedAt" class="cell-muted">数据更新于 {{ formatDateTime(dataUpdatedAt, store.timezone) }}</p>
     <PageState v-if="status === 'loading'" status="loading" />
     <PageState
-      v-else-if="status === 'error'"
+      v-else-if="status === 'error' && items.length === 0"
       status="error"
       :error="error"
       @retry="refresh"
@@ -118,9 +122,10 @@ function amount(row: ApplicationListItem): string {
     <PageState
       v-else-if="items.length === 0"
       status="empty"
-      message="尚未创建应用，创建后即可签发接入密钥并授权模型。"
+:message="hasFilters ? '没有符合筛选条件的应用，请调整筛选。' : '尚未创建应用，创建后即可签发接入密钥并授权模型。'"
     />
     <template v-else>
+      <PageState v-if="status === 'error'" status="error" :error="error" @retry="refresh" />
       <div class="lai-table-wrap">
         <table class="lai-table application-table">
           <thead>
@@ -141,13 +146,13 @@ function amount(row: ApplicationListItem): string {
                 <RouterLink :to="`/ui/applications/${row.id}`" class="lai-link application-name">
                   {{ row.name }}
                 </RouterLink>
-                <div class="cell-muted"><span class="lai-cell-mono">{{ row.code }}</span> · {{ environmentLabel[row.environment] }}</div>
+                <div class="cell-muted"><span class="lai-cell-mono">{{ row.code }}</span> · {{ environmentLabel[row.environment] || row.environment }}</div>
               </td>
               <td>
                 <div>{{ row.owner_name }}</div>
                 <div class="cell-muted">{{ row.department || '—' }}</div>
               </td>
-              <td><span class="status" :class="`status-${row.status.toLowerCase()}`">{{ statusLabel[row.status] }}</span></td>
+              <td><span class="status" :class="`status-${row.status.toLowerCase()}`">{{ statusLabel[row.status] || row.status }}</span></td>
               <td>{{ row.model_count }} / {{ row.active_key_count }}</td>
               <td>{{ ratio(row.tokens_used, row.tokens_reserved, row.token_limit) }}</td>
               <td>{{ amount(row) }}</td>
@@ -172,7 +177,7 @@ function amount(row: ApplicationListItem): string {
 <style scoped>
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
 .page-subtitle { margin: -10px 0 0; color: #667085; font-size: 14px; }
-.application-filters { display: flex; gap: 10px; align-items: center; margin: 24px 0 14px; }
+.application-filters { flex-wrap: wrap; display: flex; gap: 10px; align-items: center; margin: 24px 0 14px; }
 .filter-keyword { width: 280px; }
 .application-table { min-width: 1120px; }
 .application-name { font-weight: 600; color: #172033; }

@@ -1,47 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { routes } from '@/app/router'
 import { useBootstrapStore } from '@/stores/bootstrap'
 import { bootstrapFixtures } from '../mocks/fixtures/bootstrap'
 import { dataEnvelope, installJsonFetchStub, pageEnvelope, type FetchStub } from './helpers/fetchStub'
 
-const application = {
-  id: '4a9b72f1-1225-42fd-b304-33d1884e9695',
-  code: 'customer-service-prod',
-  name: '智能客服生产环境',
-  department: '客户成功部',
-  owner_id: 'user-admin',
-  owner_name: '系统管理员',
-  environment: 'PROD',
-  description: '企业客服系统',
-  status: 'ACTIVE',
-  active_key_count: 1,
-  model_count: 1,
-  token_limit: 1_000_000,
-  tokens_used: 1200,
-  tokens_reserved: 100,
-  amount_limit: '1000',
-  amount_used: '12.5',
-  amount_reserved: '0.5',
-  currency: 'CNY',
-  rpm: 60,
-  tpm: 100_000,
-  last_called_at: '2026-09-08T08:00:00Z',
-  created_at: '2026-09-01T08:00:00Z',
-  updated_at: '2026-09-08T08:00:00Z',
-  version: 2,
-  quota: {
-    id: 'quota-1', token_limit: 1_000_000, tokens_used: 1200, tokens_reserved: 100,
-    amount_limit: '1000', amount_used: '12.5', amount_reserved: '0.5', currency: 'CNY',
-    rpm: 60, tpm: 100_000, period_type: 'MONTH', period_start: null, period_end: null, version: 1,
-  },
-  models: [{
-    id: 'permission-1', virtual_model_id: 'alias-1', virtual_model_code: 'chat-default',
-    enabled: true, max_output_tokens: null, stream_allowed: null, version: 1,
-  }],
-}
+import { application } from './fixtures/application'
 
 async function mountPage(path: string) {
   setActivePinia(createPinia())
@@ -61,6 +27,8 @@ async function mountPage(path: string) {
   await flushPromises()
   return { wrapper, router }
 }
+
+enableAutoUnmount(afterEach)
 
 describe('Application pages（V2 应用中心）', () => {
   let stub: FetchStub
@@ -99,7 +67,11 @@ describe('Application pages（V2 应用中心）', () => {
     await wrapper.find('input[name="name"]').setValue('智能客服生产环境')
     await wrapper.find('input[name="code"]').setValue('customer-service-prod')
     await wrapper.find('input[type="checkbox"][value="alias-1"]').setValue(true)
+    for (const [name, value] of Object.entries({ token_limit: '1000000', amount_limit: '1000', currency: 'CNY', rpm: '60', tpm: '100000' })) await wrapper.get('input[name="' + name + '"]').setValue(value)
     expect(wrapper.find('[data-test="save-application"]').attributes('disabled')).toBeUndefined()
+    await wrapper.find('form').trigger('submit')
+    expect(stub.calls.some(call => call.method === 'POST')).toBe(false)
+    expect(wrapper.text()).toContain('确认应用信息')
     await wrapper.find('form').trigger('submit')
     await flushPromises()
     await flushPromises()

@@ -234,8 +234,9 @@ export function updateApplicationModels(
 
 export function fetchApplicationQuotaAdjustments(
   id: string,
+  signal?: AbortSignal,
 ): Promise<ApplicationQuotaAdjustment[]> {
-  return request({ path: `/applications/${id}/quota/adjustments` })
+  return request({ path: `/applications/${id}/quota/adjustments`, signal })
 }
 
 export function adjustApplicationQuota(
