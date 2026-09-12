@@ -13,14 +13,16 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * model_alias JDBC 仓储（DATABASE_PLAN §6）。
- * alias 活行全局唯一；删除前引用检查由服务层完成。
- * 支持 PostgreSQL 与 MySQL 5.7 / 8.0 双方言自适应。
+ * virtual_model JDBC 仓储（DATABASE_PLAN §6）。
+ * V5 起物理表 model_alias 更名为 virtual_model、业务码列 alias 更名为 code（id 不变，
+ * 历史/快照 JSON 的 alias 键不受影响）；status 列与 enabled 同语句双写，读取仍以 enabled 为准。
+ * code 活行全局唯一；删除前引用检查由服务层完成。
+ * 支持 PostgreSQL 与 MySQL 8.0 / H2(MySQL 模式) 双方言自适应。
  */
 public class JdbcAliasRepository extends AbstractJdbcRepository {
 
     private static final String COLUMNS =
-            "id, alias, display_name, description, route_strategy, enabled, version, created_at, updated_at";
+            "id, code, display_name, description, route_strategy, enabled, version, created_at, updated_at";
 
     public JdbcAliasRepository(String schemaName, DatabaseDialect explicitDialect) {
         super(schemaName, explicitDialect);
@@ -34,11 +36,16 @@ public class JdbcAliasRepository extends AbstractJdbcRepository {
         this(com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME);
     }
 
+    /** status 与 enabled 同源：ACTIVE/DISABLED。 */
+    static String statusOf(boolean enabled) {
+        return enabled ? "ACTIVE" : "DISABLED";
+    }
+
     public void insert(Connection connection, AliasRecord record) {
         DatabaseDialect d = dialect(connection);
-        String insertColumns = COLUMNS.substring(0, COLUMNS.lastIndexOf(", created_at"));
+        String insertColumns = COLUMNS.substring(0, COLUMNS.lastIndexOf(", created_at")) + ", status";
         int columnCount = insertColumns.split(",").length;
-        String sql = "INSERT INTO " + qualify(connection, "model_alias") + " (" + insertColumns + ", created_at, updated_at) "
+        String sql = "INSERT INTO " + qualify(connection, "virtual_model") + " (" + insertColumns + ", created_at, updated_at) "
                 + "VALUES (" + inPlaceholders(columnCount) + ", " + d.nowFunction() + ", " + d.nowFunction() + ")";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, record.id());
@@ -48,6 +55,7 @@ public class JdbcAliasRepository extends AbstractJdbcRepository {
             statement.setString(5, record.routeStrategy());
             statement.setBoolean(6, record.enabled());
             statement.setLong(7, record.version());
+            statement.setString(8, statusOf(record.enabled()));
             statement.executeUpdate();
         } catch (SQLException e) {
             throw translate("Alias写入失败", e);
@@ -56,7 +64,7 @@ public class JdbcAliasRepository extends AbstractJdbcRepository {
 
     public Optional<AliasRecord> findLiveById(Connection connection, UUID id) {
         DatabaseDialect d = dialect(connection);
-        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "model_alias")
+        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "virtual_model")
                 + " WHERE id = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, id);
@@ -70,7 +78,7 @@ public class JdbcAliasRepository extends AbstractJdbcRepository {
 
     public Optional<AliasRecord> lockLiveById(Connection connection, UUID id) {
         DatabaseDialect d = dialect(connection);
-        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "model_alias")
+        String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "virtual_model")
                 + " WHERE id = ? AND deleted_at IS NULL " + d.forUpdateClause();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, id);
@@ -84,7 +92,7 @@ public class JdbcAliasRepository extends AbstractJdbcRepository {
 
     public boolean existsByLiveAlias(Connection connection, String alias) {
         DatabaseDialect d = dialect(connection);
-        String sql = "SELECT 1 FROM " + qualify(connection, "model_alias") + " WHERE alias = ? AND deleted_at IS NULL";
+        String sql = "SELECT 1 FROM " + qualify(connection, "virtual_model") + " WHERE code = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, alias);
             try (ResultSet rs = statement.executeQuery()) {
@@ -100,16 +108,17 @@ public class JdbcAliasRepository extends AbstractJdbcRepository {
         if (d.supportsReturning()) {
             String sql = """
                     UPDATE %s
-                       SET display_name = ?, description = ?, enabled = ?,
+                       SET display_name = ?, description = ?, enabled = ?, status = ?,
                            version = version + 1, updated_at = %s
                      WHERE id = ? AND deleted_at IS NULL
                     RETURNING %s
-                    """.strip().formatted(qualify(connection, "model_alias"), d.nowFunction(), COLUMNS);
+                    """.strip().formatted(qualify(connection, "virtual_model"), d.nowFunction(), COLUMNS);
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, record.displayName());
                 statement.setString(2, record.description());
                 statement.setBoolean(3, record.enabled());
-                d.bindUuid(statement, 4, record.id());
+                statement.setString(4, statusOf(record.enabled()));
+                d.bindUuid(statement, 5, record.id());
                 try (ResultSet rs = statement.executeQuery()) {
                     if (!rs.next()) {
                         throw new IllegalStateException("Alias更新未命中活行");
@@ -120,14 +129,15 @@ public class JdbcAliasRepository extends AbstractJdbcRepository {
                 throw translate("Alias更新失败", e);
             }
         } else {
-            String sql = "UPDATE " + qualify(connection, "model_alias")
-                    + " SET display_name = ?, description = ?, enabled = ?, version = version + 1, updated_at = " + d.nowFunction()
+            String sql = "UPDATE " + qualify(connection, "virtual_model")
+                    + " SET display_name = ?, description = ?, enabled = ?, status = ?, version = version + 1, updated_at = " + d.nowFunction()
                     + " WHERE id = ? AND deleted_at IS NULL";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, record.displayName());
                 statement.setString(2, record.description());
                 statement.setBoolean(3, record.enabled());
-                d.bindUuid(statement, 4, record.id());
+                statement.setString(4, statusOf(record.enabled()));
+                d.bindUuid(statement, 5, record.id());
                 int affected = statement.executeUpdate();
                 if (affected == 0) {
                     throw new IllegalStateException("Alias更新未命中活行");
@@ -142,7 +152,7 @@ public class JdbcAliasRepository extends AbstractJdbcRepository {
 
     public void markDeleted(Connection connection, UUID id) {
         DatabaseDialect d = dialect(connection);
-        String sql = "UPDATE " + qualify(connection, "model_alias")
+        String sql = "UPDATE " + qualify(connection, "virtual_model")
                 + " SET deleted_at = " + d.nowFunction() + ", updated_at = " + d.nowFunction()
                 + " WHERE id = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -157,10 +167,10 @@ public class JdbcAliasRepository extends AbstractJdbcRepository {
                                   String sortExpression, int limit, int offset) {
         DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT ").append(COLUMNS).append(" FROM ")
-                .append(qualify(connection, "model_alias")).append(" WHERE deleted_at IS NULL");
+                .append(qualify(connection, "virtual_model")).append(" WHERE deleted_at IS NULL");
         List<Object> params = new ArrayList<>();
         if (keyword != null && !keyword.isBlank()) {
-            sql.append(" AND (").append(d.ilikeClause("alias"))
+            sql.append(" AND (").append(d.ilikeClause("code"))
                     .append(" OR ").append(d.ilikeClause("display_name")).append(")");
             params.add("%" + keyword.strip() + "%");
             params.add("%" + keyword.strip() + "%");
@@ -169,7 +179,9 @@ public class JdbcAliasRepository extends AbstractJdbcRepository {
             sql.append(" AND enabled = ?");
             params.add(enabled);
         }
-        sql.append(" ORDER BY ").append(sortExpression).append(", id ASC LIMIT ? OFFSET ?");
+        // 服务层排序白名单与 API sort 键仍为 alias（BE-P21 DTO 切换前），物理列已更名 code。
+        sql.append(" ORDER BY ").append(sortExpression.replaceFirst("(?i)\\balias\\b", "code"))
+                .append(", id ASC LIMIT ? OFFSET ?");
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
             bindParameters(statement, params, d);
             statement.setInt(params.size() + 1, limit);
@@ -189,10 +201,10 @@ public class JdbcAliasRepository extends AbstractJdbcRepository {
     public long count(Connection connection, String keyword, Boolean enabled) {
         DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT count(*) FROM ")
-                .append(qualify(connection, "model_alias")).append(" WHERE deleted_at IS NULL");
+                .append(qualify(connection, "virtual_model")).append(" WHERE deleted_at IS NULL");
         List<Object> params = new ArrayList<>();
         if (keyword != null && !keyword.isBlank()) {
-            sql.append(" AND (").append(d.ilikeClause("alias"))
+            sql.append(" AND (").append(d.ilikeClause("code"))
                     .append(" OR ").append(d.ilikeClause("display_name")).append(")");
             params.add("%" + keyword.strip() + "%");
             params.add("%" + keyword.strip() + "%");
@@ -215,7 +227,7 @@ public class JdbcAliasRepository extends AbstractJdbcRepository {
     private AliasRecord mapRow(ResultSet rs, DatabaseDialect d) throws SQLException {
         return new AliasRecord(
                 d.readUuid(rs, "id"),
-                rs.getString("alias"),
+                rs.getString("code"),
                 rs.getString("display_name"),
                 rs.getString("description"),
                 rs.getString("route_strategy"),

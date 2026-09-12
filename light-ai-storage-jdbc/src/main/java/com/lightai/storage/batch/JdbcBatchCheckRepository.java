@@ -128,81 +128,65 @@ public class JdbcBatchCheckRepository extends AbstractJdbcRepository {
         }
     }
 
-    /** 明细完成后同事务刷新任务汇总。 */
+    /** 明细完成后同事务刷新任务汇总（两步聚合 + 更新，跨方言等价）。 */
     public void refreshJobSummary(Connection connection, UUID jobId) {
         DatabaseDialect d = dialect(connection);
-        String sql;
         String nowFn = d.nowFunction();
-        if (d.databaseType() == DatabaseType.MYSQL) {
-            sql = """
-                    UPDATE %s job
-                    JOIN (
-                      SELECT count(*) AS completed,
-                             COUNT(CASE WHEN status = 'SUCCEEDED' THEN 1 END) AS succeeded,
-                             COUNT(CASE WHEN status = 'FAILED' THEN 1 END) AS failed,
-                             COUNT(CASE WHEN status = 'CANCELLED' THEN 1 END) AS cancelled
-                        FROM %s WHERE job_id = ?
-                    ) agg ON 1 = 1
-                    SET
-                      job.completed_count = agg.completed,
-                      job.success_count = agg.succeeded,
-                      job.failure_count = agg.failed,
-                      job.cancelled_count = agg.cancelled,
-                      job.status = CASE
-                        WHEN agg.completed >= job.total_count AND agg.failed = 0 AND agg.cancelled = 0
-                          THEN 'SUCCEEDED'
-                        WHEN agg.completed >= job.total_count AND agg.cancelled > 0
-                          THEN 'CANCELLED'
-                        WHEN agg.completed >= job.total_count AND agg.succeeded = 0
-                          THEN 'FAILED'
-                        WHEN agg.completed >= job.total_count THEN 'PARTIAL_FAILED'
-                        ELSE 'RUNNING' END,
-                      job.started_at = COALESCE(job.started_at, %s),
-                      job.ended_at = CASE WHEN agg.completed >= job.total_count THEN %s ELSE job.ended_at END,
-                      job.updated_at = %s
-                    WHERE job.id = ?
-                    """.strip().formatted(
-                            qualify(connection, "batch_check_job"),
-                            qualify(connection, "batch_check_item"),
-                            nowFn, nowFn, nowFn);
-        } else {
-            sql = """
-                    UPDATE %s job SET
-                      completed_count = agg.completed,
-                      success_count = agg.succeeded,
-                      failure_count = agg.failed,
-                      cancelled_count = agg.cancelled,
-                      status = CASE
-                        WHEN agg.completed >= job.total_count AND agg.failed = 0 AND agg.cancelled = 0
-                          THEN 'SUCCEEDED'
-                        WHEN agg.completed >= job.total_count AND agg.cancelled > 0
-                          THEN 'CANCELLED'
-                        WHEN agg.completed >= job.total_count AND agg.succeeded = 0
-                          THEN 'FAILED'
-                        WHEN agg.completed >= job.total_count THEN 'PARTIAL_FAILED'
-                        ELSE 'RUNNING' END,
-                      started_at = COALESCE(job.started_at, %s),
-                      ended_at = CASE WHEN agg.completed >= job.total_count THEN %s ELSE job.ended_at END,
-                      updated_at = %s
-                    FROM (
-                      SELECT count(*) AS completed,
-                             COUNT(CASE WHEN status = 'SUCCEEDED' THEN 1 END) AS succeeded,
-                             COUNT(CASE WHEN status = 'FAILED' THEN 1 END) AS failed,
-                             COUNT(CASE WHEN status = 'CANCELLED' THEN 1 END) AS cancelled
-                        FROM %s WHERE job_id = ?
-                    ) agg
-                    WHERE job.id = ?
-                    """.strip().formatted(
-                            qualify(connection, "batch_check_job"),
-                            nowFn, nowFn, nowFn,
-                            qualify(connection, "batch_check_item"));
-        }
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+        String aggregateSql = "SELECT j.total_count AS total_count, count(*) AS completed, "
+                + "COUNT(CASE WHEN i.status = 'SUCCEEDED' THEN 1 END) AS succeeded, "
+                + "COUNT(CASE WHEN i.status = 'FAILED' THEN 1 END) AS failed, "
+                + "COUNT(CASE WHEN i.status = 'CANCELLED' THEN 1 END) AS cancelled "
+                + "FROM " + qualify(connection, "batch_check_job") + " j "
+                + "LEFT JOIN " + qualify(connection, "batch_check_item") + " i ON i.job_id = j.id "
+                + "WHERE j.id = ?";
+        int total;
+        int completed;
+        int succeeded;
+        int failed;
+        int cancelled;
+        try (PreparedStatement statement = connection.prepareStatement(aggregateSql)) {
             d.bindUuid(statement, 1, jobId);
-            d.bindUuid(statement, 2, jobId);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return;
+                }
+                total = rs.getInt("total_count");
+                completed = rs.getInt("completed");
+                succeeded = rs.getInt("succeeded");
+                failed = rs.getInt("failed");
+                cancelled = rs.getInt("cancelled");
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("检测任务汇总读取失败", e);
+        }
+        String status;
+        if (completed >= total && failed == 0 && cancelled == 0) {
+            status = "SUCCEEDED";
+        } else if (completed >= total && cancelled > 0) {
+            status = "CANCELLED";
+        } else if (completed >= total && succeeded == 0) {
+            status = "FAILED";
+        } else if (completed >= total) {
+            status = "PARTIAL_FAILED";
+        } else {
+            status = "RUNNING";
+        }
+        boolean finished = completed >= total;
+        String updateSql = "UPDATE " + qualify(connection, "batch_check_job")
+                + " SET completed_count = ?, success_count = ?, failure_count = ?, cancelled_count = ?, "
+                + "status = ?, started_at = COALESCE(started_at, " + nowFn + "), "
+                + (finished ? "ended_at = " + nowFn + ", " : "ended_at = ended_at, ")
+                + "updated_at = " + nowFn + " WHERE id = ?";
+        try (PreparedStatement statement = connection.prepareStatement(updateSql)) {
+            statement.setInt(1, completed);
+            statement.setInt(2, succeeded);
+            statement.setInt(3, failed);
+            statement.setInt(4, cancelled);
+            statement.setString(5, status);
+            d.bindUuid(statement, 6, jobId);
             statement.executeUpdate();
         } catch (SQLException e) {
-            throw new IllegalStateException("任务汇总刷新失败：" + e.getClass().getSimpleName(), e);
+            throw new IllegalStateException("检测任务汇总写入失败", e);
         }
     }
 

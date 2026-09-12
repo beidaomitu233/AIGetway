@@ -70,7 +70,7 @@ public class JdbcConfigReferenceRepository extends AbstractJdbcRepository {
 
     /** 渠道被引用的不同 Alias 数（BE-012 model_alias_count）。 */
     public long countAliasesByChannel(Connection connection, UUID channelId) {
-        String sql = "SELECT count(DISTINCT alias_id) FROM " + qualify(connection, "route_candidate")
+        String sql = "SELECT count(DISTINCT virtual_model_id) FROM " + qualify(connection, "route_candidate")
                 + " WHERE channel_id = ? AND deleted_at IS NULL";
         return count(connection, sql, channelId);
     }
@@ -171,9 +171,9 @@ public class JdbcConfigReferenceRepository extends AbstractJdbcRepository {
     public Map<UUID, String> candidateNamesByChannel(Connection connection, UUID channelId) {
         DatabaseDialect d = dialect(connection);
         String castExpr = (d.databaseType() == DatabaseType.POSTGRESQL) ? "rc.id::text" : "CAST(rc.id AS CHAR)";
-        String sql = "SELECT rc.id, COALESCE(ma.alias, ma.display_name, " + castExpr + ") AS name FROM "
+        String sql = "SELECT rc.id, COALESCE(ma.code, ma.display_name, " + castExpr + ") AS name FROM "
                 + qualify(connection, "route_candidate") + " rc LEFT JOIN "
-                + qualify(connection, "model_alias") + " ma ON ma.id = rc.alias_id "
+                + qualify(connection, "virtual_model") + " ma ON ma.id = rc.virtual_model_id "
                 + "WHERE rc.channel_id = ? AND rc.deleted_at IS NULL ORDER BY name";
         return nameMap(connection, sql, channelId);
     }

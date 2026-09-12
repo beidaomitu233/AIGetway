@@ -369,11 +369,11 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
     public List<ApplicationModelPermissionRecord> listModelPermissions(
             Connection connection, UUID applicationId) {
         DatabaseDialect dialect = dialect(connection);
-        String sql = "SELECT p.id, p.application_id, p.virtual_model_id, a.alias AS virtual_model_code, "
+        String sql = "SELECT p.id, p.application_id, p.virtual_model_id, a.code AS virtual_model_code, "
                 + "p.enabled, p.constraints_json, p.version, p.created_at, p.updated_at FROM "
                 + qualify(connection, "application_model_permission") + " p LEFT JOIN "
-                + qualify(connection, "model_alias") + " a ON a.id = p.virtual_model_id "
-                + "WHERE p.application_id = ? ORDER BY a.alias, p.id";
+                + qualify(connection, "virtual_model") + " a ON a.id = p.virtual_model_id "
+                + "WHERE p.application_id = ? ORDER BY a.code, p.id";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             dialect.bindUuid(statement, 1, applicationId);
             try (ResultSet resultSet = statement.executeQuery()) {
