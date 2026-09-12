@@ -30,7 +30,15 @@ public interface ApplicationQuotaPort {
 
     record Settlement(long inputTokens, long outputTokens, BigDecimal amount, String currency,
                       String usageSource, String virtualModelId, String upstreamModelId,
-                      String inputPrice, String outputPrice, int priceUnit) {
+                      String inputPrice, String outputPrice, int priceUnit, String channelId) {
+
+        public Settlement(long inputTokens, long outputTokens, BigDecimal amount, String currency,
+                          String usageSource, String virtualModelId, String upstreamModelId,
+                          String inputPrice, String outputPrice, int priceUnit) {
+            this(inputTokens, outputTokens, amount, currency, usageSource, virtualModelId,
+                    upstreamModelId, inputPrice, outputPrice, priceUnit, null);
+        }
+
         public Settlement {
             inputTokens = Math.max(0, inputTokens);
             outputTokens = Math.max(0, outputTokens);

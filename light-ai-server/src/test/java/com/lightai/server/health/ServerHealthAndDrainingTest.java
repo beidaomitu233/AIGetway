@@ -171,7 +171,8 @@ public class ServerHealthAndDrainingTest {
         assertEquals(503, ex.code().httpStatus());
 
         V1ErrorHandler errorHandler = new V1ErrorHandler();
-        ResponseEntity<String> errorRes = errorHandler.handle(ex);
+        ResponseEntity<String> errorRes = errorHandler.handle(ex,
+                new org.springframework.mock.web.MockHttpServletRequest());
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, errorRes.getStatusCode());
         assertTrue(errorRes.getBody().contains("SERVER_DRAINING"));
     }

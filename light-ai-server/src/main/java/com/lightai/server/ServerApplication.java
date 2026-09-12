@@ -195,6 +195,20 @@ public class ServerApplication {
         return new com.lightai.server.runtime.ServerInstanceCoordinator(publishService, snapshotPort);
     }
 
+    /** 渠道 Key 运行健康回写（BE-224）：429 冷却与认证失败退出选择，只写健康维度。 */
+    @Bean
+    public com.lightai.runtime.ports.CredentialHealthPort credentialHealthPort(
+            javax.sql.DataSource dataSource) {
+        return new com.lightai.server.runtime.JdbcCredentialHealthPort(
+                dataSource, new com.lightai.storage.runtime.JdbcRuntimeStateWriter());
+    }
+
+    /** 进程崩溃恢复（BE-225）：周期收敛超过 deadline 的 RUNNING/QUEUED Trace。 */
+    @Bean
+    public com.lightai.server.runtime.TraceRecoverySweeper traceRecoverySweeper(TraceStore traceStore) {
+        return new com.lightai.server.runtime.TraceRecoverySweeper(traceStore);
+    }
+
     @Bean
     public ModelsService modelsService(com.lightai.runtime.ports.ConfigSnapshotPort snapshotPort) {
         return new ModelsService(snapshotPort);
@@ -210,10 +224,11 @@ public class ServerApplication {
                                      com.lightai.runtime.ports.CredentialSecretPort credentialPort,
                                      com.lightai.runtime.ports.AdapterRegistryPort adapterRegistry,
                                      TraceStore traceStore,
-                                     com.lightai.runtime.ports.ApplicationQuotaPort applicationQuotaPort) {
+                                     com.lightai.runtime.ports.ApplicationQuotaPort applicationQuotaPort,
+                                     com.lightai.runtime.ports.CredentialHealthPort credentialHealthPort) {
         return new ChatPipeline(snapshotPort, runtimeConfigPort::defaultAliasId, routingPort, capacityPort,
                 circuitStateStore, credentialPort, queueService, adapterRegistry, traceStore,
-                applicationQuotaPort, () -> ReliabilityBudgets.DEFAULT, 120_000L);
+                applicationQuotaPort, () -> ReliabilityBudgets.DEFAULT, 120_000L, credentialHealthPort);
     }
 
     // ---------------- Admin UI 静态资源（/ui/** → classpath:/static/ui/，深链回落 index.html） ----------------

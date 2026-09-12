@@ -88,6 +88,22 @@ public final class InMemoryTraceStore implements TraceStore {
     }
 
     @Override
+    public int finalizeExpired(java.time.Instant now, String errorCode) {
+        int converged = 0;
+        synchronized (lock) {
+            for (TraceRow row : traces.values()) {
+                if (row.finalized || row.deadline == null || !now.isAfter(row.deadline)) {
+                    continue;
+                }
+                row.finalized = true;
+                row.status = "FAILED";
+                converged++;
+            }
+        }
+        return converged;
+    }
+
+    @Override
     public List<AttemptView> attempts(String traceId) {
         TraceRow row = require(traceId);
         synchronized (lock) {
@@ -121,6 +137,7 @@ public final class InMemoryTraceStore implements TraceStore {
         private final String traceId;
         private final String model;
         private final String application;
+        private final java.time.Instant deadline = java.time.Instant.now().plus(java.time.Duration.ofMinutes(2));
         private final List<AttemptRow> attempts = new CopyOnWriteArrayList<>();
         private volatile boolean committed;
         private volatile boolean finalized;

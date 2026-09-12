@@ -82,7 +82,8 @@ public class V1Controller {
             @RequestHeader(value = "Content-Encoding", required = false) String contentEncoding,
             @RequestHeader(value = "X-Trace-Id", required = false) String headerTraceId,
             @RequestBody String body,
-            HttpServletRequest servletRequest) throws IOException {
+            HttpServletRequest servletRequest,
+            jakarta.servlet.http.HttpServletResponse servletResponse) throws IOException {
         checkAcceptingRequests();
         checkProtocol(contentType, contentEncoding);
         AccessTokenPort.Principal principal = authenticate(authorization, servletRequest);
@@ -95,7 +96,7 @@ public class V1Controller {
             request = withTraceId(request, headerTraceId);
         }
         if (request.stream()) {
-            return chatStreamInternal(principal, request);
+            return chatStreamInternal(principal, request, servletResponse);
         }
         return chatInternal(principal, request);
     }
@@ -121,7 +122,11 @@ public class V1Controller {
     }
 
     private SseEmitter chatStreamInternal(AccessTokenPort.Principal principal,
-                                          UnifiedChatRequest request) throws IOException {
+                                          UnifiedChatRequest request,
+                                          jakarta.servlet.http.HttpServletResponse servletResponse) throws IOException {
+        // SSE 首个事件触发响应提交，头必须在返回前写到 servlet 响应
+        servletResponse.setHeader(VERSION_HEADER, SERVER_VERSION);
+        servletResponse.setHeader("X-Trace-Id", request.traceId() != null ? request.traceId() : "");
         SseEmitter emitter = new SseEmitter(0L);
         emitter.send(SseEmitter.event().comment("light-ai stream open"));
         com.lightai.server.lifecycle.ServerLifecycleService.ActiveRequestHandle trackedHandle =
@@ -250,5 +255,10 @@ public class V1Controller {
     static String errorBody(LightAiException e) {
         UnifiedErrorEnvelope envelope = UnifiedErrorEnvelope.of(e.toError());
         return json(Map.of("error", envelope.error()));
+    }
+
+    /** 错误响应体：异常映射器可先注入 request_id 再序列化。 */
+    static String errorJson(UnifiedError error) {
+        return json(Map.of("error", error));
     }
 }
