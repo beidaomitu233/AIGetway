@@ -192,6 +192,7 @@ public class ChannelService {
                 state == null ? "UNKNOWN" : state.connectionStatusOrDefault(),
                 record.priority(),
                 record.weight(),
+                record.version(),
                 draftChangeRepository.findChangedEntityIds(connection, ENTITY_TYPE,
                         List.of(record.id())).contains(record.id()),
                 state == null ? null : state.lastCheckedAt(),
