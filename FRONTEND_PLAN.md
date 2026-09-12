@@ -2,6 +2,8 @@
 
 ## 1. 执行边界
 
+开发基线统一为 origin/dev。FE-P20 可从 TASK_STATUS.md 领取；接口包装和缺失子资源见 COMMUNICATION.md 的 CONTRACT-V2-001。前端可推进页面、状态及同契约夹具测试，真实联调须等待对应后端契约收口，不以模拟结果勾选完成。
+
 任务包从 P20 编号，用于避免与既有提交记录中的编号冲突。技术栈沿用 Vue 3、TypeScript、Vue Router、Pinia、Vite、fetch/AbortController、Vitest/Vue Test Utils；首期只交付集中式浅色管理后台，目标桌面宽度 1024—1920，重点验收 1280 与 1920。
 
 ## 2. 路由、状态和调用规则

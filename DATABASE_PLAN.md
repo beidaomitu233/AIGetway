@@ -2,6 +2,8 @@
 
 ## 1. 执行边界
 
+开发基线统一为 origin/dev，占用按 TASK_STATUS.md 登记。DB-P20 先复核已有 V2/V3/V4 迁移与 BE-P20 字段差异，只为确有缺口新增迁移；COMMUNICATION.md 的未决业务选项不得被解释为可自行改变数据口径。
+
 任务包从 P20 编号，用于避免与既有迁移及提交记录中的编号冲突。V2 延续 PostgreSQL、MySQL 8.0/MySQL 5.7 双方言与版本化迁移，已发布迁移不得修改。金额使用定点 decimal，时间存 UTC，密钥原文禁止落库。所有主表具有 created_at、updated_at 和 version；历史/流水表只追加并使用 created_at/occurred_at。有历史引用的主对象采用禁用或归档，禁止直接物理删除。
 
 ## 2. 核心表契约

@@ -2,6 +2,8 @@
 
 ## 1. 执行边界
 
+开发基线统一为 origin/dev。BE-P20 可从 TASK_STATUS.md 领取；BE-201/202 首先处理 COMMUNICATION.md 的 CONTRACT-V2-001，交付应用和密钥的精确字段、响应包装及接口测试供前端使用。身份源等未决项仅限制对应任务；执行环境故障按 ENV-V2-001 验证审批通道。
+
 任务包从 P20 编号，用于避免与既有提交记录中的编号冲突。技术栈沿用 Java 17 字节码、Spring Boot Standalone、模块化 Maven、JDBC、PostgreSQL/MySQL、Redis 原子脚本和 JDK HttpClient。V2 首期权威配置位于集中式服务，公共 client/spi/runtime 不依赖 Spring，Adapter 只承担单次调用与协议映射。
 
 ## 2. API 与错误基线
