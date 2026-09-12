@@ -12,7 +12,6 @@ import {
   connectionStatusLabels,
   formatDateTime,
   formatDuration,
-  poolStatusLabels,
 } from '@/app/display'
 import { Permission } from '@/app/permissions'
 import {
@@ -26,7 +25,7 @@ import {
   getProviderImpact,
 } from '@/api/providers'
 import { listProviderModels } from '@/api/providerModels'
-import { listPools } from '@/api/credentialPools'
+import CredentialPanel from '@/components/credentials/CredentialPanel.vue'
 import { ApiError, isAbortError } from '@/api/errors'
 
 const route = useRoute()
@@ -40,10 +39,8 @@ const canCheck = computed(() => store.can(Permission.providerCheck))
 const state = ref<'loading' | 'ready' | 'error'>('loading')
 const error = ref<unknown>(null)
 const detail = ref<ProviderDetail | null>(null)
-const relatedPools = ref<Array<{ id: string; name: string; status: string }>>([])
 const relatedModels = ref<Array<{ id: string; display_name: string; model_id: string; connection_status: string }>>([])
 
-const poolsError = ref<unknown>(null)
 const modelsError = ref<unknown>(null)
 let loadSequence = 0
 let loadController: AbortController | null = null
@@ -56,17 +53,14 @@ async function load(): Promise<void> {
   error.value = null
   try {
     const signal = loadController.signal
-    const [detailResult, pools, models] = await Promise.allSettled([
+    const [detailResult, models] = await Promise.allSettled([
       getProvider(providerId.value, signal),
-      listPools({ provider_id: providerId.value, page: 1, page_size: 10 }, signal),
-      listProviderModels({ provider_id: providerId.value, page: 1, page_size: 10 }, signal),
+      listProviderModels({ channel_id: providerId.value, page: 1, page_size: 10 }, signal),
     ])
     if (sequence !== loadSequence) return
     if (detailResult.status === 'rejected') throw detailResult.reason
     detail.value = detailResult.value
-    poolsError.value = pools.status === 'rejected' ? pools.reason : null
     modelsError.value = models.status === 'rejected' ? models.reason : null
-    relatedPools.value = pools.status === 'fulfilled' ? pools.value.items : []
     relatedModels.value = models.status === 'fulfilled' ? models.value.items : []
     state.value = 'ready'
   } catch (e) {
@@ -145,7 +139,7 @@ const headerRows = computed(() => Object.entries(detail.value?.default_headers ?
   <section class="lai-page">
     <div class="lai-page-header">
       <h1 class="lai-page-title">
-        Provider 详情
+        渠道 详情
       </h1>
       <div class="lai-row-actions">
         <button
@@ -288,51 +282,34 @@ const headerRows = computed(() => Object.entries(detail.value?.default_headers ?
 
       <div class="lai-card">
         <h2 class="lai-card-title">
-          关联凭证池
+          渠道 Key
         </h2>
-        <PageState v-if="poolsError" status="error" :error="poolsError" @retry="load" />
-        <ul
-          v-else-if="relatedPools.length > 0"
-          class="lai-related-list"
-        >
-          <li
-            v-for="pool in relatedPools"
-            :key="pool.id"
-          >
-            <RouterLink
-              :to="{ name: 'pool-detail', params: { id: pool.id } }"
-              class="lai-link"
-            >
-              {{ pool.name }}
-            </RouterLink>
-            <span class="lai-related-meta">
-              <StatusText
-                :value="pool.status"
-                :labels="poolStatusLabels"
-              />
-            </span>
-          </li>
-        </ul>
+        <CredentialPanel
+          v-if="store.can(Permission.credentialView)"
+          :key="detail.id"
+          :pool-id="detail.id"
+          :provider-id="detail.id"
+          :can-manage="store.can(Permission.credentialManage)"
+          :can-check="canCheck"
+        />
         <p
           v-else
-          class="lai-related-empty"
+          role="status"
         >
-          暂无关联凭证池
+          无渠道 Key 查看权限
         </p>
-        <RouterLink
-          v-if="relatedPools.length === 10"
-          :to="{ name: 'pool-list', query: { provider_id: detail.id } }"
-          class="lai-link"
-        >
-          查看全部凭证池
-        </RouterLink>
       </div>
 
       <div class="lai-card">
         <h2 class="lai-card-title">
           关联模型
         </h2>
-        <PageState v-if="modelsError" status="error" :error="modelsError" @retry="load" />
+        <PageState
+          v-if="modelsError"
+          status="error"
+          :error="modelsError"
+          @retry="load"
+        />
         <ul
           v-else-if="relatedModels.length > 0"
           class="lai-related-list"
@@ -353,7 +330,7 @@ const headerRows = computed(() => Object.entries(detail.value?.default_headers ?
         </p>
         <RouterLink
           v-if="relatedModels.length === 10"
-          :to="{ name: 'model-list', query: { provider_id: detail.id } }"
+          :to="{ name: 'model-list', query: { channel_id: detail.id } }"
           class="lai-link"
         >
           查看全部模型
@@ -444,7 +421,7 @@ const headerRows = computed(() => Object.entries(detail.value?.default_headers ?
 
     <CheckDialog
       :open="checkOpen"
-      title="检测 Provider"
+      title="检测 渠道"
       :target="checkTarget"
       :loading="checkLoading"
       :result="checkResult"

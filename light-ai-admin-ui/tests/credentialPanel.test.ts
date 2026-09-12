@@ -16,7 +16,7 @@ function jsonResponse(status: number, body: unknown): Response {
 const credentialRows: CredentialListItem[] = [
   {
     id: 'cred-1',
-    pool_id: 'pool-1',
+    channel_id: 'pool-1',
     name: 'openai-key-1',
     masked_value: 'sk-****abcd',
     secret_source: 'INLINE_ENCRYPTED',
@@ -61,7 +61,7 @@ afterEach(() => {
 })
 
 const listRoutes: [RegExp, (url: URL, method: string) => Response][] = [
-  [/\/admin\/credential-pools\/pool-1\/credentials$/, (_url, method) =>
+  [/\/admin\/channels\/pool-1\/credentials$/, (_url, method) =>
     method === 'GET'
       ? jsonResponse(200, { data: { items: credentialRows, total: 1, page: 1, page_size: 20, sort: 'name', query_started_at: 'q', data_updated_at: 'u' } })
       : jsonResponse(200, { data: { id: 'cred-new', version: 1, entity: null, draft_changed: true, draft_revision: null, request_id: 'r1' } })],
@@ -95,7 +95,7 @@ describe('CredentialPanel（FE-013/014）', () => {
   it('删除被 CAPACITY_IN_USE 拒绝时保留对象并提示', async () => {
     const fetchMock = stubFetch([
       ...listRoutes,
-      [/\/admin\/credentials\/cred-1$/, (_url, method) =>
+      [/\/admin\/channels\/pool-1\/credentials\/cred-1$/, (_url, method) =>
         method === 'DELETE'
           ? jsonResponse(409, { error: { code: 'CAPACITY_IN_USE', type: 'conflict', message: '占用中', retryable: false } })
           : jsonResponse(200, { data: {} })],

@@ -34,7 +34,7 @@ describe('router guards', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
     const router = buildRouter()
-    await router.push('/ui/providers')
+    await router.push('/ui/channels')
     await router.isReady()
     const store = useBootstrapStore()
     expect(store.status).toBe('ready')
@@ -48,10 +48,10 @@ describe('router guards', () => {
       vi.fn(() => Promise.resolve(jsonResponse(200, { data: bootstrapFixtures.VIEWER }))),
     )
     const router = buildRouter()
-    await router.push('/ui/providers/new')
+    await router.push('/ui/channels/new')
     await router.isReady()
     expect(router.currentRoute.value.name).toBe('forbidden')
-    expect(router.currentRoute.value.query.from).toBe('/ui/providers/new')
+    expect(router.currentRoute.value.query.from).toBe('/ui/channels/new')
   })
 
   it('身份失效（ACCESS_DENIED）进入 forbidden 页', async () => {

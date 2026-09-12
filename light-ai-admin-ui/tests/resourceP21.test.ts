@@ -83,12 +83,12 @@ describe('FE-215 候选选项竞态', () => {
   it('旧模型选项迟到不覆盖当前模型', async () => {
     let finishFirst!: (value: CredentialPoolOption[]) => void
     const first = new Promise<CredentialPoolOption[]>((resolve) => { finishFirst = resolve })
-    const loadPools = vi.fn().mockReturnValueOnce(first).mockResolvedValueOnce([{ id: 'pool-b', name: '渠道 B', provider_id: 'b', credential_available: 1, status: 'ACTIVE' }])
+    const loadPools = vi.fn().mockReturnValueOnce(first).mockResolvedValueOnce([{ id: 'pool-b', name: '渠道 B', channel_id: 'b', credential_available: 1, status: 'ACTIVE' }])
     const wrapper = mount(CandidateFormDialog, { props: { open: true, aliasId: 'v', candidate: null, modelGroups: [{ providerName: '测试', models: ['a', 'b'].map((id) => ({ id, label: id, supportStream: true, contextWindow: 100 })) }], loadPools }, global: { stubs: { Teleport: true } } })
     await wrapper.find('#lai-candidate-model').setValue('a')
     await wrapper.find('#lai-candidate-model').setValue('b')
     await flushPromises()
-    finishFirst([{ id: 'pool-a', name: '渠道 A', provider_id: 'a', credential_available: 1, status: 'ACTIVE' }])
+    finishFirst([{ id: 'pool-a', name: '渠道 A', channel_id: 'a', credential_available: 1, status: 'ACTIVE' }])
     await flushPromises()
     expect(wrapper.find('#lai-candidate-pool').text()).toContain('渠道 B')
     expect(wrapper.find('#lai-candidate-pool').text()).not.toContain('渠道 A')

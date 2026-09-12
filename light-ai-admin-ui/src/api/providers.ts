@@ -67,8 +67,8 @@ export interface ProviderSavePayload {
 export type CheckMode = 'MINIMAL_CHAT' | 'CONNECTION_ONLY'
 
 export interface ProviderCheckCommand {
-  provider_model_id?: string
-  credential_id?: string
+  upstream_model_id?: string
+  channel_credential_id?: string
   mode: CheckMode
   timeout_ms: number
 }
@@ -92,37 +92,37 @@ export function listProviders(
   query: Record<string, import('./http').QueryValue>,
   signal: AbortSignal,
 ): Promise<PageResult<ProviderListItem>> {
-  return request({ path: '/providers', query, signal })
+  return request({ path: '/channels', query, signal })
 }
 
 export function getProvider(id: string, signal?: AbortSignal): Promise<ProviderDetail> {
-  return request({ path: `/providers/${id}`, signal })
+  return request({ path: `/channels/${id}`, signal })
 }
 
 export function createProvider(payload: ProviderSavePayload): Promise<ManagementOperationResult> {
-  return request({ path: '/providers', method: 'POST', body: payload })
+  return request({ path: '/channels', method: 'POST', body: payload })
 }
 
 export function updateProvider(
   id: string,
   payload: ProviderSavePayload,
 ): Promise<ManagementOperationResult> {
-  return request({ path: `/providers/${id}`, method: 'PUT', body: payload })
+  return request({ path: `/channels/${id}`, method: 'PUT', body: payload })
 }
 
 export function getProviderImpact(id: string, operation: 'DISABLE' | 'DELETE'): Promise<ImpactAnalysis> {
-  return request({ path: `/providers/${id}/impact`, query: { operation } })
+  return request({ path: `/channels/${id}/impact`, query: { operation } })
 }
 
 export function checkProvider(
   id: string,
   command: ProviderCheckCommand,
 ): Promise<ProviderCheckRecord> {
-  return request({ path: `/providers/${id}/check`, method: 'POST', body: command })
+  return request({ path: `/channels/${id}/check`, method: 'POST', body: command })
 }
 
 export function enableProvider(id: string, version: number): Promise<ManagementOperationResult> {
-  return request({ path: `/providers/${id}/enable`, method: 'POST', body: { version } })
+  return request({ path: `/channels/${id}/enable`, method: 'POST', body: { version } })
 }
 
 export function disableProvider(
@@ -131,7 +131,7 @@ export function disableProvider(
   confirmedImpactVersion: string,
 ): Promise<ManagementOperationResult> {
   return request({
-    path: `/providers/${id}/disable`,
+    path: `/channels/${id}/disable`,
     method: 'POST',
     body: { version, confirmed_impact_version: confirmedImpactVersion },
   })
@@ -143,7 +143,7 @@ export function deleteProvider(
   confirmedImpactVersion: string,
 ): Promise<ManagementOperationResult> {
   return request({
-    path: `/providers/${id}`,
+    path: `/channels/${id}`,
     method: 'DELETE',
     body: { version, confirmed_impact_version: confirmedImpactVersion },
   })

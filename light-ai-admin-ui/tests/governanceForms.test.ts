@@ -57,7 +57,7 @@ async function mountAt(component: unknown, path: string, routes: { path: string;
 }
 
 const scopeRoutes: Route[] = [
-  [/\/admin\/model-aliases$/, () =>
+  [/\/admin\/virtual-models$/, () =>
     jsonResponse(200, { data: { items: [{ id: 'alias-1', alias: 'chat-default', display_name: '默认对话' }], total: 1, page: 1, page_size: 100, sort: 'alias', query_started_at: '', data_updated_at: '' } })],
 ]
 
@@ -143,7 +143,7 @@ describe('ReliabilityFormPage（FE-021）', () => {
   ]
 
   it('首 Token 超时不小于总超时时阻止保存', async () => {
-    stubFetch([[/\/admin\/model-aliases$/, () =>
+    stubFetch([[/\/admin\/virtual-models$/, () =>
       jsonResponse(200, { data: { items: [{ id: 'alias-1', alias: 'chat-default', display_name: '默认对话' }], total: 1, page: 1, page_size: 100, sort: 'alias', query_started_at: '', data_updated_at: '' } })]])
     const wrapper = await mountAt(ReliabilityFormPage, '/ui/reliability-policies/new', pageRoutes)
     const inputs = wrapper.findAll('input[type="text"]')
@@ -161,7 +161,7 @@ describe('ReliabilityFormPage（FE-021）', () => {
 
   it('失败率百分比提交转换为 0—1 小数', async () => {
     const fetchMock = stubFetch([
-      [/\/admin\/model-aliases$/, () =>
+      [/\/admin\/virtual-models$/, () =>
         jsonResponse(200, { data: { items: [{ id: 'alias-1', alias: 'chat-default', display_name: '默认对话' }], total: 1, page: 1, page_size: 100, sort: 'alias', query_started_at: '', data_updated_at: '' } })],
       [/\/admin\/reliability-policies$/, (_url, method) =>
         method === 'POST'

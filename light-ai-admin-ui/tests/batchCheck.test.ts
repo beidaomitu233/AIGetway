@@ -21,14 +21,14 @@ function jobObject(status: string, completed: number) {
     cancelled_count: 0,
     started_at: '2026-09-05T10:00:00Z',
     ended_at: null,
-    command: { provider_model_ids: ['m-1', 'm-2'], credential_id: 'cred-1', mode: 'MINIMAL_CHAT', timeout_ms: 10000 },
+    command: { upstream_model_ids: ['m-1', 'm-2'], credential_id: 'cred-1', mode: 'MINIMAL_CHAT', timeout_ms: 10000 },
   }
 }
 
 function itemRows(status: string) {
   return [
-    { id: 'i-1', provider_model_id: 'm-1', provider_model_name: 'M1', sequence: 1, status: 'SUCCEEDED', check_record_id: 'c1', error_code: null },
-    { id: 'i-2', provider_model_id: 'm-2', provider_model_name: 'M2', sequence: 2, status, check_record_id: null, error_code: null },
+    { id: 'i-1', upstream_model_id: 'm-1', upstream_model_name: 'M1', sequence: 1, status: 'SUCCEEDED', check_record_id: 'c1', error_code: null },
+    { id: 'i-2', upstream_model_id: 'm-2', upstream_model_name: 'M2', sequence: 2, status, check_record_id: null, error_code: null },
   ]
 }
 
@@ -50,7 +50,7 @@ const credentialOptions = [{ id: 'cred-1', label: 'key-1' }]
 
 function mountPanel(): ReturnType<typeof mount> {
   return mount(BatchCheckPanel, {
-    props: { open: true, models, credentialOptions, providerName: 'OpenAI' },
+    props: { open: true, channelId: 'prov-1', models, credentialOptions, providerName: 'OpenAI' },
     global: { stubs: { teleport: true } },
   })
 }
@@ -61,7 +61,7 @@ describe('BatchCheckPanel（FE-016）', () => {
     let pollCount = 0
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET'
-      if (String(url).endsWith('/admin/provider-models/batch-check') && method === 'POST') {
+      if (String(url).endsWith('/admin/upstream-models/batch-check') && method === 'POST') {
         return Promise.resolve(jsonResponse(200, { data: jobObject('RUNNING', 0) }))
       }
       if (String(url).includes('/admin/batch-check-jobs/job-1')) {
@@ -69,7 +69,7 @@ describe('BatchCheckPanel（FE-016）', () => {
         const completed = Math.min(pollCount, 2)
         const status = completed >= 2 ? 'SUCCEEDED' : 'RUNNING'
         const itemStatus = completed >= 1 ? 'SUCCEEDED' : 'PENDING'
-        return Promise.resolve(jsonResponse(200, { data: { job: jobObject(status, completed), items: itemRows(itemStatus) } }))
+        return Promise.resolve(jsonResponse(200, { data: { ...jobObject(status, completed), items: itemRows(itemStatus) } }))
       }
       return Promise.resolve(jsonResponse(404, { error: { code: 'OBJECT_NOT_FOUND', type: 'api', message: 'x', retryable: false } }))
     })
@@ -104,7 +104,7 @@ describe('BatchCheckPanel（FE-016）', () => {
       'fetch',
       vi.fn((url: string, init?: RequestInit) => {
         const method = init?.method ?? 'GET'
-        if (String(url).endsWith('/admin/provider-models/batch-check') && method === 'POST') {
+        if (String(url).endsWith('/admin/upstream-models/batch-check') && method === 'POST') {
           return Promise.resolve(jsonResponse(200, { data: jobObject('RUNNING', 0) }))
         }
         if (String(url).endsWith('/admin/batch-check-jobs/job-1/cancel') && method === 'POST') {
@@ -114,7 +114,7 @@ describe('BatchCheckPanel（FE-016）', () => {
         if (String(url).includes('/admin/batch-check-jobs/job-1')) {
           const status = cancelled ? 'CANCELLED' : 'RUNNING'
           const itemStatus = cancelled ? 'CANCELLED' : 'PENDING'
-          return Promise.resolve(jsonResponse(200, { data: { job: jobObject(status, 0), items: itemRows(itemStatus) } }))
+          return Promise.resolve(jsonResponse(200, { data: { ...jobObject(status, 0), items: itemRows(itemStatus) } }))
         }
         return Promise.resolve(jsonResponse(404, { error: { code: 'OBJECT_NOT_FOUND', type: 'api', message: 'x', retryable: false } }))
       }),

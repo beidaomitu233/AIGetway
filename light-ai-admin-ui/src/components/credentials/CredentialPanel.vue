@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 凭证池详情的 Credential 管理区域（FE-013/014）。
+// 凭证池详情的 Key 管理区域（FE-013/014）。
 // 自包含数据流：列表查询、10 秒运行态刷新、增改、轮换、检测、启停、删除；
 // 池详情页只需提供 poolId/providerId 与权限标记并挂载本组件。
 import { computed, onMounted, onUnmounted, reactive, ref, shallowRef } from 'vue'
@@ -145,7 +145,7 @@ async function submitForm(command: {
         enabled: command.enabled,
       })
     } else {
-      await updateCredential(formTarget.value!.id, {
+      await updateCredential(props.poolId, formTarget.value!.id, {
         name: command.name,
         secret_ref: command.secret_ref ?? null,
         weight: command.weight,
@@ -181,7 +181,7 @@ async function submitRotate(command: { secret_value: string; secret_value_confir
   rotateSubmitting.value = true
   rotateError.value = null
   try {
-    await rotateCredential(rotateTarget.value!.id, command)
+    await rotateCredential(props.poolId, rotateTarget.value!.id, command)
     rotateOpen.value = false
     await load()
   } catch (e) {
@@ -206,7 +206,7 @@ async function openCheck(row: CredentialListItem): Promise<void> {
   checkOpen.value = true
   if (props.providerId) {
     try {
-      const models = await fetchProviderModels({ provider_id: props.providerId, page_size: 100 })
+      const models = await fetchProviderModels({ channel_id: props.providerId, page_size: 100 })
       modelOptions.value = models.items.map((item) => ({
         id: item.id,
         label: `${item.display_name}（${item.model_id}）`,
@@ -218,8 +218,8 @@ async function openCheck(row: CredentialListItem): Promise<void> {
 }
 
 async function submitCheck(command: {
-  provider_model_id?: string | undefined
-  credential_id?: string | undefined
+  upstream_model_id?: string | undefined
+  channel_credential_id?: string | undefined
   mode: 'MINIMAL_CHAT' | 'CONNECTION_ONLY'
   timeout_ms: number
 }): Promise<void> {
@@ -227,7 +227,7 @@ async function submitCheck(command: {
   checkSubmitting.value = true
   checkError.value = null
   try {
-    checkResult.value = await checkCredential(checkTarget.value!.id, command)
+    checkResult.value = await checkCredential(props.poolId, checkTarget.value!.id, command)
     await load()
   } catch (e) {
     checkError.value = e
@@ -245,9 +245,9 @@ async function toggleEnabled(row: CredentialListItem): Promise<void> {
   actionError.value = null
   try {
     if (row.enabled) {
-      await disableCredential(row.id, row.version)
+      await disableCredential(props.poolId, row.id, row.version)
     } else {
-      await enableCredential(row.id, row.version)
+      await enableCredential(props.poolId, row.id, row.version)
     }
     await load()
   } catch (e) {
@@ -266,7 +266,7 @@ async function submitDelete(): Promise<void> {
   actionBusy.value = deleteTarget.value.id
   actionError.value = null
   try {
-    await deleteCredential(deleteTarget.value.id, deleteTarget.value.version)
+    await deleteCredential(props.poolId, deleteTarget.value.id, deleteTarget.value.version)
     deleteOpen.value = false
     await load()
   } catch (e) {
@@ -308,7 +308,7 @@ function formatTime(value: string | null, emptyText: string): string {
   <section class="lai-cred-panel">
     <div class="lai-cred-toolbar">
       <h2 class="lai-section-title">
-        Credential
+        Key
       </h2>
       <div class="lai-cred-filters">
         <select
@@ -349,7 +349,7 @@ function formatTime(value: string | null, emptyText: string): string {
           class="lai-btn lai-btn-primary"
           @click="openCreate"
         >
-          新增 Credential
+          新增 Key
         </button>
       </div>
     </div>
@@ -375,7 +375,7 @@ function formatTime(value: string | null, emptyText: string): string {
     <PageState
       v-else-if="items.length === 0"
       status="empty"
-      :message="listState.healthStatus || listState.enabled ? '没有匹配的 Credential' : '尚未配置 Credential'"
+      :message="listState.healthStatus || listState.enabled ? '没有匹配的 Key' : '尚未配置 Key'"
     />
     <template v-else>
       <div class="lai-table-wrap">
@@ -501,7 +501,7 @@ function formatTime(value: string | null, emptyText: string): string {
     />
     <CheckCommandDialog
       v-model:open="checkOpen"
-      title="检测 Credential"
+      title="检测 Key"
       :target-label="`目标：${checkTarget?.name ?? ''}`"
       :model-options="modelOptions"
       :require-model="modelOptions.length > 0"
@@ -512,8 +512,8 @@ function formatTime(value: string | null, emptyText: string): string {
     />
     <ConfirmDialog
       v-model:open="deleteOpen"
-      title="删除 Credential"
-      :message="`确认删除 Credential「${deleteTarget?.name ?? ''}」？删除未发布对象或记录删除草稿，发布后生效。`"
+      title="删除 Key"
+      :message="`确认删除 Key「${deleteTarget?.name ?? ''}」？删除未发布对象或记录删除草稿，发布后生效。`"
       danger
       :loading="actionBusy !== ''"
       @confirm="submitDelete"
@@ -583,4 +583,17 @@ function formatTime(value: string | null, emptyText: string): string {
 .lai-cell-actions .lai-btn {
   margin-right: 4px;
 }
+.lai-table th:first-child,
+.lai-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff;
+  min-width: 140px;
+  max-width: 220px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.lai-table th:first-child { background: #f6f8fa; }
+.lai-cred-filters { flex-wrap: wrap; }
 </style>

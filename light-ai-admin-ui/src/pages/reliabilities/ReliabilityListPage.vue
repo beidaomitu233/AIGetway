@@ -186,7 +186,7 @@ function openRecovery(row: ReliabilityPolicyListItem): void {
               </td>
               <td>
                 <RouterLink
-                  :to="`/ui/model-aliases/${row.alias_id}`"
+                  :to="`/ui/models/virtual/${row.alias_id}`"
                   class="lai-link lai-cell-mono"
                 >
                   {{ row.alias }}

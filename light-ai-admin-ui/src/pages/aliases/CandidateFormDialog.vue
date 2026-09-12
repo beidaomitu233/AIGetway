@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// 候选新增/编辑弹窗（FE-018，附录 4.2.8.2）：模型按 Provider 分组选择，
-// 凭证池只显示与模型同 Provider 的池；编辑时模型只读。
+// 候选新增/编辑弹窗（FE-018，附录 4.2.8.2）：模型按 渠道 分组选择，
+// 所属渠道只显示与模型模型所属渠道；编辑时模型只读。
 import { computed, ref, watch } from 'vue'
 import { toErrorMessage } from '@/api/errors'
 import type { CredentialPoolOption, RouteCandidateDetail } from '@/api/modelAliases'
@@ -19,7 +19,7 @@ const props = withDefaults(
     modelGroups: ModelGroupOption[]
     submitting?: boolean
     error?: unknown
-    /** 凭证池选项按所选模型加载（调用方提供异步函数）。 */
+    /** 所属渠道选项按所选模型加载（调用方提供异步函数）。 */
     loadPools: (modelId: string) => Promise<CredentialPoolOption[]>
   }>(),
   {
@@ -29,7 +29,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
-  confirm: [command: { provider_model_id: string; credential_pool_id: string; priority: number; weight: number; enabled: boolean; version?: number | undefined }]
+  confirm: [command: { upstream_model_id: string; channel_id: string; priority: number; weight: number; enabled: boolean; version?: number | undefined }]
 }>()
 
 const providerModelId = ref('')
@@ -50,8 +50,8 @@ watch(
     if (!open) { poolRequest++; poolsLoading.value = false; return }
     poolsError.value = ''
     if (props.candidate) {
-      providerModelId.value = props.candidate.provider_model_id
-      credentialPoolId.value = props.candidate.credential_pool_id
+      providerModelId.value = props.candidate.upstream_model_id
+      credentialPoolId.value = props.candidate.channel_id
       priority.value = props.candidate.priority
       weight.value = props.candidate.weight
       enabled.value = props.candidate.enabled
@@ -95,16 +95,16 @@ async function refreshPoolOptions(modelId: string): Promise<void> {
 const modelInvalid = computed(() => providerModelId.value === '')
 const poolInvalid = computed(() => credentialPoolId.value === '')
 const priorityInvalid = computed(() => !Number.isInteger(priority.value) || priority.value < 1 || priority.value > 100)
-const weightInvalid = computed(() => !Number.isInteger(weight.value) || weight.value < 1 || weight.value > 100)
+const weightInvalid = computed(() => !Number.isInteger(weight.value) || weight.value < 0 || weight.value > 100)
 const confirmDisabled = computed(
-  () => !props.open || props.submitting || poolsLoading.value || !!poolsError.value || !poolOptions.value.some((pool) => pool.id === credentialPoolId.value && pool.credential_available > 0) || modelInvalid.value || poolInvalid.value || priorityInvalid.value || weightInvalid.value,
+  () => !props.open || props.submitting || poolsLoading.value || !!poolsError.value || !poolOptions.value.some((pool) => pool.id === credentialPoolId.value && pool.credential_available > 0 && pool.status === 'ACTIVE') || modelInvalid.value || poolInvalid.value || priorityInvalid.value || weightInvalid.value,
 )
 
 function confirm(): void {
   if (confirmDisabled.value) return
   emit('confirm', {
-    provider_model_id: providerModelId.value,
-    credential_pool_id: credentialPoolId.value,
+    upstream_model_id: providerModelId.value,
+    channel_id: credentialPoolId.value,
     priority: priority.value,
     weight: weight.value,
     enabled: enabled.value,
@@ -140,7 +140,7 @@ function close(): void {
           <label
             class="lai-form-label"
             for="lai-candidate-model"
-          >Provider 模型<span
+          >上游模型<span
             class="lai-required"
             aria-hidden="true"
           >*</span></label>
@@ -183,7 +183,7 @@ function close(): void {
           <label
             class="lai-form-label"
             for="lai-candidate-pool"
-          >凭证池<span
+          >所属渠道<span
             class="lai-required"
             aria-hidden="true"
           >*</span></label>
@@ -197,14 +197,14 @@ function close(): void {
               value=""
               disabled
             >
-              {{ poolsLoading ? '加载中…' : '请选择凭证池' }}
+              {{ poolsLoading ? '加载中…' : '请选择所属渠道' }}
             </option>
             <option
               v-for="item in poolOptions"
               :key="item.id"
               :value="item.id"
             >
-              {{ item.name }}（可用凭证 {{ item.credential_available }}）
+              {{ item.name }}（启用 Key {{ item.credential_available }}）
             </option>
           </select>
           <p
@@ -217,7 +217,7 @@ function close(): void {
             v-else-if="providerModelId !== '' && poolOptions.length === 0 && !poolsLoading"
             class="lai-form-hint"
           >
-            该模型所属 Provider 下没有可用凭证池
+            该模型所属渠道 下没有可用所属渠道
           </p>
         </div>
 
@@ -246,24 +246,27 @@ function close(): void {
             <label
               class="lai-form-label"
               for="lai-candidate-weight"
-            >weight（1—100）</label>
+            >权重（0—100）</label>
             <input
               id="lai-candidate-weight"
               v-model.number="weight"
               class="lai-input"
               type="number"
-              min="1"
+              min="0"
               max="100"
             >
             <p
               v-if="weightInvalid"
               class="lai-form-message-error"
             >
-              范围为 1—100
+              范围为 0—100
             </p>
           </div>
         </div>
 
+        <p class="lai-form-hint">
+          权重仅在同优先级比较；零权重不接收普通流量。保存仅形成草稿。
+        </p>
         <label class="lai-candidate-switch">
           <input
             v-model="enabled"

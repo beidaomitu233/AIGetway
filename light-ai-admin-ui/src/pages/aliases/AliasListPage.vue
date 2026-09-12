@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Model Alias 列表页（FE-017，附录 4.2.7.1）。
+// 虚拟模型 列表页（FE-017，附录 4.2.7.1）。
 import PageState from '@/components/PageState.vue'
 import ListPager from '@/components/ListPager.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -47,9 +47,9 @@ const {
   submitDelete,
   actionText,
 } = useListActions<ModelAliasListItem>({
-  togglePath: (row) => `/model-aliases/${row.id}/${row.enabled ? 'disable' : 'enable'}`,
-  deletePath: (row) => `/model-aliases/${row.id}`,
-  impactPath: (row) => `/model-aliases/${row.id}/impact`,
+  togglePath: (row) => `/virtual-models/${row.id}/${row.enabled ? 'disable' : 'enable'}`,
+  deletePath: (row) => `/virtual-models/${row.id}`,
+  impactPath: (row) => `/virtual-models/${row.id}/impact`,
   reload: refresh,
 })
 
@@ -77,17 +77,17 @@ const aliasName = (row: ModelAliasListItem) => row.alias
   <section class="lai-page">
     <div class="lai-page-header">
       <h1 class="lai-page-title">
-        模型别名
+        虚拟模型
       </h1>
       <div
         v-if="canManage"
         class="lai-page-actions"
       >
         <RouterLink
-          to="/ui/model-aliases/new"
+          to="/ui/models/virtual/new"
           class="lai-btn lai-btn-primary"
         >
-          新建 Model Alias
+          新建 虚拟模型
         </RouterLink>
       </div>
     </div>
@@ -162,7 +162,7 @@ const aliasName = (row: ModelAliasListItem) => row.alias
     <PageState
       v-else-if="items.length === 0"
       status="empty"
-      message="没有匹配的模型别名"
+      message="没有匹配的虚拟模型"
     />
     <template v-else>
       <p
@@ -196,7 +196,7 @@ const aliasName = (row: ModelAliasListItem) => row.alias
             >
               <td>
                 <RouterLink
-                  :to="`/ui/model-aliases/${row.id}`"
+                  :to="`/ui/models/virtual/${row.id}`"
                   class="lai-link lai-cell-mono"
                 >
                   {{ row.alias }}
@@ -206,7 +206,7 @@ const aliasName = (row: ModelAliasListItem) => row.alias
               <td>{{ row.route_strategy }}</td>
               <td>
                 <RouterLink
-                  :to="`/ui/model-aliases/${row.id}`"
+                  :to="`/ui/models/virtual/${row.id}`"
                   class="lai-link"
                 >
                   {{ row.candidate_count }}
@@ -220,14 +220,14 @@ const aliasName = (row: ModelAliasListItem) => row.alias
               <td>{{ row.updated_at }}</td>
               <td class="lai-cell-actions">
                 <RouterLink
-                  :to="`/ui/model-aliases/${row.id}`"
+                  :to="`/ui/models/virtual/${row.id}`"
                   class="lai-btn lai-btn-text"
                 >
                   查看
                 </RouterLink>
                 <RouterLink
                   v-if="canManage"
-                  :to="`/ui/model-aliases/${row.id}/edit`"
+                  :to="`/ui/models/virtual/${row.id}/edit`"
                   class="lai-btn lai-btn-text"
                 >
                   编辑
@@ -271,7 +271,7 @@ const aliasName = (row: ModelAliasListItem) => row.alias
 
     <ConfirmDialog
       v-model:open="disableTarget.open"
-      title="停用模型别名"
+      title="停用虚拟模型"
       :message="`确认停用「${disableTarget.row ? aliasName(disableTarget.row as ModelAliasListItem) : ''}」？停用并发布后调用返回 MODEL_ALIAS_DISABLED。`"
       :impact="disableTarget.impact"
       danger
@@ -280,7 +280,7 @@ const aliasName = (row: ModelAliasListItem) => row.alias
     />
     <ConfirmDialog
       v-model:open="deleteTarget.open"
-      title="删除模型别名"
+      title="删除虚拟模型"
       :message="`确认删除「${deleteTarget.row ? aliasName(deleteTarget.row as ModelAliasListItem) : ''}」？存在治理策略或 Access Credential 引用时将被拒绝。`"
       :impact="deleteTarget.impact"
       danger

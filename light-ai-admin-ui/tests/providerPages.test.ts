@@ -61,7 +61,7 @@ describe('ProviderListPage（FE-007）', () => {
 
   it('列表渲染状态与聚合字段，筛选参数进入 URL', async () => {
     stub = installJsonFetchStub(({ url, method }) => {
-      if (method === 'GET' && url.pathname.endsWith('/admin/providers')) {
+      if (method === 'GET' && url.pathname.endsWith('/admin/channels')) {
         return pageEnvelope([adminProvider])
       }
       if (url.pathname.endsWith('/admin/bootstrap')) {
@@ -69,7 +69,7 @@ describe('ProviderListPage（FE-007）', () => {
       }
       return undefined
     })
-    const { wrapper } = await mountPage('/ui/providers', 'SYSTEM_ADMIN')
+    const { wrapper } = await mountPage('/ui/channels', 'SYSTEM_ADMIN')
     const text = wrapper.text()
     expect(text).toContain('OpenAI 生产')
     expect(text).toContain('可用')
@@ -87,7 +87,7 @@ describe('ProviderListPage（FE-007）', () => {
     await availableOption!.trigger('click')
     await flushPromises()
     await flushPromises()
-    const listCall = stub.calls.filter((call) => call.url.includes('/admin/providers?')).at(-1)
+    const listCall = stub.calls.filter((call) => call.url.includes('/admin/channels?')).at(-1)
     expect(listCall).toBeDefined()
     expect(listCall!.url).toContain('keyword=openai')
     expect(listCall!.url).toContain('connection_status=AVAILABLE')
@@ -95,7 +95,7 @@ describe('ProviderListPage（FE-007）', () => {
 
   it('管理员可见编辑/停用/删除，只读角色仅有查看', async () => {
     stub = installJsonFetchStub(({ url, method }) => {
-      if (method === 'GET' && url.pathname.endsWith('/admin/providers')) {
+      if (method === 'GET' && url.pathname.endsWith('/admin/channels')) {
         return pageEnvelope([adminProvider])
       }
       if (url.pathname.endsWith('/admin/bootstrap')) {
@@ -103,20 +103,20 @@ describe('ProviderListPage（FE-007）', () => {
       }
       return undefined
     })
-    const adminWrapper = await mountPage('/ui/providers', 'SYSTEM_ADMIN')
+    const adminWrapper = await mountPage('/ui/channels', 'SYSTEM_ADMIN')
     expect(adminWrapper.wrapper.text()).toContain('编辑')
     expect(adminWrapper.wrapper.text()).toContain('删除')
 
-    const viewerWrapper = await mountPage('/ui/providers', 'VIEWER')
+    const viewerWrapper = await mountPage('/ui/channels', 'VIEWER')
     expect(viewerWrapper.wrapper.text()).toContain('查看')
     expect(viewerWrapper.wrapper.text()).not.toContain('删除')
-    expect(viewerWrapper.wrapper.text()).not.toContain('新建 Provider')
+    expect(viewerWrapper.wrapper.text()).not.toContain('新建 渠道')
   })
 
   it('列表错误状态不显示为空列表并可重试', async () => {
     let fail = true
     stub = installJsonFetchStub(({ url, method }) => {
-      if (method === 'GET' && url.pathname.endsWith('/admin/providers')) {
+      if (method === 'GET' && url.pathname.endsWith('/admin/channels')) {
         if (fail) {
           return errorEnvelope(503, 'CONFIG_DATA_UNAVAILABLE', '配置数据暂不可读', { retryable: true })
         }
@@ -127,7 +127,7 @@ describe('ProviderListPage（FE-007）', () => {
       }
       return undefined
     })
-    const { wrapper } = await mountPage('/ui/providers', 'SYSTEM_ADMIN')
+    const { wrapper } = await mountPage('/ui/channels', 'SYSTEM_ADMIN')
     expect(wrapper.text()).toContain('配置数据暂不可读')
     fail = false
     const retry = wrapper.findAll('button').find((button) => button.text() === '重试')
@@ -150,7 +150,7 @@ describe('ProviderFormPage（FE-008）', () => {
       if (url.pathname.endsWith('/admin/bootstrap')) {
         return dataEnvelope(bootstrapFixtures.SYSTEM_ADMIN)
       }
-      if (method === 'GET' && url.pathname.endsWith('/admin/providers/prov-1')) {
+      if (method === 'GET' && url.pathname.endsWith('/admin/channels/prov-1')) {
         return dataEnvelope({
           ...adminProvider,
           connect_timeout_ms: 3000,
@@ -163,10 +163,10 @@ describe('ProviderFormPage（FE-008）', () => {
           recent_check_records: [],
         })
       }
-      if (method === 'PUT' && url.pathname.endsWith('/admin/providers/prov-1')) {
+      if (method === 'PUT' && url.pathname.endsWith('/admin/channels/prov-1')) {
         return putResponses[putCount++] ?? dataEnvelope({ id: 'prov-1', version: 4, entity: null, draft_changed: true, draft_revision: 9, request_id: 'r1' })
       }
-      if (method === 'POST' && url.pathname.endsWith('/admin/providers')) {
+      if (method === 'POST' && url.pathname.endsWith('/admin/channels')) {
         expect(body.name).toBe('合法名称')
         return dataEnvelope({ id: 'prov-2', version: 1, entity: null, draft_changed: true, draft_revision: 9, request_id: 'r1' })
       }
@@ -176,7 +176,7 @@ describe('ProviderFormPage（FE-008）', () => {
 
   it('读取超时小于连接超时、名称过短时不提交', async () => {
     bootStub()
-    const { wrapper } = await mountPage('/ui/providers/new', 'SYSTEM_ADMIN')
+    const { wrapper } = await mountPage('/ui/channels/new', 'SYSTEM_ADMIN')
     await wrapper.find('#provider-name').setValue('短')
     await wrapper.find('#provider-base-url').setValue('https://api.example.com/v1/')
     await wrapper.find('#provider-connect-timeout').setValue('5000')
@@ -190,7 +190,7 @@ describe('ProviderFormPage（FE-008）', () => {
 
   it('合法新建提交成功后跳转详情', async () => {
     bootStub()
-    const { wrapper, router } = await mountPage('/ui/providers/new', 'SYSTEM_ADMIN')
+    const { wrapper, router } = await mountPage('/ui/channels/new', 'SYSTEM_ADMIN')
     await wrapper.find('#provider-name').setValue('合法名称')
     await wrapper.find('#provider-type').setValue('OPENAI')
     await wrapper.find('#provider-base-url').setValue('https://api.example.com/v1/')
@@ -205,7 +205,7 @@ describe('ProviderFormPage（FE-008）', () => {
     bootStub([
       errorEnvelope(409, 'CONFIG_VERSION_CONFLICT', '对象已被其他管理员修改', { current_version: 7 }),
     ])
-    const { wrapper } = await mountPage('/ui/providers/prov-1/edit', 'SYSTEM_ADMIN')
+    const { wrapper } = await mountPage('/ui/channels/prov-1/edit', 'SYSTEM_ADMIN')
     await flushPromises()
     await wrapper.find('#provider-name').setValue('本地新名称')
     await wrapper.find('form').trigger('submit')
@@ -223,13 +223,13 @@ describe('ProviderFormPage（FE-008）', () => {
 describe('FE-211/212 渠道异常状态', () => {
   it('关联资源失败保持独立错误，不伪装为空数据', async () => {
     const stub = installJsonFetchStub(({ url }) => {
-      if (url.pathname.endsWith('/providers/prov-1')) return dataEnvelope({ ...adminProvider, default_headers: {}, recent_check_records: [], connect_timeout_ms: 3000, read_timeout_ms: 120000 })
-      if (url.pathname.endsWith('/credential-pools')) return errorEnvelope(403, 'ACCESS_DENIED', '无渠道 Key 查看权限')
-      if (url.pathname.endsWith('/provider-models')) return errorEnvelope(503, 'UNAVAILABLE', '上游模型查询失败')
+      if (url.pathname.endsWith('/channels/prov-1')) return dataEnvelope({ ...adminProvider, default_headers: {}, recent_check_records: [], connect_timeout_ms: 3000, read_timeout_ms: 120000 })
+      if (url.pathname.endsWith('/channels/prov-1/credentials')) return errorEnvelope(403, 'ACCESS_DENIED', '无渠道 Key 查看权限')
+      if (url.pathname.endsWith('/upstream-models')) return errorEnvelope(503, 'UNAVAILABLE', '上游模型查询失败')
       return undefined
     })
     try {
-      const { wrapper } = await mountPage('/ui/providers/prov-1', 'SYSTEM_ADMIN')
+      const { wrapper } = await mountPage('/ui/channels/prov-1', 'SYSTEM_ADMIN')
       expect(wrapper.text()).toContain('无渠道 Key 查看权限')
       expect(wrapper.text()).toContain('上游模型查询失败')
       expect(wrapper.text()).not.toContain('暂无关联模型')
@@ -238,9 +238,9 @@ describe('FE-211/212 渠道异常状态', () => {
     } finally { stub.restore() }
   })
   it('地址列表只显示主机，不展示地址中的凭证信息', async () => {
-    const stub = installJsonFetchStub(({ url }) => url.pathname.endsWith('/providers') ? pageEnvelope([{ ...adminProvider, base_url: 'https://user:fixture-password@example.com/v1?key=fixture-secret' }]) : undefined)
+    const stub = installJsonFetchStub(({ url }) => url.pathname.endsWith('/channels') ? pageEnvelope([{ ...adminProvider, base_url: 'https://user:fixture-password@example.com/v1?key=fixture-secret' }]) : undefined)
     try {
-      const { wrapper } = await mountPage('/ui/providers', 'SYSTEM_ADMIN')
+      const { wrapper } = await mountPage('/ui/channels', 'SYSTEM_ADMIN')
       expect(wrapper.text()).toContain('example.com')
       expect(wrapper.html()).not.toContain('fixture-password')
       expect(wrapper.html()).not.toContain('fixture-secret')

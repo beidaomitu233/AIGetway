@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Model Alias 新建/编辑表单（FE-017，附录 4.2.7.2）。
+// 虚拟模型 新建/编辑表单（FE-017，附录 4.2.7.2）。
 // alias 创建后只读：2—64 字符，仅字母、数字、点、短横线、下划线。
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -83,7 +83,7 @@ async function onSubmit(): Promise<void> {
   })
   if (outcome.ok) {
     dirty.value = false
-    void router.push(`/ui/model-aliases/${savedId}`)
+    void router.push(`/ui/models/virtual/${savedId}`)
   }
 }
 
@@ -110,7 +110,7 @@ onMounted(async () => {
 <template>
   <section class="lai-page">
     <h1 class="lai-page-title">
-      {{ isEdit ? '编辑模型别名' : '新建 Model Alias' }}
+      {{ isEdit ? '编辑虚拟模型' : '新建 虚拟模型' }}
     </h1>
 
     <PageState
@@ -131,7 +131,7 @@ onMounted(async () => {
       @input="onInput"
     >
       <FormField
-        label="alias"
+        label="code"
         required
         :hint="isEdit ? 'alias 创建后不可修改；如需更名请创建新 Alias 并迁移接入方' : '业务调用入口，创建后不可修改'"
         :error="!isEdit && aliasInvalid ? '2—64 字符，仅字母、数字、点、短横线、下划线' : ''"
@@ -181,7 +181,12 @@ onMounted(async () => {
         >
       </FormField>
 
-      <p v-if="isEdit" class="lai-form-hint">状态变更请返回列表核对影响后操作。</p>
+      <p
+        v-if="isEdit"
+        class="lai-form-hint"
+      >
+        状态变更请返回列表核对影响后操作。
+      </p>
       <label class="lai-switch">
         <input
           v-model="form.enabled"

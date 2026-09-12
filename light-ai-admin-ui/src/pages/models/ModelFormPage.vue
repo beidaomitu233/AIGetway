@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Provider Model 新建/编辑表单（FE-015，附录 4.2.6.1）。
+// 上游模型 新建/编辑表单（FE-015，附录 4.2.6.1）。
 // 能力开关关闭时隐藏对应范围与默认值；价格保持字符串精度；启用要求能力字段完整。
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -24,7 +24,7 @@ const loadError = ref<unknown>(null)
 const providers = ref<ProviderOption[]>([])
 
 const form = reactive({
-  provider_id: '',
+  channel_id: '',
   display_name: '',
   model_id: '',
   tokenizer_family: '',
@@ -141,7 +141,7 @@ const formInvalid = computed(
     ![1000, 1000000].includes(form.price_unit) ||
     currencyInvalid.value ||
     capabilityIncomplete.value ||
-    form.provider_id === '',
+    form.channel_id === '',
 )
 
 const dirty = ref(false)
@@ -158,7 +158,7 @@ function onInput(): void {
 useDirtyGuard(() => dirty.value)
 
 function applyDetail(detail: ProviderModelDetail): void {
-  form.provider_id = detail.provider_id
+  form.channel_id = detail.channel_id
   form.display_name = detail.display_name
   form.model_id = detail.model_id
   form.tokenizer_family = detail.tokenizer_family ?? ''
@@ -190,7 +190,7 @@ function applyDetail(detail: ProviderModelDetail): void {
 
 function buildCommand(): ProviderModelCommand {
   return {
-    provider_id: form.provider_id,
+    channel_id: form.channel_id,
     display_name: form.display_name.trim(),
     model_id: form.model_id,
     tokenizer_family: form.tokenizer_family.trim() === '' ? null : form.tokenizer_family.trim(),
@@ -235,7 +235,7 @@ async function onSubmit(): Promise<void> {
   })
   if (outcome.ok) {
     dirty.value = false
-    void router.push(`/ui/provider-models/${savedId}`)
+    void router.push(`/ui/models/upstream/${savedId}`)
   }
 }
 
@@ -292,12 +292,12 @@ onMounted(reload)
         </legend>
         <div class="lai-form-grid">
           <FormField
-            label="Provider"
+            label="渠道"
             required
-            :error="form.provider_id === '' && loadError ? '请选择 Provider' : ''"
+            :error="form.channel_id === '' && loadError ? '请选择 渠道' : ''"
           >
             <select
-              v-model="form.provider_id"
+              v-model="form.channel_id"
               class="lai-input lai-select"
               :disabled="isEdit"
             >
@@ -305,7 +305,7 @@ onMounted(reload)
                 value=""
                 disabled
               >
-                请选择 Provider
+                请选择 渠道
               </option>
               <option
                 v-for="item in providers"
@@ -359,7 +359,7 @@ onMounted(reload)
         <div class="lai-form-grid">
           <FormField
             label="Tokenizer"
-            :hint="'需为当前 Provider Adapter 声明的 TokenEstimator'"
+            :hint="'需为当前 渠道 Adapter 声明的 TokenEstimator'"
             :error="form.enabled && form.tokenizer_family.trim() === '' ? '启用模型必须填写' : ''"
           >
             <input
@@ -741,6 +741,7 @@ onMounted(reload)
   max-width: 880px;
 }
 .lai-fieldset {
+  min-inline-size: 0;
   border: 1px solid #d8dee4;
   border-radius: 6px;
   margin: 0 0 16px;
@@ -752,7 +753,7 @@ onMounted(reload)
 }
 .lai-form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
   gap: 4px 16px;
   margin-bottom: 8px;
 }
@@ -762,6 +763,8 @@ onMounted(reload)
 }
 .lai-switch {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   align-items: center;
   gap: 6px;
   font-size: 13px;

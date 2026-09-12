@@ -78,7 +78,7 @@ function validate(): boolean {
     errors.name = '名称长度为 2—64 字符'
   }
   if (!isEdit.value && !adapterOptions.value.some((option) => option.value === form.type)) {
-    errors.type = '请选择 Provider 类型'
+    errors.type = '请选择 渠道 类型'
   }
   if (normalizeResourceUrl(form.base_url) === null) {
     errors.base_url = '必须为合法的 http(s) 绝对地址，且不含认证信息、查询参数与片段'
@@ -194,7 +194,7 @@ function fieldError(field: string): string | undefined {
 <template>
   <section class="lai-page">
     <h1 class="lai-page-title">
-      {{ isEdit ? '编辑 Provider' : '新建 Provider' }}
+      {{ isEdit ? '编辑 渠道' : '新建 渠道' }}
     </h1>
 
     <PageState
@@ -348,8 +348,8 @@ function fieldError(field: string): string | undefined {
       >
         <input
           id="provider-enabled"
-          :disabled="isEdit || submitting || !canManage"
           v-model="form.enabled"
+          :disabled="isEdit || submitting || !canManage"
           type="checkbox"
           class="lai-checkbox"
           @change="markDirty"

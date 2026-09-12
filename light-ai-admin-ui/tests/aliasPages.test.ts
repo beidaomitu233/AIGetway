@@ -41,26 +41,24 @@ const aliasDetail = {
 const candidateRows = {
   data: [
     {
-      id: 'cand-1', version: 2, draft_changed: false, alias_id: 'alias-1', provider_id: 'prov-1',
-      provider_name: 'OpenAI', provider_model_id: 'model-1', provider_model_display_name: 'GPT-4o',
-      provider_model_id_label: 'gpt-4o', credential_pool_id: 'pool-1', credential_pool_name: 'openai-main',
-      priority: 10, weight: 1, enabled: true, support_stream: true, support_system_message: true,
+      id: 'cand-1', version: 2, draft_changed: false, alias_id: 'alias-1', channel_id: 'prov-1',
+      channel_name: 'OpenAI', upstream_model_id: 'model-1', upstream_model_name: 'GPT-4o',
+      upstream_model_id_label: 'gpt-4o', priority: 10, weight: 1, enabled: true, support_stream: true, support_system_message: true,
       context_window: 128000, current_concurrency: 0, runtime_status: 'AVAILABLE', excluded_reason: null,
     },
     {
-      id: 'cand-2', version: 1, draft_changed: false, alias_id: 'alias-1', provider_id: 'prov-1',
-      provider_name: 'OpenAI', provider_model_id: 'model-2', provider_model_display_name: 'GPT-4o mini',
-      provider_model_id_label: 'gpt-4o-mini', credential_pool_id: 'pool-1', credential_pool_name: 'openai-main',
-      priority: 20, weight: 1, enabled: true, support_stream: true, support_system_message: true,
+      id: 'cand-2', version: 1, draft_changed: false, alias_id: 'alias-1', channel_id: 'prov-1',
+      channel_name: 'OpenAI', upstream_model_id: 'model-2', upstream_model_name: 'GPT-4o mini',
+      upstream_model_id_label: 'gpt-4o-mini', priority: 20, weight: 1, enabled: true, support_stream: true, support_system_message: true,
       context_window: 128000, current_concurrency: 0, runtime_status: 'AVAILABLE', excluded_reason: null,
     },
   ],
 }
 
 const detailRoutes: Route[] = [
-  [/\/admin\/model-aliases\/alias-1$/, () => jsonResponse(200, aliasDetail)],
-  [/\/admin\/model-aliases\/alias-1\/candidates$/, () => jsonResponse(200, candidateRows)],
-  [/\/admin\/model-aliases\/alias-1\/candidates\/reorder$/, (_url, method) => {
+  [/\/admin\/virtual-models\/alias-1$/, () => jsonResponse(200, aliasDetail)],
+  [/\/admin\/virtual-models\/alias-1\/routes$/, () => jsonResponse(200, candidateRows)],
+  [/\/admin\/virtual-models\/alias-1\/routes\/reorder$/, (_url, method) => {
     if (method === 'PUT') {
       return jsonResponse(409, { error: { code: 'CONFIG_VERSION_CONFLICT', type: 'conflict', message: '已被修改', retryable: false } })
     }
@@ -78,9 +76,9 @@ afterEach(() => {
 })
 
 const pageRoutes = [
-  { path: '/ui/model-aliases/new', component: AliasFormPage },
-  { path: '/ui/model-aliases/:id/edit', component: AliasFormPage },
-  { path: '/ui/model-aliases/:id', component: AliasDetailPage },
+  { path: '/ui/models/virtual/new', component: AliasFormPage },
+  { path: '/ui/models/virtual/:id/edit', component: AliasFormPage },
+  { path: '/ui/models/virtual/:id', component: AliasDetailPage },
 ]
 
 async function mountAt(path: string): Promise<{ wrapper: ReturnType<typeof mount>; router: Router }> {
@@ -103,7 +101,7 @@ async function mountAt(path: string): Promise<{ wrapper: ReturnType<typeof mount
 describe('AliasFormPage（FE-017）', () => {
   it('非法 alias 禁止保存', async () => {
     stubFetch([])
-    const { wrapper } = await mountAt('/ui/model-aliases/new')
+    const { wrapper } = await mountAt('/ui/models/virtual/new')
     const aliasInput = wrapper.find('input[maxlength="64"]')
     await aliasInput.setValue('a')
     await wrapper.find('input[maxlength="64"]:not([disabled]) + * , form input[type="text"]')
@@ -115,8 +113,8 @@ describe('AliasFormPage（FE-017）', () => {
   })
 
   it('编辑模式下 alias 只读', async () => {
-    stubFetch([[/\/admin\/model-aliases\/alias-1$/, () => jsonResponse(200, aliasDetail)]])
-    const { wrapper } = await mountAt('/ui/model-aliases/alias-1/edit')
+    stubFetch([[/\/admin\/virtual-models\/alias-1$/, () => jsonResponse(200, aliasDetail)]])
+    const { wrapper } = await mountAt('/ui/models/virtual/alias-1/edit')
     const aliasInput = wrapper.find('input[maxlength="64"]')
     expect((aliasInput.element as HTMLInputElement).disabled).toBe(true)
     expect((aliasInput.element as HTMLInputElement).value).toBe('chat-default')
@@ -126,7 +124,7 @@ describe('AliasFormPage（FE-017）', () => {
 describe('AliasDetailPage 候选重排（FE-018）', () => {
   it('版本冲突时整批不提交并还原本地编辑', async () => {
     const fetchMock = stubFetch(detailRoutes)
-    const { wrapper } = await mountAt('/ui/model-aliases/alias-1')
+    const { wrapper } = await mountAt('/ui/models/virtual/alias-1')
     const priorityInput = wrapper.find('input[type="number"]')
     await priorityInput.setValue('15')
     const saveButton = wrapper.findAll('button').find((button) => button.text() === '保存排序')!
@@ -144,7 +142,7 @@ describe('AliasDetailPage 候选重排（FE-018）', () => {
 describe('FE-214/215 路由操作边界', () => {
   it('越界优先级在发送前阻止', async () => {
     const fetchMock = stubFetch(detailRoutes)
-    const { wrapper } = await mountAt('/ui/model-aliases/alias-1')
+    const { wrapper } = await mountAt('/ui/models/virtual/alias-1')
     await wrapper.find('input[type="number"]').setValue('0')
     await wrapper.findAll('button').find((button) => button.text() === '保存排序')!.trigger('click')
     expect(wrapper.text()).toContain('优先级必须为 1—100 的整数')
@@ -153,7 +151,7 @@ describe('FE-214/215 路由操作边界', () => {
   })
   it('权限撤销后移除编辑和排序输入', async () => {
     stubFetch(detailRoutes)
-    const { wrapper } = await mountAt('/ui/model-aliases/alias-1')
+    const { wrapper } = await mountAt('/ui/models/virtual/alias-1')
     useBootstrapStore().$patch({ permissions: [] })
     await flushPromises()
     expect(wrapper.find('input[type="number"]').exists()).toBe(false)
@@ -162,7 +160,7 @@ describe('FE-214/215 路由操作边界', () => {
   })
   it('虚拟模型只读用户不能触发表单写入', async () => {
     const fetchMock = stubFetch([])
-    const { wrapper } = await mountAt('/ui/model-aliases/new')
+    const { wrapper } = await mountAt('/ui/models/virtual/new')
     await wrapper.findAll('input[type="text"]')[0]!.setValue('valid-model')
     await wrapper.findAll('input[type="text"]')[1]!.setValue('有效模型')
     useBootstrapStore().$patch({ permissions: [] })

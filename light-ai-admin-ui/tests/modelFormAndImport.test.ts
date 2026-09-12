@@ -36,16 +36,16 @@ function stubFetch(routes: Route[]): ReturnType<typeof vi.fn> {
 }
 
 const providerRoutes: Route[] = [
-  [/\/admin\/providers$/, () =>
+  [/\/admin\/channels$/, () =>
     jsonResponse(200, { data: { items: [{ id: 'prov-1', name: 'OpenAI', type: 'OPENAI', enabled: true }], total: 1, page: 1, page_size: 100, sort: 'name', query_started_at: 'q', data_updated_at: 'u' } })],
 ]
 
-async function mountForm(route = '/ui/provider-models/new'): Promise<{ wrapper: ReturnType<typeof mount>; router: Router }> {
+async function mountForm(route = '/ui/models/upstream/new'): Promise<{ wrapper: ReturnType<typeof mount>; router: Router }> {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/ui/provider-models/new', component: ModelFormPage },
-      { path: '/ui/provider-models/:id/edit', component: ModelFormPage, props: true },
+      { path: '/ui/models/upstream/new', component: ModelFormPage },
+      { path: '/ui/models/upstream/:id/edit', component: ModelFormPage, props: true },
     ],
   })
   void router.push(route)
@@ -94,7 +94,7 @@ describe('ModelFormPage（FE-015）', () => {
   it('合法表单提交创建命令并保留价格字符串', async () => {
     const fetchMock = stubFetch([
       ...providerRoutes,
-      [/\/admin\/provider-models$/, (_url, method) => (method === 'POST' ? opOk() : jsonResponse(200, { data: { items: [], total: 0, page: 1, page_size: 20, sort: '', query_started_at: '', data_updated_at: '' } }))],
+      [/\/admin\/upstream-models$/, (_url, method) => (method === 'POST' ? opOk() : jsonResponse(200, { data: { items: [], total: 0, page: 1, page_size: 20, sort: '', query_started_at: '', data_updated_at: '' } }))],
     ])
     const { wrapper } = await mountForm()
     await wrapper.find('select').setValue('prov-1')
@@ -122,12 +122,12 @@ describe('ModelFormPage（FE-015）', () => {
   it('409 版本冲突保留用户输入', async () => {
     stubFetch([
       ...providerRoutes,
-      [/\/admin\/provider-models\/model-1$/, (_url, method) =>
+      [/\/admin\/upstream-models\/model-1$/, (_url, method) =>
         method === 'PUT'
           ? jsonResponse(409, { error: { code: 'CONFIG_VERSION_CONFLICT', type: 'conflict', message: '已被修改', retryable: false, current_version: 9 } })
           : jsonResponse(200, {
               data: {
-                id: 'model-1', version: 3, draft_changed: false, provider_id: 'prov-1', provider_name: 'OpenAI',
+                id: 'model-1', version: 3, draft_changed: false, channel_id: 'prov-1', channel_name: 'OpenAI',
                 display_name: '旧名称', model_id: 'gpt-4o', model_type: 'CHAT_TEXT', tokenizer_family: 'o200k',
                 context_window: 128000, max_output_tokens: 16384, support_stream: true, support_system_message: true,
                 support_temperature: true, temperature_min: '0', temperature_max: '2', support_top_p: true,
@@ -139,7 +139,7 @@ describe('ModelFormPage（FE-015）', () => {
               },
             })],
     ])
-    const { wrapper } = await mountForm('/ui/provider-models/model-1/edit')
+    const { wrapper } = await mountForm('/ui/models/upstream/model-1/edit')
     await flushPromises()
     const nameInput = wrapper.find('input[maxlength="64"]')
     expect((nameInput.element as HTMLInputElement).value).toBe('旧名称')
@@ -157,9 +157,9 @@ describe('ModelImportPage（FE-016）', () => {
     ...providerRoutes,
     [/\/admin\/credential-pools$/, () =>
       jsonResponse(200, { data: { items: [{ id: 'pool-1', name: 'openai-main' }], total: 1, page: 1, page_size: 100, sort: 'name', query_started_at: '', data_updated_at: '' } })],
-    [/\/admin\/credential-pools\/pool-1\/credentials$/, () =>
+    [/\/admin\/channels\/pool-1\/credentials$/, () =>
       jsonResponse(200, { data: { items: [{ id: 'cred-1', name: 'key-1', enabled: true }], total: 1, page: 1, page_size: 100, sort: 'name', query_started_at: '', data_updated_at: '' } })],
-    [/\/admin\/providers\/prov-1\/available-models$/, () =>
+    [/\/admin\/channels\/prov-1\/available-models$/, () =>
       jsonResponse(200, {
         data: [
           { model_id: 'gpt-4.1', display_name: 'GPT-4.1', existing: true, source: 'ADAPTER_PRESET', tokenizer_family: 'o200k', context_window: 1000000, max_output_tokens: 32768, support_stream: true, support_system_message: true, support_temperature: true, support_top_p: true, support_stop: true },
@@ -193,7 +193,7 @@ describe('ModelImportPage（FE-016）', () => {
 
   it('提交导入返回逐项结果', async () => {
     const wrapper = await mountWizard([
-      [/\/admin\/provider-models\/import$/, () =>
+      [/\/admin\/upstream-models\/import$/, () =>
         jsonResponse(200, {
           data: {
             created: [{ model_id: 'gpt-4.1', id: 'm-9', version: 1 }],
@@ -218,7 +218,7 @@ describe('ModelImportPage（FE-016）', () => {
 
 describe('FE-213 未知能力与权限', () => {
   it('禁用草稿保留未知能力和空价格，不伪造支持或免费', async () => {
-    const fetchMock = stubFetch([...providerRoutes, [/\/admin\/provider-models$/, () => opOk()]])
+    const fetchMock = stubFetch([...providerRoutes, [/\/admin\/upstream-models$/, () => opOk()]])
     const { wrapper } = await mountForm()
     await wrapper.find('select').setValue('prov-1')
     await wrapper.find('input[maxlength="64"]').setValue('待配置模型')

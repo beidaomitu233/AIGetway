@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Model Alias 详情与候选路由页（FE-018，附录 4.2.8）。
+// 虚拟模型 详情与候选路由页（FE-018，附录 4.2.8）。
 // 候选按 priority 升序展示；优先级调整显式保存、任一版本冲突整批不变；
 // 探测选择池内一个可用凭证；运行摘要 30 秒刷新，页面离开停止。
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
@@ -10,7 +10,6 @@ import CheckCommandDialog from '@/components/CheckCommandDialog.vue'
 import CandidateFormDialog, { type ModelGroupOption } from './CandidateFormDialog.vue'
 import { useBootstrapStore } from '@/stores/bootstrap'
 import { Permission } from '@/app/permissions'
-import { runtimeAvailabilityLabel } from '@/app/display'
 import {
   checkCandidate,
   createCandidate,
@@ -138,14 +137,14 @@ async function loadModelGroups(): Promise<void> {
     const items = models.items as ProviderModelListItem[]
     const groups = new Map<string, ModelGroupOption>()
     for (const item of items) {
-      const group = groups.get(item.provider_name) ?? { providerName: item.provider_name, models: [] }
+      const group = groups.get(item.channel_name) ?? { providerName: item.channel_name, models: [] }
       group.models.push({
         id: item.id,
         label: `${item.display_name}（${item.model_id}）`,
         supportStream: item.support_stream ?? false,
         contextWindow: item.context_window,
       })
-      groups.set(item.provider_name, group)
+      groups.set(item.channel_name, group)
     }
     modelGroups.value = [...groups.values()]
   } catch (error) {
@@ -175,8 +174,8 @@ async function loadPools(modelId: string): Promise<CredentialPoolOption[]> {
 }
 
 async function submitForm(command: {
-  provider_model_id: string
-  credential_pool_id: string
+  upstream_model_id: string
+  channel_id: string
   priority: number
   weight: number
   enabled: boolean
@@ -187,7 +186,7 @@ async function submitForm(command: {
   formError.value = null
   try {
     if (formTarget.value) {
-      await updateCandidate(formTarget.value.id, { ...command, version: command.version! })
+      await updateCandidate(aliasId.value, formTarget.value.id, { ...command, version: command.version! })
     } else {
       await createCandidate(aliasId.value, command)
     }
@@ -195,7 +194,7 @@ async function submitForm(command: {
     await load()
   } catch (e) {
     if (e instanceof ApiError && e.code === 'DUPLICATE_ROUTE_CANDIDATE') {
-      formError.value = new Error('相同的模型与凭证池组合已存在')
+      formError.value = new Error('相同的模型与渠道组合已存在')
     } else {
       formError.value = e
     }
@@ -215,9 +214,9 @@ async function toggleCandidate(row: RouteCandidateDetail): Promise<void> {
   busyId.value = row.id
   actionMessage.value = ''
   try {
-    await updateCandidate(row.id, {
-      provider_model_id: row.provider_model_id,
-      credential_pool_id: row.credential_pool_id,
+    await updateCandidate(aliasId.value, row.id, {
+      upstream_model_id: row.upstream_model_id,
+      channel_id: row.channel_id,
       priority: row.priority,
       weight: row.weight,
       enabled: !row.enabled,
@@ -235,7 +234,7 @@ async function submitDelete(): Promise<void> {
   if (!canManage.value || busyId.value || !deleteTarget.value) return
   busyId.value = deleteTarget.value.id
   try {
-    await deleteCandidate(deleteTarget.value.id, deleteTarget.value.version)
+    await deleteCandidate(aliasId.value, deleteTarget.value.id, deleteTarget.value.version)
     deleteOpen.value = false
     await load()
   } catch (e) {
@@ -262,7 +261,7 @@ async function openProbe(row: RouteCandidateDetail): Promise<void> {
   checkCredentialOptions.value = []
   checkOpen.value = true
   try {
-    const credentials = await fetchCredentials(row.credential_pool_id, { enabled: true, page_size: 100 })
+    const credentials = await fetchCredentials(row.channel_id, { enabled: true, page_size: 100 })
     checkCredentialOptions.value = credentials.items.map((item) => ({ id: item.id, label: item.name }))
   } catch (error) {
     checkError.value = error
@@ -274,9 +273,9 @@ async function submitProbe(command: ProviderCheckCommand): Promise<void> {
   checkSubmitting.value = true
   checkError.value = null
   try {
-    checkResult.value = await checkCandidate(checkTarget.value.id, {
+    checkResult.value = await checkCandidate(aliasId.value, checkTarget.value.id, {
       ...command,
-      provider_model_id: checkTarget.value.provider_model_id,
+      upstream_model_id: checkTarget.value.upstream_model_id,
     })
   } catch (e) {
     checkError.value = e
@@ -302,14 +301,14 @@ watch(aliasId, () => {
   <section class="lai-page">
     <div class="lai-page-header">
       <h1 class="lai-page-title">
-        模型别名详情
+        虚拟模型详情
       </h1>
       <div
         v-if="canManage"
         class="lai-page-actions"
       >
         <RouterLink
-          :to="`/ui/model-aliases/${aliasId}/edit`"
+          :to="`/ui/models/virtual/${aliasId}/edit`"
           class="lai-btn"
         >
           编辑
@@ -341,7 +340,7 @@ watch(aliasId, () => {
             基础信息
           </h2>
           <dl class="lai-dl">
-            <dt>alias</dt><dd class="lai-cell-mono">
+            <dt>code</dt><dd class="lai-cell-mono">
               {{ alias.alias }}
             </dd>
             <dt>展示名称</dt><dd>{{ alias.display_name }}</dd>
@@ -353,15 +352,18 @@ watch(aliasId, () => {
         </div>
         <div class="lai-detail-card">
           <h2 class="lai-section-title">
-            能力与运行
+            候选配置与运行摘要
           </h2>
+          <p class="lai-form-hint">
+            候选配置数量不代表运行可调用性，能力交集与实时容量待联调。
+          </p>
           <dl class="lai-dl">
-            <dt>候选</dt><dd>{{ alias.candidate_count }} 个（可调用 {{ alias.available_candidate_count }}）</dd>
+            <dt>候选</dt><dd>{{ alias.candidate_count }} 个（配置有效 {{ alias.available_candidate_count }}）</dd>
             <dt>流式支持</dt><dd>{{ alias.stream_candidate_count }} / {{ alias.candidate_count }}</dd>
             <dt>24h 调用</dt><dd>{{ alias.request_count_24h }}</dd>
             <dt>成功率（24h）</dt><dd>{{ alias.success_rate_24h == null ? '—' : `${alias.success_rate_24h}%` }}</dd>
             <dt>P95 耗时（24h）</dt><dd>{{ alias.p95_total_ms_24h == null ? '—' : `${alias.p95_total_ms_24h} ms` }}</dd>
-            <dt>当前快照</dt><dd>#{{ alias.current_snapshot_no ?? '—' }}</dd>
+            <dt>当前快照</dt><dd>{{ alias.current_snapshot_no == null ? '未提供' : '#' + alias.current_snapshot_no }}</dd>
           </dl>
         </div>
       </div>
@@ -404,9 +406,8 @@ watch(aliasId, () => {
               <tr>
                 <th>priority</th>
                 <th>weight</th>
-                <th>Provider</th>
+                <th>渠道</th>
                 <th>模型</th>
-                <th>凭证池</th>
                 <th>流式</th>
                 <th>当前并发</th>
                 <th>运行状态</th>
@@ -431,7 +432,7 @@ watch(aliasId, () => {
                     min="1"
                     max="100"
                     :value="editedPriority(row)"
-                    :aria-label="`调整 ${row.provider_model_display_name} 优先级`"
+                    :aria-label="`调整 ${row.upstream_model_name} 优先级`"
                     @change="onPriorityInput(row, Number(($event.target as HTMLInputElement).value))"
                   >
                   <template v-else>
@@ -439,20 +440,19 @@ watch(aliasId, () => {
                   </template>
                 </td>
                 <td>{{ row.weight }}</td>
-                <td>{{ row.provider_name }}</td>
+                <td>{{ row.channel_name }}</td>
                 <td>
                   <RouterLink
-                    :to="`/ui/provider-models/${row.provider_model_id}`"
+                    :to="`/ui/models/upstream/${row.upstream_model_id}`"
                     class="lai-link"
                   >
-                    {{ row.provider_model_display_name }}
+                    {{ row.upstream_model_name }}
                   </RouterLink>
-                  <span class="lai-cell-sub lai-cell-mono">{{ row.provider_model_id_label }}</span>
+                  <span class="lai-cell-sub lai-cell-mono">{{ row.upstream_model_id_label }}</span>
                 </td>
-                <td>{{ row.credential_pool_name }}</td>
                 <td>{{ row.support_stream ? '支持' : '不支持' }}</td>
-                <td>{{ row.current_concurrency }}</td>
-                <td>{{ runtimeAvailabilityLabel(row.runtime_status) }}</td>
+                <td>待运行态联调</td>
+                <td>待运行态联调</td>
                 <td>{{ row.excluded_reason ?? '—' }}</td>
                 <td>{{ row.enabled ? '启用' : '停用' }}</td>
                 <td>{{ row.draft_changed ? '待发布' : '' }}</td>
@@ -521,7 +521,7 @@ watch(aliasId, () => {
     <CheckCommandDialog
       v-model:open="checkOpen"
       title="探测候选"
-      :target-label="`目标：${checkTarget?.provider_model_display_name ?? ''} → ${checkTarget?.credential_pool_name ?? ''}`"
+      :target-label="`目标：${checkTarget?.upstream_model_name ?? ''} → ${checkTarget?.channel_name ?? ''}`"
       :credential-options="checkCredentialOptions"
       require-credential
       :submitting="checkSubmitting"
@@ -532,7 +532,7 @@ watch(aliasId, () => {
     <ConfirmDialog
       v-model:open="deleteOpen"
       title="删除候选"
-      :message="`确认删除候选「${deleteTarget?.provider_model_display_name ?? ''} → ${deleteTarget?.credential_pool_name ?? ''}」？`"
+      :message="`确认删除候选「${deleteTarget?.upstream_model_name ?? ''} → ${deleteTarget?.channel_name ?? ''}」？`"
       danger
       :loading="busyId !== ''"
       @confirm="submitDelete"
