@@ -1,6 +1,6 @@
 # 轻享 AI V2.0 全栈联调报告（FS-P20）
 
-> §1～§9 为首批 FS-201～FS-203 记录；§10 为同日追加批（FS-P20-006/007/008，渠道 V2 接入与应用版本契约）。
+> §1～§9 为首批 FS-201～FS-203 记录；§10 为同日追加批（FS-P20-006/007/008，渠道 V2 接入与应用版本契约）；§11 为同日 FS-P21 批（上游模型 / 虚拟模型 / 路由跨端联调，全栈联调 fsagent-0912）。
 
 ## 1. 本轮范围
 
@@ -217,3 +217,111 @@ Spring Boot Starter —— 全部 SUCCESS
 | 远程合并 | 已普通推送：分支创建成功；`dev` 快进至 `62c0268`，`git ls-remote origin refs/heads/dev` 回读 `62c02680b90faa8f7e27dbecaf398a14a75e24e9`，未强推。推送前远程 `dev` 为 `181a68a`，无并行新提交需合并。本地 `dev` 已同步至同一提交 |
 | 联调通过 | 渠道全链路、应用域版本契约在 H2 + 单机 Redis + 真实页面渲染链路通过；页面**点击级**写操作未回放，保留为待验证 |
 | 上线验收 | 未进行 |
+
+---
+
+## 11. FS-P21 上游模型 / 虚拟模型 / 路由跨端联调（2026-09-12，全栈联调 fsagent-0912）
+
+经用户授权，以全栈联调身份接管 `FE-P21`/`BE-P21` 名下登记为「阻塞」、且 `BACKEND_PLAN` BE-213/214/215 明确标注「本轮未覆盖」的上游模型 / 虚拟模型 / 路由跨端联调与复验。本条即 §10.7 与 §8 保留的未验证环节之一（「`upstream_model`/`virtual_model`/`route` 的草稿发布与生效」），用同一套「真实 jar + H2 + Redis + Vite + 无头浏览器」方法复现。
+
+### 11.1 范围与结果
+
+| 项 | 内容 |
+|---|---|
+| 任务包 | FS-P21（FS-211～FS-213） |
+| 负责人 / 分支 | fsagent-0912 / `fix-fullstack-integration-fsp21-takeover-fsagent-0912` |
+| 领取提交 | 5007b2c（已推送 `origin/dev`） |
+| 基线 | `origin/dev` = 6242fd0（无并行新提交） |
+| 联调单位 | 上游模型 → 虚拟模型 → 路由候选 的资源接入与回显链路（对应 FE-213/214/215 ↔ BE-213/214/215） |
+| 修改范围 | light-ai-client `UpstreamModelDetail`/`ModelAliasDetail`；light-ai-admin `UpstreamModelService.toDetail`；light-ai-admin-ui `providerModels.ts`、`models/` 两页、`mocks/`、`tests/`；两侧契约测试与文档 |
+| 未修改 | 数据库迁移、`FE-P21`/`BE-P21` 主任务勾选状态、其他任务包文件、主任务负责人占用 |
+
+| 编号 | 流程 | 结果 |
+|---|---|---|
+| FS-P21-001 | 上游模型表单/导入页渠道下拉（渠道 V2 字段切换遗漏） | 通过（修复后） |
+| FS-P21-002 | 上游模型列表/详情的「最近检测 / 错误码 / 候选数」回显 | 通过（修复后） |
+| FS-P21-003 | 虚拟模型列表/详情的 24h 摘要回显 | 通过（修复后） |
+| FS-P21-101 | 应用域同类 SNAKE_CASE 命名隐患 | 登记待确认，本轮未动 |
+
+### 11.2 联调环境（本批）
+
+| 项 | 实际值 |
+|---|---|
+| Java / Maven | Temurin OpenJDK 17.0.19 / Maven 3.9.11（`.m2\wrapper` 内绝对路径调用） |
+| 数据库 | H2 内存库 `jdbc:h2:mem:lightai`，`MODE=MySQL`，`schema-mode=MIGRATE`，启动应用 V1～V8 双方言迁移（数据随 JVM 进程存活） |
+| 共享状态 | 本机 Redis 127.0.0.1:6379（运行中） |
+| 后端 | 本批重新打包的 `light-ai-server-0.1.0-SNAPSHOT.jar`，**实际监听 18080**，`light-ai.server.auth.trusted-local=true` |
+| 前端 | Vite 7.3.6 dev server 127.0.0.1:5173，`VITE_BACKEND_TARGET=http://127.0.0.1:18080`，**未启用 Mock**（未设 `VITE_USE_MOCK`、未用 `--mode mock`） |
+| 浏览器 | `chromium_headless_shell-1223`，`--headless --disable-gpu --virtual-time-budget=9000 --dump-dom` |
+
+打包注意（环境记录，非产品缺陷）：旧 jar 被上一批仍在运行的 18080 进程占用，`spring-boot:repackage` 会因 `Unable to rename ... .jar.original` 失败；须先停止监听 18080 的进程再打包。
+
+### 11.3 验证记录
+
+**11.3.1 真实链路探针（`p21-probe3`，真实 jar@18080 + H2 + Redis + Vite@5173）**
+
+| 步骤 | 请求 | 结果 |
+|---|---|---|
+| Q1 | `POST /admin/channels`（V2 载荷） | 200，创建 `fs21-ch<rand>` |
+| Q2 | `POST /admin/upstream-models` | 200，绑定上一步渠道 |
+| Q3 | `GET /admin/upstream-models` 与 `/{id}` | 200，`route_candidate_count=0`、`connection_status=UNKNOWN`；未检测时 `last_check_at`/`last_error_code` **不下发**（`@JsonInclude(NON_NULL)`） |
+| Q4 | `POST /admin/virtual-models` | 200，创建 `fs21-alias<rand>` |
+| Q5 | `GET /admin/virtual-models` 与 `/{id}` | 200，`request_count_24h` 存在（值 0），旧键 `request_count24h` **不存在** |
+| Q6 | `POST /admin/virtual-models/{id}/routes`（引用上游模型 + 渠道） | 200，候选创建 |
+| Q7 | `GET /admin/upstream-models` 与 `/{id}` 重读 | 200，`route_candidate_count` 由 0 → **1**，详情与列表一致 |
+| Q8 | `GET /admin/channels` | 200，列表项含 `provider_type`/`status`，不含旧 `type`/`enabled` |
+
+**11.3.2 页面级验证（真实 Vite 页面 → 真实后端 → H2）**
+
+| 页面 | 证据 |
+|---|---|
+| `/ui/models`（上游模型列表） | 「候选」列渲染真实值 **1**；渠道列渲染真实渠道名 `fs21-ch784871`，无空白/`undefined` |
+| `/ui/models/new`（新建模型） | 渠道下拉渲染 `fs21-ch784871（OPENAI）`，无 `（undefined）` |
+| `/ui/aliases`（虚拟模型列表） | 「24h 调用」列渲染 **0**（修复前为空白） |
+
+**11.3.3 契约测试（MockMvc + 真实 service + H2）**
+
+`ResourceApiContractTest` 由 14 项增至 **16 项**，0 失败：
+
+- `upstreamModelExposesRuntimeSnapshotAndReferenceCount`：未检测时 `connection_status=UNKNOWN`、`has("last_check_at")==false`、`has("last_error_code")==false`、`route_candidate_count=0`；直写 `object_runtime_state`（`MERGE INTO object_runtime_state (id, entity_type, entity_id, connection_status, last_checked_at, last_error_code, state_version, created_at, updated_at) KEY(entity_type, entity_id) VALUES (?, 'UPSTREAM_MODEL', ?, 'AVAILABLE', CURRENT_TIMESTAMP, 'UPSTREAM_TIMEOUT', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`）后断言 `AVAILABLE` 且 `last_check_at` 下发、`last_error_code=UPSTREAM_TIMEOUT`；建候选后详情与列表 `route_candidate_count=1`。
+- `alias24hSummaryUsesUnderscoreSnakeCase`：详情与列表 `request_count_24h` 存在且 `has("request_count24h")==false`。
+
+### 11.4 问题台账
+
+| 编号 | 问题与复现步骤 | 涉及流程/模块 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+|---|---|---|---|---|---|---|
+| FS-P21-001 | 打开「新建上游模型」或「导入模型」，渠道下拉显示为「OpenAI（）」而非「OpenAI（OPENAI）」；代码中亦无法判断渠道是否停用 | FS-P21-001、上游模型表单/导入页 | 前端 `providerModels.ts::fetchProviderOptions` 仍按渠道旧形状 `ProviderOption{id,name,type,enabled}` 消费 `/channels`；BE-211 渠道 V2 列表项已无 `type`/`enabled`（实测为 `provider_type`/`status` 等）。属 FE-211 跨端切换遗漏。已把 `ProviderOption` 收口为 `{id,name,provider_type,status}`，两页下拉改渲染 `provider_type`，并同步 `mocks/modelAccessMock.ts` 与 `tests/modelFormAndImport.test.ts` 夹具 | 已验证：真实链路 `GET /admin/channels` 下发 V2 字段；页面下拉渲染 `fs21-ch784871（OPENAI）`；typecheck/244 项测试/build 通过 | fsagent-0912 | 已验证 |
+| FS-P21-002 | 上游模型列表「候选」列恒空白、「最近检测」恒显示「未检测」；详情页「最近错误码」恒空 | FS-P21-002、上游模型回显 | `UpstreamModelDetail` 只投影 `connection_status`，丢弃同一 `object_runtime_state` 快照中的 `last_checked_at`/`last_error_code`，且无被引用候选数；而 `ModelListPage.vue:289/291`、`ModelDetailPage.vue:280` 按 `last_check_at`/`route_candidate_count`/`last_error_code` 渲染。渠道 V2（`ChannelListItem`/`ChannelDetail`）已交付同口径三字段，属上游模型侧遗漏。已在 `UpstreamModelDetail` 增 `lastCheckAt`/`lastErrorCode`/`routeCandidateCount`：前二者取 `toDetail` 已加载的 `RuntimeStateSnapshot`（零额外查询），后者复用既有 `JdbcCandidateRepository.countLiveByProviderModel`（与 BE-014 删除拦截同源）；未检测时不下发空值 | 已验证：真实链路 `route_candidate_count` 0→1（详情与列表一致）；未检测时字段不下发；新增契约断言 2 项中 1 项覆盖本缺陷 | fsagent-0912 | 已验证 |
+| FS-P21-003 | 虚拟模型列表「24h 调用」列与详情同名字段恒为空白 | FS-P21-003、虚拟模型回显 | `ModelAliasDetail` 的 `requestCount24h`/`successRate24h`/`p95TotalMs24h` 经 Jackson `SNAKE_CASE` 产出 `request_count24h`/`success_rate24h`/`p95_total_ms24h`（数字结尾不加下划线），与 `BACKEND_PLAN:250` 的 `requests_24h`/`success_rate_24h` 口径及前端 `modelAliases.ts`、`tests/aliasPages.test.ts`、`mocks/modelAccessMock.ts` 的 `_24h` 命名不一致。已对三个分量显式声明 `@JsonProperty("request_count_24h")`/`("success_rate_24h")`/`("p95_total_ms_24h")`，Java 访问器不变。先例：`UpstreamModelDetail` 对 `top_p_min`/`top_p_max` 同样使用显式 JSON 名 | 已验证：真实链路旧键 `request_count24h` 消失、新键到位；页面渲染 0；新增契约断言 `alias24hSummaryUsesUnderscoreSnakeCase` | fsagent-0912 | 已验证 |
+| FS-P21-101 | 同一 SNAKE_CASE 问题存在于应用域：`ApplicationListItem.requests24h`/`successRate24h` 产出 `requests24h`/`success_rate24h`，与 `BACKEND_PLAN:250` 口径不一致 | FS-P20 相邻、应用列表 24h 摘要 | 建议按 FS-P21-003 加显式 JSON 名；因 FE-P20 页面未消费该二字段（`applications.ts` 无对应声明）故**无页面影响**，本轮不改动 P20 已交付代码，避免与 `ApplicationApiContractTest` 断言交叉 | 未修改，登记待确认 | fsagent-0912 | 待确认 |
+
+参考口径（`BACKEND_PLAN.md` 第 250 行）：24h 摘要字段为 `requests_24h` / `success_rate_24h`。代码内既有正向先例为 `UpstreamModelDetail` 的 `top_p_min`/`top_p_max`。
+
+### 11.5 测试命令与结果
+
+| 范围 | 命令 | 结果 |
+|---|---|---|
+| 后端目标模块 | `mvn -B -pl light-ai-admin -am test` | BUILD SUCCESS；`ResourceApiContractTest` **16 项 0 失败** |
+| 后端全量 | `mvn -B clean verify`（14 模块） | **BUILD SUCCESS**，0 失败 / 0 错误；示例模块用例数：client 66、spi 5、runtime 80、storage-jdbc 57（+5 环境跳过）、provider-common 6、anthropic 5、gemini 5、admin 230、server 38、starter 15；Redis IT 11 项环境跳过 |
+| 前端类型 | `npm run typecheck` | 通过，exit 0 |
+| 前端测试 | `npm test` | **28 文件 / 244 项通过** |
+| 前端构建 | `npm run build` | 通过，exit 0 |
+| 真实链路 | `p21-probe3.ps1`（Q1～Q8） | 全部 HTTP 200，见 §11.3.1 |
+| 页面渲染 | `chrome-headless-shell --dump-dom` 三个页面 | 均渲染真实后端数据，见 §11.3.2 |
+
+### 11.6 未验证环节
+
+- **真实上游检测写入的运行态**：`POST /admin/channels/{id}/check` 在无适配器时返回 503 `PROVIDER_ADAPTER_NOT_FOUND`，真实检测未执行；`last_check_at`/`last_error_code` 的非空路径仅在契约测试中通过直写 `object_runtime_state` 验证，真实写入待真实 Provider。
+- **发布生效链路**（草稿 → 校验 → 发布 → 不可变快照）与运行态容量/熔断维度依赖 DB-P21 迁移余项与运行可用性端口（BE-P21-003/004/005 余项），本包未覆盖。
+- **页面点击级写操作回放**未执行（沿用 FS-P20 口径：以 DOM 渲染 + API 全链路证据覆盖字段与请求形态）。
+- 真实 PostgreSQL/MySQL/Redis、企业身份四角色、真实上游 Provider 成功调用与 Usage 对账：沿用 FS-P20 未验证结论，本轮未新增证据。
+
+### 11.7 交付状态
+
+| 项 | 状态 |
+|---|---|
+| 代码提交 | 见 COMMUNICATION.md「FS-P21」章节与本节提交清单（`fix(fullstack): FS-P21-001/002/003`、`test(fullstack):`、`docs(fullstack):`） |
+| 远程合并 | 普通推送至 `origin/dev`，推送前后 `git ls-remote` 核对（记录见 COMMUNICATION.md「FS-P21 远程交付确认」） |
+| 联调通过 | FS-P21-001/002/003 在 H2 + 单机 Redis + 真实 jar + 真实页面渲染链路通过 |
+| 主任务状态 | FE-P21 / BE-P21 主任务勾选状态与负责人占用**均未改动**（保持阻塞、保留原负责人） |
+| 上线验收 | 未进行；§11.6 未验证环节不得视为生产可用 |

@@ -384,6 +384,23 @@ BE-211～215 均未达到整项完成标准，不勾选；已交付子项随本�
 | 证据 | INTEGRATION_REPORT.md §10.1/§10.3/§10.5；COMMUNICATION.md FS-P20-007/FS-P20-008 |
 | 仍未验收 | 渠道检测的真实上游连通、即时状态运行广播与禁用影响的真实数据验收、SSRF/DNS 重绑定/TLS 真实环境验收（BE-P21-001 余项）；`upstream_model`/`virtual_model`/`route` 的发布生效链路（BE-213/214/215）本轮未覆盖。BE-211～215 仍不勾选。 |
 
+## BE-213/214/215 跨端回显补充（2026-09-12，全栈联调 fsagent-0912）
+
+承接上一节保留的「`upstream_model`/`virtual_model`/`route` 发布生效链路未覆盖」，经用户授权以全栈联调身份在真实 H2(MySQL 模式) + 本机 Redis + 重新打包的 jar@18080 链路上复验上游客源、虚拟模型、路由三条链路，定位并修复 2 处后端响应投影缺陷。**未改变既有 DTO 语义、未改数据库迁移、未新增接口或业务规则、未动 BE-P23 在途代码。**
+
+| 编号 | 缺陷 | 修复 | 验证 |
+|---|---|---|---|
+| BE-213（对应 FS-P21-002） | `UpstreamModelDetail` 只投影 `connection_status`，丢弃同一 `object_runtime_state` 快照中的 `last_checked_at`/`last_error_code`；也无被引用候选数。前端 `ModelListPage.vue:289/291`、`ModelDetailPage.vue:280` 按 `last_check_at`/`route_candidate_count`/`last_error_code` 渲染，真实链路恒显示「未检测」/空白。渠道 V2（`ChannelListItem`/`ChannelDetail`）已交付同口径三字段（`@JsonProperty("last_check_at")` 等），上游模型侧属遗漏 | `light-ai-client/.../upstream/UpstreamModelDetail.java` 增 `lastCheckAt`/`lastErrorCode`/`routeCandidateCount`（只读投影，标注不进入草稿、不参与配置状态）；`light-ai-admin/.../upstream/UpstreamModelService.toDetail` 从已加载的 `RuntimeStateSnapshot` 取前二者（零额外查询），`routeCandidateCount` 复用既有 `JdbcCandidateRepository.countLiveByProviderModel`（与 BE-014 删除拦截同源，无新增存储代码）。`connectionStatus` 缺省仍为 `UNKNOWN`；`@JsonInclude(NON_NULL)` 下未检测时不下发空值（不填零值） | 真实链路 `POST /admin/upstream-models` → 建候选 → `GET` 列表/详情：`route_candidate_count` 0→1 且详情与列表一致；未检测时 `last_check_at`/`last_error_code` 不下发；契约定级 `ResourceApiContractTest` 新增 `upstreamModelExposesRuntimeSnapshotAndReferenceCount`（直写 `object_runtime_state` 验证非空路径） |
+| BE-213（对应 FS-P21-003） | `ModelAliasDetail` 的 `requestCount24h`/`successRate24h`/`p95TotalMs24h` 经 Jackson `SNAKE_CASE` 产出 `request_count24h`/`success_rate24h`/`p95_total_ms24h`（数字结尾不加下划线），与下方 BE-P20-001 列表口径（本文件第 250 行）的 24h 摘要口径 `requests_24h`/`success_rate_24h` 及前端 `_24h` 命名不一致，导致虚拟模型列表「24h 调用」列与详情同名字段恒空白 | `light-ai-client/.../alias/ModelAliasDetail.java` 三个分量显式声明 `@JsonProperty("request_count_24h")`/`("success_rate_24h")`/`("p95_total_ms_24h")`，Java 访问器不变。先例：同文件族 `UpstreamModelDetail` 的 `top_p_min`/`top_p_max` 同样使用显式 JSON 名 | 真实链路：旧键 `request_count24h` 消失、新键 `request_count_24h` 到位（值 0）；契约定级 `ResourceApiContractTest` 新增 `alias24hSummaryUsesUnderscoreSnakeCase`（详情与列表同断言） |
+
+同类隐患登记（本轮未改）：`ApplicationListItem.requests24h`/`successRate24h` 存在相同的 SNAKE_CASE 命名偏差，见 COMMUNICATION.md `FS-P21-101`；因 FE-P20 页面未消费该二字段故无页面影响，未动 P20 已交付代码以免与 `ApplicationApiContractTest` 断言交叉。
+
+测试与未验收：
+
+- `ResourceApiContractTest` 由 14 项增至 **16 项**，0 失败；全仓 `mvn -B clean verify` **14 模块 BUILD SUCCESS**，0 失败 / 0 错误。
+- 打包注意（环境记录）：旧 jar 被运行中的 18080 进程占用时 `spring-boot:repackage` 会因 `Unable to rename ... .jar.original` 失败，须先停止该进程。
+- **仍未验收**：真实上游检测写入的运行态（`POST /admin/channels/{id}/check` 无适配器返回 503 `PROVIDER_ADAPTER_NOT_FOUND`；非空 `last_check_at`/`last_error_code` 仅在契约测试中通过直写 `object_runtime_state` 验证）；`upstream_model`/`virtual_model`/`route` 的**发布生效链路**（草稿 → 校验 → 发布 → 不可变快照）与运行态容量/熔断维度（依赖 BE-P21-003/004/005 余项与 DB-P21 迁移余项）；真实 PostgreSQL/MySQL/Redis 与真实 Provider。证据见 INTEGRATION_REPORT.md §11。BE-211～215 仍不勾选，占用保留。
+
 ## BE-P23 本次执行记录（2026-09-12）
 
 负责人：后端执行模型 zcode-be-0912。分支：feature/backend-p23-zcode-be-0912（独立 worktree .worktrees/backend-p23-zcode-be-0912）。实现提交 028e050，基于 origin/dev（含 BE-P20/P21 接管交付与 DB-P21 V5 迁移）合并后复验。本轮只修改后端与执行文档，无前端修改、无新增迁移；详情读路径对已发布 schema 的适配属查询层修复，不改表结构。以下为已验证子项，不等同 BE-231～235 全量验收；主任务均保持未勾选，差异登记 COMMUNICATION BE-P23-001～006。

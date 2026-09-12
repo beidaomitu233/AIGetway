@@ -292,6 +292,32 @@ Playwright CLI 以明确标记的测试夹具拦截所有管理 API：1366 桌�
 
 仍未验收：渠道页面的浏览器**点击级**写操作回放；渠道检测的真实上游连通；FE-212～215 对应契约。FE-211～215 主任务保持未勾选。
 
+### FE-213/214/215 跨端回显补充（2026-09-12，全栈联调 fsagent-0912）
+
+在真实 H2(MySQL 模式) + 本机 Redis + 重新打包的 jar@18080 + Vite@5173 链路上，对上游客源（FE-213）、虚拟模型（FE-214）、路由（FE-215）三条回显链路做跨端复验，定位并修复 1 处前端契约遗漏。**沿用 FE-P21 已交付的页面逻辑、组件与既有测试，只切换契约字段；未新增接口、未改后端契约口径、未动 BE-P23 在途分支。**
+
+| 文件 | 变更 |
+|---|---|
+| `src/api/providerModels.ts` | `ProviderOption` 由渠道旧形状 `{id,name,type,enabled}` 切换为 V2 `{id,name,provider_type,status}`（BE-211 渠道 V2 列表项已无 `type`/`enabled`） |
+| `src/pages/models/ModelFormPage.vue`（第 315 行） | 渠道下拉 `（{{ item.type }}）` → `（{{ item.provider_type }}）` |
+| `src/pages/models/ModelImportPage.vue`（第 268 行） | 同上 |
+| `mocks/modelAccessMock.ts`（第 162 行起） | 渠道选项夹具由 `type`/`enabled` 改为 `provider_type`/`status` |
+| `tests/modelFormAndImport.test.ts`（`providerRoutes`，第 38 行） | 夹具同步改为 `{id:'prov-1', name:'OpenAI', provider_type:'OPENAI', status:'ACTIVE'}` |
+
+对应问题：COMMUNICATION.md `FS-P21-001`（FE-211 跨端切换遗漏，同 FE-P20-002 处理口径）。真实链路下修复前渠道下拉渲染为「OpenAI（）」且无法判断停用。
+
+未改动的前端侧字段（经核对页面本就按正确命名消费，缺陷在后端，见 BACKEND_PLAN「BE-213/214/215 跨端回显补充」）：
+
+- `src/api/modelAliases.ts`、`src/pages/aliases/AliasListPage.vue:217`、`AliasDetailPage.vue:363`：按 `request_count_24h`/`success_rate_24h` 消费（正确侧，未改）。
+- `src/api/providerModels.ts` 的 `last_check_at`/`last_error_code`、`src/pages/models/ModelListPage.vue:289/291`、`ModelDetailPage.vue:280` 的 `last_check_at`/`route_candidate_count`/`last_error_code`：按页面既有字段名消费（正确侧，未改）。
+
+验证（详见 INTEGRATION_REPORT.md §11）：
+
+- 工具链：`npm run typecheck` exit 0；`npm test` 28 文件 / 244 项通过；`npm run build` exit 0。
+- 真实页面（`chrome-headless-shell --dump-dom`）：`/ui/models` 的「候选」列渲染 **1**、渠道列渲染 `fs21-ch784871`；`/ui/models/new` 渠道下拉渲染 `fs21-ch784871（OPENAI）`（无 `undefined`）；`/ui/aliases` 的「24h 调用」列渲染 **0**（修复前空白）。
+
+仍属 FE-213/214/215 未满足验收项（不勾选，保留原负责人）：同步预览/锁定字段/幂等（BE-P21-003/006）、能力交集与授权应用影响（BE-P21-004）、固定快照与真实健康容量（BE-P21-005）、发布生效链路；以及页面浏览器**点击级**写操作回放。FE-211～215 主任务保持未勾选。
+
 ### 本包前端文件清单
 
 资源页沿用既有目录名，产品入口改为 /ui/channels、/ui/models/upstream、/ui/models/virtual；/ui 挂载前缀的统一迁移仍属 FE-P23。旧池与旧导入源码保留为技术资产，旧池导航退场、旧入口转渠道列表，原池路由测试更新为迁移回归。观测/限流/可靠性文件仅改资源链接或选项查询路径，不扩展对应任务。

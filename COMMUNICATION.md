@@ -352,6 +352,29 @@
 | BE-P23-005 | 后端执行模型 zcode-be-0912 | 待确认 | /admin/usage/adjustments 现含两类事实：quota_adjustment（人工调整/重置/续期）与 usage_ledger 账本事件。已随 DB-P22 V7 升级为直接读取 usage_ledger.event_type 列（当前写入方经默认值落 SETTLE；缺列历史数据回退 event_key 前缀解析）。请求预占/释放/周期重置事件待 BE-P20-004 与 DB-223 落地后随账本自然出现；预占/释放/重置/人工调整是否统一入账本（DB-P22-103）属写入路径决策，建议保持 quota_adjustment 与账本并存、由 adjustments 端点合并呈现，待确认。跨应用合并流水分页窗口 5000 行/分支，超限明确 400 提示缩小范围；聚合延迟口径与导出列待 FE-P22-002 确认。summary 的预算使用率/单位请求成本未入本轮（跨应用预算口径需契约）。 |
 | BE-P23-006 | 后端执行模型 zcode-be-0912 | 待确认 | 关联 BE-P20-109/110：/admin/applications/{id}/audit 所需应用审计读取端口与 result=DENIED 审计枚举涉及本包审计域；本轮未改 audit_log 读路径（/admin/audit-logs 既有能力维持），待 DB-201 application_id 列与枚举契约确认后由本负责人统一补齐。 |
 
+## FS-P21 上游模型 / 虚拟模型 / 路由跨端联调（2026-09-12，全栈联调 fsagent-0912）
+
+经用户授权，以全栈联调身份接管 FE-P21/BE-P21 名下登记为「阻塞」、且 BACKEND_PLAN BE-213/214/215 明确标注「本轮未覆盖」的上游模型 / 虚拟模型 / 路由跨端联调与复验（TASK_STATUS 登记为 FS-P21，领取提交 5007b2c，基线 origin/dev=6242fd0）。按「页面 → 请求 → 响应 → 回显」定位到 3 类跨端不一致；保留原负责人占用与既有实现，未改动主任务勾选状态。详细验证见 INTEGRATION_REPORT §11。
+
+| 编号 | 提出方 | 问题类型 | 功能问题描述 | 优化说明 | 涉及前端文件 | 涉及后端文件 | 涉及数据库表 | 状态 | 处理结论 |
+|---|---|---|---|---|---|---|---|---|---|
+| FS-P21-001 | 全栈联调 fsagent-0912 | 跨端字段遗漏（前端） | `providerModels.ts::fetchProviderOptions` 仍按渠道旧形状 `ProviderOption{id,name,type,enabled}` 消费 `/channels`，但 BE-211 渠道 V2 列表项已无 `type`/`enabled`（实测字段为 id/name/provider_type/base_url/proxy/status/health/priority/weight/upstream_model_count/credential_count/draft_changed/last_checked_at/last_check_latency_ms/last_error_code/version/updated_at）。`ModelFormPage.vue`、`ModelImportPage.vue` 渠道下拉渲染 `（{{ item.type }}）`，真实链路下渠道名显示为「OpenAI（）」，且「是否停用」无法判断 | 按 V2 切换为 `{id,name,provider_type,status}`，下拉显示 `provider_type`；同步修正 `mocks/modelAccessMock.ts` 与 `tests/modelFormAndImport.test.ts` 中残留的 `type`/`enabled` 夹具 | providerModels.ts、ModelFormPage.vue、ModelImportPage.vue、mocks/modelAccessMock.ts、tests/modelFormAndImport.test.ts | 无（改为消费已交付的 V2 契约，不要求后端补字段） | 无 | 已修复，真实链路+真实页面复验通过 | 属 FE-211 跨端切换遗漏（同 FE-P20-002 处理口径）；不新增接口、不新增后端字段 |
+| FS-P21-002 | 全栈联调 fsagent-0912 | 跨端字段遗漏（后端） | `UpstreamModelDetail` 只投影 `connection_status`，丢弃同一 `object_runtime_state` 快照中的 `last_checked_at`/`last_error_code`，也没有被引用候选数。而 `ModelListPage.vue:289/291`、`ModelDetailPage.vue:280` 渲染 `last_check_at`/`route_candidate_count`（详情页另有 `last_error_code`），真实链路恒定显示「未检测」/「—」/空白。渠道 V2（BE-211 `ChannelListItem`/`ChannelDetail`）已交付同口径三字段，属上游模型侧遗漏 | `UpstreamModelDetail` 增加 `lastCheckAt`/`lastErrorCode`/`routeCandidateCount`：前二者取 `toDetail` 已加载的 `RuntimeStateSnapshot`（零额外查询），后者复用既有 `JdbcCandidateRepository.countLiveByProviderModel`（与 BE-014 删除拦截同源）。`@JsonInclude(NON_NULL)` 下未检测时不下发空值，不填零值 | 无（页面按原字段名消费） | UpstreamModelDetail.java、UpstreamModelService.toDetail | 无（只读投影 object_runtime_state / route_candidate，无迁移） | 已修复，真实链路+真实页面复验通过 | 属增量只读投影，不改既有字段语义；与渠道 V2 命名对齐（`lastCheckAt`→`last_check_at`，同 `ChannelCredentialListItem`） |
+| FS-P21-003 | 全栈联调 fsagent-0912 | JSON 命名偏差（后端） | `ModelAliasDetail` 的 `requestCount24h`/`successRate24h`/`p95TotalMs24h` 经 Jackson SNAKE_CASE 产出 `request_count24h`/`success_rate24h`/`p95_total_ms24h`，与 BACKEND_PLAN:250 的「24h 摘要」口径（`requests_24h`/`success_rate_24h`）以及前端 `modelAliases.ts`、`tests/aliasPages.test.ts`、`mocks/modelAccessMock.ts` 的 `_24h` 命名不一致，导致别名列表「24h 调用」列与详情同名字段恒为空白 | 三个分量显式声明 `@JsonProperty("request_count_24h")`/`("success_rate_24h")`/`("p95_total_ms_24h")`，Java 访问器不变 | 无（页面本就按 `_24h` 消费，为正确侧） | ModelAliasDetail.java | 无 | 已修复，真实链路+真实页面复验通过 | 先例：`UpstreamModelDetail` 对 `top_p_min`/`top_p_max` 同样使用显式 JSON 名 |
+| FS-P21-101 | 全栈联调 fsagent-0912 | 同类命名隐患（登记待确认） | 同一 SNAKE_CASE 问题存在于应用域：`ApplicationListItem.requests24h`/`successRate24h` 产出 `requests24h`/`success_rate24h`，与 BACKEND_PLAN:250 的 `requests_24h`/`success_rate_24h` 口径不一致 | 建议按 FS-P21-003 同样方式加显式 JSON 名；因 FE-P20 页面未消费该二字段（`applications.ts` 无对应声明）故无页面影响，本轮不改动 P20 已交付代码，避免与 P20 契约测试交叉 | 无 | ApplicationListItem.java（建议） | 无 | 待确认 | 由 BE-P20 负责人或后续联调批决定；若采纳需同步 `ApplicationApiContractTest` 断言 |
+
+### FS-P21 未验收项（不冒称完成）
+
+- **真实上游检测写入的运行态**：`POST /admin/channels/{id}/check` 在无适配器时返回 503（`PROVIDER_ADAPTER_NOT_FOUND`），真实检测未执行；`last_check_at`/`last_error_code` 的非空路径仅在 `ResourceApiContractTest` 中通过直写 `object_runtime_state` 验证，真实写入待真实 Provider。
+- **发布生效链路**（草稿 → 校验 → 发布 → 不可变快照）与运行态容量/熔断维度依赖 DB-P21 迁移余项与运行可用性端口（BE-P21-003/004/005 余项），本包未覆盖。
+- **页面点击级写操作回放**未执行（沿用 FS-P20 口径）。
+
+### FS-P21 复验证据摘要
+
+- 真实链路 `p21-probe3`（H2 + Redis + 真实 jar @18080 + Vite @5173）：Q1～Q8 全部 HTTP 200；上游模型 `route_candidate_count` 随候选创建由 0 增至 1（详情与列表一致）；虚拟模型列表/详情下发 `request_count_24h` 且旧键 `request_count24h` 消失。
+- 真实页面（`chrome-headless-shell --dump-dom`）：模型列表「候选」列渲染 1、渠道列渲染真实渠道名；新建模型页渠道下拉渲染 `fs21-ch784871（OPENAI）`（无 `undefined`）；虚拟模型列表「24h 调用」列渲染 0。
+
+
 协作提示：本轮起后端会话共享 TASK_STATUS 负责人标识时，须遵守 BE-P23-COEXIST-001 结论——同一负责人标识只允许一个在席会话；后到会话让出并将替代实现存档至 .worktrees/be-p23-alt-impl/（不入 Git）。本负责人交付未引用该存档实现。
 ## DB-P22 接管交付复核（2026-09-12，数据库执行模型 zcode-db-0912d）
 
