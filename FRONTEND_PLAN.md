@@ -241,6 +241,10 @@
 
 未执行：真实企业登录、真实数据库/Redis/上游联调、应用密钥首调 E2E、宽限轮换、真实预算结算/归档互斥与性能。后端的 H2/MockMvc 结果为其独立证据，不冒称本次前端真实 E2E 通过。
 
+### FE-201/203 版本传输类型补充（2026-09-12，全栈联调 fsagent-0912）
+
+FS-P20-006 已在真实链路关闭：应用详情 `version` 与列表统一为十进制**字符串**（BE-P20-102）。前端 `src/api/applications.ts` 的 `version`/`quota_version`/`application_version` 声明改为 `string`，应用页面与测试夹具同步。真实链路证据：`GET /admin/applications` 与 `GET /admin/applications/{id}` 的 `version` 均为 JSON 字符串且文本相等；带字符串 `version` 的 `PUT` 200 并递增；页面 `/ui/applications` 渲染 `0 / 1,000,000（0%）`，证明 64 位定点展示无字符串拼接。详见 INTEGRATION_REPORT.md §10.4。FE-201～205 主任务仍保持未勾选。
+
 
 ## FE-P21 本次前端交付记录（2026-09-12）
 
@@ -266,6 +270,27 @@
 Windows / Node 20.19.6 / npm 10.8.2 / 既有 Vue、TypeScript、Vitest。最终命令：npm run typecheck；npm test -- --maxWorkers=2 --reporter=json --outputFile=../output/p21-delivery-tests.json；npm run lint -- --format json --output-file ../output/p21-delivery-lint.json；npm run build。全部退出码 0；26 文件 / 226 项通过，0 失败、0 跳过；lint 0 error、81 项历史 warning（ApplicationIntegrationPage 44、AuditDetailPage 36、AuditListPage 1），未改其格式。git diff --check 通过。默认并发曾因内存不足中止，旧 JSON 不作为结果；降为 2 worker 后使用新的报告文件，严格检查退出码。
 
 Playwright CLI 以明确标记的测试夹具拦截所有管理 API：1366 桌面检查渠道 Key 掩码/轮换输入与取消、虚拟模型零权重回填和表格；1024 路由页面 documentWidth=1024，11 表头/11 数据列；390 模型表单五项能力默认为待确认，修正 fieldset/grid 后 main 无越界元素，但公共页面壳仍有 20px 横向溢出（documentWidth=410），登记 FE-P21-004 待 FE-P23 处理。截图与原始日志在 output/playwright/p21，未提交；本人 Vite 和浏览器已关闭。未执行真实企业身份、DB/Redis、上游协议、真实发布/调用/批量成功、性能或完整移动端验收。
+
+### FE-211 跨端 V2 字段切换与联调补充（2026-09-12，全栈联调 fsagent-0912）
+
+针对 COMMUNICATION.md 登记的 FS-P20-007（渠道创建 400：前端仍发 V1 字段）与 FS-P20-006（应用 `version` 传输类型不一致），全栈联调批在真实 H2(MySQL 模式) + 本机 Redis + Vite + Chromium 链路上完成切换与复验。**沿用 FE-P21 已交付的页面逻辑、状态处理与既有测试，只切换契约字段与数值类型；未新增接口、未改后端契约口径、未动 FE-P23 在途分支。**
+
+| 文件 | 变更 |
+|---|---|
+| `src/api/providers.ts` | 切到 V2：`ProviderListItem`（`provider_type`/`proxy`/`status`/`health`/`priority`/`weight`/`upstream_model_count`/`credential_count`/`last_checked_at`）、`ChannelTimeouts`（`connect_ms`/`read_ms`/`stream_idle_ms`）、`ProviderDetail`（`timeouts`/`headers`/`version`）、`ProviderSavePayload`、`ProviderCheckRecord`（`mode`/`attempt_id`/`channel_request_id`） |
+| `src/pages/providers/ProviderFormPage.vue` | 表单切换 V2 字段，新增 `stream_idle_ms`/`priority`/`weight`，移除 `enabled` 复选框；`version` 自 `detail.version` 读取用于乐观锁提交 |
+| `src/pages/providers/ProviderListPage.vue`、`ProviderDetailPage.vue` | 列与详情字段切换 V2；启停改走独立命令，`status`/`health` 分列展示 |
+| `src/api/applications.ts` | `version`/`quota_version`/`application_version` 由 `number` 改为 `string`（BE-P20-102 十进制字符串） |
+| `src/components/CheckDialog.vue`、`src/api/modelAliases.ts`、应用页面与测试夹具 | 同步字段与类型调整 |
+
+验证（详见 INTEGRATION_REPORT.md §10）：
+
+- 后端契约：同一 V2 载荷修复前 400、修复后 `POST /admin/channels` 200；渠道全链路（创建→列表→详情→编辑→停用→启用→删除→删除后 404）在真实链路通过，陈旧版本 409。
+- 应用域：`GET /admin/applications` 与 `/{id}` 的 `version` 均为 JSON 字符串且文本相等；带字符串 `version` 的 PUT 200。
+- 页面：`/ui/channels` 渲染真实渠道行与操作列；`/ui/channels/{id}` 渲染 V2 详情（含 `版本 1`、`优先级 / 权重 15 / 3`、`流式空闲超时 20000 ms`）；`/ui/applications` 渲染 `0 / 1,000,000（0%）` 证明 64 位定点展示正确。
+- 工具链：`npm run typecheck` 0 error、`npm test` 28 文件 244 项通过、`npm run build` 通过；后端 `mvn -B clean verify` 14 模块 BUILD SUCCESS、521 项 505 通过/16 环境跳过/0 失败。
+
+仍未验收：渠道页面的浏览器**点击级**写操作回放；渠道检测的真实上游连通；FE-212～215 对应契约。FE-211～215 主任务保持未勾选。
 
 ### 本包前端文件清单
 

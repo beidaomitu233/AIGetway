@@ -393,10 +393,13 @@
 | FS-P20-003 | 全栈联调 | 跨端契约 | 应用授权模型约束字段与后端不一致 | 后端统一 `allow_stream`（BE-P20-103），前端仍用 `stream_allowed` | api/applications.ts、ApplicationDetailPage.vue | 无 | 无 | 已验证 | 同上 |
 | FS-P20-004 | 全栈联调 | 精度/契约 | Token 计数与额度版本为 64 位十进制字符串（BE-P20-102），前端按 `number` 运算，`tokens_used + tokens_reserved` 会字符串拼接导致额度比较与剩余量错误（非零用量时必现） | 前端改为字符串类型 + BigInt 定点展示与比较，新增 `integerUnits/integerText/tokenUsageText/tokenRemainingText/positiveIntegerText/toSafeInteger` | api/applications.ts、applicationValues.ts、ApplicationListPage.vue、ApplicationDetailPage.vue、ApplicationQuotaSummary.vue、ApplicationIntegrationPage.vue、测试夹具 | 无 | 无 | 已验证 | 列表、详情、额度明细、调整预览均按定点展示；typecheck/244 项测试/构建通过 |
 | FS-P20-005 | 全栈联调 | 校验口径 | `GET /admin/usage/groups` 不带 `group_sort` 返回 400「TOTAL_COST 排序必须指定单一 currency」 | 后端按币种口径校验，属既定契约；前端排行实际传 `group_sort=-REQUEST_COUNT` | 无 | 无 | usage_ledger、usage_aggregate | 已验证（非缺陷） | 按前端参数请求 200，无需修改 |
-| FS-P20-006 | 全栈联调 | 契约不一致 | 应用列表 `version` 为字符串、应用详情 `version` 为数字，同一资源两种传输类型 | 根因已定位：`light-ai-client/.../ApplicationListItem.java` 的 `version` 为 `String` 且列表服务显式 `String.valueOf(record.version())`；`ApplicationDetail.java` 的 `version` 仍为原始 `long`，详情服务直接序列化数值。BE-P20-102 已声明版本用十进制字符串，但修复会影响管理写接口和 `ManagementOperationResult`，需与 BE-P20/契约负责人确认后统一 | 已按实际类型声明，各自处理 | ApplicationService、ApplicationListItem、ApplicationDetail | application | 阻塞 | 前端已规避；当前不是页面故障，需后端统一传输口径后再改写入 DTO/测试，不能在本批擅自变更破坏性契约 |
-| FS-P20-007 | 全栈联调 | 跨端契约 | 渠道创建：前端发 `type/proxy_url/connect_timeout_ms/read_timeout_ms/default_headers/enabled` 返回 400「请求体不合法」；后端要求 `provider_type/proxy/timeouts/headers/priority/weight` | 根因已定位：`providers.ts` 仍消费旧 V1 字段，而 ChannelController 已收口 BE-P21-001 V2 DTO；字段切换涉及表单默认值、超时/代理/headers 序列化、启停独立命令及测试夹具，属于 FE-P21 已占用范围 | providers.ts（未改） | ChannelController（已符合 BE-P21-001） | channel | 阻塞 | 已复现 400；需 FE-P21 负责人按 BE-P21-001 统一切换并在真实服务上复验，本批不接管已占用前端范围 |
+| FS-P20-006 | 全栈联调 | 契约不一致 | 应用列表 `version` 为字符串、应用详情 `version` 为数字，同一资源两种传输类型 | 按 BE-P20-102「版本以十进制字符串传输」统一：`ApplicationDetail.version` 加 `@JsonSerialize(using = ToStringSerializer.class)`，前端 `applications.ts` 的 `version`/`quota_version`/`application_version` 同步声明为 `string`；列表侧原本已是字符串 | api/applications.ts、ApplicationDetailPage/FormPage、应用测试夹具 | ApplicationDetail | application | 已验证 | 真实链路：`GET /admin/applications` 与 `/{id}` 的 `version` 均为 JSON 字符串且文本相等（均为 `"1"`）；带字符串 `version` 的 PUT 200 并递增为 `"2"`；签发密钥 201；写后重读一致。见 INTEGRATION_REPORT.md §10.4。观察项：`ManagementOperationResult.version` 仍为 `long`（数字），前端未消费该字段作为乐观锁令牌，不构成缺陷，待 BE-P20 确认是否一并统一 |
+| FS-P20-007 | 全栈联调 | 跨端契约 | 渠道创建：前端发 `type/proxy_url/connect_timeout_ms/read_timeout_ms/default_headers/enabled` 返回 400「请求体不合法」；后端要求 `provider_type/proxy/timeouts/headers/priority/weight` | 按 BE-211/BE-P21-001 把 `providers.ts` 与渠道三页切换到 V2：`ProviderListItem`/`ProviderDetail`/`ProviderSavePayload`/`ProviderCheckRecord` 字段收口，表单新增 `stream_idle_ms`/`priority`/`weight`，移除 `enabled` 复选框，启停改走独立命令，同步测试夹具 | providers.ts、ProviderListPage/ProviderDetailPage/ProviderFormPage、渠道测试 | ChannelController、ChannelDetail（已符合 BE-211） | channel | 已验证 | 真实链路：同一 V2 载荷在修复前 400、修复后 `POST /admin/channels` 200；创建→列表→详情→编辑→停用→启用→删除全链路通过；页面渲染 V2 字段；SSRF 对回环 proxy 按预期 400。见 INTEGRATION_REPORT.md §10.1/§10.3 |
+| FS-P20-008 | 全栈联调 | 详情契约缺字段 | 渠道详情页/编辑表单的「编辑」「停用」「启用」「删除」全部 400「编辑操作必须提交正整数 version」；详情接口不回传配置版本 | `ChannelDetail` 按 BE-211 字段清单补 `long version`，`ChannelService.toDetail` 传入 `record.version()`；前端 `applyDetail` 读取 `detail.version` 即可提交。原 `ResourceApiContractTest` 覆盖渠道 V2 字段但未断言 `version`，是漏检直接原因，已补断言 | api/providers.ts（读取 `version`） | ChannelDetail、ChannelService、ResourceApiContractTest | 无 | 已验证 | 真实链路：详情 `version` 与列表一致；携带 `version` 的 PUT/enable/disable/DELETE 均 200；不带 `version` 的 PUT 复现 400；陈旧版本 409 `CONFIG_VERSION_CONFLICT` 并回传 `current_version`；页面「版本 1」正常显示。见 INTEGRATION_REPORT.md §10.3/§10.5 |
 
-未验证：真实 PostgreSQL/MySQL/Redis、真实 Provider 成功调用与 Usage 对账、企业身份四角色、P21 渠道/路由发布链路。H2 与回环信任管理员不替代上述验收。
+未验证：真实 PostgreSQL/MySQL/Redis、真实 Provider 成功调用与 Usage 对账、企业身份四角色。H2 与回环信任管理员不替代上述验收。
+
+追加批（同日）后收敛：原「P21 渠道/路由发布链路未验证」已部分收敛——渠道实体（`channel`）的创建/详情/编辑/启停/删除与应用版本契约已在真实 H2 + Redis + 页面渲染链路通过；仍待验证的是渠道检测命令的真实上游连通、`upstream_model`/`virtual_model`/`route` 的草稿发布生效链路，以及渠道页面的浏览器点击级写操作回放。详见 INTEGRATION_REPORT.md §10.7。
 
 接管说明：FE-P20（codex-0912）会话中断、工作区无在途改动，本轮仅切换其契约字段与数值类型，保留其页面逻辑、状态处理与既有测试；未修改 FE-P23 在途分支与其他任务包文件。
 
@@ -405,3 +408,10 @@
 - 本批五个提交 `deb93f4`、`71e19a4`、`88d158b`、`cdbd584`、`f46d8a1` 已从本地 `dev` 普通推送至远程 `dev`，未强推、未修改其他任务包。
 - 通过 `git ls-remote origin refs/heads/dev` 回读确认远程提交为 `f46d8a1ca7a86c83d79abb81a5e02be2a8252031`；代码提交、远程合并与联调通过分别记录，未将未验证环境视为上线验收。
 - `TASK_STATUS.md` 的 FS-P20 已更新为“完成”，负责人 `fsagent-0912` 本批占用解除；FS-P20-006（应用 version 类型不一致）与 FS-P20-007（渠道字段切换）继续保留为待定位问题。
+
+### FS-P20 追加批交付确认（2026-09-12）
+
+- 追加批在 `fix-fullstack-integration-fs20-followup-fsagent-0912` 分支提交 `39468a7`、`91e2d7b`、`286cf73`，关闭 FS-P20-006/007 并新增 FS-P20-008。
+- 关键根因与修复：`ChannelDetail` 缺 `version` 导致渠道详情页全部写操作 400（本批新增 FS-P20-008）；应用 `version` 按 BE-P20-102 统一为十进制字符串。
+- 联调环境与证据见 INTEGRATION_REPORT.md §10；环境差异记录：本机沙箱下后端默认配置实际绑定 8800（配置声明为 8080），本批显式以 `--server.port=18080` 启动，Vite 以 `VITE_BACKEND_TARGET` 指向该端口，未启用 Mock。
+- 未验收：渠道检测的真实上游连通、上游模型/虚拟模型/路由的发布生效链路、渠道页面浏览器点击级写操作。上述未完成项不作为联调通过依据。

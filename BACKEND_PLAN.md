@@ -371,6 +371,19 @@ COMMUNICATION.md 已登记 BE-P21-001～006，均待确认。BE-211～215 均未
 
 BE-211～215 均未达到整项完成标准，不勾选；已交付子项随本轮提交进入远程 dev，整包状态以 TASK_STATUS.md 记录为准。
 
+## BE-211 跨端联调补充记录（2026-09-12，全栈联调 fsagent-0912）
+
+在 BE-P21 接管交付（zcode-be-0912c）的 V2 DTO 基础上，全栈联调批在真实 H2(MySQL 模式) + 本机 Redis + Vite + Chromium 链路上完成渠道实体全链路复验，并对 BE-211 的响应字段清单补一处缺陷修复。**未改变 DTO 契约口径、未改数据库迁移、未新增接口或业务规则。**
+
+| 项 | 内容 |
+|---|---|
+| 缺陷 | 响应 `ChannelDetail` 缺 `version`（BE-211 字段清单明确包含 `version`），导致详情页读取到 `undefined`，携带 `version` 的 PUT/`enable`/`disable`/`DELETE` 全部 400「编辑操作必须提交正整数 version」 |
+| 修复 | `light-ai-client/.../channel/ChannelDetail.java` 补 `long version`；`light-ai-admin/.../channel/ChannelService.java` 的 `toDetail` 传入 `record.version()` |
+| 测试 | `ResourceApiContractTest` 原覆盖 `provider_type`/`timeouts`/`priority`/`weight`/`status`/`health` 但未断言 `version`，已补「详情 `version` 为数值且与列表项相等」断言（14 项） |
+| 验证 | `POST /admin/channels`（V2 载荷）200；`GET /admin/channels` 与 `/{id}` 的 `version` 一致；带 `version` 的 PUT 200 并递增、`disable` 200→`DISABLED`、`enable` 200→`ACTIVE`、`DELETE` 200→删除后 404；陈旧版本 409 `CONFIG_VERSION_CONFLICT`；`proxy` 指向回环时 400 `FORBIDDEN_TARGET`（SSRF 生效） |
+| 证据 | INTEGRATION_REPORT.md §10.1/§10.3/§10.5；COMMUNICATION.md FS-P20-007/FS-P20-008 |
+| 仍未验收 | 渠道检测的真实上游连通、即时状态运行广播与禁用影响的真实数据验收、SSRF/DNS 重绑定/TLS 真实环境验收（BE-P21-001 余项）；`upstream_model`/`virtual_model`/`route` 的发布生效链路（BE-213/214/215）本轮未覆盖。BE-211～215 仍不勾选。 |
+
 ## BE-P23 本次执行记录（2026-09-12）
 
 负责人：后端执行模型 zcode-be-0912。分支：feature/backend-p23-zcode-be-0912（独立 worktree .worktrees/backend-p23-zcode-be-0912）。实现提交 028e050，基于 origin/dev（含 BE-P20/P21 接管交付与 DB-P21 V5 迁移）合并后复验。本轮只修改后端与执行文档，无前端修改、无新增迁移；详情读路径对已发布 schema 的适配属查询层修复，不改表结构。以下为已验证子项，不等同 BE-231～235 全量验收；主任务均保持未勾选，差异登记 COMMUNICATION BE-P23-001～006。
