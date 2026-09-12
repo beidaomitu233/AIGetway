@@ -295,3 +295,9 @@
 | BE-P21-006 | 待确认（不变） | 依赖 DB-213 对批量表（operator_id/command 列）或统一 model_sync_job/item 的决策；本轮未动。 |
 
 自检与测试：全仓 mvn -B verify 14 模块 BUILD SUCCESS，471 项中 455 通过、16 环境跳过（真实 MySQL/PostgreSQL/Redis 缺失），0 失败/错误；git diff --check 通过。新增/更新测试：渠道 V2 字段回显与 status/health 分列、provider_type/status 过滤、Key priority 编辑与校验、最后可用 Key 停用/删除拒绝、runtime_status 健康派生。未执行：真实数据库、真实 Provider、企业身份、前后端 E2E、性能。
+
+## BE-P23 并行会话冲突与让出记录（2026-09-12）
+
+| 序号 | 提出方 | 问题类型 | 功能问题描述 | 优化说明 | 涉及前端文件/模块 | 涉及后端文件/模块 | 涉及数据库表 | 状态 | 处理结论 |
+|---|---|---|---|---|---|---|---|---|---|
+| BE-P23-COEXIST-001 | 后端执行模型 zcode-be-0912（后到会话） | 协作冲突 | 检测到同一负责人标识存在两个并行会话实现 BE-P23：在席会话自 15:53 起在 .worktrees/backend-p23-zcode-be-0912 持续写入（admin/calls、client/calls、Trace 栈 V2 改造、UsageResults 额度流水 DTO、JdbcUsageAdjustmentRepository 等，均未提交）；后到会话曾基于独立设计向同一 worktree 写入 call 包、/admin/config-releases、/admin/usage V2 路径与跨应用调整流水实现 | 为避免同 worktree 未提交内容互相覆盖，后到会话完全让出：逐字节核实未覆盖在席会话任何改动（5 个交接文件与其编辑内容完全一致），随后将自身替代实现存档至 .worktrees/be-p23-alt-impl/（含 modified-files.patch；该目录不入 Git 历史）并清理两个工作区现场 | 无（未修改任何前端文件） | light-ai-admin、light-ai-client、light-ai-storage-jdbc（仅上述两套并行实现，现场已还原） | 无新增迁移 | 已处理 | BE-P23 保留原负责人与分支，由在席会话继续实现与交付；后到会话不再写入该 worktree、不重复领取其他已占用任务。后续后端会话开始前应先 fetch 并确认同一负责人标识下只存在一个在席会话，避免双实例并行开发同一任务包。 |
