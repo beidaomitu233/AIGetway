@@ -514,7 +514,7 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
                   FROM %s rc
                   JOIN %s pm ON pm.id = rc.upstream_model_id
                   JOIN %s p ON p.id = pm.channel_id
-                 WHERE rc.alias_id = ?
+                 WHERE rc.virtual_model_id = ?
                  ORDER BY p.name ASC
                 """.strip().formatted(
                         qualify(connection, "route_candidate"),

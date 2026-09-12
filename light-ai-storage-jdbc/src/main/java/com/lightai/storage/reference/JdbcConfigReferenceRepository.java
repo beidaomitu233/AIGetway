@@ -78,7 +78,7 @@ public class JdbcConfigReferenceRepository extends AbstractJdbcRepository {
     /** 渠道被引用的 Alias 集合（经模型候选推导，BE-010 affected_alias_ids）。 */
     public List<UUID> aliasIdsByChannel(Connection connection, UUID channelId) {
         DatabaseDialect d = dialect(connection);
-        String sql = "SELECT DISTINCT rc.alias_id FROM "
+        String sql = "SELECT DISTINCT rc.virtual_model_id FROM "
                 + qualify(connection, "route_candidate") + " rc JOIN "
                 + qualify(connection, "upstream_model") + " pm ON pm.id = rc.upstream_model_id AND pm.deleted_at IS NULL "
                 + "WHERE pm.channel_id = ? AND rc.deleted_at IS NULL";
@@ -87,7 +87,7 @@ public class JdbcConfigReferenceRepository extends AbstractJdbcRepository {
             try (ResultSet rs = statement.executeQuery()) {
                 List<UUID> aliasIds = new ArrayList<>();
                 while (rs.next()) {
-                    aliasIds.add(d.readUuid(rs, "alias_id"));
+                    aliasIds.add(d.readUuid(rs, "virtual_model_id"));
                 }
                 return List.copyOf(aliasIds);
             }
