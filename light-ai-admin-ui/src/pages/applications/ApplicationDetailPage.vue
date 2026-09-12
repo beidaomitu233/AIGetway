@@ -16,17 +16,18 @@ import {
   adjustApplicationQuota,
   fetchApplication,
   fetchApplicationMembers,
+  fetchApplicationModelOptions,
   fetchApplicationQuotaAdjustments,
   resetApplicationQuotaUsage,
   updateApplicationModels,
   updateApplicationQuota,
   type ApplicationDetail,
   type ApplicationMemberView,
+  type ApplicationModelOption,
   type ApplicationModelPermission,
   type ApplicationQuotaAdjustment,
   type ApplicationStatus,
 } from '@/api/applications'
-import { fetchModelAliases, type ModelAliasListItem } from '@/api/modelAliases'
 
 /** 应用级模型参数上限的表单状态；空值表示不施加该维度限制。 */
 interface ModelConstraintForm {
@@ -145,10 +146,12 @@ const resetDialogOpen = ref(false)
 const adjustments = ref<ApplicationQuotaAdjustment[]>([])
 const adjustmentsLoading = ref(false)
 const adjustmentsLoadError = ref<unknown>(null)
-const availableModels = ref<ModelAliasListItem[]>([])
+/** FE-205：授权候选取自 /applications/{id}/model-options（活动快照中已发布且可路由），不用配置视图替代。 */
+const availableModels = ref<ApplicationModelOption[]>([])
 const modelsLoading = ref(false)
 const modelsLoadError = ref<unknown>(null)
 const selectedModelIds = ref<string[]>([])
+const unavailableAuthorizedModels = ref<string[]>([])
 const modelReason = ref('')
 const modelConstraints = ref<Record<string, ModelConstraintForm>>({})
 const adjustmentForm = reactive({
@@ -427,6 +430,7 @@ async function openModelDialog(): Promise<void> {
   modelReason.value = ''
   modelDialogOpen.value = true
   if (availableModels.value.length) {
+    reconcileUnavailableAuthorizedModels()
     ensureConstraintForms()
     return
   }
@@ -436,9 +440,10 @@ async function openModelDialog(): Promise<void> {
   modelsLoading.value = true
   modelsLoadError.value = null
   try {
-    const page = await fetchModelAliases({ enabled: true, page: 1, page_size: 100, sort: 'alias' }, controller.signal)
+    const options = await fetchApplicationModelOptions(detail.value!.id, controller.signal)
     if (controller.signal.aborted) return
-    availableModels.value = page.items
+    availableModels.value = options
+    reconcileUnavailableAuthorizedModels()
     ensureConstraintForms()
   } catch (error) {
     if (!controller.signal.aborted && !isAbortError(error)) modelsLoadError.value = error
@@ -447,6 +452,13 @@ async function openModelDialog(): Promise<void> {
   }
 }
 
+/** 资源下线后仍可能保留历史授权；从提交集合移除，允许管理员通过保存完成收口。 */
+function reconcileUnavailableAuthorizedModels(): void {
+  const availableIds = new Set(availableModels.value.map(model => model.virtual_model_id))
+  const stale = detail.value?.models.filter(model => model.enabled && !availableIds.has(model.virtual_model_id)) ?? []
+  unavailableAuthorizedModels.value = stale.map(model => model.virtual_model_code || model.virtual_model_id)
+  selectedModelIds.value = selectedModelIds.value.filter(modelId => availableIds.has(modelId))
+}
 function ensureConstraintForm(modelId: string): void {
   if (!modelConstraints.value[modelId]) {
     modelConstraints.value[modelId] = { maxOutputTokens: '', streamAllowed: '' }
@@ -455,8 +467,16 @@ function ensureConstraintForm(modelId: string): void {
 
 function ensureConstraintForms(): void {
   for (const model of availableModels.value) {
-    ensureConstraintForm(model.id)
+    ensureConstraintForm(model.virtual_model_id)
   }
+}
+
+/** 候选能力交集摘要；用于提示应用只能收紧，不能突破候选能力。 */
+function capabilityText(model: ApplicationModelOption): string {
+  const parts: string[] = []
+  if (model.max_output_tokens !== null) parts.push(`最大输出 ${model.max_output_tokens.toLocaleString()}`)
+  parts.push(model.allow_stream === null ? '流式能力未知' : model.allow_stream ? '支持流式' : '不支持流式')
+  return parts.join(' · ') || '未声明能力上限'
 }
 
 /** 留空返回 null 表示不限；非法值返回 NaN 供校验拦截。 */
@@ -543,7 +563,7 @@ function clearContext(): void {
   ++loadSequence
   modelsController?.abort()
   detailController?.abort(); membersController?.abort(); adjustmentsController?.abort()
-  detail.value = null; members.value = []; adjustments.value = []; availableModels.value = []
+  detail.value = null; members.value = []; adjustments.value = []; availableModels.value = []; unavailableAuthorizedModels.value = []
   statusDialogOpen.value = false; quotaDialogOpen.value = false; modelDialogOpen.value = false
   adjustmentDialogOpen.value = false; resetDialogOpen.value = false
 }
@@ -1501,6 +1521,12 @@ onScopeDispose(clearContext)
         <p class="lai-dialog-message">
           未授权的模型会在调用进入路由前被拒绝。取消授权不会改写历史调用记录。
         </p>
+        <p
+          v-if="unavailableAuthorizedModels.length"
+          class="warning"
+        >
+          已授权模型 {{ unavailableAuthorizedModels.join('、') }} 当前不可路由，保存后会取消这些授权；如需保留，请先恢复其发布和路由候选。
+        </p>
         <PageState
           v-if="modelsLoading"
           status="loading"
@@ -1517,37 +1543,37 @@ onScopeDispose(clearContext)
         >
           <div
             v-for="model in availableModels"
-            :key="model.id"
+            :key="model.virtual_model_id"
             class="model-option-group"
           >
             <label class="model-option">
               <input
                 v-model="selectedModelIds"
                 type="checkbox"
-                :value="model.id"
-                @change="ensureConstraintForm(model.id)"
+                :value="model.virtual_model_id"
+                @change="ensureConstraintForm(model.virtual_model_id)"
               >
-              <span><strong>{{ model.display_name }}</strong><small>{{ model.alias }}</small></span>
+              <span><strong>{{ model.code }}</strong><small>候选能力：{{ capabilityText(model) }}</small></span>
             </label>
             <div
-              v-if="selectedModelIds.includes(model.id)"
+              v-if="selectedModelIds.includes(model.virtual_model_id)"
               class="model-constraint"
             >
               <label class="model-constraint-field">
                 <span>最大输出 Token</span>
                 <input
-                  v-model="modelConstraints[model.id].maxOutputTokens"
+                  v-model="modelConstraints[model.virtual_model_id].maxOutputTokens"
                   class="lai-input"
                   type="number"
                   min="1"
                   step="1"
-                  placeholder="留空表示不限"
+                  :placeholder="model.max_output_tokens === null ? '留空表示不限' : `候选上限 ${model.max_output_tokens}`"
                 >
               </label>
               <label class="model-constraint-field">
                 <span>流式调用</span>
                 <select
-                  v-model="modelConstraints[model.id].streamAllowed"
+                  v-model="modelConstraints[model.virtual_model_id].streamAllowed"
                   class="lai-input"
                 >
                   <option value="">继承（不限）</option>
@@ -1568,7 +1594,7 @@ onScopeDispose(clearContext)
           v-else
           class="empty-inline"
         >
-          当前没有已启用的虚拟模型。保存后应用将没有可调用模型。
+          当前没有可授权的虚拟模型：活动快照中缺少已发布且存在可用路由候选的模型，请先在模型与路由发布后再授权。
         </p>
         <label class="lai-dialog-field"><span>变更原因</span><textarea
           v-model="modelReason"

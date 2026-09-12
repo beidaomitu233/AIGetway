@@ -67,6 +67,9 @@ export interface ApplicationListItem {
   currency: string
   rpm: number | null
   tpm: number | null
+  budget_status: 'NORMAL' | 'EXHAUSTED' | 'UNLIMITED'
+  requests_24h: string
+  success_rate_24h: string | null
   last_called_at: string | null
   updated_at: string
   version: string
@@ -189,11 +192,44 @@ export interface ApplicationMemberView {
   role: string
 }
 
+/**
+ * 授权候选目录行（BE-P20-003）：来自活动配置快照中已发布且存在可用路由候选的虚拟模型，
+ * 与 GET /virtual-models（配置视图，可能失效）口径不同，不能混用（FRONTEND_PLAN FE-205）。
+ */
+export interface ApplicationModelOption {
+  virtual_model_id: string
+  code: string
+  /** 候选能力交集上限；null 表示候选未声明上限。 */
+  max_output_tokens: number | null
+  /** 全部启用候选支持流式为 true，存在显式不支持为 false，未知为 null。 */
+  allow_stream: boolean | null
+  snapshot_no: string
+}
+
 export function fetchApplicationMembers(
   applicationId: string,
   signal?: AbortSignal,
 ): Promise<ApplicationMemberView[]> {
   return request({ path: `/applications/${applicationId}/members`, signal })
+}
+
+/** 已有应用的授权候选：按操作者可授权范围裁剪，仅含已发布且可路由的模型。 */
+export function fetchApplicationModelOptions(
+  applicationId: string,
+  signal?: AbortSignal,
+): Promise<ApplicationModelOption[]> {
+  return request<{ items: ApplicationModelOption[] }>({
+    path: `/applications/${applicationId}/model-options`, signal,
+  }).then(result => result.items ?? [])
+}
+
+/** 创建前授权候选：尚无应用 ID，非可信身份返回空列表。 */
+export function fetchApplicationModelOptionsForCreate(
+  signal?: AbortSignal,
+): Promise<ApplicationModelOption[]> {
+  return request<{ items: ApplicationModelOption[] }>({
+    path: '/applications/model-options', signal,
+  }).then(result => result.items ?? [])
 }
 
 export function fetchApplications(

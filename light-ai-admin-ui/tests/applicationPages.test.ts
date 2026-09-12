@@ -45,12 +45,18 @@ describe('Application pages（V2 应用中心）', () => {
     expect(wrapper.text()).toContain('customer-service-prod')
     expect(wrapper.text()).toContain('1,300 / 1,000,000')
     expect(wrapper.text()).toContain('13.00 / 1000.00 CNY')
+    expect(wrapper.text()).toContain('预算：额度正常')
+    expect(wrapper.text()).toContain('42 次')
+    expect(wrapper.text()).toContain('成功率 87.5%')
   })
 
   it('创建应用提交基本信息、初始额度与模型授权', async () => {
     stub = installJsonFetchStub(({ url, method }) => {
-      if (method === 'GET' && url.pathname.endsWith('/admin/virtual-models')) {
-        return pageEnvelope([{ id: 'alias-1', alias: 'chat-default', display_name: '默认对话', enabled: true }])
+      // 授权候选取自 /admin/applications/model-options（活动快照），不是配置视图 /admin/virtual-models
+      if (method === 'GET' && url.pathname === '/admin/applications/model-options') {
+        return dataEnvelope({
+          items: [{ virtual_model_id: 'alias-1', code: 'chat-default', max_output_tokens: 4096, allow_stream: true, snapshot_no: '7' }],
+        })
       }
       if (method === 'POST' && url.pathname.endsWith('/admin/applications')) {
         return dataEnvelope({ id: application.id, version: 1, entity: application, draft_changed: false, draft_revision: null, request_id: 'req-1' })
@@ -208,11 +214,14 @@ describe('Application pages（V2 应用中心）', () => {
           operator_id: 'user-admin', created_at: '2026-09-08T07:00:00Z',
         }])
       }
-      if (method === 'GET' && url.pathname.endsWith('/admin/virtual-models')) {
-        return pageEnvelope([
-          { id: 'alias-1', alias: 'chat-default', display_name: '默认对话', enabled: true },
-          { id: 'alias-2', alias: 'chat-backup', display_name: '备用对话', enabled: true },
-        ])
+      // 详情授权候选：/admin/applications/{id}/model-options，按快照能力交集返回
+      if (method === 'GET' && url.pathname === `/admin/applications/${application.id}/model-options`) {
+        return dataEnvelope({
+          items: [
+            { virtual_model_id: 'alias-1', code: 'chat-default', max_output_tokens: 4096, allow_stream: true, snapshot_no: '7' },
+            { virtual_model_id: 'alias-2', code: 'chat-backup', max_output_tokens: null, allow_stream: null, snapshot_no: '7' },
+          ],
+        })
       }
       if (method === 'PUT' && url.pathname.endsWith(`/admin/applications/${application.id}/quota`)) {
         return dataEnvelope({
