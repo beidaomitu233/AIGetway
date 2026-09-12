@@ -239,3 +239,15 @@
 ### FE-P21 远程交付确认
 
 2026-09-12：在独立集成目录本地 dev 合入 feature/frontend-p21-codex-0912，fetch 并同步远程 9b15d79 后普通推送为 8e96984；回读 origin/dev 包含 fd9014a 及此前 def540e/b27689d。合并后 light-ai-admin-ui 文件树与最终四项门禁通过的 fd9014a 完全一致，git diff --check 通过；未推送功能分支、未强推。FE-P21 保持阻塞并保留 codex-0912 负责人，未解除占用；FE-211～215 未勾选，等待已登记的后端契约/真实联调及页面壳窄屏验收。
+
+## FE-P22 契约核对（2026-09-12，前端执行模型 zcode-0912）
+
+以 origin/dev 1c3a68a 为核对点，BE-P22 进行中、BE-P23 未领取。观测、用量、发布、接入与总览页面按 FRONTEND_PLAN 在现有过渡端点上加固；V2 目标路径与字段差异如下，待后端交付后再对齐，不构造未定义响应。
+
+| 序号 | 提出方 | 问题类型 | 功能问题描述 | 优化说明 | 涉及前端文件/模块 | 涉及后端文件/模块 | 涉及数据库表 | 状态 | 处理结论 |
+| -- | --- | ---- | ------ | ---- | --------- | --------- | ------ | -- | ---- |
+| FE-P22-001 | 前端执行模型 | 接口路径与时间线 | V2 目标 `GET /admin/calls`、`GET /admin/calls/{requestId}` 及受控导出未交付；当前消费 /traces、/traces/{traceId} 过渡端点，时间线由既有 events/attempts 组合 | 请 BE-231 公布 request_id 与现有 traceId 对应、准入/路由/Attempt/恢复/流提交/结算/终态链路 DTO、导出字段与权限 | traces 页面/API | calls、trace、attempt | request_trace、request_attempt、recovery_decision | 待确认 | 已完成运行中静默刷新等前端加固；V2 链路字段交付前不冒称完整时间线验收 |
+| FE-P22-002 | 前端执行模型 | 接口路径与流水范围 | V2 目标 `/admin/usage/summary\|trend\|breakdown\|adjustments\|export` 未交付；当前消费 /usage/summary、/usage/trends、/usage/groups，额度流水经 /applications/{id}/quota/adjustments 按应用逐个查询，无用量导出 | 请 BE-232 明确跨应用流水范围、分页、导出契约与聚合延迟口径；输入/输出 Token 已在当前 DTO | usage、UsageAdjustmentsPage | usage、ledger | usage_ledger、usage_aggregate、quota_adjustment | 待确认 | 新增 /ui/usage/adjustments 过渡页；V2 调整流水端点交付后由原负责人切换 |
+| FE-P22-003 | 前端执行模型 | 发布契约 | V2 目标 `/admin/config-releases/**` 不可变完整快照、实例部分失败与回滚生成新记录未交付；当前消费 /config/draft-*、/config/validate、/config/publish、/config/publish-records、/config/snapshots、/runtime-instances | 请 BE-233 冻结 VALIDATING/ACTIVATING 状态枚举、实例结果 DTO、回滚与版本冲突契约 | config/PublishPage | config-release、snapshot | config_snapshot、publish_record、publish_instance_result | 待确认 | 已完成轮询中断提示等前端加固；快照语义交付前不显示运行成功 |
+| FE-P22-004 | 前端执行模型 | 接入与受控测试 | V2 目标 `GET /admin/applications/{id}/integration` 与受控测试接口未交付；当前消费 /developer-access/context、/developer-access/code-sample、/developer-access/test/chat | 请确认接入信息端点归属与受控测试来源标记、预算耗尽/限流错误码及流式失败契约 | ApplicationIntegrationPage、developerAccess API | application、integration、gateway | application、application_key | 待确认 | 已完成无密钥前置警告；真实预算/限流/流式失败待 BE-P22 联调验收 |
+| FE-P22-005 | 前端执行模型 | 总览契约 | V2 目标 `/admin/overview/**` 未交付；当前消费 /overview/filters、/overview/summary、/overview/trends、/overview/exceptions，应用排行以 /usage/groups（group_by=APPLICATION）过渡实现 | 请 BE-232/233 确认角色范围字段、应用排行与渠道健康是否纳入 overview 聚合及部分失败口径 | overview 页面/API | overview、usage | usage_aggregate、request_trace | 待确认 | 排行钻取与局部失败已验证；渠道健康区域待 V2 字段交付后补充 |

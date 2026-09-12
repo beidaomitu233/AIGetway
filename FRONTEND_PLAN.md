@@ -318,3 +318,28 @@ Playwright CLI 以明确标记的测试夹具拦截所有管理 API：1366 桌�
 - light-ai-admin-ui/tests/resourceApiP21.test.ts
 - light-ai-admin-ui/tests/resourceP21.test.ts
 - light-ai-admin-ui/tests/routerGuards.test.ts
+
+## FE-P22 前端加固交付记录（2026-09-12）
+
+负责人：前端执行模型 zcode-0912；分支 feature/frontend-p22-zcode-0912；领取与占用登记见 TASK_STATUS.md（eaa697b 已普通推送 dev）。独立工作目录 .worktrees/frontend-p22-zcode-0912。实现提交 fc0e955，合并 origin/dev（含 FE-P21 交付 1c3a68a）为 685cf91。以下仅为现有过渡端点上已实现并经前端测试验证的加固子项；FE-221～FE-225 主勾选框全部保持未勾选，完整验收依赖 COMMUNICATION.md FE-P22-001～005 与 BE-P22/BE-P23 的 V2 契约及真实联调。
+
+| 任务 | 本次已验证子项 | 未满足验收项 |
+|---|---|---|
+| FE-221 | 运行中详情自动刷新改为静默刷新：保留上次时间线、显示“刷新中”状态，刷新失败保留旧数据并提示可重试；既有列表筛选（时间/应用/模型/状态/错误码）、request_id 查询、时间线与 Attempt 抽屉、导出失败态维持回归 | V2 `GET /admin/calls`、`GET /admin/calls/{requestId}` 契约、准入/路由/Attempt/恢复/流提交/结算/终态完整链路字段、受控导出与应用范围（FE-P22-001/BE-231） |
+| FE-222 | 汇总卡新增输入/输出 Token；应用/虚拟模型/渠道/上游模型/币种/粒度筛选进入 URL 并可深链还原；新增 /ui/usage/adjustments 额度流水页（应用切换、调整与重置流水、空态/错误/重试、URL 还原）；多币种分币种展示与 ESTIMATED/ACTUAL 标记沿用既有口径 | `/admin/usage/summary\|trend\|breakdown\|adjustments\|export` V2 契约、跨应用额度流水与导出、聚合延迟口径（FE-P22-002/BE-232） |
+| FE-223 | 发布进度轮询中断时保留最近进度、提示自动重试、恢复后清除；VALIDATING/ACTIVATING 真实轮询、失败保护与既有发布/历史/回滚交互维持回归 | `/admin/config-releases/**` 不可变完整快照、实例部分失败、回滚生成新记录与版本冲突契约（FE-P22-003/BE-233） |
+| FE-224 | 接入页新增无活动密钥前置警告；无授权模型空态、占位符示例、连接信息/限制/错误表维持回归；新增接入页测试 | `GET /admin/applications/{id}/integration` 与受控测试接口 V2 契约、预算耗尽/限流/流式失败真实联调（FE-P22-004） |
+| FE-225 | 时间范围与共享筛选进入 URL 并可深链还原；新增应用排行（同口径时间范围、按请求数前 10）并可钻取到预设筛选的调用记录；排行失败独立展示不影响摘要区域 | `/admin/overview/**` 角色范围字段、渠道健康与部分区域失败聚合契约（FE-P22-005） |
+
+### 已完成子项检查
+
+- [x] 在现有过渡端点上完成五页加固，未自行添加后端接口或数据库字段。
+- [x] 新增/更新调用记录、用量、发布、接入、总览与额度流水测试共 18 项。
+- [x] 类型检查、lint、全量单测、构建通过；已合并最新 origin/dev 后复跑门禁。
+- [ ] FE-221～225 完整业务验收及真实环境联调；保留负责人，等待上述契约。
+
+### 实际验证
+
+Windows / Node 20.19.6 / npm 10.8.2 / 既有 Vue、TypeScript、Vitest，独立 worktree；无新增依赖。最终代码 685cf91（含 origin/dev 合并）：npm run typecheck 通过；npm test 28 文件 / 244 项通过、0 失败 / 0 跳过（本包新增 27 项）；npm run lint 0 error / 37 warning，警告仅来自未修改的 AuditDetailPage.vue 与 AuditListPage.vue 历史格式；npm run build 通过；无 console.log/debugger 残留。合并后文件树复跑全部门禁，结果一致。
+
+未执行：真实后端联调、真实企业身份、数据库/Redis/Provider、真实发布与调用链路、性能与完整移动端验收。调用记录、用量、发布、接入、总览当前均消费既有过渡端点（/traces、/usage、/config、/developer-access、/overview），不冒称 V2 契约已验收；差异已登记 COMMUNICATION.md FE-P22-001～005。
