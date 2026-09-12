@@ -343,3 +343,14 @@ Playwright CLI 以明确标记的测试夹具拦截所有管理 API：1366 桌�
 Windows / Node 20.19.6 / npm 10.8.2 / 既有 Vue、TypeScript、Vitest，独立 worktree；无新增依赖。最终代码 685cf91（含 origin/dev 合并）：npm run typecheck 通过；npm test 28 文件 / 244 项通过、0 失败 / 0 跳过（本包新增 16 项；较上一基线的其余增量来自同期合入的 FE-P21 交付）；npm run lint 0 error / 37 warning，警告仅来自未修改的 AuditDetailPage.vue 与 AuditListPage.vue 历史格式；npm run build 通过；无 console.log/debugger 残留。合并后文件树复跑全部门禁，结果一致。
 
 未执行：真实后端联调、真实企业身份、数据库/Redis/Provider、真实发布与调用链路、性能与完整移动端验收。调用记录、用量、发布、接入、总览当前均消费既有过渡端点（/traces、/usage、/config、/developer-access、/overview），不冒称 V2 契约已验收；差异已登记 COMMUNICATION.md FE-P22-001～005。
+
+## FS-P20 应用域跨端契约对齐（2026-09-12，全栈联调 fsagent-0912）
+
+真实联调（H2 + Redis + Vite + Chromium）复现后，按后端已确认契约切换应用域字段，不新增业务规则、不改页面逻辑与状态处理。
+
+- 修改文件：src/api/applications.ts；src/pages/applications 下 applicationValues.ts、ApplicationListPage.vue、ApplicationDetailPage.vue、ApplicationQuotaSummary.vue、ApplicationIntegrationPage.vue、ApplicationKeyPanel.vue；测试 fixtures/application.ts、applicationPages.test.ts、applicationP20.test.ts、applicationIntegration.test.ts。
+- 密钥：一次性结果字段 `key_value` → `secret`，并补 `key_prefix`/`status`/`issued_at`/`expires_at`（对应 BE-P20-101）。
+- 模型约束：`stream_allowed` → `allow_stream`（对应 BE-P20-103）。
+- 64 位计数与版本：`token_limit`/`tokens_used`/`tokens_reserved`/`version` 等改为十进制字符串类型，新增 `integerUnits`/`integerText`/`tokenUsageText`/`tokenRemainingText`/`positiveIntegerText`/`toSafeInteger` 做 BigInt 定点展示与比较；修正此前 `tokens_used + tokens_reserved` 字符串拼接导致的额度比较与剩余量错误（对应 BE-P20-102）。
+- 验证：Windows / Node 22.22.2 / npm 10.9.7；`npm run typecheck` 通过；`npm test` 28 文件 244 项通过、0 失败；`npm run lint` 0 error / 37 warning（均为未修改文件历史格式）；`npm run build` 通过。Playwright 真实页面：列表/详情/密钥页渲染正常，签发密钥弹窗显示真实原文且关闭后不残留。
+- 未执行：真实企业身份、真实 Provider 成功调用、P21 渠道字段切换（登记 COMMUNICATION FS-P20-007）。

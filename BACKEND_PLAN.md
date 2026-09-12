@@ -388,3 +388,13 @@ BE-211～215 均未达到整项完成标准，不勾选；已交付子项随本�
 测试环境 Windows / Temurin Java 17.0.11 / 项目 Maven（IntelliJ Maven 3.9.6）与 JUnit5、MockMvc、H2 迁移、真实 JDBC/服务。新增 13 项测试：CallObservationApiTest（3）、UsageAdjustmentApiTest（3）、ConfigReleaseRollbackTest（5）、SettingsApiTest（2）。合并 origin/dev 后全仓 mvn -B verify：14 模块 BUILD SUCCESS，502 项中 486 通过、16 环境跳过（Redis 11、Provider 5，缺 LAI_IT_REDIS_URI 等），0 失败/错误；git diff --check 通过。真实 MySQL/PostgreSQL/Redis、真实 Provider、企业身份、前后端 E2E 与性能未执行，H2 验证不替代真实数据库验收。
 
 BE-231～235 均未达到整项完成标准，不勾选；已交付子项随本轮提交进入远程 dev，整包状态以 TASK_STATUS.md 记录为准。并行会话冲突已按 COMMUNICATION BE-P23-COEXIST-001 处理：后到会话让出，本负责人保留交付。
+
+## FS-P20 网关请求解析修复（2026-09-12，全栈联调 fsagent-0912）
+
+真实 HTTP 复现：`POST /v1/chat/completions` 在请求体缺少 `stream` 字段时返回 400 `请求体解析失败: MismatchedInputException`，标准 OpenAI 客户端（通常不带 `stream`）在业务校验前即被拒绝。
+
+- 根因：`ProtocolJson` 对协议对象启用 `FAIL_ON_NULL_FOR_PRIMITIVES`，而 `UnifiedChatRequest.stream` 为原始 `boolean`；字段缺省或显式 null 被 Jackson 判为 null 基本类型。
+- 修复：`V1Controller.parseRequest` 在反序列化前按 OpenAI 兼容语义补 `stream=false`（新增私有方法 `applyStreamDefault`）；不放宽未知字段拒绝与类型校验，不修改共享 DTO 与管理命令严格解析。
+- 修改文件：light-ai-server/src/main/java/com/lightai/server/v1/V1Controller.java；新增 light-ai-server/src/test/java/com/lightai/server/v1/V1ChatRequestParsingTest.java（5 项：缺省 stream、显式 null、stream=true 走流式、未知字段仍 400、messages 类型错误仍 400）。
+- 验证：`mvn -B -pl light-ai-server -am -Dtest=V1ChatRequestParsingTest test` 5 项通过；重新打包后真实 HTTP 五组报文与 `/health/ready` 验证通过。既有测试仅覆盖 `stream:true`，该分支此前无覆盖。
+- 未执行：真实 Provider 成功调用与 Usage/价格快照对账（无可用测试渠道与凭证）。

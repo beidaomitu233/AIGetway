@@ -10,3 +10,4 @@ target/
 Thumbs.db
 
 .worktrees/
+.workbuddy-ai/

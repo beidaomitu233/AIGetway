@@ -381,3 +381,21 @@
 | DB-P20-106 | H2 兼容性约束登记：迁移脚本不得使用 UPDATE..JOIN 多表形式与 DO 块（迁移器分号切分不识别美元引用）；本迁移已用关联子查询与单语句门禁改写 | DB-P21/P22/P23 后续迁移负责人 | 已确认 | 后续 V9+ 迁移沿用该约定，避免 H2 门禁失败 |
 
 自检与测试：全仓 mvn -B verify 14 模块 BUILD SUCCESS，516 项中 500 通过、16 环境跳过（真实 MySQL/PostgreSQL/Redis 缺失），0 失败/错误；git diff --check 通过。新增 ApplicationQuotaLifecycleV6Test 6 项（约束/回填/转换/门禁）。未执行：真实数据库升级对账、并发结算/轮换/归档、回滚演练。
+
+## FS-P20 全栈联调记录（2026-09-12，全栈联调 fsagent-0912）
+
+以 origin/dev 728850d 为基点领取（6aefd88，已推送），在 H2(MySQL 模式) + 本机 Redis + Vite + Chromium 真实链路完成应用接入联调。完整环境、命令与证据见 [INTEGRATION_REPORT.md](INTEGRATION_REPORT.md)。
+
+| 编号 | 提出方 | 问题类型 | 功能问题描述 | 优化说明 | 涉及前端文件/模块 | 涉及后端文件/模块 | 涉及数据库表 | 状态 | 处理结论 |
+|---|---|---|---|---|---|---|---|---|---|
+| FS-P20-001 | 全栈联调 | 网关协议缺陷 | 标准 OpenAI 报文（不带 `stream`）调用 `POST /v1/chat/completions` 返回 400 `请求体解析失败: MismatchedInputException`，在业务校验前即被拒绝 | `ProtocolJson` 启用 `FAIL_ON_NULL_FOR_PRIMITIVES`，`UnifiedChatRequest.stream` 为原始 boolean，字段缺省或 null 被判为 null 基本类型；在 `V1Controller.parseRequest` 按 OpenAI 语义补默认值，不放宽未知字段与类型校验 | 无 | V1Controller、V1ChatRequestParsingTest（新增） | 无 | 已验证 | 真实 HTTP 五组报文通过；新增 5 项回归。既有测试仅覆盖 `stream:true`，该分支此前无覆盖 |
+| FS-P20-002 | 全栈联调 | 跨端契约 | 应用详情签发密钥后一次性弹窗为空 | 后端按 BE-P20-101 返回 `secret`，前端仍读 `key_value` | api/applications.ts、ApplicationKeyPanel.vue、应用测试夹具 | 无（后端已符合契约） | 无 | 已验证 | 页面显示真实原文，关闭后不残留；typecheck/244 项测试/构建通过 |
+| FS-P20-003 | 全栈联调 | 跨端契约 | 应用授权模型约束字段与后端不一致 | 后端统一 `allow_stream`（BE-P20-103），前端仍用 `stream_allowed` | api/applications.ts、ApplicationDetailPage.vue | 无 | 无 | 已验证 | 同上 |
+| FS-P20-004 | 全栈联调 | 精度/契约 | Token 计数与额度版本为 64 位十进制字符串（BE-P20-102），前端按 `number` 运算，`tokens_used + tokens_reserved` 会字符串拼接导致额度比较与剩余量错误（非零用量时必现） | 前端改为字符串类型 + BigInt 定点展示与比较，新增 `integerUnits/integerText/tokenUsageText/tokenRemainingText/positiveIntegerText/toSafeInteger` | api/applications.ts、applicationValues.ts、ApplicationListPage.vue、ApplicationDetailPage.vue、ApplicationQuotaSummary.vue、ApplicationIntegrationPage.vue、测试夹具 | 无 | 无 | 已验证 | 列表、详情、额度明细、调整预览均按定点展示；typecheck/244 项测试/构建通过 |
+| FS-P20-005 | 全栈联调 | 校验口径 | `GET /admin/usage/groups` 不带 `group_sort` 返回 400「TOTAL_COST 排序必须指定单一 currency」 | 后端按币种口径校验，属既定契约；前端排行实际传 `group_sort=-REQUEST_COUNT` | 无 | 无 | usage_ledger、usage_aggregate | 已验证（非缺陷） | 按前端参数请求 200，无需修改 |
+| FS-P20-006 | 全栈联调 | 契约不一致 | 应用列表 `version` 为字符串、应用详情 `version` 为数字，同一资源两种传输类型 | 后端列表视图与详情实体序列化口径不一致；BE-P20-102 声明版本用十进制字符串 | 已按实际类型声明，各自处理 | 待后端统一（未改） | application | 待定位 | 前端已规避；后端统一口径需契约确认后处理 |
+| FS-P20-007 | 全栈联调 | 跨端契约 | 渠道创建：前端发 `type/proxy_url/connect_timeout_ms/read_timeout_ms/default_headers/enabled` 返回 400「请求体不合法」；后端要求 `provider_type/proxy/timeouts/headers/priority/weight` | 属 BE-P21-001 已登记的同批跨端切换项，FE-P21 负责人未完成切换 | providers.ts（未改） | ChannelController（已符合 BE-P21-001） | channel | 待定位 | 已复现 400；列入下一批，需与 FE-P21 占用范围协调 |
+
+未验证：真实 PostgreSQL/MySQL/Redis、真实 Provider 成功调用与 Usage 对账、企业身份四角色、P21 渠道/路由发布链路。H2 与回环信任管理员不替代上述验收。
+
+接管说明：FE-P20（codex-0912）会话中断、工作区无在途改动，本轮仅切换其契约字段与数值类型，保留其页面逻辑、状态处理与既有测试；未修改 FE-P23 在途分支与其他任务包文件。
