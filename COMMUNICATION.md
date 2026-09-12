@@ -301,3 +301,17 @@
 | 序号 | 提出方 | 问题类型 | 功能问题描述 | 优化说明 | 涉及前端文件/模块 | 涉及后端文件/模块 | 涉及数据库表 | 状态 | 处理结论 |
 |---|---|---|---|---|---|---|---|---|---|
 | BE-P23-COEXIST-001 | 后端执行模型 zcode-be-0912（后到会话） | 协作冲突 | 检测到同一负责人标识存在两个并行会话实现 BE-P23：在席会话自 15:53 起在 .worktrees/backend-p23-zcode-be-0912 持续写入（admin/calls、client/calls、Trace 栈 V2 改造、UsageResults 额度流水 DTO、JdbcUsageAdjustmentRepository 等，均未提交）；后到会话曾基于独立设计向同一 worktree 写入 call 包、/admin/config-releases、/admin/usage V2 路径与跨应用调整流水实现 | 为避免同 worktree 未提交内容互相覆盖，后到会话完全让出：逐字节核实未覆盖在席会话任何改动（5 个交接文件与其编辑内容完全一致），随后将自身替代实现存档至 .worktrees/be-p23-alt-impl/（含 modified-files.patch；该目录不入 Git 历史）并清理两个工作区现场 | 无（未修改任何前端文件） | light-ai-admin、light-ai-client、light-ai-storage-jdbc（仅上述两套并行实现，现场已还原） | 无新增迁移 | 已处理 | BE-P23 保留原负责人与分支，由在席会话继续实现与交付；后到会话不再写入该 worktree、不重复领取其他已占用任务。后续后端会话开始前应先 fetch 并确认同一负责人标识下只存在一个在席会话，避免双实例并行开发同一任务包。 |
+
+## DB-P22 接管交付复核（2026-09-12，数据库执行模型 zcode-db-0912d）
+
+经用户确认原领取（zcode-db-0912b）会话中断、无交付、无远程分支，由 zcode-db-0912d 接管（领取 c3e2e6f，基线 1d210b5）。交付 V7 双方言迁移（准入/账本/观测/留存域）并注册 DefaultSchemaMigrator，LATEST_VERSION 升至 7；明细见 DATABASE_PLAN「DB-P22 接管执行记录」。
+
+| 编号 | 影响与建议 | 待确认方 | 状态 | 处理结论 |
+| --- | --- | --- | --- | --- |
+| DB-P22-101 | usage_aggregate 此前缺少聚合幂等唯一键，JdbcUsageAggregateRepository 的 ON CONFLICT/ON DUPLICATE (granularity, bucket_start, dimension_key, currency) 在真实 PostgreSQL 上会因无唯一约束失败、MySQL/H2 上静默重复；V7 已补唯一索引 | BE-P22（codex-be-0912）、BE-P23（zcode-be-0912） | 已交付待验收 | 后端聚合/观测联调可直接依赖该键；已有聚合行的旧环境升级前需先去重 |
+| DB-P22-102 | attempt 新增 (trace_id, sequence) 唯一约束，运行时 Attempt 写入必须保证同 trace 内 sequence 递增不重复 | BE-P22、BE-P23 | 已交付待验收 | 如后端存在补写历史 Attempt 场景需改为显式新序号，不得复用旧序号 |
+| DB-P22-103 | usage_ledger 新增 event_type（默认 SETTLE）；预占/释放/周期重置/人工调整事件写入账本属后端行为变更 | BE-P22、BE-P23 | 待确认 | 当前周期重置与人工调整仍写 quota_adjustment，是否统一入账本由后端确认后再改写入路径 |
+| DB-P22-104 | trace 新增 application_id/application_key_id UUID 维度（application 名称列保留），需要运行时写入路径回填 | BE-P22、BE-P23 | 待确认 | 名称列与 UUID 列并存，不强制回填历史；回填策略由 BE-P23 观测改造决定 |
+| DB-P22-105 | 迁移号：V5=DB-P21、V6=DB-P20 已登记，V7=DB-P22；V7 仅依赖 V1～V4 对象，与 V5/V6 合入顺序无耦合 | DB-P21（zcode-db-0912c）、DB-P20（zcode-0912） | 已确认 | SchemaGuard 校验已注册最高版本；三包合入后 fresh 数据库按 V1→V7 顺序应用 |
+
+自检与测试：全仓 mvn -B verify 14 模块 BUILD SUCCESS，486 项中 470 通过、16 环境跳过（真实 MySQL/PostgreSQL/Redis 缺失），0 失败/错误；git diff --check 通过。新增 AdmissionLedgerSchemaV7Test 5 项约束验收；storage-redis 静态复核 SETTLE/RELEASE 幂等守卫无缺陷。未执行：真实数据库升级/并发/崩溃恢复、真实 Redis 并发、归档与留存的运行验证。

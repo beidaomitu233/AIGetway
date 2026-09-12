@@ -27,7 +27,7 @@ import javax.sql.DataSource;
  */
 public class DefaultSchemaMigrator implements SchemaMigrator {
 
-    static final int LATEST_VERSION = 4;
+    static final int LATEST_VERSION = 7;
     private static final long POSTGRES_LOCK_ID = 738_120_426L;
     private static final String MYSQL_LOCK_NAME = "light_ai_schema_migration";
     private static final Migration POSTGRES_BASELINE = new Migration(
@@ -52,6 +52,12 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
     private static final Migration MYSQL_RESOURCE_DOMAIN_CHANNELS = new Migration(
             4, "resource_domain_channels_and_upstream_models",
             "db/migration/mysql/V4__resource_domain_channels_and_upstream_models.sql");
+    private static final Migration POSTGRES_ADMISSION_LEDGER_OBSERVATION = new Migration(
+            7, "admission_ledger_observation_retention",
+            "db/migration/postgres/V7__admission_ledger_observation_retention.sql");
+    private static final Migration MYSQL_ADMISSION_LEDGER_OBSERVATION = new Migration(
+            7, "admission_ledger_observation_retention",
+            "db/migration/mysql/V7__admission_ledger_observation_retention.sql");
 
     private final DataSource dataSource;
 
@@ -76,11 +82,13 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
                     apply(connection, MYSQL_APPLICATION_FOUNDATION, h2);
                     apply(connection, MYSQL_APPLICATION_KEY_MODEL_SCOPE, h2);
                     apply(connection, MYSQL_RESOURCE_DOMAIN_CHANNELS, h2);
+                    apply(connection, MYSQL_ADMISSION_LEDGER_OBSERVATION, h2);
                 } else {
                     apply(connection, POSTGRES_BASELINE, h2);
                     apply(connection, POSTGRES_APPLICATION_FOUNDATION, h2);
                     apply(connection, POSTGRES_APPLICATION_KEY_MODEL_SCOPE, h2);
                     apply(connection, POSTGRES_RESOURCE_DOMAIN_CHANNELS, h2);
+                    apply(connection, POSTGRES_ADMISSION_LEDGER_OBSERVATION, h2);
                 }
                 if (dialect.databaseType() == DatabaseType.POSTGRESQL) {
                     connection.commit();

@@ -75,9 +75,15 @@ class DefaultSchemaMigratorTest {
             assertThat(resultSet.getString("checksum")).hasSize(64);
             assertThat(resultSet.getBoolean("success")).isTrue();
             assertThat(resultSet.next()).isTrue();
-            assertThat(resultSet.getInt("version")).isEqualTo(DefaultSchemaMigrator.LATEST_VERSION);
+            assertThat(resultSet.getInt("version")).isEqualTo(4);
             assertThat(resultSet.getString("description"))
                     .isEqualTo("resource_domain_channels_and_upstream_models");
+            assertThat(resultSet.getString("checksum")).hasSize(64);
+            assertThat(resultSet.getBoolean("success")).isTrue();
+            assertThat(resultSet.next()).isTrue();
+            assertThat(resultSet.getInt("version")).isEqualTo(DefaultSchemaMigrator.LATEST_VERSION);
+            assertThat(resultSet.getString("description"))
+                    .isEqualTo("admission_ledger_observation_retention");
             assertThat(resultSet.getString("checksum")).hasSize(64);
             assertThat(resultSet.getBoolean("success")).isTrue();
             assertThat(resultSet.next()).isFalse();
