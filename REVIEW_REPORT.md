@@ -61,7 +61,7 @@
 - `COMMUNICATION.md` 已登记 FS-RV-P20-001/002 与 RV-P20-001～005；`INTEGRATION_REPORT.md` 已记录 H2+Redis、真实 HTTP 和页面回放证据。本报告补充统一问题统计和复验结论。
 - `FRONTEND_PLAN.md`、`BACKEND_PLAN.md`、`DATABASE_PLAN.md` 的主任务勾选未擅自改为完成，因真实环境门禁和包级验收仍阻塞。
 - `TASK_STATUS.md` 的 RV-P20 占用保留至本分支提交及远程回读完成。
-- 前端修复提交：`9a9454a`、`a953dd2`（RV-P20-001/003/004/005）；JSON 契约提交：`a320d8f`（RV-P20-002）；并行后端修复：`41e6635`；并行联调文档：`b7265bc`。审查报告提交：`fdbe546`；PR：[#1](https://github.com/beidaomitu233/AIGetway/pull/1)，已推送审查分支并完成远程哈希回读，待独立评审合并。
+- 前端修复提交：`9a9454a`、`a953dd2`（RV-P20-001/003/004/005）；JSON 契约提交：`a320d8f`（RV-P20-002）；并行后端修复：`41e6635`；并行联调文档：`b7265bc`。审查报告提交：`fdbe546`，最终 lint 复验补记：`ff9d375`；PR：[#1](https://github.com/beidaomitu233/AIGetway/pull/1)，已推送审查分支并完成远程哈希回读，待独立评审合并。
 
 ## 7. 合并建议
 
