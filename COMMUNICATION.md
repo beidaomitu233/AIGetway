@@ -123,3 +123,22 @@
 - 未验收：BE-201～205 均未勾选。真实 MySQL/PostgreSQL/Redis、Provider、企业身份、前后端首调 E2E 与性能未执行。不得以本次 H2/MockMvc 结果宣称生产链路成功。
 - 影响/回滚：密钥调用方应读取统一 data 包装，字段仍为当前 DTO，未提供双结构；必要回退 bd95691，数据库无迁移回滚需求。前端文件由 FE-P20 负责人维护。
 - 占用：BE-P20 改为阻塞，保留原负责人、暂停后续实现，未标记完成或解除占用。需架构确认 BE-P20-001～005 后继续，不重复领取或接管。
+## 8. FE-P20 部分交付与契约依赖（2026-09-12）
+
+| 序号 | 提出方 | 问题类型 | 功能问题描述 | 优化说明 | 涉及前端文件/模块 | 涉及后端文件/模块 | 涉及数据库表 | 状态 | 处理结论 |
+| -- | --- | ---- | ------ | ---- | --------- | --------- | ------ | -- | ---- |
+| FE-P20-001 | 前端执行模型 | 列表/权限契约 | FE-201 缺部门/预算筛选字段定义及 24h/峰值响应；应用页面仍基于 /ui 前缀；401 企业登录跳转与细粒度创建权限尚未冻结 | 关联 BE-P20-001/005，确认精确 DTO、页面根与身份入口；已完成现有字段的 URL 筛选、排序、错误和身份清理，不伪造统计 | ApplicationListPage、ApplicationFormPage、应用路由/会话 | ApplicationService、bootstrap/auth | application、usage_aggregate、member | 待确认 | 已实现可执行子项；FE-201/202 完整验收未通过。长整型 Token 超出 JS 安全范围的传输口径也需契约明确 |
+| FE-P20-002 | 前端执行模型 | 密钥轮换 | 后端 bd95691 已修复 data 包装，但当前原地轮换无宽限/新记录/幂等；key_value/masked_value 与计划 secret/key_prefix 未收口 | 关联 BE-P20-002，由架构/DB 定义精确请求、结果与宽限策略；不加双响应兼容。前端已做现有响应的一次显示、清理、复制失败与范围校验 | ApplicationKeyPanel、ApplicationKeySecretDialog、api/applications | ApplicationKeyController/Service | application_key、audit_log | 待确认 | 当前立即轮换行为保留为既有接口，未宣称 V2 宽限轮换完成；FE-204 不勾选 |
+| FE-P20-003 | 前端执行模型 | 模型/审计/影响接口 | 当前 model-aliases enabled 不代表已发布可路由，缺授权/状态影响结果与应用审计 GET；新 GET models 仍为授权配置视图 | 关联 BE-P20-001/003，确认活动目录、能力交集、受影响密钥/近期调用与应用审计；不能用全局审计模糊筛选替代完整应用审计 | ApplicationDetailPage、ApplicationFormPage | application/alias/audit services | model_permission、key、trace、audit_log | 待确认 | 已保留局部错误和权限控制；现有审计链接仅导航，不代表应用审计闭环；FE-202/203/205 未勾选 |
+| FE-P20-004 | 前端执行模型 | 额度规则冲突 | 前端按 PRD 预览并提示降低后停止新请求，但后端仍拒绝低于已用+预占；缺周期历史/统一时区/remaining/reset_at 最终契约，PUT 调整账本尚不完整 | 关联 BE-P20-004；后端完成原子策略/账本后联调。前端剩余值按返回的 limit-used-reserved 定点计算；period_end 仅称周期结束，不冒充重置时间 | ApplicationDetailPage、ApplicationQuotaSummary、applicationValues | ApplicationService、quota port | application_quota_policy、quota_adjustment、usage_ledger | 待确认 | 前端校验/预览/失败处理已验证，真实结算与降低额度成功未验证；FE-205 未勾选 |
+
+### 本次执行与测试记录
+
+- 任务：FE-P20（FE-201～FE-205），领取 7e6c6dc，分支 feature/frontend-p20-codex-0912。前端实现提交 418218d、ef8a972；同步后端 bd95691 后完成门禁。未修改后端、数据库、迁移或依赖锁文件。
+- 修改文件：light-ai-admin-ui/src/api/applications.ts；src/pages/applications 下 ApplicationListPage.vue、ApplicationFormPage.vue、ApplicationDetailPage.vue、ApplicationKeyPanel.vue；新增 ApplicationKeySecretDialog.vue、ApplicationQuotaSummary.vue、applicationValues.ts；测试 applicationPages.test.ts、applicationP20.test.ts、fixtures/application.ts。文件前缀均为 light-ai-admin-ui。
+- 组件：既有列表/表单/详情/密钥组件改造；新增一次性密钥弹窗与额度明细组件；新增页面域内定点金额、整数/周期/IP 校验。不引入状态库或新测试框架。
+- 接口消费：现有 GET/POST applications、GET/PUT application detail、POST status、GET/POST keys、POST key rotate/status/revoke、PUT models/quota、GET/POST quota/adjustments、POST quota/reset、GET members、GET model-aliases。统一经现有 data/error 请求层；新 GET models/quota 本包未改为重复读取，因为详情已有相同子对象。
+- 状态：loading、保留数据的刷新、未创建/筛选空态、error/403、权限裁剪、表单非法值、409 保留输入与对比、提交中、撤销失败、局部查询失败、复制失败、未知枚举、身份/应用切换、过期读取与迟到签发结果。写入成功仅以 API 成功结果为准。
+- 新增 31 项回归；应用相关 39 项通过。最终全量 24 文件/199 项通过，0 失败/0 跳过；typecheck/build 通过；lint 0 error/81 个未修改文件的 warning；git diff --check 通过。命令与浏览器检查详见 FRONTEND_PLAN.md 附录。
+- 原始日志/截图位于独立工作目录 output/playwright，未提交；浏览器为明确标记测试夹具。未执行真实企业身份、DB/Redis/Provider/首调 E2E、完整预算/宽限/归档及性能验证。
+- 任务主勾选：FE-201～FE-205 全部保持未勾选；已完成的前端子项允许审查合入，完整任务包等待上述契约与真实联调，状态为阻塞。远程合入与占用最终状态由后续 TASK_STATUS.md 记录确认。
