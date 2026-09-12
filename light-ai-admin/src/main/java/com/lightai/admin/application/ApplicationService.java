@@ -129,6 +129,35 @@ public final class ApplicationService {
         }
     }
 
+    public ApplicationQuotaPolicyView quota(RequestContext context, UUID id) {
+        RequestPermissions.require(context, Permissions.APPLICATION_QUOTA_VIEW);
+        try (Connection connection = dataSource.getConnection()) {
+            ApplicationRecord application = load(connection, id);
+            requireScope(connection, context, application.code());
+            return repository.findQuota(connection, id).map(this::toQuotaView)
+                    .orElseThrow(() -> new LightAiException(
+                            ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用缺少额度策略"));
+        } catch (LightAiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用额度当前无法读取");
+        }
+    }
+
+    public List<ApplicationModelPermissionView> models(RequestContext context, UUID id) {
+        RequestPermissions.require(context, Permissions.APPLICATION_MODEL_VIEW);
+        try (Connection connection = dataSource.getConnection()) {
+            ApplicationRecord application = load(connection, id);
+            requireScope(connection, context, application.code());
+            return repository.listModelPermissions(connection, id).stream()
+                    .map(this::toModelView).toList();
+        } catch (LightAiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用模型权限当前无法读取");
+        }
+    }
+
     public ManagementOperationResult<ApplicationDetail> create(
             RequestContext context, ApplicationCreateCommand command) {
         RequestPermissions.require(context, Permissions.APPLICATION_MANAGE);

@@ -40,7 +40,7 @@ public final class ApplicationController {
     }
 
     @PostMapping("/admin/applications")
-    public ResponseEntity<String> create(@RequestBody String body, HttpServletRequest request) {
+    public ResponseEntity<String> create(@RequestBody(required = false) String body, HttpServletRequest request) {
         ApplicationCreateCommand command = CommandBodies.parse(body, ApplicationCreateCommand.class);
         return ResponseEntity.status(201)
                 .header("Content-Type", ManagementResponses.APPLICATION_JSON)
@@ -53,14 +53,24 @@ public final class ApplicationController {
     }
 
     @PutMapping("/admin/applications/{id}")
-    public ResponseEntity<String> update(@PathVariable String id, @RequestBody String body,
+    public ResponseEntity<String> update(@PathVariable String id, @RequestBody(required = false) String body,
                                          HttpServletRequest request) {
         ApplicationUpdateCommand command = CommandBodies.parse(body, ApplicationUpdateCommand.class);
         return json(ManagementResponses.ok(service.update(context(request), parseId(id), command)));
     }
 
+    @GetMapping("/admin/applications/{id}/quota")
+    public ResponseEntity<String> quota(@PathVariable String id, HttpServletRequest request) {
+        return json(ManagementResponses.ok(service.quota(context(request), parseId(id))));
+    }
+
+    @GetMapping("/admin/applications/{id}/models")
+    public ResponseEntity<String> models(@PathVariable String id, HttpServletRequest request) {
+        return json(ManagementResponses.ok(service.models(context(request), parseId(id))));
+    }
+
     @PutMapping("/admin/applications/{id}/quota")
-    public ResponseEntity<String> updateQuota(@PathVariable String id, @RequestBody String body,
+    public ResponseEntity<String> updateQuota(@PathVariable String id, @RequestBody(required = false) String body,
                                               HttpServletRequest request) {
         ApplicationQuotaUpdateCommand command = CommandBodies.parse(
                 body, ApplicationQuotaUpdateCommand.class);
@@ -69,7 +79,7 @@ public final class ApplicationController {
     }
 
     @PutMapping("/admin/applications/{id}/models")
-    public ResponseEntity<String> updateModels(@PathVariable String id, @RequestBody String body,
+    public ResponseEntity<String> updateModels(@PathVariable String id, @RequestBody(required = false) String body,
                                                HttpServletRequest request) {
         ApplicationModelsUpdateCommand command = CommandBodies.parse(
                 body, ApplicationModelsUpdateCommand.class);
@@ -85,7 +95,7 @@ public final class ApplicationController {
     }
 
     @PostMapping("/admin/applications/{id}/quota/adjustments")
-    public ResponseEntity<String> adjustQuota(@PathVariable String id, @RequestBody String body,
+    public ResponseEntity<String> adjustQuota(@PathVariable String id, @RequestBody(required = false) String body,
                                               HttpServletRequest request) {
         ApplicationQuotaAdjustmentCommand command = CommandBodies.parse(
                 body, ApplicationQuotaAdjustmentCommand.class);
@@ -94,7 +104,7 @@ public final class ApplicationController {
     }
 
     @PostMapping("/admin/applications/{id}/quota/reset")
-    public ResponseEntity<String> resetQuotaUsage(@PathVariable String id, @RequestBody String body,
+    public ResponseEntity<String> resetQuotaUsage(@PathVariable String id, @RequestBody(required = false) String body,
                                                  HttpServletRequest request) {
         ApplicationQuotaResetCommand command = CommandBodies.parse(
                 body, ApplicationQuotaResetCommand.class);
@@ -103,7 +113,7 @@ public final class ApplicationController {
     }
 
     @PostMapping("/admin/applications/{id}/status")
-    public ResponseEntity<String> changeStatus(@PathVariable String id, @RequestBody String body,
+    public ResponseEntity<String> changeStatus(@PathVariable String id, @RequestBody(required = false) String body,
                                                HttpServletRequest request) {
         ApplicationStatusCommand command = CommandBodies.parse(body, ApplicationStatusCommand.class);
         return json(ManagementResponses.ok(service.changeStatus(context(request), parseId(id), command)));
@@ -117,7 +127,9 @@ public final class ApplicationController {
 
     private static UUID parseId(String raw) {
         try {
-            return UUID.fromString(raw);
+            UUID id = UUID.fromString(raw);
+            if (!id.toString().equalsIgnoreCase(raw)) throw new IllegalArgumentException();
+            return id;
         } catch (Exception e) {
             throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "应用 ID 格式不合法", "id");
         }

@@ -24,19 +24,16 @@ public final class CommandBodies {
         }
         try {
             ObjectMapper mapper = ProtocolJson.strictCommands();
-            return mapper.readValue(body, type);
+            T command = mapper.readValue(body, type);
+            if (command == null) {
+                throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "请求体不能为空",
+                        List.of(new FieldIssue("body", "REQUIRED", "请求体不能为空")));
+            }
+            return command;
         } catch (JsonProcessingException e) {
             throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "请求体不合法",
-                    List.of(new FieldIssue("body", "INVALID", safeMessage(e))));
+                    List.of(new FieldIssue("body", "INVALID", "JSON 格式或字段类型不合法")));
         }
     }
 
-    private static String safeMessage(JsonProcessingException e) {
-        String message = e.getOriginalMessage();
-        if (message == null) {
-            return "JSON 解析失败";
-        }
-        // 不回传原始报文内容，只保留解析位置与原因类别
-        return message.length() > 200 ? message.substring(0, 200) : message;
-    }
 }
