@@ -151,28 +151,42 @@ public class ConfigValidationService {
                                                             Map<String, Object> content,
                                                             OffsetDateTime now) {
         List<ConfigValidationIssueRecord> issues = new ArrayList<>();
-        Map<String, Map<String, Object>> providers = index(content, "providers");
-        Map<String, Map<String, Object>> pools = index(content, "credential_pools");
-        Map<String, Map<String, Object>> credentials = index(content, "credentials");
+        // 快照键与字段随 V2 资源域收口（FS-P22-001）：channel 承接连接语义，凭证池已并入渠道，
+        // 渠道/渠道 Key/上游模型的启停状态在快照中为 status（ACTIVE/DISABLED），
+        // 虚拟模型与路由候选仍为 enabled。
+        Map<String, Map<String, Object>> channels = index(content, "channels");
+        Map<String, Map<String, Object>> legacyProviders = index(content, "providers");
+        if (channels.isEmpty()) {
+            channels = legacyProviders;
+        }
+        Map<String, Map<String, Object>> credentials = index(content, "channel_credentials");
+        Map<String, Map<String, Object>> legacyPools = index(content, "credential_pools");
+        if (credentials.isEmpty()) {
+            credentials = index(content, "credentials");
+        }
         Map<String, Map<String, Object>> models = index(content, "upstream_models");
         Map<String, Map<String, Object>> aliases = index(content, "model_aliases");
         Map<String, Map<String, Object>> candidates = index(content, "route_candidates");
-
-        for (Map<String, Object> provider : providers.values()) {
-            if (!truthy(provider.get("enabled"))) {
+        // 渠道协议类型由快照装配阶段从协议类型目录派生为 channels[].provider_type（FS-P22-002），
+        // 与运行端口同源，此处直接读快照校验 Adapter 可用性，不再回查目录。
+        for (Map<String, Object> channel : channels.values()) {
+            if (!active(channel)) {
                 continue;
             }
-            String type = text(provider.get("type"));
+            String type = text(channel.get("provider_type"));
+            if (type == null) {
+                type = text(channel.get("type"));
+            }
             if (type != null && !providerTypeRegistry.isRegistered(type)) {
                 issues.add(issue(validationId, ConfigValidationIssueView.SEVERITY_ERROR,
-                        "ADAPTER_UNAVAILABLE", "channel", provider, null,
+                        "ADAPTER_UNAVAILABLE", "channel", channel, null,
                         "Provider 类型 " + type + " 没有已注册 Adapter",
                         "确认 Adapter 已部署，或改用已加载的 Provider 类型"));
             }
         }
 
         for (Map<String, Object> model : models.values()) {
-            if (!truthy(model.get("enabled"))) {
+            if (!active(model)) {
                 continue;
             }
             BigDecimal context = decimal(model.get("context_window"));
@@ -202,24 +216,31 @@ public class ConfigValidationService {
 
         for (Map<String, Object> candidate : candidates.values()) {
             Map<String, Object> model = models.get(text(candidate.get("upstream_model_id")));
-            Map<String, Object> pool = pools.get(text(candidate.get("channel_id")));
-            if (model == null || pool == null) {
+            String referencedChannelId = text(candidate.get("channel_id"));
+            Map<String, Object> channel = channels.get(referencedChannelId);
+            Map<String, Object> legacyPool = channel == null ? legacyPools.get(referencedChannelId) : null;
+            String candidateChannelId = referencedChannelId;
+            if (legacyPool != null) {
+                candidateChannelId = text(legacyPool.get("channel_id"));
+                channel = channels.get(candidateChannelId);
+            }
+            if (model == null || channel == null) {
                 issues.add(issue(validationId, ConfigValidationIssueView.SEVERITY_ERROR,
                         "REFERENCE_INVALID", "route_candidate", candidate, null,
-                        "候选引用的模型或凭证池不存在", "修正候选引用关系"));
+                        "候选引用的上游模型或渠道不存在", "修正候选引用关系"));
                 continue;
             }
-            if (!truthy(model.get("enabled")) || !truthy(pool.get("enabled"))) {
+            if (!active(model) || !active(channel)) {
                 issues.add(issue(validationId, ConfigValidationIssueView.SEVERITY_ERROR,
                         "REFERENCE_INVALID", "route_candidate", candidate, null,
-                        "候选引用的模型或凭证池已停用", "启用引用对象或调整候选"));
+                        "候选引用的上游模型或渠道已停用", "启用引用对象或调整候选"));
             }
-            String modelProviderId = text(model.get("channel_id"));
-            String poolProviderId = text(pool.get("channel_id"));
-            if (modelProviderId == null || !modelProviderId.equals(poolProviderId)) {
+            // V2 无凭证池：候选的渠道必须与上游模型所属渠道一致（V1「模型与凭证池同属一个 Provider」的等价规则）。
+            String modelChannelId = text(model.get("channel_id"));
+            if (modelChannelId == null || !modelChannelId.equals(candidateChannelId)) {
                 issues.add(issue(validationId, ConfigValidationIssueView.SEVERITY_ERROR,
                         "PROVIDER_RELATION_INVALID", "route_candidate", candidate, null,
-                        "候选的模型与凭证池属于不同 Provider", "候选的模型与凭证池必须同属一个 Provider"));
+                        "候选的模型与渠道不属于同一渠道", "候选的模型与渠道必须同属一个渠道"));
             }
         }
 
@@ -257,12 +278,17 @@ public class ConfigValidationService {
             }
         }
 
-        Map<String, Long> enabledCredentialsByPool = new HashMap<>();
+        Map<String, Long> activeCredentialsByChannel = new HashMap<>();
         for (Map<String, Object> credential : credentials.values()) {
-            if (!truthy(credential.get("enabled"))) {
+            if (!active(credential)) {
                 continue;
             }
-            enabledCredentialsByPool.merge(text(credential.get("channel_id")), 1L, Long::sum);
+            String credentialChannelId = text(credential.get("channel_id"));
+            activeCredentialsByChannel.merge(credentialChannelId, 1L, Long::sum);
+            Map<String, Object> pool = legacyPools.get(credentialChannelId);
+            if (pool != null) {
+                activeCredentialsByChannel.merge(text(pool.get("channel_id")), 1L, Long::sum);
+            }
             if (!checkRecordRepository.existsSuccessSince(connection, "CHANNEL_CREDENTIAL",
                     uuid(credential.get("id")), now.minus(CHECK_STALE))) {
                 issues.add(issue(validationId, ConfigValidationIssueView.SEVERITY_WARNING,
@@ -270,12 +296,25 @@ public class ConfigValidationService {
                         "凭证最近 24 小时无成功检测记录", "发布前执行一次凭证检测确认连接可用"));
             }
         }
-        for (Map<String, Object> pool : pools.values()) {
-            if (truthy(pool.get("enabled"))
-                    && enabledCredentialsByPool.getOrDefault(text(pool.get("id")), 0L) == 0) {
+        // V1「启用凭证池必须配置启用 Credential」在 V2 的等价规则：
+        // 被启用候选引用的渠道必须至少有一个启用的渠道 Key（BACKEND_PLAN BE-215「无 Key」异常）。
+        for (Map<String, Object> candidate : candidates.values()) {
+            if (!truthy(candidate.get("enabled"))) {
+                continue;
+            }
+            String referencedChannelId = text(candidate.get("channel_id"));
+            Map<String, Object> channel = channels.get(referencedChannelId);
+            Map<String, Object> pool = channel == null ? legacyPools.get(referencedChannelId) : null;
+            if (pool != null) {
+                channel = channels.get(text(pool.get("channel_id")));
+            }
+            if (channel == null || !active(channel)) {
+                continue;
+            }
+            if (activeCredentialsByChannel.getOrDefault(text(channel.get("id")), 0L) == 0) {
                 issues.add(issue(validationId, ConfigValidationIssueView.SEVERITY_ERROR,
-                        "CREDENTIAL_CONFIGURATION_INVALID", "credential_pool", pool, null,
-                        "启用凭证池没有启用的 Credential", "为凭证池配置启用 Credential"));
+                        "CREDENTIAL_CONFIGURATION_INVALID", "channel", channel, null,
+                        "启用候选所属渠道没有启用的渠道 Key", "为渠道配置至少一个启用的渠道 Key"));
             }
         }
 
@@ -370,6 +409,20 @@ public class ConfigValidationService {
             }
         }
         return index;
+    }
+
+    /**
+     * 启用判定（FS-P22-001，V2 资源域口径）：渠道、渠道 Key 与上游模型以 status == ACTIVE 表达启停；
+     * 虚拟模型与路由候选仍以 enabled 表达。两者互斥，按快照字段存在性分派。
+     */
+    private static boolean active(Map<String, Object> entity) {
+        if (entity == null) {
+            return false;
+        }
+        if (entity.containsKey("status")) {
+            return "ACTIVE".equalsIgnoreCase(text(entity.get("status")));
+        }
+        return truthy(entity.get("enabled"));
     }
 
     private static String text(Object value) {
