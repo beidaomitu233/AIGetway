@@ -81,6 +81,12 @@ class DefaultSchemaMigratorTest {
             assertThat(resultSet.getString("checksum")).hasSize(64);
             assertThat(resultSet.getBoolean("success")).isTrue();
             assertThat(resultSet.next()).isTrue();
+            assertThat(resultSet.getInt("version")).isEqualTo(5);
+            assertThat(resultSet.getString("description"))
+                    .isEqualTo("virtual_model_routes_and_sync");
+            assertThat(resultSet.getString("checksum")).hasSize(64);
+            assertThat(resultSet.getBoolean("success")).isTrue();
+            assertThat(resultSet.next()).isTrue();
             assertThat(resultSet.getInt("version")).isEqualTo(DefaultSchemaMigrator.LATEST_VERSION);
             assertThat(resultSet.getString("description"))
                     .isEqualTo("admission_ledger_observation_retention");

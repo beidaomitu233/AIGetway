@@ -306,12 +306,12 @@ class ResourceApiContractTest {
         call(post(path),body.replace(channel,otherChannel)).andExpect(status().isUnprocessableEntity());
         call(post(path),body.replace("}",",\"mode\":\"INVALID\"}")).andExpect(status().isBadRequest());
         assertThat(sql.queryForObject("SELECT count(*) FROM batch_check_job",Long.class)).isZero();
-        // Existing migrated schema lacks columns required by the batch repository.
-        // BE-P21-006 records this blocker; never assert a fabricated successful job.
-        call(post(path),body).andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.error.code").value("CONFIG_DATA_UNAVAILABLE"));
-        assertThat(sql.queryForObject("SELECT count(*) FROM batch_check_job",Long.class)).isZero();
-        assertThat(sql.queryForObject("SELECT count(*) FROM batch_check_item",Long.class)).isZero();
+        // V5 已补齐批量检测存储列（BE-P21-006 解除）：合法请求真实落库为 PENDING 作业，
+        // 终态由真实检测执行推进；此处只断言持久化，不伪造成功或失败。
+        call(post(path),body).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
+        assertThat(sql.queryForObject("SELECT count(*) FROM batch_check_job",Long.class)).isEqualTo(1);
+        assertThat(sql.queryForObject("SELECT count(*) FROM batch_check_item",Long.class)).isEqualTo(1);
     }
 
     @Test

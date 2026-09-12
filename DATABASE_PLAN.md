@@ -226,6 +226,29 @@ JSON 字段必须给出稳定 schema、最大长度和脱敏要求。MySQL 5.7 �
 
 验收必须包括真实 PostgreSQL/MySQL 唯一冲突、归档/准入竞争、双并发轮换、响应丢失后的幂等重放、降低额度至已用以下、自然滚动与晚到结算、人工重置/续期的未终态占用拒绝、单维重置不清零另一维度、预约版本冲突及未知 JSON。未运行的环境保持未验收。
 
+## DB-P21 执行与交付记录（2026-09-12）
+
+负责人 zcode-db-0912b；分支 feature/database-p21-zcode-db-0912b；领取提交 894c436。V5__virtual_model_routes_and_sync 双方言迁移已交付；DB-211～215 因真实 PostgreSQL/MySQL 环境未执行，全部保持未勾选，整包转阻塞并保留负责人。
+
+| 任务 | 本次交付 | 尚未满足验收，保持未勾选 |
+|---|---|---|
+| DB-211 | 渠道表复核：V4 已含 provider 目录、优先级/权重、配置与健康分列、软删除；本包未新增渠道列 | 真实双数据库迁移对账与回滚报告未执行 |
+| DB-212 | channel_credential 新增 (channel_id,name) 活行唯一 uk_channel_credential_name；历史同名 Key 以 8 位 id 后缀收敛 | 真实库唯一冲突、并发与密文扫描测试未执行 |
+| DB-213 | upstream_model 新增 locked_fields 与 (channel_id,model_id) 活行唯一 uk_upstream_model_identity；新增 model_sync_job/model_sync_item 及 JdbcModelSyncJobRepository（幂等键作用域为渠道） | 同步预览/提交服务端接线与真实库验证属 BE-P21 后续 |
+| DB-214 | model_alias→virtual_model（id 不变、历史引用保持有效）、业务码列 alias→code；新增 capabilities/status；code 活行唯一 uk_virtual_model_code；route_candidate.alias_id→virtual_model_id、新增 conditions/status、三元组活行唯一 uk_route_candidate_triple、(virtual_model_id,status,priority) 索引 | 真实库迁移对账、排序与引用阻止测试未执行 |
+| DB-215 | route_candidate 反向引用索引（channel_id、upstream_model_id）；draft 依赖关系更新为 virtual_model_id；batch_check_job/item 列与仓储契约对齐（BE-P21-006 的 503 拦截解除） | 影响查询跨包验收待 BE-P21/BE-P23 |
+
+契约要点：
+
+- 活行唯一实现：PostgreSQL 用部分唯一索引（WHERE deleted_at IS NULL）；MySQL 8.0 与 H2 用生成列 active_token（活行 'ACTIVE'、软删除行为本行 id）+ 复合唯一索引，绕开 MySQL 无部分索引与 H2 方言差异。重复活动数据的收敛规则见迁移脚本头注释；无法收敛时索引创建失败并阻止升级。
+- status 与 enabled 同语句双写（仓储 INSERT/UPDATE 与快照恢复均派生），读取仍以 enabled 为准；快照 JSON 键 model_aliases/alias、route_candidates/alias_id 及 reliability_policy.alias_id 保持不变，实体类型 model_alias/route_candidate 不变。
+- trace.alias_id、usage_aggregate.alias_id、access_credential_alias.alias_id 列名保留，随 DB-P22/DB-P23 的 request_trace 契约统一处理。
+- locked_fields/capabilities/conditions/summary_json 等 JSON 列：PostgreSQL NOT NULL DEFAULT，MySQL/H2 可空并由仓储显式写入（沿用 V4 方言口径）；内容 schema 与最大长度由使用方服务校验。
+- SchemaContract 增量解析 V5 并允许 CREATE INDEX 省略 IF NOT EXISTS（MySQL 不支持该子句）；ExpectedSchema 产品表由 47 张调整为 49 张（model_alias→virtual_model，新增 model_sync_job/model_sync_item）。
+
+测试证据：Windows、Java 17.0.19、项目 Maven（D:/IntelliJ IDEA 2025.2.3/plugins/maven/lib/maven3/bin/mvn.cmd）。`mvn -B verify`：14 模块 BUILD SUCCESS，443 通过、16 环境跳过（Redis 11、Provider 环境 5，缺 LAI_IT_REDIS_URI 等）、0 失败。其中 storage-jdbc 43 项，新增 ResourceDomainV5MigrationTest 8 项覆盖：虚拟模型更名读写与 status 双写、code/三元组/上游模型身份/渠道 Key 名称四类活行唯一、locked_fields、批量检测仓储对齐与汇总刷新、模型同步作业幂等与状态收敛、快照 JSON 键跨更名稳定。DefaultSchemaMigratorTest（V5 版本历史）、SchemaGuardTest（49 表）已同步更新。admin ResourceApiContractTest 批量检测用例由"schema 缺列返回 503"改为"合法请求真实落库 PENDING"（BE-P21-006 解除，涉及 BE-P21 占用文件的测试段，已在 COMMUNICATION 登记）。
+
+未执行：真实 PostgreSQL/MySQL（PostgresSchemaGuardIT/MySqlSchemaGuardIT 缺 LAI_IT_DB_URL/LAI_IT_MYSQL_URL 跳过，H2 验证不能替代）、MySQL 5.7（迁移沿用 V4 的 MySQL 8.0+ 前置）、Redis/真实 Provider 环境。`git diff --check` 通过；仓库无独立后端 lint 任务。
 ## DB-P22 接管执行记录（2026-09-12，zcode-db-0912d）
 
 负责人 zcode-db-0912d；经用户确认原领取（zcode-db-0912b）会话中断、无交付、无远程分支，由本负责人接管。领取提交 c3e2e6f，基线 origin/dev 1d210b5。独立目录 .worktrees/database-p22-zcode-db-0912d。本轮只修改 storage-jdbc 迁移/注册与执行文档，无前端与 admin/client/runtime/server 服务代码。

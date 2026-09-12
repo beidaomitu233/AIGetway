@@ -370,11 +370,11 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
     public List<ApplicationModelPermissionRecord> listModelPermissions(
             Connection connection, UUID applicationId) {
         DatabaseDialect dialect = dialect(connection);
-        String sql = "SELECT p.id, p.application_id, p.virtual_model_id, a.alias AS virtual_model_code, "
+        String sql = "SELECT p.id, p.application_id, p.virtual_model_id, a.code AS virtual_model_code, "
                 + "p.enabled, p.constraints_json, p.version, p.created_at, p.updated_at FROM "
                 + qualify(connection, "application_model_permission") + " p LEFT JOIN "
-                + qualify(connection, "model_alias") + " a ON a.id = p.virtual_model_id "
-                + "WHERE p.application_id = ? ORDER BY a.alias, p.id";
+                + qualify(connection, "virtual_model") + " a ON a.id = p.virtual_model_id "
+                + "WHERE p.application_id = ? ORDER BY a.code, p.id";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             dialect.bindUuid(statement, 1, applicationId);
             try (ResultSet resultSet = statement.executeQuery()) {
@@ -582,10 +582,10 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
         DatabaseDialect dialect = dialect(connection);
         String sql = "SELECT p.application_id, COUNT(DISTINCT p.virtual_model_id) AS model_count FROM "
                 + qualify(connection, "application_model_permission") + " p"
-                + " JOIN " + qualify(connection, "model_alias")
+                + " JOIN " + qualify(connection, "virtual_model")
                 + " a ON a.id = p.virtual_model_id AND a.enabled = true AND a.deleted_at IS NULL"
                 + " JOIN " + qualify(connection, "route_candidate")
-                + " c ON c.alias_id = a.id AND c.enabled = true AND c.deleted_at IS NULL"
+                + " c ON c.virtual_model_id = a.id AND c.enabled = true AND c.deleted_at IS NULL"
                 + " WHERE p.enabled = true AND p.application_id IN ("
                 + inPlaceholders(applicationIds.size()) + ") GROUP BY p.application_id";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -666,7 +666,7 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
     public boolean existsEnabledCandidate(Connection connection, UUID aliasId) {
         DatabaseDialect dialect = dialect(connection);
         String sql = "SELECT COUNT(*) FROM " + qualify(connection, "route_candidate")
-                + " WHERE alias_id = ? AND enabled = true AND deleted_at IS NULL";
+                + " WHERE virtual_model_id = ? AND enabled = true AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             dialect.bindUuid(statement, 1, aliasId);
             try (ResultSet resultSet = statement.executeQuery()) {

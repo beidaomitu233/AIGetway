@@ -29,18 +29,29 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
         super();
     }
 
-    /** 实体类型 → (存储表, JSON 键, 白名单列)。顺序即快照键序。 */
+    /**
+     * 实体类型 → (存储表, JSON 键, 白名单列)。顺序即快照键序。
+     * V5 起虚拟模型表更名为 virtual_model（实体类型与快照 JSON 键 model_aliases 及 alias/alias_id
+     * 字段名保持不变，经 jsonToColumn 映射物理列 code/virtual_model_id）；statusFromEnabled 表示
+     * 恢复时由 enabled 同语句派生 status 列。
+     */
     private static final List<EntityColumns> ENTITIES = List.of(
             new EntityColumns("channel", "channels",
                     "id, provider_id, name, base_url, proxy_url, connect_timeout_ms, read_timeout_ms, "
                             + "stream_idle_timeout_ms, default_headers, priority, weight, status, version",
                     Set.of("default_headers"),
-                    Set.of("provider_id")),
+                    Set.of("provider_id"),
+                    Map.of(),
+                    null,
+                    false),
             new EntityColumns("channel_credential", "channel_credentials",
                     "id, channel_id, name, masked_value, priority, weight, rpm_limit, tpm_limit, concurrent_limit, "
                             + "status, version",
                     Set.of(),
-                    Set.of("channel_id")),
+                    Set.of("channel_id"),
+                    Map.of(),
+                    null,
+                    false),
             new EntityColumns("upstream_model", "upstream_models",
                     "id, channel_id, model_id, display_name, model_type, tokenizer_family, context_window, "
                             + "max_output_tokens, support_stream, support_system_message, support_temperature, "
@@ -49,20 +60,32 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
                             + "default_max_tokens, default_stop, input_price, output_price, price_unit, currency, "
                             + "status, import_source, import_adapter_version, version",
                     Set.of(),
-                    Set.of("channel_id")),
+                    Set.of("channel_id"),
+                    Map.of(),
+                    null,
+                    false),
             new EntityColumns("model_alias", "model_aliases",
                     "id, alias, display_name, description, route_strategy, enabled, version",
                     Set.of(),
-                    Set.of()),
+                    Set.of(),
+                    Map.of("alias", "code"),
+                    "virtual_model",
+                    true),
             new EntityColumns("route_candidate", "route_candidates",
                     "id, alias_id, upstream_model_id, channel_id, priority, weight, enabled, version",
                     Set.of(),
-                    Set.of("alias_id", "upstream_model_id", "channel_id")),
+                    Set.of("alias_id", "upstream_model_id", "channel_id"),
+                    Map.of("alias_id", "virtual_model_id"),
+                    null,
+                    true),
             new EntityColumns("limit_policy", "limit_policies",
                     "id, name, scope_type, scope_id, rpm_limit, tpm_limit, concurrent_limit, "
                             + "overflow_strategy, queue_timeout_ms, queue_max_size, enabled, version",
                     Set.of(),
-                    Set.of("scope_id")),
+                    Set.of("scope_id"),
+                    Map.of(),
+                    null,
+                    false),
             new EntityColumns("reliability_policy", "reliability_policies",
                     "id, name, alias_id, connect_timeout_ms, first_token_timeout_ms, total_timeout_ms, "
                             + "max_retries, max_credential_failovers, initial_backoff_ms, backoff_multiplier, "
@@ -71,7 +94,10 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
                             + "circuit_open_seconds, circuit_half_open_probes, circuit_half_open_successes, "
                             + "enabled, version",
                     Set.of(),
-                    Set.of("alias_id")));
+                    Set.of("alias_id"),
+                    Map.of(),
+                    null,
+                    false));
 
     private static final Set<String> BOOLEAN_COLUMNS = Set.of(
             "enabled", "support_stream", "support_system_message", "support_temperature",
@@ -232,7 +258,7 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
 
     /** 全量活行读取（发布前草稿对比与快照内容生成都使用同一白名单）。 */
     public List<Map<String, Object>> readRows(Connection connection, EntityColumns entity) {
-        String sql = "SELECT " + entity.columns() + " FROM " + qualify(connection, entity.table())
+        String sql = "SELECT " + selectList(entity) + " FROM " + qualify(connection, entity.table())
                 + " WHERE deleted_at IS NULL ORDER BY id";
         String[] columns = entity.columns().split(", ");
         try (PreparedStatement statement = connection.prepareStatement(sql);
@@ -254,26 +280,33 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
     private void upsertRow(Connection connection, EntityColumns entity, Map<String, Object> row) {
         DatabaseDialect d = dialect(connection);
         String[] columns = entity.columns().split(", ");
+        String insertColumns = insertList(entity);
         String sql;
         if (d.supportsReturning()) {
-            String updates = java.util.Arrays.stream(entity.columns().split(", "))
+            String updates = java.util.Arrays.stream(columns)
                     .filter(column -> !column.equals("id"))
-                    .map(column -> column + " = EXCLUDED." + column)
+                    .map(column -> entity.columnOf(column) + " = EXCLUDED." + entity.columnOf(column))
                     .reduce((a, b) -> a + ", " + b)
                     .orElse("");
+            if (entity.statusFromEnabled()) {
+                updates += ", status = EXCLUDED.status";
+            }
             sql = "INSERT INTO " + qualify(connection, entity.table())
-                    + " (" + entity.columns() + ", created_at, updated_at, deleted_at) "
+                    + " (" + insertColumns + ", created_at, updated_at, deleted_at) "
                     + "VALUES (" + placeholders(d, entity.columns(), entity) + ", now(), now(), NULL) "
                     + "ON CONFLICT (id) DO UPDATE SET " + updates
                     + ", deleted_at = NULL, updated_at = now()";
         } else {
-            String updates = java.util.Arrays.stream(entity.columns().split(", "))
+            String updates = java.util.Arrays.stream(columns)
                     .filter(column -> !column.equals("id"))
-                    .map(column -> column + " = VALUES(" + column + ")")
+                    .map(column -> entity.columnOf(column) + " = VALUES(" + entity.columnOf(column) + ")")
                     .reduce((a, b) -> a + ", " + b)
                     .orElse("");
+            if (entity.statusFromEnabled()) {
+                updates += ", status = VALUES(status)";
+            }
             sql = "INSERT INTO " + qualify(connection, entity.table())
-                    + " (" + entity.columns() + ", created_at, updated_at, deleted_at) "
+                    + " (" + insertColumns + ", created_at, updated_at, deleted_at) "
                     + "VALUES (" + placeholders(d, entity.columns(), entity) + ", " + d.nowFunction() + ", " + d.nowFunction() + ", NULL) "
                     + "ON DUPLICATE KEY UPDATE " + updates
                     + ", deleted_at = NULL, updated_at = " + d.nowFunction();
@@ -281,12 +314,36 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             int index = 1;
             for (String column : columns) {
-                index = bindValue(d, statement, index, column, row.get(column), entity);
+                index = bindValue(d, statement, index, entity.columnOf(column), row.get(column), entity);
+            }
+            if (entity.statusFromEnabled()) {
+                index = bindValue(d, statement, index, "status",
+                        Boolean.TRUE.equals(row.get("enabled")) ? "ACTIVE" : "DISABLED", entity);
             }
             statement.executeUpdate();
         } catch (SQLException e) {
             throw translate("快照行恢复失败：" + entity.table(), e);
         }
+    }
+
+    /** SELECT 列表：更名物理列以 “code AS alias” 形式保持快照 JSON 键稳定。 */
+    private static String selectList(EntityColumns entity) {
+        return java.util.Arrays.stream(entity.columns().split(", "))
+                .map(column -> {
+                    String physical = entity.columnOf(column);
+                    return physical.equals(column) ? column : physical + " AS " + column;
+                })
+                .reduce((a, b) -> a + ", " + b)
+                .orElse("");
+    }
+
+    /** INSERT 列表：物理列名；statusFromEnabled 实体追加 status（与 enabled 同语句双写）。 */
+    private static String insertList(EntityColumns entity) {
+        String base = java.util.Arrays.stream(entity.columns().split(", "))
+                .map(entity::columnOf)
+                .reduce((a, b) -> a + ", " + b)
+                .orElse("");
+        return entity.statusFromEnabled() ? base + ", status" : base;
     }
 
     private static String placeholders(DatabaseDialect d, String columns, EntityColumns entity) {
@@ -297,6 +354,12 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
                 markers.append(", ");
             }
             markers.append(entity.jsonbColumns().contains(parts[i]) ? d.jsonPlaceholder() : "?");
+        }
+        for (int i = 0; i < (entity.statusFromEnabled() ? 1 : 0); i++) {
+            if (markers.length() > 0) {
+                markers.append(", ");
+            }
+            markers.append("?");
         }
         return markers.toString();
     }
@@ -413,16 +476,24 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
                 .orElseThrow(() -> new IllegalStateException("未知配置实体类型：" + entityType));
     }
 
-    /** 实体白名单定义：select 与 upsert 共用同一列序。 */
+    /** 实体白名单定义：select 与 upsert 共用同一列序（columns 为快照 JSON 键序）。 */
     public record EntityColumns(
             String entityType,
             String jsonKey,
             String columns,
             Set<String> jsonbColumns,
-            Set<String> uuidColumns) {
+            Set<String> uuidColumns,
+            Map<String, String> jsonToColumn,
+            String tableName,
+            boolean statusFromEnabled) {
 
         String table() {
-            return entityType;
+            return tableName == null || tableName.isBlank() ? entityType : tableName;
+        }
+
+        /** 快照 JSON 键对应的物理列名（V5 更名列经此映射）。 */
+        String columnOf(String jsonKey) {
+            return jsonToColumn.getOrDefault(jsonKey, jsonKey);
         }
     }
 

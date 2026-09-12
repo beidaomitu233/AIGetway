@@ -14,14 +14,15 @@ import java.util.UUID;
 
 /**
  * route_candidate JDBC 仓储（DATABASE_PLAN §7）。
- * (alias_id, upstream_model_id, channel_id) 活行唯一；
+ * V5 起 alias_id 列更名为 virtual_model_id，(virtual_model_id, channel_id, upstream_model_id)
+ * 三元组活行唯一由数据库唯一索引保证；status 列与 enabled 同语句双写。
  * 更新不换 model；重排为同事务批量 version 校验后统一写入。
- * 支持 PostgreSQL 与 MySQL 5.7 / 8.0 双方言自适应。
+ * 支持 PostgreSQL 与 MySQL 8.0 / H2(MySQL 模式) 双方言自适应。
  */
 public class JdbcCandidateRepository extends AbstractJdbcRepository {
 
     private static final String COLUMNS =
-            "id, alias_id, upstream_model_id, channel_id, priority, weight, enabled, "
+            "id, virtual_model_id, upstream_model_id, channel_id, priority, weight, enabled, "
                     + "version, created_at, updated_at";
 
     public JdbcCandidateRepository(String schemaName, DatabaseDialect explicitDialect) {
@@ -38,7 +39,7 @@ public class JdbcCandidateRepository extends AbstractJdbcRepository {
 
     public void insert(Connection connection, CandidateRecord record) {
         DatabaseDialect d = dialect(connection);
-        String insertColumns = COLUMNS.substring(0, COLUMNS.lastIndexOf(", created_at"));
+        String insertColumns = COLUMNS.substring(0, COLUMNS.lastIndexOf(", created_at")) + ", status";
         int count = insertColumns.split(",").length;
         String sql = "INSERT INTO " + qualify(connection, "route_candidate") + " (" + insertColumns + ", created_at, updated_at) "
                 + "VALUES (" + inPlaceholders(count) + ", " + d.nowFunction() + ", " + d.nowFunction() + ")";
@@ -51,6 +52,7 @@ public class JdbcCandidateRepository extends AbstractJdbcRepository {
             statement.setInt(6, record.weight());
             statement.setBoolean(7, record.enabled());
             statement.setLong(8, record.version());
+            statement.setString(9, JdbcAliasRepository.statusOf(record.enabled()));
             statement.executeUpdate();
         } catch (SQLException e) {
             throw translate("候选写入失败", e);
@@ -89,7 +91,7 @@ public class JdbcCandidateRepository extends AbstractJdbcRepository {
                                 UUID channelId) {
         DatabaseDialect d = dialect(connection);
         String sql = "SELECT 1 FROM " + qualify(connection, "route_candidate")
-                + " WHERE alias_id = ? AND upstream_model_id = ? AND channel_id = ?"
+                + " WHERE virtual_model_id = ? AND upstream_model_id = ? AND channel_id = ?"
                 + " AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, aliasId);
@@ -106,7 +108,7 @@ public class JdbcCandidateRepository extends AbstractJdbcRepository {
     public List<CandidateRecord> listLiveByAlias(Connection connection, UUID aliasId) {
         DatabaseDialect d = dialect(connection);
         String sql = "SELECT " + COLUMNS + " FROM " + qualify(connection, "route_candidate")
-                + " WHERE alias_id = ? AND deleted_at IS NULL ORDER BY priority ASC, id ASC";
+                + " WHERE virtual_model_id = ? AND deleted_at IS NULL ORDER BY priority ASC, id ASC";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, aliasId);
             try (ResultSet rs = statement.executeQuery()) {
@@ -124,7 +126,7 @@ public class JdbcCandidateRepository extends AbstractJdbcRepository {
     public long countLiveByAlias(Connection connection, UUID aliasId) {
         DatabaseDialect d = dialect(connection);
         String sql = "SELECT count(*) FROM " + qualify(connection, "route_candidate")
-                + " WHERE alias_id = ? AND deleted_at IS NULL";
+                + " WHERE virtual_model_id = ? AND deleted_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             d.bindUuid(statement, 1, aliasId);
             try (ResultSet rs = statement.executeQuery()) {
@@ -142,7 +144,7 @@ public class JdbcCandidateRepository extends AbstractJdbcRepository {
         if (d.supportsReturning()) {
             String sql = """
                     UPDATE %s
-                       SET priority = ?, weight = ?, enabled = ?, version = version + 1, updated_at = %s
+                       SET priority = ?, weight = ?, enabled = ?, status = ?, version = version + 1, updated_at = %s
                      WHERE id = ? AND deleted_at IS NULL
                     RETURNING %s
                     """.strip().formatted(qualify(connection, "route_candidate"), d.nowFunction(), COLUMNS);
@@ -150,7 +152,8 @@ public class JdbcCandidateRepository extends AbstractJdbcRepository {
                 statement.setInt(1, record.priority());
                 statement.setInt(2, record.weight());
                 statement.setBoolean(3, record.enabled());
-                d.bindUuid(statement, 4, record.id());
+                statement.setString(4, JdbcAliasRepository.statusOf(record.enabled()));
+                d.bindUuid(statement, 5, record.id());
                 try (ResultSet rs = statement.executeQuery()) {
                     if (!rs.next()) {
                         throw new IllegalStateException("候选更新未命中活行");
@@ -162,13 +165,14 @@ public class JdbcCandidateRepository extends AbstractJdbcRepository {
             }
         } else {
             String sql = "UPDATE " + qualify(connection, "route_candidate")
-                    + " SET priority = ?, weight = ?, enabled = ?, version = version + 1, updated_at = " + d.nowFunction()
+                    + " SET priority = ?, weight = ?, enabled = ?, status = ?, version = version + 1, updated_at = " + d.nowFunction()
                     + " WHERE id = ? AND deleted_at IS NULL";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setInt(1, record.priority());
                 statement.setInt(2, record.weight());
                 statement.setBoolean(3, record.enabled());
-                d.bindUuid(statement, 4, record.id());
+                statement.setString(4, JdbcAliasRepository.statusOf(record.enabled()));
+                d.bindUuid(statement, 5, record.id());
                 int affected = statement.executeUpdate();
                 if (affected == 0) {
                     throw new IllegalStateException("候选更新未命中活行");
@@ -232,7 +236,7 @@ public class JdbcCandidateRepository extends AbstractJdbcRepository {
     private CandidateRecord mapRow(ResultSet rs, DatabaseDialect d) throws SQLException {
         return new CandidateRecord(
                 d.readUuid(rs, "id"),
-                d.readUuid(rs, "alias_id"),
+                d.readUuid(rs, "virtual_model_id"),
                 d.readUuid(rs, "upstream_model_id"),
                 d.readUuid(rs, "channel_id"),
                 rs.getInt("priority"),

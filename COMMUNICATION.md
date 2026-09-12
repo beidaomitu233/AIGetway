@@ -256,6 +256,22 @@
 
 2026-09-12：origin/dev eb2843a 已包含实现 fc0e955 与文档 eaa32e3，TASK_STATUS 于 24a19e4 登记 FE-P22 为阻塞并保留负责人；测试计数修正 d709a6b 经本地 dev 合入后以 b4a344c 普通推送，fetch 回读确认。合并后文件树在独立 worktree 复跑门禁：typecheck 通过、28 文件/244 项测试通过、0 失败/0 跳过；lint 0 error/37 warning（仅未修改的审计页历史格式）；build 通过；git diff --check 通过。1280 宽度浏览器冒烟检查总览页应用排行与用量页新筛选/输入输出 Token 卡片，无额外横向溢出。FE-P22 保持阻塞并保留 zcode-0912 负责人，未解除占用；FE-221～225 未勾选，等待 FE-P22-001～005 与 BE-P22/BE-P23 契约及真实联调。未推送功能分支，未强推，未修改其他负责人记录。
 
+## DB-P21 执行与交付记录（2026-09-12，zcode-db-0912b）
+
+负责人 zcode-db-0912b；分支 feature/database-p21-zcode-db-0912b；领取提交 894c436；实现提交 c794043（V5 迁移 + 仓储适配 + 测试）。本轮仅修改 storage-jdbc、admin 的 ResourceApiContractTest 测试断言与计划文档；未改前端与 admin 生产代码。详见 DATABASE_PLAN.md「DB-P21 执行与交付记录」。
+
+| 编号 | 状态 | 说明 |
+|---|---|---|
+| DB-P21-001 | 已交付 | V5__virtual_model_routes_and_sync 双方言迁移：model_alias→virtual_model（id 不变）、alias→code、capabilities/status、code 活行唯一；route_candidate.alias_id→virtual_model_id、conditions/status、三元组活行唯一与反向索引。快照 JSON 键与实体类型不变，admin 无需同步改动。 |
+| DB-P21-002 | 已交付 | channel_credential 增 (channel_id,name) 活行唯一；历史同名 Key（旧凭证池合并所致）以 id 后缀确定性收敛，不物理删除。 |
+| DB-P21-003 | 存储已交付 | upstream_model.locked_fields（JSON，PG 默认 '[]'/MySQL 可空）与 model_sync_job/item 表 + JdbcModelSyncJobRepository（幂等键渠道作用域、PREVIEWED/COMMITTED/DISCARDED/EXPIRED/FAILED）。admin 服务端接线（预览/提交/锁定字段语义）由 BE-P21 负责人实现。 |
+| DB-P21-004 | 存储已交付 | virtual_model.capabilities 列就绪（安全交集由服务写入）；显式收紧与应用影响 DTO 属 BE-P21-004 待确认项，不受本包阻塞。 |
+| DB-P21-005 | 存储已交付 | route_candidate.status/conditions 列就绪并与 enabled 双写；(virtual_model_id,status,priority) 索引就绪；运行态健康/容量仍属运行端口验收。 |
+| DB-P21-006 | 已解除 | batch_check_job 列（total_count/completed_count/success_count/failure_count/cancelled_count/operator_id）与 batch_check_item（sequence/started_at/ended_at）已与 JdbcBatchCheckRepository 对齐；合法批量检测请求现真实落库 PENDING。admin ResourceApiContractTest 两处断言已随之更新（503 拦截 → 200 PENDING），该文件为 BE-P21 占用文件，请 BE-P21 负责人知悉并复核。 |
+| DB-P21-007 | 待确认 | 活行唯一的方言实现差异：PostgreSQL 部分唯一索引 vs MySQL/H2 生成列 active_token + 复合唯一；语义等价（活行唯一、删除行不阻塞重建）。PostgreSQL 需 ≥12 评审确认；若环境受限于 PG11，需回退为触发器或应用层约束方案。 |
+| DB-P21-008 | 待确认 | trace.alias_id、usage_aggregate.alias_id、access_credential_alias.alias_id、runtime_config.default_alias_id 保留旧列名/参数名，待 DB-P22（request_trace 契约）与 BE-P21 DTO 切换统一更名，避免单独破坏现有 API 字段。 |
+
+测试证据与未执行项：mvn -B verify 14 模块 SUCCESS，443 通过、16 环境跳过、0 失败；`git diff --check` 通过。真实 PostgreSQL/MySQL（LAI_IT_DB_URL/LAI_IT_MYSQL_URL 缺失）、MySQL 5.7（沿用 V4 的 8.0+ 前置）、Redis/真实 Provider 环境未执行，不作为通过依据。
 ## BE-P20 接管交付与契约切换（2026-09-12，后端执行模型 zcode-be-0912b）
 
 经用户确认原领取（codex-be-0912）会话中断、剩余子项未实际执行，由本负责人接管 BE-P20 并交付无迁移依赖子项；领取记录见 TASK_STATUS（5a11054）。本轮详情见 BACKEND_PLAN「BE-P20 接管执行记录」。以下为需其他负责人跟进的契约与阻塞事项。
@@ -302,6 +318,11 @@
 |---|---|---|---|---|---|---|---|---|---|
 | BE-P23-COEXIST-001 | 后端执行模型 zcode-be-0912（后到会话） | 协作冲突 | 检测到同一负责人标识存在两个并行会话实现 BE-P23：在席会话自 15:53 起在 .worktrees/backend-p23-zcode-be-0912 持续写入（admin/calls、client/calls、Trace 栈 V2 改造、UsageResults 额度流水 DTO、JdbcUsageAdjustmentRepository 等，均未提交）；后到会话曾基于独立设计向同一 worktree 写入 call 包、/admin/config-releases、/admin/usage V2 路径与跨应用调整流水实现 | 为避免同 worktree 未提交内容互相覆盖，后到会话完全让出：逐字节核实未覆盖在席会话任何改动（5 个交接文件与其编辑内容完全一致），随后将自身替代实现存档至 .worktrees/be-p23-alt-impl/（含 modified-files.patch；该目录不入 Git 历史）并清理两个工作区现场 | 无（未修改任何前端文件） | light-ai-admin、light-ai-client、light-ai-storage-jdbc（仅上述两套并行实现，现场已还原） | 无新增迁移 | 已处理 | BE-P23 保留原负责人与分支，由在席会话继续实现与交付；后到会话不再写入该 worktree、不重复领取其他已占用任务。后续后端会话开始前应先 fetch 并确认同一负责人标识下只存在一个在席会话，避免双实例并行开发同一任务包。 |
 
+## DB-P21 仲裁与 DB-P22/P23 转出（2026-09-12，zcode-db-0912b）
+
+- 用户仲裁：DB-P21 由 zcode-db-0912b 完成并推送；zcode-db-0912c 的接管登记（d9d3579）作废，该会话未产生代码交付。zcode-db-0912b 交付分支 feature/database-p21-zcode-db-0912b（实现 c794043）在合并时与 BE-P21 接管交付（e51e56f）在 COMMUNICATION.md、TASK_STATUS.md、ResourceApiContractTest.java 三处产生冲突，已按"双方记录并留、批量检测断言取 V5 后真实行为（合法请求落库 PENDING）"解决，合并后复验结果见下行。合并暴露并修复 BE-P20 接管交付（c1bb917）新增查询对旧表/列名的三处引用（countRoutableEnabledModels 的 model_alias/rc.alias_id、existsEnabledCandidate 的 rc.alias_id、aliasIdsByChannel/providerOptionsByAlias 的 rc.alias_id），已同步为 virtual_model/virtual_model_id。
+- 合并后复验：mvn -B verify 14 模块 BUILD SUCCESS，473 项中 457 通过、16 环境跳过（Redis 11、Provider 5，缺 LAI_IT_REDIS_URI 等）、0 失败；git diff --check 通过。
+- 用户确认 DB-P22/P23 转由其他会话执行；TASK_STATUS 已释放原领取登记。接手会话请重新领取：迁移号自 V6 起分配（V5 已被 DB-P21 的 virtual_model_routes_and_sync 使用），不得修改 V1～V5 已发布迁移、不得重复建表；DB-P23 的 V1→V2 迁移兼容需覆盖 V5 引入的虚拟模型域更名与生成列语义。
 ## DB-P22 接管交付复核（2026-09-12，数据库执行模型 zcode-db-0912d）
 
 经用户确认原领取（zcode-db-0912b）会话中断、无交付、无远程分支，由 zcode-db-0912d 接管（领取 c3e2e6f，基线 1d210b5）。交付 V7 双方言迁移（准入/账本/观测/留存域）并注册 DefaultSchemaMigrator，LATEST_VERSION 升至 7；明细见 DATABASE_PLAN「DB-P22 接管执行记录」。

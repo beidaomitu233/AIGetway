@@ -22,7 +22,7 @@ final class SchemaContract {
     private static final Pattern STATEMENT = Pattern.compile(
             "(?ims)CREATE\\s+TABLE\\s+IF\\s+NOT\\s+EXISTS\\s+(?:light_ai\\.)?([a-z_]+)"
                     + "\\s*\\((.*?)^\\s*\\)\\s*(?:ENGINE[^;]*)?;"
-                    + "|CREATE\\s+(?:UNIQUE\\s+)?INDEX\\s+IF\\s+NOT\\s+EXISTS\\s+([a-z0-9_]+)"
+                    + "|CREATE\\s+(?:UNIQUE\\s+)?INDEX\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?([a-z0-9_]+)"
                     + "\\s+ON\\s+(?:light_ai\\.)?([a-z_]+)"
                     + "|ALTER\\s+TABLE\\s+(?:light_ai\\.)?([a-z_]+)\\s+RENAME\\s+COLUMN\\s+([a-z_]+)\\s+TO\\s+([a-z_]+)"
                     + "|ALTER\\s+TABLE\\s+(?:light_ai\\.)?([a-z_]+)\\s+DROP\\s+COLUMN\\s+([a-z_]+)"
@@ -47,7 +47,13 @@ final class SchemaContract {
                 "db/migration/" + folder + "/V3__application_key_model_scope.sql")
                 + "\n"
                 + DefaultSchemaMigrator.loadScript(
-                "db/migration/" + folder + "/V4__resource_domain_channels_and_upstream_models.sql");
+                "db/migration/" + folder + "/V4__resource_domain_channels_and_upstream_models.sql")
+                + "\n"
+                + DefaultSchemaMigrator.loadScript(
+                "db/migration/" + folder + "/V5__virtual_model_routes_and_sync.sql")
+                + "\n"
+                + DefaultSchemaMigrator.loadScript(
+                "db/migration/" + folder + "/V7__admission_ledger_observation_retention.sql");
         return parse(scripts);
     }
 
