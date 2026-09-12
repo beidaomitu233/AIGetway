@@ -19,7 +19,7 @@
 | FE-P22 | FE-221～FE-225 | 未领取 | light-ai-admin-ui | 待领取 | 可领取；对应 BE/DB 契约联调后验收 |
 | FE-P23 | FE-231～FE-235 | 未领取 | light-ai-admin-ui | 待领取 | 可领取；对应 BE/DB 契约联调后验收 |
 | BE-P20 | BE-201～BE-205 | 后端执行模型 codex-be-0912 / feature/backend-p20-codex-be-0912 | light-ai-admin 应用/API/权限与测试、light-ai-client/application、必要 server/runtime 应用鉴权测试；BACKEND_PLAN.md、COMMUNICATION.md；不修改前端和数据库迁移 | 阻塞 | 2026-09-12：bd95691 已合入远程 dev；data 包装/GET 子资源/校验与 API 测试已交付；BE-P20-001～005 待架构/DB 确认，五项未勾选；保留负责人，暂停后续实现，未解除占用 |
-| BE-P21 | BE-211～BE-215 | 未领取 | client/admin/runtime/server/spi | 待领取 | 可领取；迁移与 DB 协调 |
+| BE-P21 | BE-211～BE-215 | 后端执行模型 codex-be-0912 / feature/backend-p21-codex-be-0912 | light-ai-admin/channel、upstream、alias、check、同步与权限映射；相关 client DTO、server 装配与后端测试；BACKEND_PLAN.md、COMMUNICATION.md；不修改前端和数据库迁移 | 进行中 | 2026-09-12 领取；渠道/上游/虚拟模型/嵌套路由契约与服务回归；独立 worktree .worktrees/backend-p21-codex-0912 |
 | BE-P22 | BE-221～BE-225 | 未领取 | client/admin/runtime/server/spi | 待领取 | 可领取；迁移与 DB 协调 |
 | BE-P23 | BE-231～BE-235 | 未领取 | client/admin/runtime/server/spi | 待领取 | 可领取；迁移与 DB 协调 |
 | DB-P20 | DB-201～DB-205 | 未领取 | storage-jdbc/storage-redis、版本迁移 | 待领取 | 可领取；先复核现有 V2/V3/V4 迁移，不重复建表 |
