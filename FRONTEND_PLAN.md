@@ -334,12 +334,12 @@ Playwright CLI 以明确标记的测试夹具拦截所有管理 API：1366 桌�
 ### 已完成子项检查
 
 - [x] 在现有过渡端点上完成五页加固，未自行添加后端接口或数据库字段。
-- [x] 新增/更新调用记录、用量、发布、接入、总览与额度流水测试共 18 项。
+- [x] 新增/更新调用记录、用量、发布、接入、总览与额度流水测试共 16 项（tracePages +2、overviewUsage +4、usageAdjustments 新增 6、configPublish +1、applicationIntegration 新增 3）。
 - [x] 类型检查、lint、全量单测、构建通过；已合并最新 origin/dev 后复跑门禁。
 - [ ] FE-221～225 完整业务验收及真实环境联调；保留负责人，等待上述契约。
 
 ### 实际验证
 
-Windows / Node 20.19.6 / npm 10.8.2 / 既有 Vue、TypeScript、Vitest，独立 worktree；无新增依赖。最终代码 685cf91（含 origin/dev 合并）：npm run typecheck 通过；npm test 28 文件 / 244 项通过、0 失败 / 0 跳过（本包新增 27 项）；npm run lint 0 error / 37 warning，警告仅来自未修改的 AuditDetailPage.vue 与 AuditListPage.vue 历史格式；npm run build 通过；无 console.log/debugger 残留。合并后文件树复跑全部门禁，结果一致。
+Windows / Node 20.19.6 / npm 10.8.2 / 既有 Vue、TypeScript、Vitest，独立 worktree；无新增依赖。最终代码 685cf91（含 origin/dev 合并）：npm run typecheck 通过；npm test 28 文件 / 244 项通过、0 失败 / 0 跳过（本包新增 16 项；较上一基线的其余增量来自同期合入的 FE-P21 交付）；npm run lint 0 error / 37 warning，警告仅来自未修改的 AuditDetailPage.vue 与 AuditListPage.vue 历史格式；npm run build 通过；无 console.log/debugger 残留。合并后文件树复跑全部门禁，结果一致。
 
 未执行：真实后端联调、真实企业身份、数据库/Redis/Provider、真实发布与调用链路、性能与完整移动端验收。调用记录、用量、发布、接入、总览当前均消费既有过渡端点（/traces、/usage、/config、/developer-access、/overview），不冒称 V2 契约已验收；差异已登记 COMMUNICATION.md FE-P22-001～005。
