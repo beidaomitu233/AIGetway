@@ -128,7 +128,7 @@ class UsageAdjustmentApiTest {
         JsonNode items = data.path("items");
         // 时间倒序：04:00 账本 → 03:00 调整 → 02:00 调整 → 01:00 调整 → 00:30 账本
         assertThat(items.get(0).path("source").asText()).isEqualTo("USAGE_LEDGER");
-        assertThat(items.get(0).path("event_type").asText()).isEqualTo("SETTLEMENT");
+        assertThat(items.get(0).path("event_type").asText()).isEqualTo("SETTLE");
         assertThat(items.get(0).path("request_id").asText()).isEqualTo("req-ledger-a");
         assertThat(items.get(0).path("amount_delta").asText()).isEqualTo("0.01200000");
         assertThat(items.get(0).path("currency").asText()).isEqualTo("USD");

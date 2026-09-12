@@ -39,6 +39,7 @@ public class JdbcUsageAdjustmentRepository extends AbstractJdbcRepository {
             OffsetDateTime occurredAt,
             String source,
             String eventKey,
+            String eventType,
             String requestId,
             UUID applicationId,
             String applicationCode,
@@ -93,7 +94,7 @@ public class JdbcUsageAdjustmentRepository extends AbstractJdbcRepository {
         if (includeAdjustments) {
             StringBuilder branch = new StringBuilder()
                     .append("SELECT qa.created_at AS occurred_at, qa.id AS id, ")
-                    .append("'QUOTA_ADJUSTMENT' AS source, NULL AS event_key, NULL AS request_id, ")
+                    .append("'QUOTA_ADJUSTMENT' AS source, NULL AS event_key, NULL AS event_type, NULL AS request_id, ")
                     .append("qa.application_id AS application_id, a.code AS application_code, ")
                     .append("qa.dimension AS dimension, qa.before_value AS before_value, ")
                     .append("qa.delta_value AS delta_value, qa.after_value AS after_value, ")
@@ -111,7 +112,7 @@ public class JdbcUsageAdjustmentRepository extends AbstractJdbcRepository {
             StringBuilder branch = new StringBuilder()
                     .append("SELECT ul.created_at AS occurred_at, ul.id AS id, ")
                     .append("'USAGE_LEDGER' AS source, ul.event_key AS event_key, ")
-                    .append("ul.request_id AS request_id, ul.application_id AS application_id, ")
+                    .append("ul.event_type AS event_type, ul.request_id AS request_id, ul.application_id AS application_id, ")
                     .append("a.code AS application_code, NULL AS dimension, NULL AS before_value, ")
                     .append("NULL AS delta_value, NULL AS after_value, ")
                     .append("ul.input_tokens AS input_tokens, ul.output_tokens AS output_tokens, ")
@@ -166,6 +167,7 @@ public class JdbcUsageAdjustmentRepository extends AbstractJdbcRepository {
                             d.readOffsetDateTime(rs, "occurred_at"),
                             rs.getString("source"),
                             rs.getString("event_key"),
+                            rs.getString("event_type"),
                             rs.getString("request_id"),
                             d.readUuid(rs, "application_id"),
                             rs.getString("application_code"),

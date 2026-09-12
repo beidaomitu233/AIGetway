@@ -50,7 +50,10 @@ final class SchemaContract {
                 "db/migration/" + folder + "/V4__resource_domain_channels_and_upstream_models.sql")
                 + "\n"
                 + DefaultSchemaMigrator.loadScript(
-                "db/migration/" + folder + "/V5__virtual_model_routes_and_sync.sql");
+                "db/migration/" + folder + "/V5__virtual_model_routes_and_sync.sql")
+                + "\n"
+                + DefaultSchemaMigrator.loadScript(
+                "db/migration/" + folder + "/V7__admission_ledger_observation_retention.sql");
         return parse(scripts);
     }
 

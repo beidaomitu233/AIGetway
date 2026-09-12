@@ -20,6 +20,7 @@ public final class ExpectedSchema {
             "model_sync_job",
             "model_sync_item",
             "route_candidate",
+            "retention_deletion_batch",
             "limit_policy",
             "reliability_policy",
             "runtime_config",

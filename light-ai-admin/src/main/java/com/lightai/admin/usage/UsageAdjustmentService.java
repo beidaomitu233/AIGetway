@@ -91,9 +91,14 @@ public class UsageAdjustmentService {
     private UsageAdjustmentItem toItem(JdbcUsageAdjustmentRepository.AdjustmentRow row) {
         String eventType;
         if ("USAGE_LEDGER".equals(row.source())) {
-            String key = row.eventKey() == null ? "" : row.eventKey();
-            int split = key.indexOf(':');
-            eventType = split > 0 ? key.substring(0, split) : key;
+            // V7 起账本自带 event_type（当前写入方仅有 SETTLE）；缺列数据回退 event_key 前缀
+            if (row.eventType() != null && !row.eventType().isBlank()) {
+                eventType = row.eventType();
+            } else {
+                String key = row.eventKey() == null ? "" : row.eventKey();
+                int split = key.indexOf(':');
+                eventType = split > 0 ? key.substring(0, split) : key;
+            }
         } else {
             eventType = row.dimension();
         }
