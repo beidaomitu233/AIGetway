@@ -378,6 +378,7 @@
 
 - 本批三个提交 `c71edcf`（fix：前端渠道 V2 字段切换 + `UpstreamModelDetail` 运行态/引用计数投影 + `ModelAliasDetail` 24h 命名）、`b625b95`（test：`ResourceApiContractTest` 14→16 项、`UpstreamModelDetailTest` 适配、前端夹具切换）、`8aa625d`（docs：联调记录与任务状态）已在分支 `fix-fullstack-integration-fsp21-takeover-fsagent-0912` 完成，并以快进方式普通推送 `origin/dev`。
 - 推送前 `git ls-remote --heads origin` 回读远程 `dev` = `5007b2c`（即本包领取提交），无并行新提交；推送后回读 `refs/heads/dev = 8aa625d89c8ccf9c9e2fb16023dc3585beaa72cc`，未强推、未改写他人提交、未修改其他任务包记录。
+- 本确认记录自身以 `a394421` 提交后再次普通推送，最终远程 `refs/heads/dev = a39442124f6d5df29a6a0682bf83c520052dffbb`（本包提交链 `5007b2c → c71edcf → b625b95 → 8aa625d → a394421`，均为快进）。功能分支远端仍停留在领取提交 `5007b2c`，未单独推送功能分支。
 - 本地 `dev` 与功能分支指向同一提交；`TASK_STATUS.md` 的 FS-P21 已更新为完成。**FE-P21/BE-P21 主任务勾选状态与负责人占用均未改动**（保持阻塞、保留原负责人），本包仅关闭其登记为「本轮未覆盖」的上游模型/虚拟模型/路由跨端回显环节。
 - 网络环境记录（供后续批次参考，非仓库缺陷）：本机 HTTPS 出口为本地代理，端口在本次会话中由 `127.0.0.1:8825` 变为 `127.0.0.1:2640`；`git ls-remote`/`push` 出现间歇性 `CONNECT tunnel failed, response 502`（同一条命令多次重试后成功）。推送前建议先 `ls-remote` 确认可达，并把「返回结果为空」与「连不上」区分开——空输出不等于成功，须以 `ls-remote` 回读的 `refs/heads/dev` 哈希为准。
 - 未验收：真实上游检测写入的运行态、`upstream_model`/`virtual_model`/`route` 发布生效链路与运行态容量/熔断维度、页面点击级写操作回放、真实 PostgreSQL/MySQL/Redis 与真实 Provider；同批内部问题 FS-P21-101（应用域 `requests24h` 同类命名隐患）仍为待确认。详见 INTEGRATION_REPORT.md §11.6。
