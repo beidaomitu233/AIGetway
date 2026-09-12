@@ -263,11 +263,13 @@ export function fetchEntityImpact<T>(path: string, operation: string, signal?: A
   return request<T>({ path, query: { operation }, signal })
 }
 
+// 渠道选项取自 V2 渠道列表（BE-211）：provider_type 取代旧 type，
+// 配置状态为 status（ACTIVE/DISABLED），不再有 enabled 布尔字段。
 export interface ProviderOption {
   id: string
   name: string
-  type: string
-  enabled: boolean
+  provider_type: string
+  status: string
 }
 
 /** Provider 选项（表单/向导使用）；上限 100 个，超出时按 keyword 收敛。 */

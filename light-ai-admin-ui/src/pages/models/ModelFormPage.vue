@@ -312,7 +312,7 @@ onMounted(reload)
                 :key="item.id"
                 :value="item.id"
               >
-                {{ item.name }}（{{ item.type }}）
+                {{ item.name }}（{{ item.provider_type }}）
               </option>
             </select>
           </FormField>

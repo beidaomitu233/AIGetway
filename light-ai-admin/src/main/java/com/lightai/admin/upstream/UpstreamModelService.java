@@ -532,6 +532,9 @@ public class UpstreamModelService {
                 record.importAdapterVersion(),
                 state == null ? "UNKNOWN"
                         : (state.connectionStatus() == null ? "UNKNOWN" : state.connectionStatus()),
+                state == null ? null : state.lastCheckedAt(),
+                state == null ? null : state.lastErrorCode(),
+                candidateRepository.countLiveByProviderModel(connection, record.id()),
                 draftChangeRepository.findChangedEntityIds(connection, ENTITY_TYPE,
                         List.of(record.id())).contains(record.id()),
                 record.version(), record.createdAt(), record.updatedAt());

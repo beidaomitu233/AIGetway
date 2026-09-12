@@ -9,6 +9,10 @@ import java.util.List;
 /**
  * Provider Model 详情（DATABASE_PLAN §5；字段对齐 FE-015/附录 4.2.6）。
  * 价格以十进制字符串传输；停用导入允许能力缺失，启用与发布要求完整（C-014）。
+ * connection_status/last_check_at/last_error_code 取自 object_runtime_state 运行快照，
+ * 与渠道 V2（BE-211 status/health/last_checked_at/last_error_code）同一口径；
+ * route_candidate_count 为引用该上游模型的活候选数（与删除拦截同源，BE-014）。
+ * 三者均为只读投影，不进入草稿、不参与配置状态。
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record UpstreamModelDetail(
@@ -44,6 +48,9 @@ public record UpstreamModelDetail(
         String importSource,
         String importAdapterVersion,
         String connectionStatus,
+        OffsetDateTime lastCheckAt,
+        String lastErrorCode,
+        long routeCandidateCount,
         boolean draftChanged,
         long version,
         OffsetDateTime createdAt,
