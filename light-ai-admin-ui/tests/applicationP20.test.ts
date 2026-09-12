@@ -27,7 +27,9 @@ async function page(path: string, permissions: string[] = [...bootstrapFixtures.
 function button(wrapper: VueWrapper, text: string) { return wrapper.findAll('button').find(item => item.text() === text)! }
 function baseStub() {
   return installJsonFetchStub(({ url }) => {
-    if (url.pathname.endsWith('/virtual-models')) return pageEnvelope([])
+    // 授权候选取自 /admin/applications/model-options（活动快照），不再是 /admin/virtual-models
+    if (url.pathname === '/admin/applications/model-options') return dataEnvelope({ items: [] })
+    if (url.pathname.endsWith('/model-options')) return dataEnvelope({ items: [] })
     if (url.pathname.endsWith('/keys') || url.pathname.endsWith('/quota/adjustments') || url.pathname.endsWith('/members')) return dataEnvelope([])
     return dataEnvelope(application)
   })
@@ -294,6 +296,86 @@ describe('FE-P20 页面边界（同契约夹具，非真实联调）', () => {
     await flushPromises()
     expect(wrapper.text()).not.toContain('late-fixture-secret')
     expect(wrapper.find('#application-secret-title').exists()).toBe(false)
+  })
+  it('模型授权候选使用 model-options，不回退虚拟模型配置视图', async () => {
+    const stub = installJsonFetchStub(({ url }) => {
+      if (url.pathname === `/admin/applications/${application.id}/model-options`) {
+        return dataEnvelope({
+          items: [
+            { virtual_model_id: 'alias-1', code: 'chat-default', max_output_tokens: 4096, allow_stream: true, snapshot_no: '7' },
+            { virtual_model_id: 'alias-2', code: 'chat-backup', max_output_tokens: null, allow_stream: false, snapshot_no: '7' },
+          ],
+        })
+      }
+      if (url.pathname.endsWith('/keys') || url.pathname.endsWith('/quota/adjustments')) return dataEnvelope([])
+      return dataEnvelope(application)
+    })
+    const { wrapper } = await page(`/ui/applications/${application.id}`)
+    await button(wrapper, '管理授权').trigger('click')
+    await flushPromises()
+    expect(stub.calls.some(call => call.url.endsWith(`/admin/applications/${application.id}/model-options`))).toBe(true)
+    expect(stub.calls.some(call => call.url.endsWith('/admin/virtual-models'))).toBe(false)
+    const dialog = wrapper.get('[aria-labelledby="application-model-title"]')
+    expect(dialog.text()).toContain('chat-default')
+    expect(dialog.text()).toContain('最大输出')
+    expect(dialog.text()).toContain('支持流式')
+    expect(dialog.text()).toContain('不支持流式')
+    expect(wrapper.get('input[type="checkbox"][value="alias-1"]').element).toHaveProperty('checked', true)
+  })
+  it('资源下线后历史授权可被收口，不会把失效模型继续提交', async () => {
+    const staleDetail = {
+      ...application,
+      models: [...application.models, {
+        id: 'permission-stale', virtual_model_id: 'alias-stale', virtual_model_code: 'chat-retired',
+        enabled: true, max_output_tokens: null, allow_stream: null, version: 1,
+      }],
+    }
+    const stub = installJsonFetchStub(({ url, method }) => {
+      if (method === 'GET' && url.pathname === `/admin/applications/${application.id}/model-options`) {
+        return dataEnvelope({ items: [{ virtual_model_id: 'alias-1', code: 'chat-default', max_output_tokens: 4096, allow_stream: true, snapshot_no: '7' }] })
+      }
+      if (method === 'PUT' && url.pathname === `/admin/applications/${application.id}/models`) {
+        return dataEnvelope({ entity: application })
+      }
+      if (url.pathname.endsWith('/keys') || url.pathname.endsWith('/quota/adjustments')) return dataEnvelope([])
+      return method === 'GET' ? dataEnvelope(staleDetail) : dataEnvelope(application)
+    })
+    const { wrapper } = await page(`/ui/applications/${application.id}`)
+    await button(wrapper, '管理授权').trigger('click')
+    await flushPromises()
+    const dialog = wrapper.get('[aria-labelledby="application-model-title"]')
+    expect(dialog.text()).toContain('chat-retired')
+    expect(dialog.text()).toContain('保存后会取消这些授权')
+    expect(dialog.find('input[value="alias-stale"]').exists()).toBe(false)
+    await dialog.get('textarea').setValue('清理失效模型授权')
+    await dialog.get('button.lai-btn-primary').trigger('click')
+    await flushPromises()
+    const update = stub.calls.find(call => call.method === 'PUT' && call.url.endsWith(`/admin/applications/${application.id}/models`))
+    expect(update?.body).toMatchObject({ virtual_model_ids: ['alias-1'] })
+  })
+  it('列表部门与预算状态筛选写入 URL 并随请求发送', async () => {
+    const stub = installJsonFetchStub(() => pageEnvelope([application]))
+    const { wrapper, router } = await page('/ui/applications')
+    await wrapper.get('[aria-label="部门筛选"]').setValue('客户成功部')
+    await flushPromises()
+    await wrapper.get('[aria-label="预算状态筛选"]').setValue('EXHAUSTED')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toMatchObject({ department: '客户成功部', budget_status: 'EXHAUSTED' })
+    const last = stub.calls.at(-1)!
+    expect(last.url).toContain('department=%E5%AE%A2%E6%88%B7%E6%88%90%E5%8A%9F%E9%83%A8')
+    expect(last.url).toContain('budget_status=EXHAUSTED')
+  })
+  it('授权候选加载失败只影响模型选择，不阻断创建表单', async () => {
+    const stub = installJsonFetchStub(({ url }) => {
+      if (url.pathname === '/admin/applications/model-options') return errorEnvelope(503, 'CONFIG_DATA_UNAVAILABLE', '活动配置快照当前无法读取')
+      return dataEnvelope(application)
+    })
+    const { wrapper } = await page('/ui/applications/new')
+    expect(stub.calls.some(call => call.url.endsWith('/admin/applications/model-options'))).toBe(true)
+    expect(wrapper.find('input[name="name"]').exists()).toBe(true)
+    expect(wrapper.get('input[name="name"]').element).toHaveProperty('disabled', false)
+    expect(wrapper.text()).toContain('活动配置快照当前无法读取')
+    expect(wrapper.text()).not.toContain('当前没有可授权的虚拟模型')
   })
   it('创建表单切换身份清除上一身份输入', async () => {
     baseStub()

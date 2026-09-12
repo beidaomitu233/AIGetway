@@ -39,6 +39,9 @@ class JdbcApplicationRepositoryTest {
             assertThat(repository.list(connection,
                     new JdbcApplicationRepository.Filter("订单", "ACTIVE", "PROD", null, List.of()),
                     "updated_at desc", 20, 0)).hasSize(1);
+            assertThat(repository.list(connection,
+                    new JdbcApplicationRepository.Filter(null, null, null, null, null, "NORMAL", List.of()),
+                    "updated_at desc", 20, 0)).hasSize(1);
             assertThat(repository.findQuota(connection, applicationId).orElseThrow().rpm()).isEqualTo(120);
 
             ApplicationRecord current = repository.findById(connection, applicationId).orElseThrow();

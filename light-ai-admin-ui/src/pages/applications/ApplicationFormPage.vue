@@ -12,11 +12,12 @@ import { useBootstrapStore } from '@/stores/bootstrap'
 import {
   createApplication,
   fetchApplication,
+  fetchApplicationModelOptionsForCreate,
   updateApplication,
   type ApplicationEnvironment,
   type ApplicationDetail,
+  type ApplicationModelOption,
 } from '@/api/applications'
-import { fetchModelAliases, type ModelAliasListItem } from '@/api/modelAliases'
 
 const route = useRoute()
 const router = useRouter()
@@ -31,7 +32,9 @@ const editable = ref(true)
 let controller: AbortController | null = null
 let loadSequence = 0
 const loadError = ref<unknown>(null)
-const aliases = ref<ModelAliasListItem[]>([])
+/** FE-202/205：创建前授权候选取自 /applications/model-options，不能用配置视图 /virtual-models 替代。 */
+const modelOptions = ref<ApplicationModelOption[]>([])
+const modelsLoadError = ref<unknown>(null)
 const version = ref<string | null>(null)
 const latest = ref<ApplicationDetail | null>(null)
 const latestLoading = ref(false)
@@ -88,7 +91,7 @@ const formInvalid = computed(() => Boolean(
     || (form.rpm_limited && !positiveInteger(form.rpm))
     || (form.tpm_limited && !positiveInteger(form.tpm))
     || customPeriodInvalid.value
-    || form.virtual_model_ids.some(id => !aliases.value.some(model => model.id === id && model.enabled))
+    || form.virtual_model_ids.some(id => !modelOptions.value.some(option => option.virtual_model_id === id))
   ))
 ))
 const unlimited = computed(() => !isEdit.value && (!form.token_limited || !form.amount_limited || !form.rpm_limited || !form.tpm_limited))
@@ -187,6 +190,7 @@ async function load(): Promise<void> {
   const signal = controller.signal
   loading.value = true
   loadError.value = null
+  modelsLoadError.value = null
   reviewing.value = false
   latest.value = null
   latestLoading.value = false
@@ -201,12 +205,20 @@ async function load(): Promise<void> {
       editable.value = ['ACTIVE', 'DISABLED'].includes(detail.status)
       version.value = detail.version
     } else {
+      modelOptions.value = []
       Object.assign(form, { code: '', name: '', department: '', owner_id: store.userId, owner_name: store.displayName, environment: 'PROD', description: '', status: 'ACTIVE', token_limited: true, token_limit: null, amount_limited: true, amount_limit: '', currency: '', rpm_limited: true, rpm: null, tpm_limited: true, tpm: null, period_type: 'MONTH', period_start: '', period_end: '', virtual_model_ids: [] })
       editable.value = true
       version.value = null
-      const page = await fetchModelAliases({ enabled: true, page: 1, page_size: 100, sort: 'alias' }, signal)
+      // 候选属于局部数据：加载失败只影响模型选择，不阻断基本信息与额度的录入。
+      const options = await fetchApplicationModelOptionsForCreate(signal).catch(error => {
+        if (!isAbortError(error)) modelsLoadError.value = error
+        return null
+      })
       if (sequence !== loadSequence) return
-      aliases.value = page.items
+      if (options) {
+        modelOptions.value = options
+        modelsLoadError.value = null
+      }
     }
     markClean()
   } catch (error) {
@@ -530,30 +542,36 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
             可用虚拟模型
           </h2>
           <p class="section-help">
-            应用只能调用已授权模型；模型后续可在应用详情中单独管理。
+            应用只能调用已授权模型；候选来自活动配置快照中已发布且存在可用路由候选的虚拟模型，模型后续可在应用详情中单独管理。
           </p>
+          <PageState
+            v-if="modelsLoadError"
+            status="error"
+            :error="modelsLoadError"
+            @retry="load"
+          />
           <div
-            v-if="aliases.length"
+            v-else-if="modelOptions.length"
             class="model-options"
           >
             <label
-              v-for="alias in aliases"
-              :key="alias.id"
+              v-for="option in modelOptions"
+              :key="option.virtual_model_id"
               class="model-option"
             >
               <input
                 v-model="form.virtual_model_ids"
                 type="checkbox"
-                :value="alias.id"
+                :value="option.virtual_model_id"
               >
-              <span><strong>{{ alias.display_name }}</strong><small>{{ alias.alias }}</small></span>
+              <span><strong>{{ option.code }}</strong><small>{{ option.max_output_tokens === null ? '未声明输出上限' : `候选上限 ${option.max_output_tokens}` }} · {{ option.allow_stream === null ? '流式能力未知' : option.allow_stream ? '支持流式' : '不支持流式' }}</small></span>
             </label>
           </div>
           <p
             v-else
             class="empty-inline"
           >
-            当前没有已启用的虚拟模型，可先创建应用，配置模型后再授权。
+            当前没有可授权的虚拟模型：活动快照中缺少已发布且存在可用路由候选的模型，可先创建应用，发布模型后再授权。
           </p>
         </div>
       </fieldset>

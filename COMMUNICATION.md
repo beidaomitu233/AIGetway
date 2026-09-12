@@ -449,3 +449,28 @@
 - 关键根因与修复：`ChannelDetail` 缺 `version` 导致渠道详情页全部写操作 400（本批新增 FS-P20-008）；应用 `version` 按 BE-P20-102 统一为十进制字符串。
 - 联调环境与证据见 INTEGRATION_REPORT.md §10；环境差异记录：本机沙箱下后端默认配置实际绑定 8800（配置声明为 8080），本批显式以 `--server.port=18080` 启动，Vite 以 `VITE_BACKEND_TARGET` 指向该端口，未启用 Mock。
 - 未验收：渠道检测的真实上游连通、上游模型/虚拟模型/路由的发布生效链路、渠道页面浏览器点击级写操作。上述未完成项不作为联调通过依据。
+
+
+## FS-RV-P20-001 / FS-RV-P20-002 联调补记（2026-09-13，当前工作区复验）
+
+| 编号 | 问题与复现步骤 | 涉及流程/模块 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+|---|---|---|---|---|---|---|
+| FS-RV-P20-001 | 发布校验切换到 V2 `channels/channel_credentials` 后，既有 V1 草稿夹具使用 `providers/credential_pools/credentials` 时有效草稿被判失败，跨渠道与未注册 Adapter 错误码退化为 `REFERENCE_INVALID` | 配置发布校验、ConfigValidationService | V2 键切换未保留旧草稿读取兼容；校验服务增加 V2 优先、V1 键回退，解析旧候选的 credential_pool→provider 关系，并回退 `type` 字段 | `ConfigValidationServiceTest` 8 项、`ConfigPublishServiceTest` 16 项全部通过；V2 快照路径保留 | 联调模型 / 当前任务 | 已验证 |
+| FS-RV-P20-002 | 应用列表使用 `budget_status=NORMAL` 并按 `updated_at desc` 排序时，真实 H2 查询可能报 ambiguous column `updated_at` | 应用列表、JdbcApplicationRepository | 预算筛选 JOIN quota 表后排序字段未限定表名；排序表达式统一加 `application` 表限定，保留最近调用空值排序 | H2 真实仓储回归通过；真实 HTTP 创建应用后 `GET /admin/applications?budget_status=NORMAL&sort=updated_at desc` 返回 200 且正确回显 | 联调模型 / 当前任务 | 已验证 |
+## RV-P20 应用接入域代码审查补记（2026-09-13，rvagent-0912）
+
+本轮基于 `bbc1340`（后续并行修复提交 `41e6635` 已包含 FS-RV-P20-001/002 的后端修复）复核 FE-201～FE-205 的页面/API 契约。前端修复仍在当前审查分支，主任务占用不变。
+
+| 编号 | 级别 | 问题与依据 | 修复与验证 | 状态 |
+| --- | --- | --- | --- | --- |
+| RV-P20-001 | P1 | 创建/编辑授权仍读取 `/virtual-models`，可能展示未发布或不可路由模型。 | 改用 `/admin/applications/model-options` 与 `/{id}/model-options`，页面测试断言不再访问旧端点；前端 248 项测试/typecheck/build 通过。 | 已验证 |
+| RV-P20-002 | P2 | 应用列表 24h 字段数字后缀 JSON 名称与 `requests_24h/success_rate_24h` 契约不一致。 | `ApplicationListItem` 显式 `@JsonProperty`，补 API 合约断言；前端同步类型并展示摘要。后端 Maven 复验依赖并行线程结果，当前环境本会话无 Maven。 | 已验证（后端待环境复验） |
+| RV-P20-003 | P2 | 应用列表缺部门与预算状态筛选，无法按计划保留 URL/请求状态。 | 增加筛选、URL 参数和回归测试；并行 H2+Redis 真实 HTTP 已验证筛选 200。 | 已验证 |
+| RV-P20-004 | P2 | 资源下线后历史授权从候选消失但仍被提交，无法收口失效授权。 | 候选加载后提示并从提交集合移除，新增 PUT 回归断言。 | 已验证 |
+| RV-P20-005 | P2 | 后端已返回预算状态与 24h 摘要，前端未消费，FE-201 展示验收缺口。 | 补齐接口类型、预算标签、64 位请求计数格式化和成功率展示；页面夹具断言 `42 次`、`87.5%`。 | 已验证 |
+
+本轮前端验证命令：`npm run typecheck`、`npm test -- --run`（28 文件/248 项）、`npm run build`。未将 Mock 结果描述为真实业务成功；真实 Provider、真实 PostgreSQL/MySQL/Redis、企业身份四角色和首调 E2E 仍按既有报告待验收。密钥列表 N+1、`ip_allowlist` 域名解析策略登记为跨包待确认，不在本轮接管。
+
+### RV-P20 最终复验补记（2026-09-13）
+
+在上述提交之后，使用 IntelliJ Maven 运行时重新执行全仓 `mvn -B verify`，14 个模块全部 `BUILD SUCCESS`，退出码 0；真实 H2+Redis HTTP/Chromium 证据与应用域定向测试结果仍以 `INTEGRATION_REPORT.md` §12 为准。真实 PostgreSQL/MySQL/Provider、企业身份和生产级并发/恢复场景仍未验收。

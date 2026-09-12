@@ -90,6 +90,23 @@ class ApplicationApiContractTest {
         assertThat(quota.has("amountLimit")).isFalse();
     }
 
+    /**
+     * RV-P20-002：SNAKE_CASE 不会在以数字结尾的字段名中补下划线，原输出 requests24h/success_rate24h
+     * 与 BACKEND_PLAN 应用列表契约 requests_24h/success_rate_24h 不一致，必须显式声明并回归断言。
+     */
+    @Test
+    void listRowExposesContractNamesFor24hSummaryAndBudgetStatus() throws Exception {
+        JsonNode list = read(mvc.perform(asOwner(get("/admin/applications"))).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).path("data").path("items").get(0);
+        assertThat(list.path("requests_24h").isTextual()).isTrue();
+        assertThat(list.path("requests_24h").asText()).isEqualTo("0");
+        assertThat(list.has("success_rate_24h")).isTrue();
+        assertThat(list.path("success_rate_24h").isNull()).isTrue();
+        assertThat(list.has("requests24h")).isFalse();
+        assertThat(list.has("success_rate24h")).isFalse();
+        assertThat(list.path("budget_status").asText()).isEqualTo("NORMAL");
+    }
+
     @Test
     void fourRolesReadScopedSubresourcesAndOutsidersAreDenied() throws Exception {
         for (String suffix : List.of("/quota", "/models", "/keys", "/members")) {
