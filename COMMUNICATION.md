@@ -700,3 +700,9 @@ CR-001～CR-019 最终复核结果：CR-001、002、003、005、006、007、008�
 验证证据：`mvn -B verify` 成功，79 份 Surefire 报告合计 379 例，0 failure、0 error、0 skipped；显式 PostgreSQL `PostgresSchemaGuardIT` 3 例因未配置 `LAI_IT_DB_URL` 全部跳过。前端 lint 0 error/37 warning，typecheck、160 例测试及 build 通过。可执行 JAR 的 15 步 H2 + Stub Provider 冒烟通过，覆盖配置创建、严格校验、发布收敛、就绪、Token、模型目录、同步 Chat、业务 SSE 唯一 `[DONE]` 和管理 SSE START/DELTA/DONE。
 
 生产验收仍由 CR-004、CR-015、CR-016 阻塞。允许进入单实例 Standalone 功能验收及后续代码审查；在共享 Redis 存储、版本化迁移和真实多数据库/物理集群/性能兼容矩阵补齐前，不建议签署最终生产验收或合并到 main 发布。
+
+## 前端 V2 执行前基线阻塞（2026-09-12）
+
+| 序号 | 提出方 | 问题类型 | 功能问题描述 | 优化说明 | 涉及前端文件/模块 | 涉及后端文件/模块 | 涉及数据库表 | 状态 | 处理结论 |
+| -- | --- | ---- | ------ | ---- | --------- | --------- | ------ | -- | ---- |
+| FE-V2-BASELINE-001 | 前端执行模型 | 执行基线与任务领取 | fetch 后 origin/dev=036a25f，PROJECT_DOCUMENT.md 仍引用 V1，FRONTEND_PLAN.md 的 FE-001～FE-054 全部已勾选；本地 dev=c69af23 才有 FE-P20～P23，领先远程 23 个提交，含前后端及数据库资产。本地 V2 COMMUNICATION.md 的 C-V2-001 仍要求共同评审并合入 dev，C-V2-014 说明资产尚未统一验收。无法在最新远程 dev 上领取 V2 的 5 项前端任务。 | 请架构师确认并集成 V2 PRD、四份执行计划及可复用代码到远程 dev，初始化 P20～P23 任务占用表；同时确认 FE-P20 依赖的权限、周期、轮换宽限和精确 DTO。基线就绪后重新 fetch、登记并推送领取记录再编码，不以旧实现推定新版契约。 | FE-P20：FE-201～FE-205；applications 页面及相关 API 模块（均未修改、未占用） | application/auth/bootstrap/quota 等，仅列依赖，未修改 | application、application_key、application_quota_policy、application_member 等，仅列依赖，未修改 | 待确认 | 本次仅文档登记；未领取开发包、未新增完成勾选、未执行产品测试，不代表任务完成。23 个既有提交未由本次推送。 |
