@@ -6,28 +6,28 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Provider 详情（BACKEND_PLAN 4.2.9.1；字段对齐 FE-009）。
- * recent_check_records 为详情页最近检测记录（C-024：按创建时间倒序，最多10条）。
- * created_by/updated_by 当前来自 draft_change.modified_by 摘要，
- * 专用列已登记 COMMUNICATION.md 待 DB-P02 确认。
+ * 渠道详情（BACKEND_PLAN BE-211：status/health 分列，timeouts/headers/priority/weight 收口）。
+ * recent_check_records 为详情页最近检测记录（按创建时间倒序，最多10条）。
+ * health 由 object_runtime_state 派生；created_by/updated_by 当前来自
+ * draft_change.modified_by 摘要，专用列已登记 COMMUNICATION.md 待确认。
  */
 @JsonInclude(JsonInclude.Include.ALWAYS)
 public record ChannelDetail(
         String id,
         String name,
-        String type,
+        String providerType,
         String baseUrl,
-        String proxyUrl,
-        String connectionStatus,
-        OffsetDateTime lastCheckAt,
+        String proxy,
+        ChannelTimeouts timeouts,
+        Map<String, String> headers,
+        String status,
+        String health,
+        int priority,
+        int weight,
+        boolean draftChanged,
+        OffsetDateTime lastCheckedAt,
         Long lastCheckLatencyMs,
         String lastErrorCode,
-        boolean enabled,
-        boolean draftChanged,
-        long version,
-        int connectTimeoutMs,
-        int readTimeoutMs,
-        Map<String, String> defaultHeaders,
         String createdBy,
         OffsetDateTime createdAt,
         String updatedBy,
@@ -35,7 +35,7 @@ public record ChannelDetail(
         List<ChannelCheckRecord> recentCheckRecords) {
 
     public ChannelDetail {
-        defaultHeaders = defaultHeaders == null ? Map.of() : Map.copyOf(defaultHeaders);
+        headers = headers == null ? Map.of() : Map.copyOf(headers);
         recentCheckRecords = recentCheckRecords == null ? List.of() : List.copyOf(recentCheckRecords);
     }
 }

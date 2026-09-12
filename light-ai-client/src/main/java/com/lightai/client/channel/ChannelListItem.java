@@ -4,25 +4,27 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.OffsetDateTime;
 
 /**
- * Provider 列表项（BACKEND_PLAN 4.2.9.1；字段对齐 FE-007）。
- * connection_status 等运行状态由 object_runtime_state 组合派生，
- * 不进入草稿 DTO；不含任何密钥信息。
+ * 渠道列表项（BACKEND_PLAN BE-211：status/health 分列，priority/weight 可见）。
+ * status 为配置状态（ACTIVE/DISABLED），health 由 object_runtime_state 派生
+ * （UNKNOWN/AVAILABLE/UNAVAILABLE），不进入草稿 DTO；不含任何密钥信息。
  */
 @JsonInclude(JsonInclude.Include.ALWAYS)
 public record ChannelListItem(
         String id,
         String name,
-        String type,
+        String providerType,
         String baseUrl,
-        String proxyUrl,
-        String connectionStatus,
-        OffsetDateTime lastCheckAt,
+        String proxy,
+        String status,
+        String health,
+        int priority,
+        int weight,
+        long upstreamModelCount,
+        long credentialCount,
+        boolean draftChanged,
+        OffsetDateTime lastCheckedAt,
         Long lastCheckLatencyMs,
         String lastErrorCode,
-        long providerModelCount,
-        long credentialPoolCount,
-        boolean enabled,
-        boolean draftChanged,
         long version,
         OffsetDateTime updatedAt) {
 }

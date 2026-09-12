@@ -341,6 +341,9 @@ public class RouteCandidateService {
         } else if (!model.enabled() || !channel.enabled()) {
             runtimeStatus = RouteCandidateDetail.STATUS_UNAVAILABLE;
             excludedReason = "上游模型或渠道已停用";
+        } else if ("UNAVAILABLE".equals(channelHealth(connection, channel.id()))) {
+            runtimeStatus = RouteCandidateDetail.STATUS_UNAVAILABLE;
+            excludedReason = "渠道最近检测不可用";
         } else {
             runtimeStatus = RouteCandidateDetail.STATUS_AVAILABLE;
         }
@@ -360,15 +363,35 @@ public class RouteCandidateService {
     }
 
     private boolean draftChangeRepositoryOf(Connection connection, UUID id) {
-        try (var statement = connection.prepareStatement("SELECT 1 FROM "
-                + com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME
-                + ".draft_change WHERE entity_type = 'route_candidate' AND entity_id = ?")) {
-            statement.setString(1, id.toString());
-            try (var rs = statement.executeQuery()) {
-                return rs.next();
+        try {
+            var d = com.lightai.storage.dialect.DialectResolver.resolve(connection);
+            try (var statement = connection.prepareStatement("SELECT 1 FROM "
+                    + d.qualify(com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME, "draft_change")
+                    + " WHERE entity_type = 'route_candidate' AND entity_id = ?")) {
+                statement.setString(1, id.toString());
+                try (var rs = statement.executeQuery()) {
+                    return rs.next();
+                }
             }
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /** 渠道运行健康（object_runtime_state.connection_status），无记录视为 UNKNOWN。 */
+    private String channelHealth(Connection connection, UUID channelId) {
+        try {
+            var d = com.lightai.storage.dialect.DialectResolver.resolve(connection);
+            try (var statement = connection.prepareStatement("SELECT connection_status FROM "
+                    + d.qualify(com.lightai.storage.schema.ExpectedSchema.SCHEMA_NAME, "object_runtime_state")
+                    + " WHERE entity_type = 'CHANNEL' AND entity_id = ?")) {
+                d.bindUuid(statement, 1, channelId);
+                try (var rs = statement.executeQuery()) {
+                    return rs.next() && rs.getString(1) != null ? rs.getString(1) : "UNKNOWN";
+                }
+            }
+        } catch (Exception e) {
+            return "UNKNOWN";
         }
     }
 

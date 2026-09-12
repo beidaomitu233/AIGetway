@@ -3,7 +3,7 @@ package com.lightai.client.channel;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
- * Credential 创建命令（BACKEND_PLAN 4.2.9.2）。
+ * Credential 创建命令（BACKEND_PLAN BE-212：Key 级 priority/weight、RPM/TPM 限额）。
  * secret_source 创建后不可切换：INLINE 必填 secret_value，EXTERNAL 必填 secret_ref；
  * 明文仅进入受保护存储，不进入草稿、审计与日志。
  */
@@ -13,12 +13,16 @@ public record ChannelCredentialCreateCommand(
         String secretSource,
         String secretValue,
         String secretRef,
+        Integer priority,
         Integer weight,
         Long rpmLimit,
         Long tpmLimit,
         Integer concurrentLimit,
         boolean enabled) {
 
+    public static final int PRIORITY_MIN = 1;
+    public static final int PRIORITY_MAX = 100;
+    public static final int PRIORITY_DEFAULT = 10;
     public static final int WEIGHT_MIN = 1;
     public static final int WEIGHT_MAX = 100;
     public static final int CONCURRENT_LIMIT_MAX = 100000;
@@ -42,6 +46,9 @@ public record ChannelCredentialCreateCommand(
         if (weight == null || weight < WEIGHT_MIN || weight > WEIGHT_MAX) {
             throw new IllegalArgumentException("weight 范围 1—100");
         }
+        if (priority != null && (priority < PRIORITY_MIN || priority > PRIORITY_MAX)) {
+            throw new IllegalArgumentException("priority 范围 " + PRIORITY_MIN + "—" + PRIORITY_MAX);
+        }
         if ((rpmLimit != null && rpmLimit <= 0) || (tpmLimit != null && tpmLimit <= 0)) {
             throw new IllegalArgumentException("限额为空表示不限，0 不合法");
         }
@@ -53,5 +60,9 @@ public record ChannelCredentialCreateCommand(
 
     public String name() {
         return name == null ? null : name.strip();
+    }
+
+    public int priorityOrDefault() {
+        return priority == null ? PRIORITY_DEFAULT : priority;
     }
 }

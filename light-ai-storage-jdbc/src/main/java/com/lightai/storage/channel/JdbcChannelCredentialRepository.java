@@ -273,6 +273,24 @@ public class JdbcChannelCredentialRepository extends AbstractJdbcRepository {
         }
     }
 
+    /** 渠道内可用（ACTIVE）Key 计数，excludeId 用于排除即将停用/删除的 Key 自身。 */
+    public long countActiveLiveInChannel(Connection connection, UUID channelId, UUID excludeId) {
+        DatabaseDialect d = dialect(connection);
+        String sql = "SELECT count(*) FROM " + qualify(connection, "channel_credential")
+                + " WHERE channel_id = ? AND deleted_at IS NULL AND status = ? AND id <> ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            d.bindUuid(statement, 1, channelId);
+            statement.setString(2, ChannelCredentialRecord.STATUS_ACTIVE);
+            d.bindUuid(statement, 3, excludeId);
+            try (ResultSet rs = statement.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
+        } catch (SQLException e) {
+            throw translate("渠道可用 Key 计数失败", e);
+        }
+    }
+
     public long countByChannel(Connection connection, UUID channelId, String healthStatus, Boolean enabled) {
         DatabaseDialect d = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT count(*) FROM ").append(qualify(connection, "channel_credential"))

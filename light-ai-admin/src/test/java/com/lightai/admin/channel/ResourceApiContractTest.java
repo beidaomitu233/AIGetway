@@ -119,13 +119,70 @@ class ResourceApiContractTest {
     void channelRejectsDangerousUrlHeadersVersionsAndReadOnlyWrites() throws Exception {
         String body = channelBody("unsafe").replace("https://8.8.8.8/v1", "http://127.0.0.1");
         call(post("/admin/channels"), body).andExpect(status().isBadRequest());
-        call(post("/admin/channels"), channelBody("unsafe").replace("\"enabled\":true", "\"default_headers\":{\"Authorization\":\"sensitive-marker\"},\"enabled\":true"))
+        call(post("/admin/channels"), channelBody("unsafe").replace("\"weight\":10", "\"headers\":{\"Authorization\":\"sensitive-marker\"},\"weight\":10"))
                 .andExpect(status().isBadRequest());
-        call(put("/admin/channels/"+channel), channelBody("renamed").replace("\"enabled\":true", "\"version\":999,\"enabled\":true"))
+        call(put("/admin/channels/"+channel), channelBody("renamed").replace("\"weight\":10", "\"version\":999,\"weight\":10"))
                 .andExpect(status().isConflict());
         mvc.perform(post("/admin/channels").header("x-test-role", Roles.OPERATOR)
                         .contentType(MediaType.APPLICATION_JSON).content(channelBody("denied")))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void channelSaveCommandExposesV2FieldsAndStatusSeparatesFromHealth() throws Exception {
+        JsonNode detail = data(call(get("/admin/channels/"+channel), null).andExpect(status().isOk()));
+        assertThat(detail.path("provider_type").asText()).isEqualTo("OPENAI");
+        assertThat(detail.path("timeouts").path("connect_ms").asInt()).isEqualTo(1000);
+        assertThat(detail.path("timeouts").path("read_ms").asInt()).isEqualTo(10000);
+        assertThat(detail.path("timeouts").path("stream_idle_ms").asInt())
+                .isEqualTo(com.lightai.client.channel.ChannelTimeouts.STREAM_IDLE_DEFAULT_MS);
+        assertThat(detail.path("priority").asInt()).isEqualTo(5);
+        assertThat(detail.path("weight").asInt()).isEqualTo(10);
+        assertThat(detail.path("status").asText()).isEqualTo("ACTIVE");
+        assertThat(detail.has("enabled")).isFalse();
+        assertThat(detail.has("connection_status")).isFalse();
+
+        // 配置状态与健康分列：检测失败收敛的运行健康为 UNAVAILABLE，配置状态仍 ACTIVE
+        sql.update("MERGE INTO object_runtime_state (id, entity_type, entity_id, connection_status, "
+                        + "state_version, created_at, updated_at) KEY(entity_type, entity_id) VALUES (?, 'CHANNEL', ?, 'UNAVAILABLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                UUID.randomUUID().toString(), channel);
+        JsonNode afterCheck = data(call(get("/admin/channels/"+channel), null));
+        assertThat(afterCheck.path("status").asText()).isEqualTo("ACTIVE");
+        assertThat(afterCheck.path("health").asText()).isEqualTo("UNAVAILABLE");
+
+        // 列表过滤：provider_type/status
+        JsonNode filtered = data(call(get("/admin/channels?provider_type=OPENAI&status=ACTIVE"), null));
+        assertThat(filtered.path("total").asLong()).isEqualTo(2);
+        JsonNode none = data(call(get("/admin/channels?provider_type=ANTHROPIC"), null));
+        assertThat(none.path("total").asLong()).isZero();
+    }
+
+    @Test
+    void keyPriorityIsEditableAndLastActiveKeyIsProtected() throws Exception {
+        String key = id(call(post(keys(channel)), keyBody("only-key", "test-only-secret")));
+        call(put(keys(channel)+"/"+key), "{\"name\":\"only-key\",\"priority\":3,\"weight\":10,\"version\":1,\"enabled\":true}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.entity.priority").value(3));
+        assertThat(sql.queryForObject("SELECT priority FROM channel_credential WHERE id=?", Integer.class, key))
+                .isEqualTo(3);
+
+        // 渠道唯一可用 Key：停用与删除都拒绝
+        call(post(keys(channel)+"/"+key+"/disable"), "{\"version\":2}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("OBJECT_IN_USE"));
+        call(delete(keys(channel)+"/"+key), "{\"version\":2}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("OBJECT_IN_USE"));
+
+        // 新增第二个可用 Key 后，停用原 Key 成功（此前失败事务已回滚，version 仍为 2）
+        String second = id(call(post(keys(channel)), keyBody("second-key", "test-only-second")));
+        call(post(keys(channel)+"/"+key+"/disable"), "{\"version\":2}").andExpect(status().isOk());
+        assertThat(sql.queryForObject("SELECT status FROM channel_credential WHERE id=?", String.class, key))
+                .isEqualTo("DISABLED");
+        assertThat(sql.queryForObject("SELECT count(*) FROM channel_credential "
+                + "WHERE channel_id=? AND status='ACTIVE' AND deleted_at IS NULL", Long.class, channel)).isEqualTo(1);
+        // second 未占用：second-key 可用计数为 1
+        assertThat(second).isNotEqualTo(key);
     }
 
     @Test
@@ -170,12 +227,14 @@ class ResourceApiContractTest {
     void nestedKeyUpdateValidatesNameAndSecretMutation() throws Exception {
         String key = id(call(post(keys(channel)), keyBody("first-key", "test-only-first")));
         id(call(post(keys(channel)), keyBody("second-key", "test-only-second")));
-        call(put(keys(channel)+"/"+key), "{\"name\":\"second-key\",\"weight\":10,\"version\":1,\"enabled\":true}")
+        call(put(keys(channel)+"/"+key), "{\"name\":\"second-key\",\"priority\":5,\"weight\":10,\"version\":1,\"enabled\":true}")
                 .andExpect(status().isBadRequest());
-        call(put(keys(channel)+"/"+key), "{\"name\":\"x\",\"weight\":10,\"version\":1,\"enabled\":true}")
+        call(put(keys(channel)+"/"+key), "{\"name\":\"x\",\"priority\":5,\"weight\":10,\"version\":1,\"enabled\":true}")
                 .andExpect(status().isBadRequest());
-        call(put(keys(channel)+"/"+key), "{\"name\":\"first-key\",\"secret_ref\":\"test-ref\",\"weight\":10,\"version\":1,\"enabled\":true}")
+        call(put(keys(channel)+"/"+key), "{\"name\":\"first-key\",\"secret_ref\":\"test-ref\",\"priority\":5,\"weight\":10,\"version\":1,\"enabled\":true}")
                 .andExpect(status().isConflict());
+        call(put(keys(channel)+"/"+key), "{\"name\":\"first-key\",\"weight\":10,\"version\":1,\"enabled\":true}")
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -191,6 +250,20 @@ class ResourceApiContractTest {
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("CONFIG_FIELD_IMMUTABLE"));
         call(post(routes(virtualModel)), routeBody(otherChannel,model,1,null)).andExpect(status().isUnprocessableEntity());
         assertThat(sql.queryForObject("SELECT weight FROM route_candidate WHERE id=?", Integer.class,route)).isZero();
+    }
+
+    @Test
+    void routeRuntimeStatusReflectsChannelHealth() throws Exception {
+        String enabledModel = id(call(post("/admin/upstream-models"), modelBody(channel, "route-model", true)));
+        id(call(post(routes(virtualModel)), routeBody(channel, enabledModel, 5, null)));
+        JsonNode healthy = data(call(get(routes(virtualModel)), null)).get(0);
+        assertThat(healthy.path("runtime_status").asText()).isEqualTo("AVAILABLE");
+        sql.update("MERGE INTO object_runtime_state (id, entity_type, entity_id, connection_status, "
+                        + "state_version, created_at, updated_at) KEY(entity_type, entity_id) VALUES (?, 'CHANNEL', ?, 'UNAVAILABLE', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                UUID.randomUUID().toString(), channel);
+        JsonNode degraded = data(call(get(routes(virtualModel)), null)).get(0);
+        assertThat(degraded.path("runtime_status").asText()).isEqualTo("UNAVAILABLE");
+        assertThat(degraded.path("excluded_reason").asText()).isEqualTo("渠道最近检测不可用");
     }
 
     @Test
@@ -250,9 +323,9 @@ class ResourceApiContractTest {
     }
 
     private String createChannel(String name) throws Exception { return id(call(post("/admin/channels"),channelBody(name))); }
-    private static String channelBody(String name) { return "{\"name\":\""+name+"\",\"type\":\"OPENAI\",\"base_url\":\"https://8.8.8.8/v1\",\"connect_timeout_ms\":1000,\"read_timeout_ms\":10000,\"enabled\":true}"; }
+    private static String channelBody(String name) { return "{\"name\":\""+name+"\",\"provider_type\":\"OPENAI\",\"base_url\":\"https://8.8.8.8/v1\",\"timeouts\":{\"connect_ms\":1000,\"read_ms\":10000},\"priority\":5,\"weight\":10}"; }
     private static String modelBody(String channel,String code,boolean enabled) { return "{\"channel_id\":\""+channel+"\",\"model_id\":\""+code+"\",\"display_name\":\"Model\",\"input_price\":\"1\",\"output_price\":\"2\",\"price_unit\":1000000,\"currency\":\"USD\",\"tokenizer_family\":\"cl100k_base\",\"context_window\":8192,\"max_output_tokens\":1024,\"support_stream\":true,\"support_system_message\":true,\"support_temperature\":false,\"support_top_p\":false,\"support_stop\":false,\"enabled\":"+enabled+"}"; }
-    private static String keyBody(String name,String secret) { return "{\"name\":\""+name+"\",\"secret_source\":\"INLINE_ENCRYPTED\",\"secret_value\":\""+secret+"\",\"weight\":10,\"enabled\":true}"; }
+    private static String keyBody(String name,String secret) { return "{\"name\":\""+name+"\",\"secret_source\":\"INLINE_ENCRYPTED\",\"secret_value\":\""+secret+"\",\"priority\":5,\"weight\":10,\"enabled\":true}"; }
     private static String routeBody(String channel,String model,int weight,Integer version) { return "{\"channel_id\":\""+channel+"\",\"upstream_model_id\":\""+model+"\",\"priority\":10,\"weight\":"+weight+",\"enabled\":true"+(version==null?"":",\"version\":"+version)+"}"; }
     private static String keys(String channel) { return "/admin/channels/"+channel+"/credentials"; }
     private static String routes(String model) { return "/admin/virtual-models/"+model+"/routes"; }

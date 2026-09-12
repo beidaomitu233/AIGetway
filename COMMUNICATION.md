@@ -272,3 +272,53 @@
 | DB-P21-008 | 待确认 | trace.alias_id、usage_aggregate.alias_id、access_credential_alias.alias_id、runtime_config.default_alias_id 保留旧列名/参数名，待 DB-P22（request_trace 契约）与 BE-P21 DTO 切换统一更名，避免单独破坏现有 API 字段。 |
 
 测试证据与未执行项：mvn -B verify 14 模块 SUCCESS，443 通过、16 环境跳过、0 失败；`git diff --check` 通过。真实 PostgreSQL/MySQL（LAI_IT_DB_URL/LAI_IT_MYSQL_URL 缺失）、MySQL 5.7（沿用 V4 的 8.0+ 前置）、Redis/真实 Provider 环境未执行，不作为通过依据。
+## BE-P20 接管交付与契约切换（2026-09-12，后端执行模型 zcode-be-0912b）
+
+经用户确认原领取（codex-be-0912）会话中断、剩余子项未实际执行，由本负责人接管 BE-P20 并交付无迁移依赖子项；领取记录见 TASK_STATUS（5a11054）。本轮详情见 BACKEND_PLAN「BE-P20 接管执行记录」。以下为需其他负责人跟进的契约与阻塞事项。
+
+### 契约变更（需前端在同批联调切换）
+
+| 序号 | 变更 | 影响接口/字段 | 说明 |
+| -- | --- | ---- | ---- |
+| BE-P20-101 | 密钥结果字段切换 | POST /admin/applications/{id}/keys、/keys/{keyId}/rotate：data 由 key_value 改为 secret，新增 key_prefix/status/issued_at/expires_at | 轮换仍为原位换发；新代际/宽限/幂等待 DB-202 迁移，届时同一响应再补 old_key_id/grace_expires_at |
+| BE-P20-102 | 64 位数值十进制字符串 | 应用域 token_limit/tokens_used/tokens_reserved/tokens_remaining/amount_remaining、requests_24h、version/snapshot_no、affected_key_count/running_requests | 有 32 位上限的字段（max_output_tokens、rpm、page 等）仍为 JSON number；金额维持 decimal 字符串 |
+| BE-P20-103 | stream_allowed → allow_stream | GET models、PUT models constraints、约束 JSON 键名 | 后端读取兼容历史 stream_allowed；存量转换由 DB-205 迁移执行 |
+| BE-P20-104 | 列表默认排序变更 | GET /admin/applications 默认 sort 由 updated_at desc 改为 last_called_at desc | 空值排末尾，application.id asc 稳定序；sort 白名单不变 |
+| BE-P20-105 | PUT /quota 新增必填 idempotency_key | PUT /admin/applications/{id}/quota | 幂等以 quota_adjustment dimension=POLICY 行实现；DB-204 的 application_quota_operation 表就绪后由后端评估是否迁移实现 |
+| BE-P20-106 | 新增端点 | GET /admin/applications/model-options（创建前，需 application.manage）；GET /admin/applications/{id}/model-options（需 application-model.manage）；POST /admin/applications/{id}/impact | 创建前候选对非可信身份返回空列表；impact 为预览不是写入许可 |
+
+### 阻塞与待确认事项
+
+| 编号 | 提出方 | 问题描述 | 涉及任务/模块 | 影响与建议 | 待确认方 | 状态 | 处理结论 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| BE-P20-107 | 后端执行模型/zcode-be-0912b | BE-202 轮换新代际、宽限与幂等需要 application_key 新增列与 application_key_operation 表 | BE-202、DB-202 | DB-P20 交付迁移后由后端接续实现；前端暂按原位换发联调 | DB-P20（zcode-0912） | 待确认 | 依赖 DB-202 迁移合并后开工 |
+| BE-P20-108 | 后端执行模型/zcode-be-0912b | BE-204 period_id/policy_version/timezone/reset_at、renew、周期段 reset、预约调整需要周期快照与操作表 | BE-204、DB-203/204 | GET quota 相关字段当前恒为 null，不冒称周期快照已存在；平台时区配置未建前禁止猜测默认时区 | DB-P20（zcode-0912）、BP-004 决策 | 待确认 | 迁移与时区配置就绪后接续 |
+| BE-P20-109 | 后端执行模型/zcode-be-0912b | GET /admin/applications/{id}/audit 需要 audit_log.application_id（DB-201）与 BE-P23 审计读取端口 | BE-205、DB-201、BE-P23 | 审计域由 BE-P23（zcode-be-0912）负责，端口协调后由后端补齐应用审计端点 | DB-P20、BE-P23 | 待确认 | 不接管 BE-P23 文件 |
+| BE-P20-110 | 后端执行模型/zcode-be-0912b | 拒绝类审计 result 取值仅 SUCCEEDED/FAILED，PRD 语义要求 DENIED | BE-205、审计域 | result=DENIED 涉及审计枚举与查询契约（BE-P23 占用），本轮以 FAILED+ACCESS_DENIED 记录，不私改枚举 | BE-P23 | 待确认 | 与 BE-P23 协调后统一 |
+| BE-P20-111 | 后端执行模型/zcode-be-0912b | 真实 PostgreSQL/MySQL 唯一冲突、归档/准入竞争、双并发轮换、幂等重放等仅能在真实环境验收 | BE-201～204 | 本轮 16 项跳过均为缺 LAI_IT_MYSQL_URL/LAI_IT_DB_URL/LAI_IT_REDIS_URI 的环境用例 | 用户/验收环境 | 待确认 | 环境就绪后执行并补验收记录 |
+
+## BE-P21 接管交付复核（2026-09-12，后端执行模型 zcode-be-0912c）
+
+经用户确认原领取（codex-be-0912）会话中断、剩余子项未实际执行，由 zcode-be-0912c 接管推进（领取 9cdd65a，基线 5a11054）。本轮以 BACKEND_PLAN BE-211～215 字段清单为已确认技术契约执行（沿用第 8 节「按 BACKEND_PLAN 同号小节执行」先例），交付可无迁移完成的子项；依赖 DB-P21 迁移与运行端口的子项保持未验收。
+
+| 编号 | 状态 | 本轮处理与剩余缺口 |
+|---|---|---|
+| BE-P21-001 | 已确认（技术契约），跨端切换待 FE-P21 | Channel 请求/响应已按计划字段收口：provider_type/base_url/proxy/timeouts{connect_ms,read_ms,stream_idle_ms}/headers/priority/weight；响应 status（ACTIVE/DISABLED）与 health（UNKNOWN/AVAILABLE/UNAVAILABLE，源自 object_runtime_state）分列；创建默认 ACTIVE，启停仅走 enable/disable 独立命令（版本+停用影响票据）。无双字段兼容。FE-P21 需由原负责人同步切换字段（同 FE-P20-002 处理口径）。运行广播契约与真实环境验收仍开放。 |
+| BE-P21-002 | 部分交付，余项待运行端口 | Key priority 全操作可编辑（1—100，缺省 10）；rate_limit_reset_at 读取修复（快照新增 reset_at，不再以 last_checked_at 冒充冷却复位）；新增最后可用 Key 保护：停用/删除渠道最后一个 ACTIVE Key 返回 OBJECT_IN_USE/409——该行为为本轮实现决策，请架构复核；429 冷却真实联动、共享占用互斥、跨实例同步仍依赖运行端口验收。 |
+| BE-P21-003 | 待确认（不变） | 依赖 DB-213：model_sync_job/item、locked_fields、同步预览/提交幂等事务契约；本轮未动，合法批量检测仍 CONFIG_DATA_UNAVAILABLE/503。 |
+| BE-P21-004 | 待确认（不变） | 依赖 DB-214/215：virtual_model 持久化能力交集、显式收紧与应用影响 DTO；本轮未动。 |
+| BE-P21-005 | 部分交付 | 候选 runtime_status 纳入渠道运行健康：渠道 UNAVAILABLE 时候选 UNAVAILABLE/「渠道最近检测不可用」（UNKNOWN 不拦截，避免未检测渠道被误排除）；容量/熔断维度与固定快照发布验收仍依赖运行可用性端口与 DB-P21。顺带修复 raw SQL 未按方言 qualify 的缺陷（object_runtime_state/draft_change，MySQL/H2 下原实现静默失败）。 |
+| BE-P21-006 | 待确认（不变） | 依赖 DB-213 对批量表（operator_id/command 列）或统一 model_sync_job/item 的决策；本轮未动。 |
+
+自检与测试：全仓 mvn -B verify 14 模块 BUILD SUCCESS，471 项中 455 通过、16 环境跳过（真实 MySQL/PostgreSQL/Redis 缺失），0 失败/错误；git diff --check 通过。新增/更新测试：渠道 V2 字段回显与 status/health 分列、provider_type/status 过滤、Key priority 编辑与校验、最后可用 Key 停用/删除拒绝、runtime_status 健康派生。未执行：真实数据库、真实 Provider、企业身份、前后端 E2E、性能。
+
+## BE-P23 并行会话冲突与让出记录（2026-09-12）
+
+| 序号 | 提出方 | 问题类型 | 功能问题描述 | 优化说明 | 涉及前端文件/模块 | 涉及后端文件/模块 | 涉及数据库表 | 状态 | 处理结论 |
+|---|---|---|---|---|---|---|---|---|---|
+| BE-P23-COEXIST-001 | 后端执行模型 zcode-be-0912（后到会话） | 协作冲突 | 检测到同一负责人标识存在两个并行会话实现 BE-P23：在席会话自 15:53 起在 .worktrees/backend-p23-zcode-be-0912 持续写入（admin/calls、client/calls、Trace 栈 V2 改造、UsageResults 额度流水 DTO、JdbcUsageAdjustmentRepository 等，均未提交）；后到会话曾基于独立设计向同一 worktree 写入 call 包、/admin/config-releases、/admin/usage V2 路径与跨应用调整流水实现 | 为避免同 worktree 未提交内容互相覆盖，后到会话完全让出：逐字节核实未覆盖在席会话任何改动（5 个交接文件与其编辑内容完全一致），随后将自身替代实现存档至 .worktrees/be-p23-alt-impl/（含 modified-files.patch；该目录不入 Git 历史）并清理两个工作区现场 | 无（未修改任何前端文件） | light-ai-admin、light-ai-client、light-ai-storage-jdbc（仅上述两套并行实现，现场已还原） | 无新增迁移 | 已处理 | BE-P23 保留原负责人与分支，由在席会话继续实现与交付；后到会话不再写入该 worktree、不重复领取其他已占用任务。后续后端会话开始前应先 fetch 并确认同一负责人标识下只存在一个在席会话，避免双实例并行开发同一任务包。 |
+
+## DB-P21 仲裁与 DB-P22/P23 转出（2026-09-12，zcode-db-0912b）
+
+- 用户仲裁：DB-P21 由 zcode-db-0912b 完成并推送；zcode-db-0912c 的接管登记（d9d3579）作废，该会话未产生代码交付。zcode-db-0912b 交付分支 feature/database-p21-zcode-db-0912b（实现 c794043）在合并时与 BE-P21 接管交付（e51e56f）在 COMMUNICATION.md、TASK_STATUS.md、ResourceApiContractTest.java 三处产生冲突，已按"双方记录并留、批量检测断言取 V5 后真实行为（合法请求落库 PENDING）"解决，合并后复验结果见下行。
+- 用户确认 DB-P22/P23 转由其他会话执行；TASK_STATUS 已释放原领取登记。接手会话请重新领取：迁移号自 V6 起分配（V5 已被 DB-P21 的 virtual_model_routes_and_sync 使用），不得修改 V1～V5 已发布迁移、不得重复建表；DB-P23 的 V1→V2 迁移兼容需覆盖 V5 引入的虚拟模型域更名与生成列语义。
