@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ApiError, isAbortError } from '@/api/errors'
+import { amountUsage, decimalUnits, decimalText, positiveAmount, positiveInteger, validPeriod, applicationStatusLabels as statusLabel, applicationEnvironmentLabels as environmentLabel } from './applicationValues'
+import ApplicationQuotaSummary from './ApplicationQuotaSummary.vue'
 import FormField from '@/components/FormField.vue'
 import PageState from '@/components/PageState.vue'
 import ApplicationKeyPanel from './ApplicationKeyPanel.vue'
@@ -36,14 +39,23 @@ const store = useBootstrapStore()
 const id = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''))
 const detail = ref<ApplicationDetail | null>(null)
 const loading = ref(true)
+const refreshing = ref(false)
+let contextVersion = 0
+let loadSequence = 0
+let modelsController: AbortController | null = null
+let detailController: AbortController | null = null
+let membersController: AbortController | null = null
+let adjustmentsController: AbortController | null = null
 const loadError = ref<unknown>(null)
 const statusDialogOpen = ref(false)
 const targetStatus = ref<ApplicationStatus>('DISABLED')
 const statusReason = ref('')
-const canManage = computed(() => store.can(Permission.applicationManage))
+const writable = computed(() => detail.value !== null && ['ACTIVE', 'DISABLED'].includes(detail.value.status))
+const canManage = computed(() => store.can(Permission.applicationManage) && writable.value)
+const canViewKeys = computed(() => store.can(Permission.applicationKeyView))
 const canViewQuota = computed(() => store.can(Permission.applicationQuotaView))
-const canManageQuota = computed(() => store.can(Permission.applicationQuotaManage))
-const canManageModels = computed(() => store.can(Permission.applicationModelManage))
+const canManageQuota = computed(() => store.can(Permission.applicationQuotaManage) && writable.value)
+const canManageModels = computed(() => store.can(Permission.applicationModelManage) && writable.value)
 
 /** 应用详情页签（PRD 9.2.3）；当前页签写入 URL，返回列表后可还原。 */
 type DetailTab = 'overview' | 'keys' | 'models' | 'quota' | 'calls' | 'usage' | 'members'
@@ -58,6 +70,14 @@ const tabs: { key: DetailTab; label: string }[] = [
   { key: 'usage', label: '用量成本' },
   { key: 'members', label: '成员与审计' },
 ]
+const visibleTabs = computed(() => tabs.filter(tab => {
+  if (tab.key === 'keys') return canViewKeys.value
+  if (tab.key === 'quota') return canViewQuota.value
+  if (tab.key === 'models') return store.can(Permission.applicationModelView)
+  if (tab.key === 'calls') return store.can(Permission.traceView)
+  if (tab.key === 'usage') return store.can(Permission.usageView)
+  return true
+}))
 const activeTab = ref<DetailTab>('overview')
 
 const members = ref<ApplicationMemberView[]>([])
@@ -83,30 +103,33 @@ const onboardingSteps = computed(() => [
     hint: '使用应用密钥调用 /v1/chat/completions',
   },
 ])
-const onboardingComplete = computed(() => onboardingSteps.value.every((step) => step.done))
+const onboardingComplete = computed(() => detail.value?.last_called_at != null)
 
 function selectTab(tab: DetailTab): void {
-  activeTab.value = tab
-  if (tab === 'members') void loadMembers()
+  if (!visibleTabs.value.some(item => item.key === tab)) return
   void router.replace({ query: { ...route.query, tab } })
 }
 
 function syncTabFromQuery(): void {
   const raw = typeof route.query.tab === 'string' ? route.query.tab : ''
-  activeTab.value = tabs.some((item) => item.key === raw) ? (raw as DetailTab) : 'overview'
+  activeTab.value = visibleTabs.value.some((item) => item.key === raw) ? (raw as DetailTab) : 'overview'
   if (activeTab.value === 'members') void loadMembers()
 }
 
 async function loadMembers(): Promise<void> {
   if (!detail.value) return
+  membersController?.abort()
+  const controller = new AbortController()
+  membersController = controller
   membersLoading.value = true
   membersLoadError.value = null
   try {
-    members.value = await fetchApplicationMembers(detail.value.id)
+    const result = await fetchApplicationMembers(detail.value.id, controller.signal)
+    if (!controller.signal.aborted) members.value = result
   } catch (error) {
-    membersLoadError.value = error
+    if (!controller.signal.aborted && !isAbortError(error)) membersLoadError.value = error
   } finally {
-    membersLoading.value = false
+    if (!controller.signal.aborted) membersLoading.value = false
   }
 }
 
@@ -156,14 +179,6 @@ const quotaForm = reactive({
   reason: '',
 })
 
-const statusLabel: Record<ApplicationStatus, string> = {
-  ACTIVE: '启用',
-  DISABLED: '已停用',
-  ARCHIVED: '已归档',
-}
-const environmentLabel: Record<string, string> = {
-  DEV: '开发', TEST: '测试', STAGING: '预发布', PROD: '生产',
-}
 const periodLabel: Record<string, string> = {
   LIFECYCLE: '应用生命周期', DAY: '每日', MONTH: '每月', CUSTOM: '自定义',
 }
@@ -182,13 +197,11 @@ function usageText(used: number, reserved: number, limit: number | null): string
 function amountText(): string {
   if (!detail.value) return '—'
   const quota = detail.value.quota
-  const used = Number(quota.amount_used) + Number(quota.amount_reserved)
-  return quota.amount_limit == null
-    ? `${used.toFixed(2)} ${quota.currency} / 不限`
-    : `${used.toFixed(2)} / ${Number(quota.amount_limit).toFixed(2)} ${quota.currency}`
+  return amountUsage(quota.amount_used, quota.amount_reserved, quota.amount_limit, quota.currency)
 }
 
 function openStatusDialog(status: ApplicationStatus): void {
+  if (!canManage.value) return
   targetStatus.value = status
   statusReason.value = ''
   statusSubmission.reset()
@@ -196,16 +209,17 @@ function openStatusDialog(status: ApplicationStatus): void {
 }
 
 async function applyStatus(): Promise<void> {
-  if (!detail.value || !statusReason.value.trim()) return
+  if (!canManage.value || !detail.value || !statusReason.value.trim() || statusReason.value.length > 500) return
+  const context = contextVersion
   const result = await statusSubmission.submit(async () => {
     const response = await changeApplicationStatus(detail.value!.id, {
       status: targetStatus.value,
       version: detail.value!.version,
       reason: statusReason.value.trim(),
     })
-    if (response.entity) detail.value = response.entity
+    if (context === contextVersion && response.entity) detail.value = response.entity
   })
-  if (result.ok) statusDialogOpen.value = false
+  if (result.ok && context === contextVersion) statusDialogOpen.value = false
 }
 
 function asLocalDateTime(value: string | null): string {
@@ -222,7 +236,7 @@ function asOffsetDateTime(value: string): string | null {
 }
 
 function openQuotaDialog(): void {
-  if (!detail.value) return
+  if (!canManageQuota.value || !detail.value) return
   quotaSubmission.reset()
   const quota = detail.value.quota
   quotaForm.token_limited = quota.token_limit != null
@@ -243,18 +257,35 @@ function openQuotaDialog(): void {
 
 const quotaInvalid = computed(() => Boolean(
   !quotaForm.reason.trim()
-  || (quotaForm.token_limited && (!quotaForm.token_limit || quotaForm.token_limit <= 0))
-  || (quotaForm.amount_limited && (!quotaForm.amount_limit || Number(quotaForm.amount_limit) <= 0))
+  || (quotaForm.token_limited && !positiveInteger(quotaForm.token_limit))
+  || (quotaForm.amount_limited && !positiveAmount(quotaForm.amount_limit))
   || !/^[A-Za-z]{3}$/.test(quotaForm.currency)
-  || (quotaForm.rpm_limited && (!quotaForm.rpm || quotaForm.rpm <= 0))
-  || (quotaForm.tpm_limited && (!quotaForm.tpm || quotaForm.tpm <= 0))
-  || (quotaForm.period_type === 'CUSTOM'
-    && (!quotaForm.period_start || !quotaForm.period_end
-      || quotaForm.period_start >= quotaForm.period_end)),
+  || (quotaForm.rpm_limited && !positiveInteger(quotaForm.rpm))
+  || (quotaForm.tpm_limited && !positiveInteger(quotaForm.tpm))
+  || !validPeriod(quotaForm.period_type, quotaForm.period_start, quotaForm.period_end)
 ))
 
+const quotaStopsAdmission = computed(() => {
+  if (!detail.value) return false
+  const quota = detail.value.quota
+  const amount = decimalUnits(quotaForm.amount_limit)
+  const used = decimalUnits(quota.amount_used), reserved = decimalUnits(quota.amount_reserved)
+  return (quotaForm.token_limited && positiveInteger(quotaForm.token_limit) && quotaForm.token_limit < quota.tokens_used + quota.tokens_reserved)
+    || (quotaForm.amount_limited && amount !== null && used !== null && reserved !== null && amount < used + reserved)
+})
+const adjustmentPreview = computed(() => {
+  if (!detail.value || adjustmentInvalid.value) return null
+  const quota = detail.value.quota
+  const delta = decimalUnits(adjustmentForm.delta)
+  const current = adjustmentForm.dimension === 'TOKEN_LIMIT' ? (quota.token_limit === null ? null : decimalUnits(String(quota.token_limit))) : (quota.amount_limit === null ? null : decimalUnits(quota.amount_limit))
+  if (delta === null || current === null) return null
+  const after = current + delta
+  const consumed = adjustmentForm.dimension === 'TOKEN_LIMIT' ? decimalUnits(String(quota.tokens_used + quota.tokens_reserved)) : (decimalUnits(quota.amount_used) ?? 0n) + (decimalUnits(quota.amount_reserved) ?? 0n)
+  return { after: decimalText(after), stops: consumed !== null && after < consumed }
+})
 async function saveQuota(): Promise<void> {
-  if (!detail.value || quotaInvalid.value) return
+  if (!canManageQuota.value || !detail.value || quotaInvalid.value) return
+  const context = contextVersion
   const result = await quotaSubmission.submit(async () => {
     const response = await updateApplicationQuota(detail.value!.id, {
       token_limit: quotaForm.token_limited ? quotaForm.token_limit : null,
@@ -268,12 +299,13 @@ async function saveQuota(): Promise<void> {
       version: detail.value!.quota.version,
       reason: quotaForm.reason.trim(),
     })
-    if (response.entity) detail.value = response.entity
+    if (context === contextVersion && response.entity) detail.value = response.entity
   })
-  if (result.ok) quotaDialogOpen.value = false
+  if (result.ok && context === contextVersion) quotaDialogOpen.value = false
 }
 
 function openAdjustmentDialog(): void {
+  if (!canManageQuota.value) return
   adjustmentSubmission.reset()
   adjustmentForm.dimension = 'TOKEN_LIMIT'
   adjustmentForm.delta = ''
@@ -284,13 +316,14 @@ function openAdjustmentDialog(): void {
 
 const adjustmentInvalid = computed(() => {
   if (!adjustmentForm.delta.trim() || !adjustmentForm.reason.trim()) return true
-  const delta = Number(adjustmentForm.delta)
-  if (!Number.isFinite(delta) || delta === 0) return true
-  return adjustmentForm.dimension === 'TOKEN_LIMIT' && !Number.isInteger(delta)
+  const delta = decimalUnits(adjustmentForm.delta.trim())
+  if (delta === null || delta === 0n) return true
+  return adjustmentForm.dimension === 'TOKEN_LIMIT' && !/^-?\d+$/.test(adjustmentForm.delta.trim())
 })
 
 async function saveAdjustment(): Promise<void> {
-  if (!detail.value || adjustmentInvalid.value) return
+  if (!canManageQuota.value || !detail.value || adjustmentInvalid.value) return
+  const context = contextVersion
   const result = await adjustmentSubmission.submit(async () => {
     const response = await adjustApplicationQuota(detail.value!.id, {
       dimension: adjustmentForm.dimension,
@@ -299,16 +332,16 @@ async function saveAdjustment(): Promise<void> {
       idempotency_key: adjustmentForm.idempotency_key,
       quota_version: detail.value!.quota.version,
     })
-    if (response.entity) detail.value = response.entity
+    if (context === contextVersion && response.entity) detail.value = response.entity
   })
-  if (result.ok) {
+  if (result.ok && context === contextVersion) {
     adjustmentDialogOpen.value = false
     await loadAdjustments()
   }
 }
 
 function openResetDialog(): void {
-  if (!detail.value) return
+  if (!canManageQuota.value || !detail.value) return
   resetSubmission.reset()
   resetForm.dimension = detail.value.quota.tokens_used > 0 ? 'TOKEN_USAGE' : 'AMOUNT_USAGE'
   resetForm.reason = ''
@@ -322,10 +355,11 @@ const resetInvalid = computed(() => !detail.value
   || resetForm.confirmation_code !== detail.value.code
   || (resetForm.dimension === 'TOKEN_USAGE'
     ? detail.value.quota.tokens_used <= 0
-    : Number(detail.value.quota.amount_used) <= 0))
+    : !positiveAmount(detail.value.quota.amount_used)))
 
 async function saveReset(): Promise<void> {
-  if (!detail.value || resetInvalid.value) return
+  if (!canManageQuota.value || !detail.value || resetInvalid.value) return
+  const context = contextVersion
   const result = await resetSubmission.submit(async () => {
     const response = await resetApplicationQuotaUsage(detail.value!.id, {
       dimension: resetForm.dimension,
@@ -334,24 +368,28 @@ async function saveReset(): Promise<void> {
       idempotency_key: resetForm.idempotency_key,
       quota_version: detail.value!.quota.version,
     })
-    if (response.entity) detail.value = response.entity
+    if (context === contextVersion && response.entity) detail.value = response.entity
   })
-  if (result.ok) {
+  if (result.ok && context === contextVersion) {
     resetDialogOpen.value = false
     await loadAdjustments()
   }
 }
 
 async function loadAdjustments(): Promise<void> {
-  if (!canViewQuota.value) return
+  if (!canViewQuota.value || !detail.value) return
+  adjustmentsController?.abort()
+  const controller = new AbortController()
+  adjustmentsController = controller
   adjustmentsLoading.value = true
   adjustmentsLoadError.value = null
   try {
-    adjustments.value = await fetchApplicationQuotaAdjustments(id.value)
+    const result = await fetchApplicationQuotaAdjustments(id.value, controller.signal)
+    if (!controller.signal.aborted) adjustments.value = result
   } catch (error) {
-    adjustmentsLoadError.value = error
+    if (!controller.signal.aborted && !isAbortError(error)) adjustmentsLoadError.value = error
   } finally {
-    adjustmentsLoading.value = false
+    if (!controller.signal.aborted) adjustmentsLoading.value = false
   }
 }
 
@@ -369,7 +407,7 @@ function modelConstraintText(model: ApplicationModelPermission): string {
 }
 
 async function openModelDialog(): Promise<void> {
-  if (!detail.value) return
+  if (!canManageModels.value || !detail.value) return
   modelSubmission.reset()
   selectedModelIds.value = detail.value.models
     .filter((item) => item.enabled)
@@ -388,16 +426,20 @@ async function openModelDialog(): Promise<void> {
     ensureConstraintForms()
     return
   }
+  modelsController?.abort()
+  const controller = new AbortController()
+  modelsController = controller
   modelsLoading.value = true
   modelsLoadError.value = null
   try {
-    const page = await fetchModelAliases({ enabled: true, page: 1, page_size: 100, sort: 'alias' })
+    const page = await fetchModelAliases({ enabled: true, page: 1, page_size: 100, sort: 'alias' }, controller.signal)
+    if (controller.signal.aborted) return
     availableModels.value = page.items
     ensureConstraintForms()
   } catch (error) {
-    modelsLoadError.value = error
+    if (!controller.signal.aborted && !isAbortError(error)) modelsLoadError.value = error
   } finally {
-    modelsLoading.value = false
+    if (!controller.signal.aborted) modelsLoading.value = false
   }
 }
 
@@ -418,7 +460,7 @@ function parseMaxOutputTokens(form?: ModelConstraintForm): number | null {
   const raw = form?.maxOutputTokens
   if (raw === undefined || raw === null || raw === '') return null
   const parsed = typeof raw === 'number' ? raw : Number(String(raw).trim())
-  return Number.isInteger(parsed) && parsed >= 1 ? parsed : Number.NaN
+  return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : Number.NaN
 }
 
 /** 最大输出 Token 只接受大于 0 的整数；留空表示不限制。 */
@@ -456,7 +498,8 @@ function modelConstraintPayload(): {
 }
 
 async function saveModels(): Promise<void> {
-  if (!detail.value || !modelReason.value.trim() || modelConstraintInvalid.value) return
+  if (!canManageModels.value || !detail.value || modelsLoading.value || modelsLoadError.value || !modelReason.value.trim() || modelConstraintInvalid.value) return
+  const context = contextVersion
   const result = await modelSubmission.submit(async () => {
     const response = await updateApplicationModels(detail.value!.id, {
       virtual_model_ids: selectedModelIds.value,
@@ -464,56 +507,144 @@ async function saveModels(): Promise<void> {
       application_version: detail.value!.version,
       reason: modelReason.value.trim(),
     })
-    if (response.entity) detail.value = response.entity
+    if (context === contextVersion && response.entity) detail.value = response.entity
   })
-  if (result.ok) modelDialogOpen.value = false
+  if (result.ok && context === contextVersion) modelDialogOpen.value = false
 }
 
 async function load(): Promise<void> {
-  loading.value = true
+  const sequence = ++loadSequence
+  detailController?.abort()
+  detailController = new AbortController()
+  loading.value = detail.value === null
+  refreshing.value = detail.value !== null
   loadError.value = null
   try {
-    detail.value = await fetchApplication(id.value)
-    await loadAdjustments()
+    if (!store.can(Permission.applicationView)) throw new ApiError(403, { code: 'ACCESS_DENIED', type: 'permission', message: '无权查看应用' }, 'local-permission')
+    const result = await fetchApplication(id.value, detailController.signal)
+    if (sequence !== loadSequence) return
+    detail.value = result
+    void loadAdjustments()
     syncTabFromQuery()
   } catch (error) {
+    if (sequence !== loadSequence || isAbortError(error)) return
+    if (error instanceof ApiError && [401, 403, 404].includes(error.status)) detail.value = null
     loadError.value = error
   } finally {
-    loading.value = false
+    if (sequence === loadSequence) { loading.value = false; refreshing.value = false }
   }
 }
-
-onMounted(load)
+function clearContext(): void {
+  ++contextVersion
+  ++loadSequence
+  modelsController?.abort()
+  detailController?.abort(); membersController?.abort(); adjustmentsController?.abort()
+  detail.value = null; members.value = []; adjustments.value = []; availableModels.value = []
+  statusDialogOpen.value = false; quotaDialogOpen.value = false; modelDialogOpen.value = false
+  adjustmentDialogOpen.value = false; resetDialogOpen.value = false
+}
+watch(() => [id.value, store.userId, store.permissions.join(',')], () => { clearContext(); void load() }, { immediate: true })
+watch(() => route.query.tab, syncTabFromQuery)
+onScopeDispose(clearContext)
 </script>
 
 <template>
   <section class="lai-page">
-    <PageState v-if="loading" status="loading" />
-    <PageState v-else-if="loadError || !detail" status="error" :error="loadError" @retry="load" />
+    <PageState
+      v-if="loading"
+      status="loading"
+    />
+    <PageState
+      v-else-if="!detail"
+      status="error"
+      :error="loadError"
+      @retry="load"
+    />
 
     <template v-else>
+      <PageState
+        v-if="loadError"
+        status="error"
+        :error="loadError"
+        @retry="load"
+      />
+      <p
+        v-if="refreshing"
+        role="status"
+      >
+        刷新中…
+      </p>
       <div class="detail-header">
         <div>
           <div class="title-line">
-            <h1 class="lai-page-title">{{ detail.name }}</h1>
-            <span class="status" :class="`status-${detail.status.toLowerCase()}`">{{ statusLabel[detail.status] }}</span>
+            <h1 class="lai-page-title">
+              {{ detail.name }}
+            </h1>
+            <span
+              class="status"
+              :class="`status-${detail.status.toLowerCase()}`"
+            >{{ statusLabel[detail.status] || detail.status }}</span>
           </div>
-          <p><span class="lai-cell-mono">{{ detail.code }}</span> · {{ environmentLabel[detail.environment] }} · {{ detail.owner_name }}</p>
+          <p><span class="lai-cell-mono">{{ detail.code }}</span> · {{ environmentLabel[detail.environment] || detail.environment }} · {{ detail.owner_name }}</p>
         </div>
-        <div v-if="canManage" class="header-actions">
-          <RouterLink v-if="detail.status !== 'ARCHIVED'" :to="`/ui/applications/${detail.id}/settings`" class="lai-btn">编辑</RouterLink>
-          <button v-if="detail.status === 'ACTIVE'" class="lai-btn" type="button" @click="openStatusDialog('DISABLED')">停用</button>
-          <button v-else-if="detail.status === 'DISABLED'" class="lai-btn lai-btn-primary" type="button" @click="openStatusDialog('ACTIVE')">启用</button>
-          <button v-if="detail.status === 'DISABLED'" class="lai-btn" type="button" @click="openStatusDialog('ARCHIVED')">归档</button>
+        <div
+          v-if="canManage"
+          class="header-actions"
+        >
+          <RouterLink
+            v-if="detail.status !== 'ARCHIVED'"
+            :to="`/ui/applications/${detail.id}/settings`"
+            class="lai-btn"
+          >
+            编辑
+          </RouterLink>
+          <button
+            v-if="detail.status === 'ACTIVE'"
+            class="lai-btn"
+            type="button"
+            @click="openStatusDialog('DISABLED')"
+          >
+            停用
+          </button>
+          <button
+            v-else-if="detail.status === 'DISABLED'"
+            class="lai-btn lai-btn-primary"
+            type="button"
+            @click="openStatusDialog('ACTIVE')"
+          >
+            启用
+          </button>
+          <button
+            v-if="detail.status === 'DISABLED'"
+            class="lai-btn"
+            type="button"
+            @click="openStatusDialog('ARCHIVED')"
+          >
+            归档
+          </button>
         </div>
       </div>
 
-      <div v-if="detail.status === 'DISABLED'" class="notice warning">应用已停用。所有应用密钥应停止新调用，历史调用与费用记录继续保留。</div>
-      <div v-else-if="detail.status === 'ARCHIVED'" class="notice">应用已归档且不可恢复编辑，历史治理与调用快照仍保留。</div>
+      <div
+        v-if="detail.status === 'DISABLED'"
+        class="notice warning"
+      >
+        应用已停用。所有应用密钥应停止新调用，历史调用与费用记录继续保留。
+      </div>
+      <div
+        v-else-if="detail.status === 'ARCHIVED'"
+        class="notice"
+      >
+        应用已归档且不可恢复编辑，历史治理与调用快照仍保留。
+      </div>
 
-      <nav class="detail-tabs" role="tablist" aria-label="应用详情页签">
+      <nav
+        class="detail-tabs"
+        role="tablist"
+        aria-label="应用详情页签"
+      >
         <button
-          v-for="tab in tabs"
+          v-for="tab in visibleTabs"
           :key="tab.key"
           type="button"
           role="tab"
@@ -521,46 +652,114 @@ onMounted(load)
           :class="{ 'is-active': activeTab === tab.key }"
           :aria-selected="activeTab === tab.key"
           @click="selectTab(tab.key)"
-        >{{ tab.label }}</button>
+        >
+          {{ tab.label }}
+        </button>
       </nav>
 
-      <div v-show="activeTab === 'overview'" role="tabpanel" aria-label="概览">
+      <div
+        v-show="activeTab === 'overview'"
+        role="tabpanel"
+        aria-label="概览"
+      >
         <div class="metric-grid">
-          <div class="metric"><span>活跃密钥</span><strong>{{ detail.active_key_count }}</strong><small>仅统计未撤销且有效的应用密钥</small></div>
-          <div class="metric"><span>授权模型</span><strong>{{ detail.models.filter((item) => item.enabled).length }}</strong><small>调用仅允许使用已授权虚拟模型</small></div>
-          <div class="metric"><span>Token 使用</span><strong>{{ usageText(detail.quota.tokens_used, detail.quota.tokens_reserved, detail.quota.token_limit) }}</strong><small>已用与预占合并展示</small></div>
-          <div class="metric"><span>金额使用</span><strong>{{ amountText() }}</strong><small>按价格快照归属到本应用</small></div>
+          <div class="metric">
+            <span>活跃密钥</span><strong>{{ detail.active_key_count }}</strong><small>仅统计未撤销且有效的应用密钥</small>
+          </div>
+          <div class="metric">
+            <span>授权模型</span><strong>{{ detail.models.filter((item) => item.enabled).length }}</strong><small>调用仅允许使用已授权虚拟模型</small>
+          </div>
+          <div
+            v-if="canViewQuota"
+            class="metric"
+          >
+            <span>Token 使用</span><strong>{{ usageText(detail.quota.tokens_used, detail.quota.tokens_reserved, detail.quota.token_limit) }}</strong><small>已用与预占合并展示</small>
+          </div>
+          <div
+            v-if="canViewQuota"
+            class="metric"
+          >
+            <span>金额使用</span><strong>{{ amountText() }}</strong><small>按价格快照归属到本应用</small>
+          </div>
         </div>
 
         <div class="workspace-grid">
           <div class="main-column">
             <div class="lai-card">
               <div class="card-heading">
-                <h2 class="lai-card-title">接入信息</h2>
-                <RouterLink :to="`/ui/applications/${detail.id}/integration`" class="lai-btn lai-btn-small">开发接入</RouterLink>
+                <h2 class="lai-card-title">
+                  接入信息
+                </h2>
+                <RouterLink
+                  :to="`/ui/applications/${detail.id}/integration`"
+                  class="lai-btn lai-btn-small"
+                >
+                  开发接入
+                </RouterLink>
               </div>
               <div class="lai-summary-grid">
-                <div class="lai-summary-item"><span class="lai-summary-label">应用编码</span><span class="lai-cell-mono">{{ detail.code }}</span></div>
-                <div class="lai-summary-item"><span class="lai-summary-label">API 地址</span><span class="lai-cell-mono">/v1/chat/completions</span></div>
-                <div class="lai-summary-item"><span class="lai-summary-label">最近调用</span>{{ formatDateTime(detail.last_called_at, store.timezone, '尚未调用') }}</div>
-                <div class="lai-summary-item"><span class="lai-summary-label">活跃应用密钥</span>{{ detail.active_key_count }}</div>
+                <div class="lai-summary-item">
+                  <span class="lai-summary-label">应用编码</span><span class="lai-cell-mono">{{ detail.code }}</span>
+                </div>
+                <div class="lai-summary-item">
+                  <span class="lai-summary-label">API 地址</span><span class="lai-cell-mono">/v1/chat/completions</span>
+                </div>
+                <div class="lai-summary-item">
+                  <span class="lai-summary-label">最近调用</span>{{ formatDateTime(detail.last_called_at, store.timezone, '尚未调用') }}
+                </div>
+                <div class="lai-summary-item">
+                  <span class="lai-summary-label">活跃应用密钥</span>{{ detail.active_key_count }}
+                </div>
               </div>
-              <p class="card-note">OpenAI 兼容协议。业务系统只持有平台签发的应用密钥，不接触供应商 Key。应用密钥原文只应在创建或轮换成功时显示一次。</p>
+              <p class="card-note">
+                OpenAI 兼容协议。业务系统只持有平台签发的应用密钥，不接触供应商 Key。应用密钥原文只应在创建或轮换成功时显示一次。
+              </p>
             </div>
 
             <div class="lai-card">
               <div class="card-heading">
-                <h2 class="lai-card-title">{{ onboardingComplete ? '运行摘要' : '接入检查清单' }}</h2>
-                <button v-if="onboardingComplete" type="button" class="lai-btn lai-btn-small" :disabled="loading" @click="load">刷新</button>
+                <h2 class="lai-card-title">
+                  {{ onboardingComplete ? '运行摘要' : '接入检查清单' }}
+                </h2>
+                <button
+                  v-if="onboardingComplete"
+                  type="button"
+                  class="lai-btn lai-btn-small"
+                  :disabled="loading"
+                  @click="load"
+                >
+                  刷新
+                </button>
               </div>
-              <div v-if="onboardingComplete" class="lai-summary-grid">
-                <div class="lai-summary-item"><span class="lai-summary-label">最近调用</span>{{ formatDateTime(detail.last_called_at, store.timezone, '尚未调用') }}</div>
-                <div class="lai-summary-item"><span class="lai-summary-label">可用模型</span>{{ detail.models.filter((item) => item.enabled).length }} 个</div>
-                <div class="lai-summary-item"><span class="lai-summary-label">活跃密钥</span>{{ detail.active_key_count }} 个</div>
-                <div class="lai-summary-item"><span class="lai-summary-label">已用 Token</span>{{ detail.quota.tokens_used.toLocaleString() }}</div>
+              <div
+                v-if="onboardingComplete"
+                class="lai-summary-grid"
+              >
+                <div class="lai-summary-item">
+                  <span class="lai-summary-label">最近调用</span>{{ formatDateTime(detail.last_called_at, store.timezone, '尚未调用') }}
+                </div>
+                <div class="lai-summary-item">
+                  <span class="lai-summary-label">可用模型</span>{{ detail.models.filter((item) => item.enabled).length }} 个
+                </div>
+                <div class="lai-summary-item">
+                  <span class="lai-summary-label">活跃密钥</span>{{ detail.active_key_count }} 个
+                </div>
+                <div
+                  v-if="canViewQuota"
+                  class="lai-summary-item"
+                >
+                  <span class="lai-summary-label">已用 Token</span>{{ detail.quota.tokens_used.toLocaleString() }}
+                </div>
               </div>
-              <ul v-else class="onboarding-list">
-                <li v-for="step in onboardingSteps" :key="step.label" :class="{ done: step.done }">
+              <ul
+                v-else
+                class="onboarding-list"
+              >
+                <li
+                  v-for="step in onboardingSteps"
+                  :key="step.label"
+                  :class="{ done: step.done }"
+                >
                   <strong>{{ step.done ? '已完成' : '待完成' }} · {{ step.label }}</strong>
                   <span>{{ step.hint }}</span>
                 </li>
@@ -570,18 +769,29 @@ onMounted(load)
 
           <aside>
             <div class="lai-card">
-              <h2 class="lai-card-title">基本信息</h2>
+              <h2 class="lai-card-title">
+                基本信息
+              </h2>
               <dl class="property-list">
                 <div><dt>负责人</dt><dd>{{ detail.owner_name }}（{{ detail.owner_id }}）</dd></div>
                 <div><dt>所属部门</dt><dd>{{ detail.department || '—' }}</dd></div>
-                <div><dt>环境</dt><dd>{{ environmentLabel[detail.environment] }}</dd></div>
+                <div><dt>环境</dt><dd>{{ environmentLabel[detail.environment] || detail.environment }}</dd></div>
                 <div><dt>创建时间</dt><dd>{{ formatDateTime(detail.created_at, store.timezone) }}</dd></div>
                 <div><dt>更新时间</dt><dd>{{ formatDateTime(detail.updated_at, store.timezone) }}</dd></div>
-                <div v-if="detail.description"><dt>说明</dt><dd>{{ detail.description }}</dd></div>
+                <div v-if="detail.description">
+                  <dt>说明</dt><dd>{{ detail.description }}</dd>
+                </div>
               </dl>
             </div>
-            <div class="lai-card">
-              <div class="card-heading"><h2 class="lai-card-title">额度概览</h2></div>
+            <div
+              v-if="canViewQuota"
+              class="lai-card"
+            >
+              <div class="card-heading">
+                <h2 class="lai-card-title">
+                  额度概览
+                </h2>
+              </div>
               <dl class="property-list">
                 <div><dt>Token 额度</dt><dd>{{ usageText(detail.quota.tokens_used, detail.quota.tokens_reserved, detail.quota.token_limit) }}</dd></div>
                 <div><dt>金额预算</dt><dd>{{ amountText() }}</dd></div>
@@ -592,8 +802,16 @@ onMounted(load)
         </div>
       </div>
 
-      <div v-show="activeTab === 'keys'" role="tabpanel" aria-label="接入密钥">
+      <div
+        v-show="activeTab === 'keys'"
+        role="tabpanel"
+        aria-label="接入密钥"
+      >
         <ApplicationKeyPanel
+          v-if="canViewKeys"
+          :key="detail.id"
+          :application-rpm="detail.quota.rpm"
+          :application-tpm="detail.quota.tpm"
           :application-id="detail.id"
           :application-active="detail.status === 'ACTIVE'"
           :application-models="detail.models.filter((item) => item.enabled)"
@@ -601,15 +819,36 @@ onMounted(load)
         />
       </div>
 
-      <div v-show="activeTab === 'models'" role="tabpanel" aria-label="可用模型">
+      <div
+        v-if="store.can(Permission.applicationModelView)"
+        v-show="activeTab === 'models'"
+        role="tabpanel"
+        aria-label="可用模型"
+      >
         <div class="lai-card">
           <div class="card-heading">
-            <h2 class="lai-card-title">可用虚拟模型</h2>
-            <button v-if="canManageModels && detail.status !== 'ARCHIVED'" type="button" class="lai-btn lai-btn-small" @click="openModelDialog">管理授权</button>
+            <h2 class="lai-card-title">
+              可用虚拟模型
+            </h2>
+            <button
+              v-if="canManageModels && detail.status !== 'ARCHIVED'"
+              type="button"
+              class="lai-btn lai-btn-small"
+              @click="openModelDialog"
+            >
+              管理授权
+            </button>
             <span v-else>{{ detail.models.filter((item) => item.enabled).length }} 个</span>
           </div>
-          <div v-if="detail.models.length" class="model-list">
-            <div v-for="model in detail.models" :key="model.id" class="model-row">
+          <div
+            v-if="detail.models.length"
+            class="model-list"
+          >
+            <div
+              v-for="model in detail.models"
+              :key="model.id"
+              class="model-row"
+            >
               <div><strong>{{ model.virtual_model_code || model.virtual_model_id }}</strong><small>请求 model 字段</small></div>
               <div class="model-row-meta">
                 <span v-if="modelConstraintText(model)">{{ modelConstraintText(model) }}</span>
@@ -617,24 +856,55 @@ onMounted(load)
               </div>
             </div>
           </div>
-          <p v-else class="empty-inline">尚未授权虚拟模型，应用当前无法完成模型调用。</p>
-          <p class="card-note">应用级参数上限只能收紧，不能突破虚拟模型与上游候选的能力边界；越界的显式参数在路由前被拒绝。</p>
+          <p
+            v-else
+            class="empty-inline"
+          >
+            尚未授权虚拟模型，应用当前无法完成模型调用。
+          </p>
+          <p class="card-note">
+            应用级参数上限只能收紧，不能突破虚拟模型与上游候选的能力边界；越界的显式参数在路由前被拒绝。
+          </p>
         </div>
       </div>
 
-      <div v-show="activeTab === 'quota'" role="tabpanel" aria-label="额度与速率">
+      <div
+        v-if="canViewQuota"
+        v-show="activeTab === 'quota'"
+        role="tabpanel"
+        aria-label="额度与速率"
+      >
         <div class="lai-card">
           <div class="card-heading">
-            <h2 class="lai-card-title">额度与速率</h2>
-            <div v-if="canManageQuota && detail.status !== 'ARCHIVED'" class="compact-actions">
-              <button type="button" class="lai-btn lai-btn-small" @click="openAdjustmentDialog">人工增减</button>
+            <h2 class="lai-card-title">
+              额度与速率
+            </h2>
+            <div
+              v-if="canManageQuota && detail.status !== 'ARCHIVED'"
+              class="compact-actions"
+            >
               <button
                 type="button"
                 class="lai-btn lai-btn-small"
-                :disabled="detail.quota.tokens_used <= 0 && Number(detail.quota.amount_used) <= 0"
+                @click="openAdjustmentDialog"
+              >
+                人工增减
+              </button>
+              <button
+                type="button"
+                class="lai-btn lai-btn-small"
+                :disabled="detail.quota.tokens_used <= 0 && !positiveAmount(detail.quota.amount_used)"
                 @click="openResetDialog"
-              >重置用量</button>
-              <button type="button" class="lai-btn lai-btn-small" @click="openQuotaDialog">编辑策略</button>
+              >
+                重置用量
+              </button>
+              <button
+                type="button"
+                class="lai-btn lai-btn-small"
+                @click="openQuotaDialog"
+              >
+                编辑策略
+              </button>
             </div>
           </div>
           <dl class="property-list">
@@ -644,185 +914,608 @@ onMounted(load)
             <div><dt>TPM</dt><dd>{{ detail.quota.tpm == null ? '不限' : detail.quota.tpm.toLocaleString() }}</dd></div>
             <div><dt>结算周期</dt><dd>{{ periodLabel[detail.quota.period_type] }}</dd></div>
           </dl>
-          <div v-if="canViewQuota" class="adjustment-history">
+          <ApplicationQuotaSummary
+            :quota="detail.quota"
+            :timezone="store.timezone"
+          />
+          <div
+            v-if="canViewQuota"
+            class="adjustment-history"
+          >
             <div class="history-heading">
               <h3>最近额度流水</h3>
-              <button type="button" class="lai-btn lai-btn-text" :disabled="adjustmentsLoading" @click="loadAdjustments">刷新</button>
+              <button
+                type="button"
+                class="lai-btn lai-btn-text"
+                :disabled="adjustmentsLoading"
+                @click="loadAdjustments"
+              >
+                刷新
+              </button>
             </div>
-            <p v-if="adjustmentsLoading" class="history-state">正在加载…</p>
-            <p v-else-if="adjustmentsLoadError" class="history-state error-text">流水加载失败，请重试。</p>
-            <ul v-else-if="adjustments.length" class="adjustment-list">
-              <li v-for="item in adjustments" :key="item.id">
+            <p
+              v-if="adjustmentsLoading"
+              class="history-state"
+            >
+              正在加载…
+            </p>
+            <PageState
+              v-else-if="adjustmentsLoadError"
+              status="error"
+              :error="adjustmentsLoadError"
+              @retry="loadAdjustments"
+            />
+            <ul
+              v-else-if="adjustments.length"
+              class="adjustment-list"
+            >
+              <li
+                v-for="item in adjustments"
+                :key="item.id"
+              >
                 <div><strong>{{ adjustmentLabel[item.dimension] }}</strong><time>{{ formatDateTime(item.effective_at, store.timezone) }} · {{ item.operator_id }}</time></div>
                 <p><span class="lai-cell-mono">{{ item.before_value }} → {{ item.after_value }}</span><span>{{ item.reason }}</span></p>
               </li>
             </ul>
-            <p v-else class="history-state">暂无额度调整或重置记录。</p>
+            <p
+              v-else
+              class="history-state"
+            >
+              暂无额度调整或重置记录。
+            </p>
           </div>
         </div>
       </div>
 
-      <div v-show="activeTab === 'calls'" role="tabpanel" aria-label="调用记录">
+      <div
+        v-show="activeTab === 'calls'"
+        role="tabpanel"
+        aria-label="调用记录"
+      >
         <div class="lai-card">
           <div class="card-heading">
-            <h2 class="lai-card-title">调用记录</h2>
-            <RouterLink :to="{ path: '/ui/traces', query: { application: detail.code } }" class="lai-btn lai-btn-small">查看全部</RouterLink>
+            <h2 class="lai-card-title">
+              调用记录
+            </h2>
+            <RouterLink
+              :to="{ path: '/ui/traces', query: { application: detail.code } }"
+              class="lai-btn lai-btn-small"
+            >
+              查看全部
+            </RouterLink>
           </div>
           <dl class="property-list">
             <div><dt>最近调用</dt><dd>{{ formatDateTime(detail.last_called_at, store.timezone, '尚未调用') }}</dd></div>
-            <div><dt>应用编码</dt><dd class="lai-cell-mono">{{ detail.code }}</dd></div>
+            <div>
+              <dt>应用编码</dt><dd class="lai-cell-mono">
+                {{ detail.code }}
+              </dd>
+            </div>
             <div><dt>活跃密钥</dt><dd>{{ detail.active_key_count }} 个</dd></div>
           </dl>
-          <p class="card-note">调用记录按 request_id 展示准入、路由、每次 Attempt、恢复动作与结算结果；应用负责人只能查看本应用。</p>
+          <p class="card-note">
+            调用记录按 request_id 展示准入、路由、每次 Attempt、恢复动作与结算结果；应用负责人只能查看本应用。
+          </p>
         </div>
       </div>
 
-      <div v-show="activeTab === 'usage'" role="tabpanel" aria-label="用量成本">
+      <div
+        v-show="activeTab === 'usage'"
+        role="tabpanel"
+        aria-label="用量成本"
+      >
         <div class="lai-card">
           <div class="card-heading">
-            <h2 class="lai-card-title">用量与成本</h2>
-            <RouterLink :to="{ path: '/ui/usage', query: { application: detail.code } }" class="lai-btn lai-btn-small">查看全部</RouterLink>
+            <h2 class="lai-card-title">
+              用量与成本
+            </h2>
+            <RouterLink
+              :to="{ path: '/ui/usage', query: { application: detail.code } }"
+              class="lai-btn lai-btn-small"
+            >
+              查看全部
+            </RouterLink>
           </div>
           <dl class="property-list">
             <div><dt>Token 使用</dt><dd>{{ usageText(detail.quota.tokens_used, detail.quota.tokens_reserved, detail.quota.token_limit) }}</dd></div>
             <div><dt>金额使用</dt><dd>{{ amountText() }}</dd></div>
             <div><dt>结算周期</dt><dd>{{ periodLabel[detail.quota.period_type] }}</dd></div>
           </dl>
-          <p class="card-note">成本按请求发生时的价格快照归属到本应用；供应商未返回 Usage 时按估算标记，不与实际值混淆。</p>
+          <p class="card-note">
+            成本按请求发生时的价格快照归属到本应用；供应商未返回 Usage 时按估算标记，不与实际值混淆。
+          </p>
         </div>
       </div>
 
-      <div v-show="activeTab === 'members'" role="tabpanel" aria-label="成员与审计">
+      <div
+        v-show="activeTab === 'members'"
+        role="tabpanel"
+        aria-label="成员与审计"
+      >
         <div class="lai-card">
           <div class="card-heading">
-            <h2 class="lai-card-title">应用成员</h2>
-            <button type="button" class="lai-btn lai-btn-small" :disabled="membersLoading" @click="loadMembers">刷新</button>
+            <h2 class="lai-card-title">
+              应用成员
+            </h2>
+            <button
+              type="button"
+              class="lai-btn lai-btn-small"
+              :disabled="membersLoading"
+              @click="loadMembers"
+            >
+              刷新
+            </button>
           </div>
-          <p v-if="membersLoading" class="history-state">正在加载…</p>
-          <p v-else-if="membersLoadError" class="history-state error-text">成员加载失败，请重试。</p>
-          <div v-else-if="members.length" class="model-list">
-            <div v-for="member in members" :key="member.id" class="model-row">
+          <p
+            v-if="membersLoading"
+            class="history-state"
+          >
+            正在加载…
+          </p>
+          <div v-else-if="membersLoadError">
+            <p>成员加载失败，请重试。</p><PageState
+              status="error"
+              :error="membersLoadError"
+              @retry="loadMembers"
+            />
+          </div>
+          <div
+            v-else-if="members.length"
+            class="model-list"
+          >
+            <div
+              v-for="member in members"
+              :key="member.id"
+              class="model-row"
+            >
               <div><strong>{{ member.subject_name }}</strong><small>{{ member.subject_id }}</small></div>
               <span class="member-role">{{ memberRoleLabel[member.role] || member.role }}</span>
             </div>
           </div>
-          <p v-else class="empty-inline">该应用暂无成员记录。</p>
-          <p class="card-note">成员来源于企业身份系统。成员维护方式仍在产品待确认范围内，当前平台只提供查看。</p>
+          <p
+            v-else
+            class="empty-inline"
+          >
+            该应用暂无成员记录。
+          </p>
+          <p class="card-note">
+            成员来源于企业身份系统。成员维护方式仍在产品待确认范围内，当前平台只提供查看。
+          </p>
         </div>
         <div class="lai-card">
           <div class="card-heading">
-            <h2 class="lai-card-title">应用审计</h2>
-            <RouterLink :to="{ path: '/ui/audit-logs', query: { target: detail.id } }" class="lai-btn lai-btn-small">查看审计</RouterLink>
+            <h2 class="lai-card-title">
+              应用审计
+            </h2>
+            <RouterLink
+              v-if="store.can(Permission.auditView)"
+              :to="{ path: '/ui/audit-logs', query: { entity_keyword: detail.id } }"
+              class="lai-btn lai-btn-small"
+            >
+              查看审计
+            </RouterLink>
           </div>
-          <p class="card-note">密钥创建、轮换、撤销、模型授权、额度调整、状态变更与成员变更均写入审计，日志不包含密钥原文。</p>
+          <p class="card-note">
+            密钥创建、轮换、撤销、模型授权、额度调整、状态变更与成员变更均写入审计，日志不包含密钥原文。
+          </p>
         </div>
       </div>
     </template>
 
-    <div v-if="quotaDialogOpen && detail" class="lai-dialog-overlay" @click.self="quotaDialogOpen = false">
-      <div class="lai-dialog governance-dialog" role="dialog" aria-modal="true" aria-labelledby="application-quota-title">
-        <h2 id="application-quota-title" class="lai-dialog-title">调整额度与速率</h2>
-        <p class="lai-dialog-message">新上限不能低于已用与预占；当前周期已有用量时不能直接修改币种或周期。</p>
+    <div
+      v-if="quotaDialogOpen && detail"
+      class="lai-dialog-overlay"
+      @click.self="quotaDialogOpen = false"
+    >
+      <div
+        class="lai-dialog governance-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="application-quota-title"
+      >
+        <h2
+          id="application-quota-title"
+          class="lai-dialog-title"
+        >
+          调整额度与速率
+        </h2>
+        <p class="lai-dialog-message">
+          降低上限到已用与预占以下会拒绝后续新请求；当前周期已有用量时请核对币种与周期。
+        </p>
+        <p
+          v-if="quotaStopsAdmission"
+          class="warning"
+          role="alert"
+        >
+          保存后立即停止新请求：新上限低于已用与预占之和。
+        </p>
+        <p>生效后上限：Token {{ quotaForm.token_limited ? quotaForm.token_limit : '不限' }}；金额 {{ quotaForm.amount_limited ? quotaForm.amount_limit : '不限' }} {{ quotaForm.currency }}；RPM {{ quotaForm.rpm_limited ? quotaForm.rpm : '不限' }}；TPM {{ quotaForm.tpm_limited ? quotaForm.tpm : '不限' }}</p>
         <div class="governance-grid">
-          <FormField label="Token 额度" :error="quotaSubmission.fieldMessages.value.token_limit">
-            <div class="limit-control"><label><input v-model="quotaForm.token_limited" type="checkbox"> 限制</label><input v-model.number="quotaForm.token_limit" class="lai-input" type="number" min="1" :disabled="!quotaForm.token_limited"></div>
+          <FormField
+            label="Token 额度"
+            :error="quotaSubmission.fieldMessages.value.token_limit"
+          >
+            <div class="limit-control">
+              <label><input
+                v-model="quotaForm.token_limited"
+                type="checkbox"
+              > 限制</label><input
+                v-model.number="quotaForm.token_limit"
+                class="lai-input"
+                type="number"
+                min="1"
+                :disabled="!quotaForm.token_limited"
+              >
+            </div>
           </FormField>
-          <FormField label="金额预算" :error="quotaSubmission.fieldMessages.value.amount_limit">
-            <div class="amount-control"><label><input v-model="quotaForm.amount_limited" type="checkbox"> 限制</label><input v-model="quotaForm.amount_limit" class="lai-input" inputmode="decimal" :disabled="!quotaForm.amount_limited"><input v-model="quotaForm.currency" class="lai-input currency" maxlength="3" aria-label="币种"></div>
+          <FormField
+            label="金额预算"
+            :error="quotaSubmission.fieldMessages.value.amount_limit"
+          >
+            <div class="amount-control">
+              <label><input
+                v-model="quotaForm.amount_limited"
+                type="checkbox"
+              > 限制</label><input
+                v-model="quotaForm.amount_limit"
+                class="lai-input"
+                inputmode="decimal"
+                :disabled="!quotaForm.amount_limited"
+              ><input
+                v-model="quotaForm.currency"
+                class="lai-input currency"
+                maxlength="3"
+                aria-label="币种"
+              >
+            </div>
           </FormField>
-          <FormField label="RPM" hint="每分钟最大请求数" :error="quotaSubmission.fieldMessages.value.rpm">
-            <div class="limit-control"><label><input v-model="quotaForm.rpm_limited" type="checkbox"> 限制</label><input v-model.number="quotaForm.rpm" class="lai-input" type="number" min="1" :disabled="!quotaForm.rpm_limited"></div>
+          <FormField
+            label="RPM"
+            hint="每分钟最大请求数"
+            :error="quotaSubmission.fieldMessages.value.rpm"
+          >
+            <div class="limit-control">
+              <label><input
+                v-model="quotaForm.rpm_limited"
+                type="checkbox"
+              > 限制</label><input
+                v-model.number="quotaForm.rpm"
+                class="lai-input"
+                type="number"
+                min="1"
+                :disabled="!quotaForm.rpm_limited"
+              >
+            </div>
           </FormField>
-          <FormField label="TPM" hint="每分钟最大 Token 数" :error="quotaSubmission.fieldMessages.value.tpm">
-            <div class="limit-control"><label><input v-model="quotaForm.tpm_limited" type="checkbox"> 限制</label><input v-model.number="quotaForm.tpm" class="lai-input" type="number" min="1" :disabled="!quotaForm.tpm_limited"></div>
+          <FormField
+            label="TPM"
+            hint="每分钟最大 Token 数"
+            :error="quotaSubmission.fieldMessages.value.tpm"
+          >
+            <div class="limit-control">
+              <label><input
+                v-model="quotaForm.tpm_limited"
+                type="checkbox"
+              > 限制</label><input
+                v-model.number="quotaForm.tpm"
+                class="lai-input"
+                type="number"
+                min="1"
+                :disabled="!quotaForm.tpm_limited"
+              >
+            </div>
           </FormField>
-          <FormField label="额度周期" required :error="quotaSubmission.fieldMessages.value.period_type">
-            <select v-model="quotaForm.period_type" class="lai-select full-control">
-              <option value="LIFECYCLE">应用生命周期</option><option value="DAY">每日</option>
-              <option value="MONTH">每月</option><option value="CUSTOM">自定义</option>
+          <FormField
+            label="额度周期"
+            required
+            :error="quotaSubmission.fieldMessages.value.period_type"
+          >
+            <select
+              v-model="quotaForm.period_type"
+              class="lai-select full-control"
+            >
+              <option value="LIFECYCLE">
+                应用生命周期
+              </option><option value="DAY">
+                每日
+              </option>
+              <option value="MONTH">
+                每月
+              </option><option value="CUSTOM">
+                自定义
+              </option>
             </select>
           </FormField>
           <template v-if="quotaForm.period_type === 'CUSTOM'">
-            <FormField label="开始时间" required><input v-model="quotaForm.period_start" class="lai-input" type="datetime-local"></FormField>
-            <FormField label="结束时间" required :error="quotaSubmission.fieldMessages.value.period_end"><input v-model="quotaForm.period_end" class="lai-input" type="datetime-local"></FormField>
+            <FormField
+              label="开始时间"
+              required
+            >
+              <input
+                v-model="quotaForm.period_start"
+                class="lai-input"
+                type="datetime-local"
+              >
+            </FormField>
+            <FormField
+              label="结束时间"
+              required
+              :error="quotaSubmission.fieldMessages.value.period_end"
+            >
+              <input
+                v-model="quotaForm.period_end"
+                class="lai-input"
+                type="datetime-local"
+              >
+            </FormField>
           </template>
-          <FormField class="wide-field" label="调整原因" required :error="quotaSubmission.fieldMessages.value.reason">
-            <textarea v-model="quotaForm.reason" class="lai-input status-reason" maxlength="500" rows="3" placeholder="必填，将写入审计记录" />
+          <FormField
+            class="wide-field"
+            label="调整原因"
+            required
+            :error="quotaSubmission.fieldMessages.value.reason"
+          >
+            <textarea
+              v-model="quotaForm.reason"
+              class="lai-input status-reason"
+              maxlength="500"
+              rows="3"
+              placeholder="必填，将写入审计记录"
+            />
           </FormField>
         </div>
-        <p v-if="quotaSubmission.conflictError.value" class="lai-form-message-error">额度策略已变化，请关闭弹窗并刷新后重试。</p>
-        <p v-else-if="quotaSubmission.errorText.value" class="lai-form-message-error">{{ quotaSubmission.errorText.value }}</p>
+        <p
+          v-if="quotaSubmission.conflictError.value"
+          class="lai-form-message-error"
+        >
+          额度策略已变化，请关闭弹窗并刷新后重试。
+        </p>
+        <p
+          v-else-if="quotaSubmission.errorText.value"
+          class="lai-form-message-error"
+        >
+          {{ quotaSubmission.errorText.value }}
+        </p>
         <div class="lai-dialog-actions">
-          <button type="button" class="lai-btn" :disabled="quotaSubmission.submitting.value" @click="quotaDialogOpen = false">取消</button>
-          <button type="button" class="lai-btn lai-btn-primary" :disabled="quotaSubmission.submitting.value || quotaInvalid" @click="saveQuota">{{ quotaSubmission.submitting.value ? '保存中…' : '保存调整' }}</button>
+          <button
+            type="button"
+            class="lai-btn"
+            :disabled="quotaSubmission.submitting.value"
+            @click="quotaDialogOpen = false"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="lai-btn lai-btn-primary"
+            :disabled="quotaSubmission.submitting.value || quotaInvalid"
+            @click="saveQuota"
+          >
+            {{ quotaSubmission.submitting.value ? '保存中…' : '保存调整' }}
+          </button>
         </div>
       </div>
     </div>
 
-    <div v-if="adjustmentDialogOpen && detail" class="lai-dialog-overlay" @click.self="adjustmentDialogOpen = false">
-      <div class="lai-dialog" role="dialog" aria-modal="true" aria-labelledby="application-adjustment-title">
-        <h2 id="application-adjustment-title" class="lai-dialog-title">人工增减额度</h2>
-        <p class="lai-dialog-message">正数增加上限，负数扣减上限；调整后不能低于已用与预占。重复提交由幂等键保护。</p>
+    <div
+      v-if="adjustmentDialogOpen && detail"
+      class="lai-dialog-overlay"
+      @click.self="adjustmentDialogOpen = false"
+    >
+      <div
+        class="lai-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="application-adjustment-title"
+      >
+        <h2
+          id="application-adjustment-title"
+          class="lai-dialog-title"
+        >
+          人工增减额度
+        </h2>
+        <p class="lai-dialog-message">
+          正数增加上限，负数扣减上限；调整后不能低于已用与预占。重复提交由幂等键保护。
+        </p>
         <label class="lai-dialog-field">
           <span>调整维度</span>
-          <select v-model="adjustmentForm.dimension" class="lai-select full-control">
+          <select
+            v-model="adjustmentForm.dimension"
+            class="lai-select full-control"
+          >
             <option value="TOKEN_LIMIT">Token 额度</option>
             <option value="AMOUNT_LIMIT">金额预算</option>
           </select>
         </label>
         <label class="lai-dialog-field">
           <span>增减值</span>
-          <input v-model="adjustmentForm.delta" class="lai-input" inputmode="decimal" placeholder="例如 50000 或 -100">
+          <input
+            v-model="adjustmentForm.delta"
+            class="lai-input"
+            inputmode="decimal"
+            placeholder="例如 50000 或 -100"
+          >
         </label>
         <label class="lai-dialog-field">
           <span>调整原因</span>
-          <textarea v-model="adjustmentForm.reason" class="lai-input status-reason" maxlength="500" rows="3" placeholder="必填，将写入额度流水与审计记录" />
+          <textarea
+            v-model="adjustmentForm.reason"
+            class="lai-input status-reason"
+            maxlength="500"
+            rows="3"
+            placeholder="必填，将写入额度流水与审计记录"
+          />
         </label>
-        <p v-if="adjustmentSubmission.conflictError.value" class="lai-form-message-error">额度版本或幂等键发生冲突，请刷新后重试。</p>
-        <p v-else-if="adjustmentSubmission.errorText.value" class="lai-form-message-error">{{ adjustmentSubmission.errorText.value }}</p>
+        <p v-if="adjustmentPreview">
+          调整后上限：{{ adjustmentPreview.after }}
+        </p>
+        <p
+          v-if="adjustmentPreview?.stops"
+          class="warning"
+          role="alert"
+        >
+          保存后立即停止新请求：调整后的上限低于已用与预占之和。
+        </p>
+        <p
+          v-if="adjustmentSubmission.conflictError.value"
+          class="lai-form-message-error"
+        >
+          额度版本或幂等键发生冲突，请刷新后重试。
+        </p>
+        <p
+          v-else-if="adjustmentSubmission.errorText.value"
+          class="lai-form-message-error"
+        >
+          {{ adjustmentSubmission.errorText.value }}
+        </p>
         <div class="lai-dialog-actions">
-          <button type="button" class="lai-btn" :disabled="adjustmentSubmission.submitting.value" @click="adjustmentDialogOpen = false">取消</button>
-          <button type="button" class="lai-btn lai-btn-primary" :disabled="adjustmentSubmission.submitting.value || adjustmentInvalid" @click="saveAdjustment">{{ adjustmentSubmission.submitting.value ? '提交中…' : '确认调整' }}</button>
+          <button
+            type="button"
+            class="lai-btn"
+            :disabled="adjustmentSubmission.submitting.value"
+            @click="adjustmentDialogOpen = false"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="lai-btn lai-btn-primary"
+            :disabled="adjustmentSubmission.submitting.value || adjustmentInvalid"
+            @click="saveAdjustment"
+          >
+            {{ adjustmentSubmission.submitting.value ? '提交中…' : '确认调整' }}
+          </button>
         </div>
       </div>
     </div>
 
-    <div v-if="resetDialogOpen && detail" class="lai-dialog-overlay" @click.self="resetDialogOpen = false">
-      <div class="lai-dialog" role="dialog" aria-modal="true" aria-labelledby="application-reset-title">
-        <h2 id="application-reset-title" class="lai-dialog-title">重置应用用量</h2>
-        <p class="warning">这是高风险操作。只清零所选维度的当前已用量，预占、历史调用和用量账本不会删除；保存后应用可重新消耗相应预算。</p>
+    <div
+      v-if="resetDialogOpen && detail"
+      class="lai-dialog-overlay"
+      @click.self="resetDialogOpen = false"
+    >
+      <div
+        class="lai-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="application-reset-title"
+      >
+        <h2
+          id="application-reset-title"
+          class="lai-dialog-title"
+        >
+          重置应用用量
+        </h2>
+        <p class="warning">
+          这是高风险操作。只清零所选维度的当前已用量，预占、历史调用和用量账本不会删除；保存后应用可重新消耗相应预算。
+        </p>
         <label class="lai-dialog-field">
           <span>重置维度</span>
-          <select v-model="resetForm.dimension" class="lai-select full-control">
-            <option value="TOKEN_USAGE" :disabled="detail.quota.tokens_used <= 0">Token 已用量（当前 {{ detail.quota.tokens_used.toLocaleString() }}）</option>
-            <option value="AMOUNT_USAGE" :disabled="Number(detail.quota.amount_used) <= 0">金额已用量（当前 {{ detail.quota.amount_used }} {{ detail.quota.currency }}）</option>
+          <select
+            v-model="resetForm.dimension"
+            class="lai-select full-control"
+          >
+            <option
+              value="TOKEN_USAGE"
+              :disabled="detail.quota.tokens_used <= 0"
+            >Token 已用量（当前 {{ detail.quota.tokens_used.toLocaleString() }}）</option>
+            <option
+              value="AMOUNT_USAGE"
+              :disabled="!positiveAmount(detail.quota.amount_used)"
+            >金额已用量（当前 {{ detail.quota.amount_used }} {{ detail.quota.currency }}）</option>
           </select>
         </label>
         <label class="lai-dialog-field">
           <span>重置原因</span>
-          <textarea v-model="resetForm.reason" class="lai-input status-reason" maxlength="500" rows="3" placeholder="必填，将写入额度流水与审计记录" />
+          <textarea
+            v-model="resetForm.reason"
+            class="lai-input status-reason"
+            maxlength="500"
+            rows="3"
+            placeholder="必填，将写入额度流水与审计记录"
+          />
         </label>
         <label class="lai-dialog-field">
           <span>输入应用编码 <code>{{ detail.code }}</code> 确认</span>
-          <input v-model="resetForm.confirmation_code" class="lai-input lai-cell-mono" autocomplete="off" :placeholder="detail.code">
+          <input
+            v-model="resetForm.confirmation_code"
+            class="lai-input lai-cell-mono"
+            autocomplete="off"
+            :placeholder="detail.code"
+          >
         </label>
-        <p v-if="resetSubmission.conflictError.value" class="lai-form-message-error">额度版本或幂等键发生冲突，请刷新后重试。</p>
-        <p v-else-if="resetSubmission.errorText.value" class="lai-form-message-error">{{ resetSubmission.errorText.value }}</p>
+        <p
+          v-if="resetSubmission.conflictError.value"
+          class="lai-form-message-error"
+        >
+          额度版本或幂等键发生冲突，请刷新后重试。
+        </p>
+        <p
+          v-else-if="resetSubmission.errorText.value"
+          class="lai-form-message-error"
+        >
+          {{ resetSubmission.errorText.value }}
+        </p>
         <div class="lai-dialog-actions">
-          <button type="button" class="lai-btn" :disabled="resetSubmission.submitting.value" @click="resetDialogOpen = false">取消</button>
-          <button type="button" class="lai-btn lai-btn-primary" :disabled="resetSubmission.submitting.value || resetInvalid" @click="saveReset">{{ resetSubmission.submitting.value ? '重置中…' : '确认重置' }}</button>
+          <button
+            type="button"
+            class="lai-btn"
+            :disabled="resetSubmission.submitting.value"
+            @click="resetDialogOpen = false"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="lai-btn lai-btn-primary"
+            :disabled="resetSubmission.submitting.value || resetInvalid"
+            @click="saveReset"
+          >
+            {{ resetSubmission.submitting.value ? '重置中…' : '确认重置' }}
+          </button>
         </div>
       </div>
     </div>
 
-    <div v-if="modelDialogOpen && detail" class="lai-dialog-overlay" @click.self="modelDialogOpen = false">
-      <div class="lai-dialog governance-dialog" role="dialog" aria-modal="true" aria-labelledby="application-model-title">
-        <h2 id="application-model-title" class="lai-dialog-title">管理模型授权</h2>
-        <p class="lai-dialog-message">未授权的模型会在调用进入路由前被拒绝。取消授权不会改写历史调用记录。</p>
-        <PageState v-if="modelsLoading" status="loading" />
-        <PageState v-else-if="modelsLoadError" status="error" :error="modelsLoadError" @retry="openModelDialog" />
-        <div v-else-if="availableModels.length" class="model-options">
-          <div v-for="model in availableModels" :key="model.id" class="model-option-group">
+    <div
+      v-if="modelDialogOpen && detail"
+      class="lai-dialog-overlay"
+      @click.self="modelDialogOpen = false"
+    >
+      <div
+        class="lai-dialog governance-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="application-model-title"
+      >
+        <h2
+          id="application-model-title"
+          class="lai-dialog-title"
+        >
+          管理模型授权
+        </h2>
+        <p class="lai-dialog-message">
+          未授权的模型会在调用进入路由前被拒绝。取消授权不会改写历史调用记录。
+        </p>
+        <PageState
+          v-if="modelsLoading"
+          status="loading"
+        />
+        <PageState
+          v-else-if="modelsLoadError"
+          status="error"
+          :error="modelsLoadError"
+          @retry="openModelDialog"
+        />
+        <div
+          v-else-if="availableModels.length"
+          class="model-options"
+        >
+          <div
+            v-for="model in availableModels"
+            :key="model.id"
+            class="model-option-group"
+          >
             <label class="model-option">
               <input
                 v-model="selectedModelIds"
@@ -832,7 +1525,10 @@ onMounted(load)
               >
               <span><strong>{{ model.display_name }}</strong><small>{{ model.alias }}</small></span>
             </label>
-            <div v-if="selectedModelIds.includes(model.id)" class="model-constraint">
+            <div
+              v-if="selectedModelIds.includes(model.id)"
+              class="model-constraint"
+            >
               <label class="model-constraint-field">
                 <span>最大输出 Token</span>
                 <input
@@ -846,7 +1542,10 @@ onMounted(load)
               </label>
               <label class="model-constraint-field">
                 <span>流式调用</span>
-                <select v-model="modelConstraints[model.id].streamAllowed" class="lai-input">
+                <select
+                  v-model="modelConstraints[model.id].streamAllowed"
+                  class="lai-input"
+                >
                   <option value="">继承（不限）</option>
                   <option value="allow">允许</option>
                   <option value="deny">禁止</option>
@@ -854,31 +1553,115 @@ onMounted(load)
               </label>
             </div>
           </div>
-          <p v-if="modelConstraintInvalid" class="lai-form-message-error">
+          <p
+            v-if="modelConstraintInvalid"
+            class="lai-form-message-error"
+          >
             最大输出 Token 必须是大于 0 的整数；留空表示不限制。
           </p>
         </div>
-        <p v-else class="empty-inline">当前没有已启用的虚拟模型。保存后应用将没有可调用模型。</p>
-        <label class="lai-dialog-field"><span>变更原因</span><textarea v-model="modelReason" class="lai-input status-reason" maxlength="500" rows="3" placeholder="必填，将写入审计记录" /></label>
-        <p v-if="modelSubmission.conflictError.value" class="lai-form-message-error">应用授权版本已变化，请关闭弹窗并刷新后重试。</p>
-        <p v-else-if="modelSubmission.errorText.value" class="lai-form-message-error">{{ modelSubmission.errorText.value }}</p>
+        <p
+          v-else
+          class="empty-inline"
+        >
+          当前没有已启用的虚拟模型。保存后应用将没有可调用模型。
+        </p>
+        <label class="lai-dialog-field"><span>变更原因</span><textarea
+          v-model="modelReason"
+          class="lai-input status-reason"
+          maxlength="500"
+          rows="3"
+          placeholder="必填，将写入审计记录"
+        /></label>
+        <p
+          v-if="modelSubmission.conflictError.value"
+          class="lai-form-message-error"
+        >
+          应用授权版本已变化，请关闭弹窗并刷新后重试。
+        </p>
+        <p
+          v-else-if="modelSubmission.errorText.value"
+          class="lai-form-message-error"
+        >
+          {{ modelSubmission.errorText.value }}
+        </p>
         <div class="lai-dialog-actions">
-          <button type="button" class="lai-btn" :disabled="modelSubmission.submitting.value" @click="modelDialogOpen = false">取消</button>
-          <button type="button" class="lai-btn lai-btn-primary" :disabled="modelSubmission.submitting.value || !modelReason.trim() || modelsLoading || modelConstraintInvalid" @click="saveModels">{{ modelSubmission.submitting.value ? '保存中…' : '保存授权' }}</button>
+          <button
+            type="button"
+            class="lai-btn"
+            :disabled="modelSubmission.submitting.value"
+            @click="modelDialogOpen = false"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="lai-btn lai-btn-primary"
+            :disabled="modelSubmission.submitting.value || !modelReason.trim() || modelsLoading || modelConstraintInvalid"
+            @click="saveModels"
+          >
+            {{ modelSubmission.submitting.value ? '保存中…' : '保存授权' }}
+          </button>
         </div>
       </div>
     </div>
 
-    <div v-if="statusDialogOpen && detail" class="lai-dialog-overlay" @click.self="statusDialogOpen = false">
-      <div class="lai-dialog" role="dialog" aria-modal="true" aria-labelledby="application-status-title">
-        <h2 id="application-status-title" class="lai-dialog-title">{{ statusLabel[targetStatus] }}应用</h2>
-        <p class="lai-dialog-message">{{ targetStatus === 'DISABLED' ? '停用后应立即拒绝该应用的新调用。' : targetStatus === 'ARCHIVED' ? '归档是终态，必须先停用应用。' : '启用后应用可按密钥、模型权限与额度策略接入。' }}</p>
-        <label class="lai-dialog-field"><span>变更原因</span><textarea v-model="statusReason" class="lai-input status-reason" maxlength="500" rows="3" placeholder="必填，将写入审计记录" /></label>
-        <p v-if="statusSubmission.conflictError.value" class="lai-form-message-error">应用版本已变化，请刷新后再操作。</p>
-        <p v-else-if="statusSubmission.errorText.value" class="lai-form-message-error">{{ statusSubmission.errorText.value }}</p>
+    <div
+      v-if="statusDialogOpen && detail"
+      class="lai-dialog-overlay"
+      @click.self="statusDialogOpen = false"
+    >
+      <div
+        class="lai-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="application-status-title"
+      >
+        <h2
+          id="application-status-title"
+          class="lai-dialog-title"
+        >
+          {{ statusLabel[targetStatus] }}应用
+        </h2>
+        <p class="lai-dialog-message">
+          {{ targetStatus === 'DISABLED' ? '停用后应立即拒绝该应用的新调用。' : targetStatus === 'ARCHIVED' ? '归档是终态，必须先停用应用。' : '启用后应用可按密钥、模型权限与额度策略接入。' }}
+        </p>
+        <label class="lai-dialog-field"><span>变更原因</span><textarea
+          v-model="statusReason"
+          class="lai-input status-reason"
+          maxlength="500"
+          rows="3"
+          placeholder="必填，将写入审计记录"
+        /></label>
+        <p
+          v-if="statusSubmission.conflictError.value"
+          class="lai-form-message-error"
+        >
+          应用版本已变化，请刷新后再操作。
+        </p>
+        <p
+          v-else-if="statusSubmission.errorText.value"
+          class="lai-form-message-error"
+        >
+          {{ statusSubmission.errorText.value }}
+        </p>
         <div class="lai-dialog-actions">
-          <button type="button" class="lai-btn" :disabled="statusSubmission.submitting.value" @click="statusDialogOpen = false">取消</button>
-          <button type="button" class="lai-btn lai-btn-primary" :disabled="statusSubmission.submitting.value || !statusReason.trim()" @click="applyStatus">{{ statusSubmission.submitting.value ? '处理中…' : '确认' }}</button>
+          <button
+            type="button"
+            class="lai-btn"
+            :disabled="statusSubmission.submitting.value"
+            @click="statusDialogOpen = false"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="lai-btn lai-btn-primary"
+            :disabled="statusSubmission.submitting.value || !statusReason.trim()"
+            @click="applyStatus"
+          >
+            {{ statusSubmission.submitting.value ? '处理中…' : '确认' }}
+          </button>
         </div>
       </div>
     </div>
