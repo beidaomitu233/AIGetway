@@ -123,3 +123,21 @@
 - 未验收：BE-201～205 均未勾选。真实 MySQL/PostgreSQL/Redis、Provider、企业身份、前后端首调 E2E 与性能未执行。不得以本次 H2/MockMvc 结果宣称生产链路成功。
 - 影响/回滚：密钥调用方应读取统一 data 包装，字段仍为当前 DTO，未提供双结构；必要回退 bd95691，数据库无迁移回滚需求。前端文件由 FE-P20 负责人维护。
 - 占用：BE-P20 改为阻塞，保留原负责人、暂停后续实现，未标记完成或解除占用。需架构确认 BE-P20-001～005 后继续，不重复领取或接管。
+## BE-P21 执行审查（2026-09-12，codex-be-0912）
+
+提出方：后端执行模型。任务：BE-211～BE-215，领取提交 45ce9c9。按 BACKEND_PLAN 已明确路径推进渠道、嵌套凭证、上游模型、虚拟模型及嵌套路由；不保留旧 HTTP 路径双入口。内部类名可复用，不据此反推产品范围。
+
+| 编号 | 状态 | 差异及需确认的契约 |
+|---|---|---|
+| BE-P21-001 | 待确认 | Channel DTO 仍用 type/proxy_url/connect_timeout_ms/read_timeout_ms/default_headers/enabled，计划用 provider_type/proxy/timeouts/headers/status/health/priority/weight；需冻结精确请求和响应，不擅自添加双字段。紧急启停与草稿状态的独立命令、版本和运行广播契约尚未提供。 |
+| BE-P21-002 | 待确认 | 渠道 Key DTO 缺可编辑 priority，存在 rpm_limit/tpm_limit 命名；冷却/即时启停、最后可用 Key 影响与跨实例同步需确认；不以草稿写成功表示运行切换。 |
+| BE-P21-003 | 待确认 | 现有模型导入无同步预览/提交 token、请求幂等键与 model_sync_job/item，UpstreamModelRecord 无 locked_fields；需 DB-213 与架构确定预览快照、锁定字段及幂等事务契约，禁止通过临时内存状态冒充完成。 |
+| BE-P21-004 | 待确认 | 虚拟模型仍为 alias/display_name/routing_strategy/enabled，缺持久化安全能力交集、显式收紧和应用影响 DTO；等待 DB-214/215 与 BE-P20 已提出的运行可用性端口收口。 |
+| BE-P21-005 | 待确认 | route runtime_status 仅依据静态配置且 active_credential_count 当前写死 0，未反映固定快照/健康/容量；发布校验与运行状态响应需明确，不能以管理草稿视图声明运行成功。 |
+| BE-P21-006 | 待确认 | 实际迁移的 batch_check_job 缺仓储要求的 operator_id/command 等字段，批量检测无法持久化；需 DB-213 确认采用现有批量表还是统一 model_sync_job/item。已修复请求解析、输入归属、事务和连接释放；合法请求在当前 schema 明确返回 CONFIG_DATA_UNAVAILABLE/503，未验收成功批量检测。 |
+
+本次无需重新设计即可执行：按计划改为 /admin/channels、/admin/upstream-models、/admin/virtual-models、嵌套 credentials/routes；服务层校验 parent-child 归属；统一 ID 与参数错误；按 BE-215 允许零权重并验证更新不可暗换路径；补充真实 service/JDBC/H2/MockMvc 回归、事务和权限测试。跨包契约未确认项单独保留未验收。
+
+补充：沿用现有 ErrorCode，OBJECT_REFERENCE_INVALID 与 PROVIDER_ADAPTER_NOT_FOUND 为 HTTP 422，参数格式错误为 400，不能未确认擅改全局错误码。轮换审计使用现有配置动词 UPDATE 加敏感字段变更摘要，不新增审计枚举。凭证删除占用查询失败现拒绝操作；真实共享占用与删除互斥尚需运行端口验收。
+
+前端联调影响：本次 HTTP 路径切换为 channels/upstream-models/virtual-models 和嵌套 credentials/routes，原 providers/provider-models/model-aliases/route-candidates 不保留兼容映射；FE-P21 与应用模型选择器需由前端负责人同步。DTO 仅交付已存在且本次测试明确的字段，不宣称上述待确认 V2 字段齐备。

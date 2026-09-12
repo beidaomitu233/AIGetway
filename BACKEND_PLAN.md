@@ -238,3 +238,23 @@ Windows、Temurin Java 17.0.19，Maven 使用 `D:/IntelliJ IDEA 2025.2.3/plugins
 4. 真实环境跳过：MySQL 2 项缺 LAI_IT_MYSQL_URL，PostgreSQL 3 项缺 LAI_IT_DB_URL，Redis 11 项缺 LAI_IT_REDIS_URI/lightai.it.redis-uri。真实 Provider、企业身份登录、前后端首调 E2E 和性能场景未执行。
 
 未修改数据库 schema/迁移及 DATABASE_PLAN 勾选；本次读取 application、application_member、application_model_permission、application_quota_policy，密钥回归使用 application_key 与 audit_log。未提交前端或临时日志。
+
+## BE-P21 本次执行与验收记录（2026-09-12）
+
+负责人 codex-be-0912；领取 BE-211～BE-215，领取提交 45ce9c9；runtime 与凭证 JDBC 修复范围已分别单独登记并普通推送。独立目录 .worktrees/backend-p21-codex-0912。本轮只修改后端和执行文档，无前端与数据库迁移。
+
+| 任务 | 本次交付 | 未满足验收，保持未勾选 |
+|---|---|---|
+| BE-211 | /admin/channels CRUD/状态/影响/检测路径收口；规范 UUID、鉴权、SSRF、敏感头和版本回归 | 精确 V2 DTO、即时状态/广播及运行影响契约 BE-P21-001 |
+| BE-212 | 嵌套 credentials 全操作校验渠道归属；加密插入 SQL 修复；轮换递增 version/secret_version、拒绝旧版本；掩码读取、更新校验和删除存储失败拒绝 | priority/冷却/最后可用 Key 与共享占用互斥 BE-P21-002；真实 Provider 未执行 |
+| BE-213 | /admin/upstream-models 和渠道 models；真实 model_id 必填、启用价格完整、路径不可暗换；批量 DTO/归属/事务/连接释放修复 | 同步预览/锁定字段与批量表冲突 BE-P21-003/006，当前合法批量请求明确返回 503 |
+| BE-214 | /admin/virtual-models 路径、ID/权限回归 | 能力交集、显式收紧和应用影响 BE-P21-004 |
+| BE-215 | 嵌套路由归属、不可更改渠道/模型、重复候选与参数校验；weight=0 保存且运行主选/回退均排除 | 活动快照、真实健康/容量和发布验收 BE-P21-005 |
+
+主要文件：admin 下 ChannelController/Service、ChannelCredentialController/Service、UpstreamModelController/Service、ModelImportService、ModelAliasController/Service、RouteCandidateService、ResourceIds；client/RouteCandidateSaveCommand；runtime/RouteService；storage-jdbc/JdbcChannelCredentialRepository；ResourceApiContractTest、RouteServiceTest。关联表 channel、channel_credential、upstream_model、virtual_model、route_candidate、draft_state、draft_change、audit_log、batch_check_job/item、object_runtime_state、channel_check_record、capacity_reservation_item；未改变表结构或 DATABASE_PLAN 执行状态。
+
+测试环境 Windows / Java 17.0.19 / 项目 Maven 与 JUnit5、MockMvc、H2 迁移、真实 JDBC/服务/AES-GCM。新增 11 项 API 测试及 1 项零权重运行测试，覆盖鉴权、只读角色、非法 ID/空请求、SSRF、敏感头、跨父资源、重复名称/路由、不可变字段、价格、加密轮换与旧版本、审计失败事务回滚、真实 schema 不可用时拒绝成功。
+
+功能目录执行 mvn -B verify：14 模块 BUILD SUCCESS；453 项中 437 通过、16 跳过，0 失败/错误。包含 Java 编译类型检查、单元/API 测试及构建。仓库无独立后端 lint 命令，使用 git diff --check 检查补丁格式，不能冒称独立 lint 通过。MySQL 2、PostgreSQL 3、Redis 11 环境测试因缺 LAI_IT_MYSQL_URL/LAI_IT_DB_URL/LAI_IT_REDIS_URI 跳过；真实 Provider、企业身份、前后端 E2E、多节点容量和性能未执行。H2 验证不能替代真实数据库验收。
+
+COMMUNICATION.md 已登记 BE-P21-001～006，均待确认。BE-211～215 均未达到整项完成标准，不勾选；仅交付以上已验证子项，整包阻塞并保留原负责人，避免其他 Agent 重复实现。后续数据库迁移与契约确认后由原负责人继续验收。
