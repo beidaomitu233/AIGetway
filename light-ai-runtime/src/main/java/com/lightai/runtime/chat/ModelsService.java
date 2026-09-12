@@ -31,13 +31,46 @@ public class ModelsService {
                 .map(alias -> new UnifiedModelList.ModelSummary(
                         alias.alias(), "model", 0L, "light-ai",
                         new UnifiedModelList.LightAiModelInfo(
-                                alias.displayName(), alias.supportsStream(),
+                                alias.displayName(), streamAllowed(principal, alias),
                                 alias.enabledCandidates().stream()
                                         .anyMatch(candidate -> !Boolean.FALSE.equals(candidate.supportSystem())),
                                 null, null, null, null, null,
-                                firstContextWindow(alias), firstMaxOutput(alias), null)))
+                                firstContextWindow(alias), effectiveMaxOutput(principal, alias), null)))
                 .toList();
         return new UnifiedModelList("list", items);
+    }
+
+    /**
+     * 目录展示应用生效后的能力口径（BE-203/BE-221 共用规则）：
+     * 应用禁止流式则该模型不声明流式；max_output 取候选与收紧上限的较小值。
+     */
+    private static boolean streamAllowed(AccessTokenPort.Principal principal,
+                                         ConfigSnapshotPort.AliasView alias) {
+        if (!alias.supportsStream()) {
+            return false;
+        }
+        if (principal == null) {
+            return true;
+        }
+        com.lightai.client.application.ApplicationModelConstraint constraint =
+                principal.constraintFor(alias.alias());
+        return !Boolean.FALSE.equals(constraint == null ? null : constraint.streamAllowed());
+    }
+
+    private static Long effectiveMaxOutput(AccessTokenPort.Principal principal,
+                                           ConfigSnapshotPort.AliasView alias) {
+        Long candidateMax = firstMaxOutput(alias);
+        if (principal == null) {
+            return candidateMax;
+        }
+        com.lightai.client.application.ApplicationModelConstraint constraint =
+                principal.constraintFor(alias.alias());
+        Integer applicationMax = constraint == null ? null : constraint.maxOutputTokens();
+        if (applicationMax == null) {
+            return candidateMax;
+        }
+        return candidateMax == null ? applicationMax.longValue()
+                : Math.min(candidateMax, applicationMax.longValue());
     }
 
     private static Long firstContextWindow(ConfigSnapshotPort.AliasView alias) {

@@ -82,19 +82,22 @@ public interface CapacityStore {
     class CapacityLimitedException extends LightAiException {
         private final String scopeType;
         private final String metric;
+        private final Long retryAfterMs;
 
         public CapacityLimitedException(String message) {
-            this(null, null, message);
+            this(null, null, null, message);
         }
 
         public CapacityLimitedException(String scopeType, String metric) {
-            this(scopeType, metric, metric + " 容量不足：" + scopeType);
+            this(scopeType, metric, null, metric + " 容量不足：" + scopeType);
         }
 
-        private CapacityLimitedException(String scopeType, String metric, String message) {
+        /** 携带可重试时间（毫秒）与限流维度，供 429 响应返回 retry_after 与维度信息。 */
+        public CapacityLimitedException(String scopeType, String metric, Long retryAfterMs, String message) {
             super(ErrorCode.CAPACITY_LIMITED, message);
             this.scopeType = scopeType;
             this.metric = metric;
+            this.retryAfterMs = retryAfterMs;
         }
 
         public String scopeType() {
@@ -103,6 +106,10 @@ public interface CapacityStore {
 
         public String metric() {
             return metric;
+        }
+
+        public Long retryAfterMs() {
+            return retryAfterMs;
         }
     }
 }

@@ -140,6 +140,66 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
         }
     }
 
+    /**
+     * 上游 429 后的 Key 冷却写入（BE-224）：health=RATE_LIMITED 并记录复位时间，
+     * 复位前不参与调度选择；只写健康维度，不改渠道 Key 的人工配置状态。
+     */
+    public void upsertCredentialRateLimit(Connection connection, UUID channelCredentialId,
+                                          OffsetDateTime resetAt, OffsetDateTime checkedAt,
+                                          String errorCode, String errorSummary) {
+        DatabaseDialect d = dialect(connection);
+        String sql;
+        if (d.databaseType() == DatabaseType.POSTGRESQL) {
+            sql = """
+                    INSERT INTO %s
+                      (id, entity_type, entity_id, health_status, reset_at, last_checked_at,
+                       last_error_code, last_error_summary, state_version, created_at, updated_at)
+                    VALUES (?, 'CHANNEL_CREDENTIAL', ?, 'RATE_LIMITED', ?, ?, ?, ?, 1, %s, %s)
+                    ON CONFLICT (entity_type, entity_id) DO UPDATE SET
+                      health_status = 'RATE_LIMITED',
+                      reset_at = EXCLUDED.reset_at,
+                      last_checked_at = EXCLUDED.last_checked_at,
+                      last_error_code = EXCLUDED.last_error_code,
+                      last_error_summary = EXCLUDED.last_error_summary,
+                      state_version = %s.state_version + 1,
+                      updated_at = %s
+                    """.strip().formatted(qualify(connection, "object_runtime_state"),
+                            d.nowFunction(),
+                            d.nowFunction(),
+                            qualify(connection, "object_runtime_state"),
+                            d.nowFunction());
+        } else {
+            sql = """
+                    INSERT INTO %s
+                      (id, entity_type, entity_id, health_status, reset_at, last_checked_at,
+                       last_error_code, last_error_summary, state_version, created_at, updated_at)
+                    VALUES (?, 'CHANNEL_CREDENTIAL', ?, 'RATE_LIMITED', ?, ?, ?, ?, 1, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                      health_status = 'RATE_LIMITED',
+                      reset_at = VALUES(reset_at),
+                      last_checked_at = VALUES(last_checked_at),
+                      last_error_code = VALUES(last_error_code),
+                      last_error_summary = VALUES(last_error_summary),
+                      state_version = state_version + 1,
+                      updated_at = %s
+                    """.strip().formatted(qualify(connection, "object_runtime_state"),
+                            d.nowFunction(),
+                            d.nowFunction(),
+                            d.nowFunction());
+        }
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            d.bindUuid(statement, 1, UUID.randomUUID());
+            d.bindUuid(statement, 2, channelCredentialId);
+            statement.setObject(3, resetAt);
+            statement.setObject(4, checkedAt == null ? Timestamp.from(java.time.Instant.now()) : checkedAt);
+            statement.setString(5, errorCode);
+            statement.setString(6, errorSummary);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("凭证限流冷却写入失败：" + e.getClass().getSimpleName(), e);
+        }
+    }
+
     /** 批量读取（列表组合状态，避免 N+1）。 */
     public Map<UUID, JdbcObjectRuntimeStateRepository.RuntimeStateSnapshot> findByEntities(
             Connection connection, String entityType, Collection<UUID> entityIds) {

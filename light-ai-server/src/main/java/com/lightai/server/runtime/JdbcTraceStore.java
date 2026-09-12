@@ -143,6 +143,13 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
 
     @Override
     public String startAttempt(String traceId, String candidateId, String providerType, String modelId) {
+        return startAttempt(traceId, new AttemptIdentity(
+                parseUuidSafe(candidateId), null, null, null, providerType, modelId, null,
+                null, null, 0, null));
+    }
+
+    @Override
+    public String startAttempt(String traceId, AttemptIdentity identity) {
         UUID attemptUuid = UUID.randomUUID();
         int sequence = 1;
 
@@ -158,15 +165,26 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
                 }
             }
 
-            UUID routeCandidateUuid = parseUuidSafe(candidateId);
-            UUID channelUuid = routeCandidateUuid != null ? routeCandidateUuid : UUID.randomUUID();
-            UUID upstreamModelUuid = channelUuid;
-            UUID credentialUuid = channelUuid;
+            // BE-223：Attempt 固定单渠道/真实模型/单 Key 身份；缺失时退化为历史占位
+            UUID routeCandidateUuid = identity.routeCandidateId();
+            UUID channelUuid = identity.channelId() != null ? identity.channelId()
+                    : (routeCandidateUuid != null ? routeCandidateUuid : UUID.randomUUID());
+            UUID upstreamModelUuid = identity.upstreamModelId() != null ? identity.upstreamModelId()
+                    : channelUuid;
+            UUID credentialUuid = identity.channelCredentialId() != null ? identity.channelCredentialId()
+                    : channelUuid;
 
-            String pType = (providerType != null && !providerType.isBlank()) ? providerType : "UNKNOWN";
-            String mId = (modelId != null && !modelId.isBlank()) ? modelId : "UNKNOWN";
+            String pType = (identity.providerType() != null && !identity.providerType().isBlank())
+                    ? identity.providerType() : "UNKNOWN";
+            String mId = (identity.upstreamModelName() != null && !identity.upstreamModelName().isBlank())
+                    ? identity.upstreamModelName() : "UNKNOWN";
             String attemptType = sequence == 1 ? "INITIAL" : "RETRY";
             OffsetDateTime now = OffsetDateTime.now(clock);
+            BigDecimal inputPrice = identity.inputPrice() == null ? BigDecimal.ZERO : identity.inputPrice();
+            BigDecimal outputPrice = identity.outputPrice() == null ? BigDecimal.ZERO : identity.outputPrice();
+            int priceUnit = identity.priceUnit() > 0 ? identity.priceUnit() : 1000;
+            String currency = (identity.currency() != null && !identity.currency().isBlank())
+                    ? identity.currency() : "USD";
 
             String sql = "INSERT INTO " + qualify(conn, "attempt") + " ("
                     + "id, created_at, updated_at, trace_id, " + d.quoteColumn("sequence") + ", attempt_type, "
@@ -180,7 +198,7 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
                     + "?, ?, ?, "
                     + "'RUNNING', ?, 'api.provider', 0, 0, "
                     + d.jsonPlaceholder() + ", 0, 0, 0, "
-                    + "0, 0, 1000, 'USD', 0, 0, 0)";
+                    + "?, ?, ?, ?, 0, 0, 0)";
 
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 d.bindUuid(ps, 1, attemptUuid);
@@ -194,9 +212,14 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
                 ps.setString(9, pType);
                 ps.setString(10, mId);
                 ps.setString(11, mId);
-                ps.setString(12, "default");
+                // Key 只落掩码快照，不落原文或完整 secret 引用
+                ps.setString(12, identity.credentialMask() != null ? identity.credentialMask() : "default");
                 ps.setObject(13, now);
                 d.bindJson(ps, 14, "{}");
+                ps.setBigDecimal(15, inputPrice);
+                ps.setBigDecimal(16, outputPrice);
+                ps.setInt(17, priceUnit);
+                ps.setString(18, currency);
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
@@ -210,18 +233,25 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
     public void finishAttempt(String traceId, String attemptId, String status, String errorCode,
                               long inputTokens, long outputTokens, String usageSource,
                               String costAmount, String costCurrency, boolean costEstimated) {
+        finishAttempt(traceId, attemptId, status, errorCode, inputTokens, outputTokens, usageSource,
+                null, null,
+                costAmount == null || costAmount.isBlank() ? BigDecimal.ZERO : new BigDecimal(costAmount),
+                costCurrency, costEstimated);
+    }
+
+    @Override
+    public void finishAttempt(String traceId, String attemptId, String status, String errorCode,
+                              long inputTokens, long outputTokens, String usageSource,
+                              BigDecimal inputCost, BigDecimal outputCost, BigDecimal totalCost,
+                              String costCurrency, boolean costEstimated) {
         UUID attemptUuid = parseUuidSafe(attemptId);
         if (attemptUuid == null) {
             return;
         }
         OffsetDateTime now = OffsetDateTime.now(clock);
-        BigDecimal totalCost = BigDecimal.ZERO;
-        if (costAmount != null && !costAmount.isBlank()) {
-            try {
-                totalCost = new BigDecimal(costAmount);
-            } catch (Exception ignored) {
-            }
-        }
+        BigDecimal input = inputCost == null ? BigDecimal.ZERO : inputCost.max(BigDecimal.ZERO);
+        BigDecimal output = outputCost == null ? BigDecimal.ZERO : outputCost.max(BigDecimal.ZERO);
+        BigDecimal total = totalCost == null ? input.add(output) : totalCost.max(BigDecimal.ZERO);
         String currency = (costCurrency != null && !costCurrency.isBlank()) ? costCurrency : "USD";
 
         try (Connection conn = dataSource.getConnection()) {
@@ -252,7 +282,8 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
 
             String updateSql = "UPDATE " + qualify(conn, "attempt") + " SET "
                     + "status = ?, error_code = ?, input_tokens = ?, output_tokens = ?, total_tokens = ?, "
-                    + "usage_source = ?, currency = ?, total_cost = ?, ended_at = ?, total_ms = ?, "
+                    + "usage_source = ?, currency = ?, input_cost = ?, output_cost = ?, total_cost = ?, "
+                    + "ended_at = ?, total_ms = ?, settled_at = ?, "
                     + "updated_at = " + d.nowFunction() + " "
                     + "WHERE trace_id = ? AND id = ?";
             try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
@@ -263,11 +294,14 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
                 ps.setLong(5, totalTokens);
                 ps.setString(6, usageSource != null ? usageSource : "ACTUAL");
                 ps.setString(7, currency);
-                ps.setBigDecimal(8, totalCost);
-                ps.setObject(9, now);
-                ps.setLong(10, totalMs);
-                ps.setString(11, traceId);
-                d.bindUuid(ps, 12, attemptUuid);
+                ps.setBigDecimal(8, input);
+                ps.setBigDecimal(9, output);
+                ps.setBigDecimal(10, total);
+                ps.setObject(11, now);
+                ps.setLong(12, totalMs);
+                ps.setObject(13, now);
+                ps.setString(14, traceId);
+                d.bindUuid(ps, 15, attemptUuid);
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
@@ -500,6 +534,63 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
             log.debug("读取 attempts 列表异常 exception={}", e.getClass().getSimpleName());
         }
         return List.copyOf(list);
+    }
+
+    @Override
+    public int finalizeExpired(java.time.Instant now, String errorCode) {
+        List<String> expired = new ArrayList<>();
+        OffsetDateTime cutoff = now.atOffset(java.time.ZoneOffset.UTC);
+        try (Connection conn = dataSource.getConnection()) {
+            DatabaseDialect d = dialect(conn);
+            String sql = "SELECT trace_id FROM " + qualify(conn, "trace")
+                    + " WHERE status IN ('RUNNING','QUEUED') AND deadline_at IS NOT NULL AND deadline_at < ?";
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setObject(1, cutoff);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        expired.add(rs.getString(1));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            log.warn("扫描过期 Trace 失败 exception={}", e.getClass().getSimpleName());
+            return 0;
+        }
+        int converged = 0;
+        for (String traceId : expired) {
+            try (Connection conn = dataSource.getConnection()) {
+                DatabaseDialect d = dialect(conn);
+                // 崩溃前 RUNNING 的 Attempt 补终态；已终态 Attempt 不回退
+                String attemptSql = "UPDATE " + qualify(conn, "attempt") + " SET "
+                        + "status = 'FAILED', error_code = ?, ended_at = ?, "
+                        + "updated_at = " + d.nowFunction() + " "
+                        + "WHERE trace_id = ? AND status = 'RUNNING'";
+                try (PreparedStatement ps = conn.prepareStatement(attemptSql)) {
+                    ps.setString(1, errorCode);
+                    ps.setObject(2, cutoff);
+                    ps.setString(3, traceId);
+                    ps.executeUpdate();
+                }
+                String traceSql = "UPDATE " + qualify(conn, "trace") + " SET "
+                        + "error_code = ?, retryable = 0, updated_at = " + d.nowFunction() + " "
+                        + "WHERE trace_id = ? AND status IN ('RUNNING','QUEUED')";
+                try (PreparedStatement ps = conn.prepareStatement(traceSql)) {
+                    ps.setString(1, errorCode);
+                    ps.setString(2, traceId);
+                    ps.executeUpdate();
+                }
+                finalizeTrace(traceId, "FAILED");
+                converged++;
+            } catch (RuntimeException | SQLException raceFailure) {
+                // 其他实例或线程已收敛该 Trace；保持唯一终态
+                log.debug("过期 Trace 收敛跳过 trace_id={}, reason={}",
+                        traceId, raceFailure.getClass().getSimpleName());
+            }
+        }
+        if (converged > 0) {
+            log.info("过期 Trace 收敛完成 count={}, code={}", converged, errorCode);
+        }
+        return converged;
     }
 
     private static UUID parseUuidSafe(String str) {

@@ -14,7 +14,15 @@ public interface CredentialSecretPort {
     /** 解析池内一个可用凭证的秘密句柄；failoverIndex 供凭证级 Failover 选择下一凭证。 */
     ResolvedCredential resolve(String channelId, int failoverIndex);
 
-    record ResolvedCredential(String channelCredentialId, SecretHandle secretHandle) {
+    /**
+     * 已选中的渠道 Key：id 供 Attempt 与限流维度绑定，maskedValue 供时间线展示
+     * （掩码快照，不含原文）；实现无法提供掩码时为 null。
+     */
+    record ResolvedCredential(String channelCredentialId, SecretHandle secretHandle, String maskedValue) {
+
+        public ResolvedCredential(String channelCredentialId, SecretHandle secretHandle) {
+            this(channelCredentialId, secretHandle, null);
+        }
     }
 
     static CredentialSecretPort inMemory(java.util.Map<String, String> poolSecrets) {

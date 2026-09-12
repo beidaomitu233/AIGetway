@@ -147,14 +147,17 @@ public final class JdbcApplicationQuotaPort extends AbstractJdbcRepository
         BigDecimal reservedAmount = amountForPolicy(quota, amountEstimates);
         if (quota.tokenLimit() != null
                 && quota.tokensUsed() + quota.tokensReserved() + estimatedTokens > quota.tokenLimit()) {
-            throw new LightAiException(ErrorCode.APPLICATION_TOKEN_QUOTA_EXHAUSTED,
-                    "应用 Token 额度不足");
+            // 429 返回受限维度，供调用方定位 Token 预算边界（PRD 10.3）
+            throw new LightAiException(ErrorCode.APPLICATION_TOKEN_QUOTA_EXHAUSTED, "应用 Token 额度不足",
+                    List.of(new com.lightai.client.error.FieldIssue(
+                            "dimension", "QUOTA_EXHAUSTED", "token")));
         }
         if (quota.amountLimit() != null
                 && quota.amountUsed().add(quota.amountReserved()).add(reservedAmount)
                 .compareTo(quota.amountLimit()) > 0) {
-            throw new LightAiException(ErrorCode.APPLICATION_AMOUNT_BUDGET_EXHAUSTED,
-                    "应用金额预算不足");
+            throw new LightAiException(ErrorCode.APPLICATION_AMOUNT_BUDGET_EXHAUSTED, "应用金额预算不足",
+                    List.of(new com.lightai.client.error.FieldIssue(
+                            "dimension", "QUOTA_EXHAUSTED", "amount")));
         }
         if (findReservationByRequest(connection, requestId)) {
             throw new LightAiException(ErrorCode.TRACE_ID_CONFLICT, "request_id 已存在");
@@ -424,7 +427,7 @@ public final class JdbcApplicationQuotaPort extends AbstractJdbcRepository
                 + " (id, created_at, event_key, request_id, application_id, application_key_id, "
                 + "virtual_model_id, channel_id, input_tokens, output_tokens, token_delta, "
                 + "amount_delta, currency, usage_source, price_snapshot) VALUES (?, "
-                + dialect.nowFunction() + ", ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, "
+                + dialect.nowFunction() + ", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
                 + dialect.jsonPlaceholder() + ")";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             dialect.bindUuid(statement, 1, UUID.randomUUID());
@@ -433,13 +436,15 @@ public final class JdbcApplicationQuotaPort extends AbstractJdbcRepository
             dialect.bindUuid(statement, 4, row.applicationId());
             dialect.bindUuid(statement, 5, row.applicationKeyId());
             bindUuidOrNull(statement, 6, settlement.virtualModelId(), dialect);
-            statement.setLong(7, settlement.inputTokens());
-            statement.setLong(8, settlement.outputTokens());
-            statement.setLong(9, settlement.totalTokens());
-            statement.setBigDecimal(10, settlement.amount());
-            statement.setString(11, settlement.currency() == null ? row.currency() : settlement.currency());
-            statement.setString(12, settlement.usageSource() == null ? "ESTIMATED" : settlement.usageSource());
-            dialect.bindJson(statement, 13, priceSnapshotJson(settlement));
+            // BE-225：账本记录最终渠道，支撑渠道维度成本归属
+            bindUuidOrNull(statement, 7, settlement.channelId(), dialect);
+            statement.setLong(8, settlement.inputTokens());
+            statement.setLong(9, settlement.outputTokens());
+            statement.setLong(10, settlement.totalTokens());
+            statement.setBigDecimal(11, settlement.amount());
+            statement.setString(12, settlement.currency() == null ? row.currency() : settlement.currency());
+            statement.setString(13, settlement.usageSource() == null ? "ESTIMATED" : settlement.usageSource());
+            dialect.bindJson(statement, 14, priceSnapshotJson(settlement));
             statement.executeUpdate();
         }
     }
