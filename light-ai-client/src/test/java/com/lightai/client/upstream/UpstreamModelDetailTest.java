@@ -19,7 +19,7 @@ class UpstreamModelDetailTest {
                 null, null, null, null, 4, 128,
                 null, null, null, List.of(),
                 BigDecimal.ZERO, BigDecimal.ZERO, 1000000, "USD", false, null, null,
-                "UNKNOWN", false, 1L, null, null);
+                "UNKNOWN", null, null, 0L, false, 1L, null, null);
     }
 
     @Test

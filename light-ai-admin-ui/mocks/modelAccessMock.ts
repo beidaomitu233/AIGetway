@@ -159,8 +159,8 @@ async function handle(
   // —— Provider / 凭证池选项 ——
   if (method === 'GET' && path === '/channels') {
     ok(res, page([
-      { id: 'prov-1', name: 'OpenAI', type: 'OPENAI', enabled: true },
-      { id: 'prov-2', name: 'DeepSeek', type: 'DEEPSEEK', enabled: true },
+      { id: 'prov-1', name: 'OpenAI', provider_type: 'OPENAI', status: 'ACTIVE' },
+      { id: 'prov-2', name: 'DeepSeek', provider_type: 'DEEPSEEK', status: 'ACTIVE' },
     ]))
     return true
   }

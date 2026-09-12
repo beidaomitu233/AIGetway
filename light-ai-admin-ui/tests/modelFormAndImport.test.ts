@@ -37,7 +37,7 @@ function stubFetch(routes: Route[]): ReturnType<typeof vi.fn> {
 
 const providerRoutes: Route[] = [
   [/\/admin\/channels$/, () =>
-    jsonResponse(200, { data: { items: [{ id: 'prov-1', name: 'OpenAI', type: 'OPENAI', enabled: true }], total: 1, page: 1, page_size: 100, sort: 'name', query_started_at: 'q', data_updated_at: 'u' } })],
+    jsonResponse(200, { data: { items: [{ id: 'prov-1', name: 'OpenAI', provider_type: 'OPENAI', status: 'ACTIVE' }], total: 1, page: 1, page_size: 100, sort: 'name', query_started_at: 'q', data_updated_at: 'u' } })],
 ]
 
 async function mountForm(route = '/ui/models/upstream/new'): Promise<{ wrapper: ReturnType<typeof mount>; router: Router }> {

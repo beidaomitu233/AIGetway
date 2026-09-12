@@ -277,6 +277,63 @@ class ResourceApiContractTest {
     }
 
     @Test
+    void upstreamModelExposesRuntimeSnapshotAndReferenceCount() throws Exception {
+        // 上游模型运行态字段与引用候选数（FS-211）：与渠道 V2（BE-211）同一 object_runtime_state 快照口径，
+        // 未检测时为 UNKNOWN/null/null，候选数取真实引用计数（与删除拦截同源，BE-014），不填充零值。
+        JsonNode fresh = data(call(get("/admin/upstream-models/" + model), null).andExpect(status().isOk()));
+        assertThat(fresh.path("connection_status").asText()).isEqualTo("UNKNOWN");
+        // NON_NULL：未检测的运行态不下发空值，也不填零值
+        assertThat(fresh.has("last_check_at")).isFalse();
+        assertThat(fresh.has("last_error_code")).isFalse();
+        assertThat(fresh.path("route_candidate_count").asLong()).isZero();
+
+        sql.update("MERGE INTO object_runtime_state (id, entity_type, entity_id, connection_status, "
+                        + "last_checked_at, last_error_code, state_version, created_at, updated_at) "
+                        + "KEY(entity_type, entity_id) VALUES (?, 'UPSTREAM_MODEL', ?, 'AVAILABLE', "
+                        + "CURRENT_TIMESTAMP, 'UPSTREAM_TIMEOUT', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                UUID.randomUUID().toString(), model);
+        JsonNode checked = data(call(get("/admin/upstream-models/" + model), null));
+        assertThat(checked.path("connection_status").asText()).isEqualTo("AVAILABLE");
+        assertThat(checked.has("last_check_at")).isTrue();
+        assertThat(checked.path("last_check_at").asText()).isNotEmpty();
+        assertThat(checked.path("last_error_code").asText()).isEqualTo("UPSTREAM_TIMEOUT");
+
+        // 列表项与详情同一投影，真实回显运行态
+        JsonNode listed = null;
+        for (JsonNode item : data(call(get("/admin/upstream-models"), null)).path("items")) {
+            if (item.path("id").asText().equals(model)) {
+                listed = item;
+            }
+        }
+        assertThat(listed).isNotNull();
+        assertThat(listed.path("last_check_at").asText())
+                .isEqualTo(checked.path("last_check_at").asText());
+        assertThat(listed.path("route_candidate_count").asLong()).isZero();
+
+        // 被路由候选引用后计数真实增长
+        String summaryModel = id(call(post("/admin/upstream-models"), modelBody(channel, "summary-model", true)));
+        id(call(post(routes(virtualModel)), routeBody(channel, summaryModel, 1, null)));
+        assertThat(data(call(get("/admin/upstream-models/" + summaryModel), null))
+                .path("route_candidate_count").asLong()).isEqualTo(1);
+        assertThat(sql.queryForObject("SELECT count(*) FROM route_candidate WHERE upstream_model_id = ?"
+                        + " AND deleted_at IS NULL", Long.class, summaryModel)).isEqualTo(1);
+    }
+
+    @Test
+    void alias24hSummaryUsesUnderscoreSnakeCase() throws Exception {
+        // BACKEND_PLAN「24h 摘要」口径为 *_24h；Jackson SNAKE_CASE 对 requestCount24h 只会产出
+        // request_count24h，故 DTO 显式声明 JSON 名。列表与详情必须一致，且不得并存旧键。
+        JsonNode detail = data(call(get("/admin/virtual-models/" + virtualModel), null)
+                .andExpect(status().isOk()));
+        assertThat(detail.path("request_count_24h").asLong()).isZero();
+        assertThat(detail.has("request_count24h")).isFalse();
+
+        JsonNode item = data(call(get("/admin/virtual-models"), null)).path("items").get(0);
+        assertThat(item.path("request_count_24h").asLong()).isZero();
+        assertThat(item.has("request_count24h")).isFalse();
+    }
+
+    @Test
     void routeValidationErrorsAndIdsAre400Not500() throws Exception {
         for (String body : List.of("{}", "null", "", routeBody(channel,model,-1,null))) {
             call(post(routes(virtualModel)),body).andExpect(status().isBadRequest());
