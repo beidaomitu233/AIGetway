@@ -141,6 +141,16 @@ class ResourceApiContractTest {
         assertThat(detail.path("status").asText()).isEqualTo("ACTIVE");
         assertThat(detail.has("enabled")).isFalse();
         assertThat(detail.has("connection_status")).isFalse();
+        // 详情必须回传配置版本（BE-211）：详情页编辑与启停依赖 version 回传，且须与列表项一致
+        assertThat(detail.path("version").isNumber()).isTrue();
+        JsonNode sameInList = null;
+        for (JsonNode item : data(call(get("/admin/channels"), null)).path("items")) {
+            if (item.path("id").asText().equals(channel)) {
+                sameInList = item;
+            }
+        }
+        assertThat(sameInList).isNotNull();
+        assertThat(sameInList.path("version").asLong()).isEqualTo(detail.path("version").asLong());
 
         // 配置状态与健康分列：检测失败收敛的运行健康为 UNAVAILABLE，配置状态仍 ACTIVE
         sql.update("MERGE INTO object_runtime_state (id, entity_type, entity_id, connection_status, "
