@@ -285,7 +285,9 @@ function amount(row: ApplicationListItem): string {
               <td>{{ row.rpm ?? '不限' }} / {{ row.tpm == null ? '不限' : row.tpm.toLocaleString() }}</td>
               <td>
                 <div>{{ requestCount(row.requests_24h) }} 次</div>
-                <div class="cell-muted">成功率 {{ successRateText(row.success_rate_24h) }}</div>
+                <div class="cell-muted">
+                  成功率 {{ successRateText(row.success_rate_24h) }}
+                </div>
               </td>
               <td>{{ row.last_called_at ? formatDateTime(row.last_called_at, store.timezone) : '尚未调用' }}</td>
             </tr>
