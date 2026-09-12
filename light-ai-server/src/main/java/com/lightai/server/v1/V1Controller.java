@@ -1,6 +1,7 @@
 package com.lightai.server.v1;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.lightai.client.chat.UnifiedChatChunk;
 import com.lightai.client.chat.UnifiedChatRequest;
 import com.lightai.client.error.ErrorCode;
@@ -223,6 +224,7 @@ public class V1Controller {
             if (node == null || node.isEmpty()) {
                 throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "请求体不能为空");
             }
+            applyStreamDefault(node);
             return ProtocolJson.strictCommands().treeToValue(node, UnifiedChatRequest.class);
         } catch (LightAiException e) {
             throw e;
@@ -234,6 +236,23 @@ public class V1Controller {
         } catch (Exception e) {
             throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
                     "请求体解析失败: " + e.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * OpenAI 兼容语义：chat 请求的 stream 为可选项，缺省表示非流式。
+     * UnifiedChatRequest.stream 是原始 boolean，而协议解析启用了
+     * FAIL_ON_NULL_FOR_PRIMITIVES；字段缺省或显式 null 会被 Jackson 判为
+     * null 基本类型并抛 MismatchedInputException，导致标准 OpenAI 客户端
+     * （通常不带 stream）在业务校验前即被 400 拒绝。此处按协议在解析前补默认值。
+     */
+    private static void applyStreamDefault(JsonNode node) {
+        if (!node.isObject()) {
+            return;
+        }
+        JsonNode stream = node.get("stream");
+        if (stream == null || stream.isNull()) {
+            ((ObjectNode) node).put("stream", false);
         }
     }
 
