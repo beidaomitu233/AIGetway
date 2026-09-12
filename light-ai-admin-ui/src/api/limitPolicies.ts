@@ -107,7 +107,7 @@ export interface ScopeOption {
 export async function fetchScopeOptions(scopeType: ScopeType, signal?: AbortSignal): Promise<ScopeOption[]> {
   if (scopeType === 'MODEL_ALIAS') {
     const page = await request<PageResult<{ id: string; alias: string; display_name: string }>>({
-      path: '/model-aliases',
+      path: '/virtual-models',
       query: { page: 1, page_size: 100, sort: 'alias' },
       signal,
     })
@@ -115,7 +115,7 @@ export async function fetchScopeOptions(scopeType: ScopeType, signal?: AbortSign
   }
   if (scopeType === 'PROVIDER_MODEL') {
     const page = await request<PageResult<{ id: string; display_name: string; model_id: string }>>({
-      path: '/provider-models',
+      path: '/upstream-models',
       query: { page: 1, page_size: 100, sort: 'updated_at' },
       signal,
     })

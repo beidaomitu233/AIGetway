@@ -27,7 +27,7 @@ async function page(path: string, permissions: string[] = [...bootstrapFixtures.
 function button(wrapper: VueWrapper, text: string) { return wrapper.findAll('button').find(item => item.text() === text)! }
 function baseStub() {
   return installJsonFetchStub(({ url }) => {
-    if (url.pathname.endsWith('/model-aliases')) return pageEnvelope([])
+    if (url.pathname.endsWith('/virtual-models')) return pageEnvelope([])
     if (url.pathname.endsWith('/keys') || url.pathname.endsWith('/quota/adjustments') || url.pathname.endsWith('/members')) return dataEnvelope([])
     return dataEnvelope(application)
   })

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// Provider Model 列表页（FE-015，附录 4.2.5.1）：筛选同步 URL，行内启停删除带影响确认，
-// 勾选 1—20 个同 Provider 模型发起批量检测（FE-016）。
+// 上游模型 列表页（FE-015，附录 4.2.5.1）：筛选同步 URL，行内启停删除带影响确认，
+// 勾选 1—20 个同 渠道 模型发起批量检测（FE-016）。
 import { computed, ref, shallowRef } from 'vue'
 import PageState from '@/components/PageState.vue'
 import ListPager from '@/components/ListPager.vue'
@@ -10,13 +10,13 @@ import { useBootstrapStore } from '@/stores/bootstrap'
 import { Permission } from '@/app/permissions'
 import { connectionStatusLabel } from '@/app/display'
 import { useListQuery, type FilterValue } from '@/composables/useListQuery'
-import { fetchProviderModels } from '@/api/providerModels'
+import { fetchProviderModels, fetchProviderCredentials } from '@/api/providerModels'
 import type { ProviderModelListItem } from '@/api/providerModels'
 import { useListActions } from '../listActions'
 
 const store = useBootstrapStore()
-const canManage = store.can(Permission.modelManage)
-const canCheck = store.can(Permission.providerCheck)
+const canManage = computed(() => store.can(Permission.modelManage))
+const canCheck = computed(() => store.can(Permission.providerCheck))
 
 const { state: query, items, total, page, pageSize, status, error, refreshing, dataUpdatedAt, applyFilters, applyPage, applyPageSize, refresh } =
   useListQuery<Record<string, FilterValue>, ProviderModelListItem>({
@@ -52,9 +52,9 @@ const {
   submitDelete,
   actionText,
 } = useListActions<ProviderModelListItem>({
-  togglePath: (row) => `/provider-models/${row.id}/${row.enabled ? 'disable' : 'enable'}`,
-  deletePath: (row) => `/provider-models/${row.id}`,
-  impactPath: (row) => `/provider-models/${row.id}/impact`,
+  togglePath: (row) => `/upstream-models/${row.id}/${row.enabled ? 'disable' : 'enable'}`,
+  deletePath: (row) => `/upstream-models/${row.id}`,
+  impactPath: (row) => `/upstream-models/${row.id}/impact`,
   reload: refresh,
 })
 
@@ -64,7 +64,7 @@ function modelName(row: ProviderModelListItem): string {
 
 const selected = ref<ProviderModelListItem[]>([])
 const selectedSameProvider = computed(
-  () => new Set(selected.value.map((item) => item.provider_id)).size <= 1,
+  () => new Set(selected.value.map((item) => item.channel_id)).size <= 1,
 )
 function onToggleSelect(row: ProviderModelListItem, checked: boolean): void {
   selected.value = checked
@@ -75,14 +75,21 @@ function clearSelection(): void {
   selected.value = []
 }
 
+const batchError = ref('')
 const batchOpen = ref(false)
-const batchProviderName = computed(() => selected.value[0]?.provider_name ?? '')
+const batchProviderName = computed(() => selected.value[0]?.channel_name ?? '')
 const credentialOptions = shallowRef<{ id: string; label: string }[]>([])
 
 async function openBatchCheck(): Promise<void> {
+  if (!canCheck.value || !selectedSameProvider.value || !selected.value.length) return
+  const channelId = selected.value[0]!.channel_id
   batchOpen.value = true
-  // 批量检测需要同 Provider 凭证；选项加载失败时面板内可重开
+  batchError.value = ''
   credentialOptions.value = []
+  try {
+    const rows = await fetchProviderCredentials(channelId)
+    if (selected.value[0]?.channel_id === channelId) credentialOptions.value = rows.map((row) => ({ id: row.id, label: row.name }))
+  } catch (error) { batchError.value = error instanceof Error ? error.message : '渠道 Key 查询失败' }
 }
 
 const connectionOptions = [
@@ -104,13 +111,13 @@ const connectionOptions = [
         class="lai-page-actions"
       >
         <RouterLink
-          to="/ui/provider-models/import"
+          to="/ui/models/upstream/import"
           class="lai-btn"
         >
           导入模型
         </RouterLink>
         <RouterLink
-          to="/ui/provider-models/new"
+          to="/ui/models/upstream/new"
           class="lai-btn lai-btn-primary"
         >
           新建模型
@@ -181,7 +188,7 @@ const connectionOptions = [
     >
       <span>
         已选 {{ selected.length }} 个模型
-        <template v-if="!selectedSameProvider">（必须为同一 Provider）</template>
+        <template v-if="!selectedSameProvider">（必须为同一 渠道）</template>
         <template v-else-if="selected.length > 20">（最多 20 个）</template>
       </span>
       <button
@@ -235,7 +242,7 @@ const connectionOptions = [
                 <span class="lai-visually-hidden">选择</span>
               </th>
               <th>模型</th>
-              <th>Provider</th>
+              <th>渠道</th>
               <th>上下文</th>
               <th>最大输出</th>
               <th>流式</th>
@@ -262,14 +269,14 @@ const connectionOptions = [
               </td>
               <td>
                 <RouterLink
-                  :to="`/ui/provider-models/${row.id}`"
+                  :to="`/ui/models/upstream/${row.id}`"
                   class="lai-link"
                 >
                   {{ row.display_name }}
                 </RouterLink>
                 <span class="lai-cell-mono lai-cell-sub">{{ row.model_id }}</span>
               </td>
-              <td>{{ row.provider_name }}</td>
+              <td>{{ row.channel_name }}</td>
               <td>{{ row.context_window?.toLocaleString('zh-CN') ?? '待补充' }}</td>
               <td>{{ row.max_output_tokens?.toLocaleString('zh-CN') ?? '待补充' }}</td>
               <td>{{ row.support_stream == null ? '待补充' : row.support_stream ? '支持' : '不支持' }}</td>
@@ -286,14 +293,14 @@ const connectionOptions = [
               <td>{{ row.draft_changed ? '待发布' : '' }}</td>
               <td class="lai-cell-actions">
                 <RouterLink
-                  :to="`/ui/provider-models/${row.id}`"
+                  :to="`/ui/models/upstream/${row.id}`"
                   class="lai-btn lai-btn-text"
                 >
                   查看
                 </RouterLink>
                 <RouterLink
                   v-if="canManage"
-                  :to="`/ui/provider-models/${row.id}/edit`"
+                  :to="`/ui/models/upstream/${row.id}/edit`"
                   class="lai-btn lai-btn-text"
                 >
                   编辑
@@ -354,8 +361,15 @@ const connectionOptions = [
       :loading="deleteTarget.loading"
       @confirm="submitDelete"
     />
+    <p
+      v-if="batchError"
+      role="alert"
+    >
+      {{ batchError }}
+    </p>
     <BatchCheckPanel
       v-model:open="batchOpen"
+      :channel-id="selected[0]?.channel_id ?? ''"
       :models="selected.map((item) => ({ id: item.id, label: modelName(item) }))"
       :credential-options="credentialOptions"
       :provider-name="batchProviderName"

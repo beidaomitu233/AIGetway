@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 批量检测面板（FE-016，附录 4.2.5.3）：1—20 个同 Provider 模型指定凭证逐个检测，
+// 批量检测面板（FE-016，附录 4.2.5.3）：1—20 个同 渠道 模型指定凭证逐个检测，
 // 展示逐项进度；取消只阻止未开始项；组件卸载停止轮询。
 import { computed, onUnmounted, ref, shallowRef } from 'vue'
 import {
@@ -17,7 +17,8 @@ import { toErrorMessage } from '@/api/errors'
 const props = withDefaults(
   defineProps<{
     open: boolean
-    /** 已选模型（同 Provider，1—20 个）。 */
+    channelId: string
+    /** 已选模型（同 渠道，1—20 个）。 */
     models: { id: string; label: string }[]
     credentialOptions: CheckOption[]
     providerName?: string
@@ -49,7 +50,7 @@ const progressPercent = computed(() => {
   return Math.round((job.completed_count / job.total_count) * 100)
 })
 const canStart = computed(
-  () => props.models.length >= 1 && props.models.length <= 20 && credentialId.value !== '' && !submitting.value,
+  () => props.channelId !== '' && Number.isInteger(timeoutMs.value) && timeoutMs.value >= 100 && timeoutMs.value <= 60000 && props.models.length >= 1 && props.models.length <= 20 && credentialId.value !== '' && !submitting.value,
 )
 
 function stopPolling(): void {
@@ -83,8 +84,9 @@ async function start(): Promise<void> {
   startError.value = ''
   try {
     const job = await startBatchCheck({
-      provider_model_ids: props.models.map((item) => item.id),
-      credential_id: credentialId.value,
+      channel_id: props.channelId,
+      upstream_model_ids: props.models.map((item) => item.id),
+      channel_credential_id: credentialId.value,
       mode: mode.value,
       timeout_ms: timeoutMs.value,
     })
@@ -253,7 +255,7 @@ defineExpose({ stopPolling, jobFinished, pollOnce })
               v-for="item in jobDetail.items"
               :key="item.id"
             >
-              <span class="lai-batch-item-name">{{ item.provider_model_name }}</span>
+              <span class="lai-batch-item-name">{{ props.models.find((model) => model.id === item.upstream_model_id)?.label ?? item.upstream_model_id }}</span>
               <span class="lai-batch-item-status">
                 {{ batchItemStatusLabel(item.status) }}
                 <template v-if="item.error_code">（{{ item.error_code }}）</template>

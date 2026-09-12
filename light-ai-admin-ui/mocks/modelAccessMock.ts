@@ -59,8 +59,8 @@ function ok(res: ServerResponse, body: unknown): void {
 }
 
 const pools: Row[] = [
-  { id: 'pool-1', version: 3, draft_changed: false, name: 'openai-main', provider_id: 'prov-1', selection_strategy: 'LEAST_CONCURRENT', enabled: true, credential_total: 3, credential_available: 3, current_concurrency: 0, rpm_used: 0, tpm_used: 0, status: 'AVAILABLE', route_candidate_count: 2, model_alias_count: 1 },
-  { id: 'pool-2', version: 1, draft_changed: false, name: 'deepseek-backup', provider_id: 'prov-2', selection_strategy: 'WEIGHTED_RANDOM', enabled: true, credential_total: 1, credential_available: 1, current_concurrency: 0, rpm_used: 0, tpm_used: 0, status: 'AVAILABLE', route_candidate_count: 0, model_alias_count: 0 },
+  { id: 'pool-1', version: 3, draft_changed: false, name: 'openai-main', channel_id: 'prov-1', selection_strategy: 'LEAST_CONCURRENT', enabled: true, credential_total: 3, credential_available: 3, current_concurrency: 0, rpm_used: 0, tpm_used: 0, status: 'AVAILABLE', route_candidate_count: 2, model_alias_count: 1 },
+  { id: 'pool-2', version: 1, draft_changed: false, name: 'deepseek-backup', channel_id: 'prov-2', selection_strategy: 'WEIGHTED_RANDOM', enabled: true, credential_total: 1, credential_available: 1, current_concurrency: 0, rpm_used: 0, tpm_used: 0, status: 'AVAILABLE', route_candidate_count: 0, model_alias_count: 0 },
 ]
 
 const credentials: Row[] = [
@@ -69,9 +69,9 @@ const credentials: Row[] = [
 ]
 
 const models: Row[] = [
-  { id: 'model-1', version: 4, draft_changed: true, provider_id: 'prov-1', provider_name: 'OpenAI', model_id: 'gpt-4o', display_name: 'GPT-4o', model_type: 'CHAT_TEXT', tokenizer_family: 'o200k', context_window: 128000, max_output_tokens: 16384, support_stream: true, support_system_message: true, support_temperature: true, temperature_min: '0.0000', temperature_max: '2.0000', support_top_p: true, top_p_min: '0.0000', top_p_max: '1.0000', support_stop: true, max_stop_sequences: 4, max_stop_length: 128, default_temperature: null, default_top_p: null, default_max_tokens: null, default_stop: [], input_price: '2.50000000', output_price: '10.00000000', price_unit: 1000000, currency: 'USD', connection_status: 'AVAILABLE', last_check_at: nowIso(), last_error_code: null, route_candidate_count: 2, enabled: true, related_aliases: [{ id: 'cand-1', alias_id: 'alias-1', alias: 'chat-default', priority: 10, weight: 1, credential_pool_name: 'openai-main', candidate_status: 'AVAILABLE' }], recent_checks: [] },
-  { id: 'model-2', version: 2, draft_changed: false, provider_id: 'prov-1', provider_name: 'OpenAI', model_id: 'gpt-4o-mini', display_name: 'GPT-4o mini', model_type: 'CHAT_TEXT', tokenizer_family: 'o200k', context_window: 128000, max_output_tokens: 16384, support_stream: true, support_system_message: true, support_temperature: true, temperature_min: '0.0000', temperature_max: '2.0000', support_top_p: true, top_p_min: '0.0000', top_p_max: '1.0000', support_stop: true, max_stop_sequences: 4, max_stop_length: 128, default_temperature: null, default_top_p: null, default_max_tokens: null, default_stop: [], input_price: '0.15000000', output_price: '0.60000000', price_unit: 1000000, currency: 'USD', connection_status: 'UNKNOWN', last_check_at: null, last_error_code: null, route_candidate_count: 0, enabled: true, related_aliases: [], recent_checks: [] },
-  { id: 'model-3', version: 1, draft_changed: false, provider_id: 'prov-2', provider_name: 'DeepSeek', model_id: 'deepseek-chat', display_name: 'DeepSeek Chat', model_type: 'CHAT_TEXT', tokenizer_family: null, context_window: null, max_output_tokens: null, support_stream: null, support_system_message: null, support_temperature: null, temperature_min: null, temperature_max: null, support_top_p: null, top_p_min: null, top_p_max: null, support_stop: null, max_stop_sequences: null, max_stop_length: null, default_temperature: null, default_top_p: null, default_max_tokens: null, default_stop: [], input_price: '0.00000000', output_price: '0.00000000', price_unit: 1000000, currency: 'CNY', connection_status: 'UNKNOWN', last_check_at: null, last_error_code: null, route_candidate_count: 0, enabled: false, related_aliases: [], recent_checks: [] },
+  { id: 'model-1', version: 4, draft_changed: true, channel_id: 'prov-1', channel_name: 'OpenAI', model_id: 'gpt-4o', display_name: 'GPT-4o', model_type: 'CHAT_TEXT', tokenizer_family: 'o200k', context_window: 128000, max_output_tokens: 16384, support_stream: true, support_system_message: true, support_temperature: true, temperature_min: '0.0000', temperature_max: '2.0000', support_top_p: true, top_p_min: '0.0000', top_p_max: '1.0000', support_stop: true, max_stop_sequences: 4, max_stop_length: 128, default_temperature: null, default_top_p: null, default_max_tokens: null, default_stop: [], input_price: '2.50000000', output_price: '10.00000000', price_unit: 1000000, currency: 'USD', connection_status: 'AVAILABLE', last_check_at: nowIso(), last_error_code: null, route_candidate_count: 2, enabled: true, related_aliases: [{ id: 'cand-1', alias_id: 'alias-1', alias: 'chat-default', priority: 10, weight: 1, channel_name: 'openai-main', candidate_status: 'AVAILABLE' }], recent_checks: [] },
+  { id: 'model-2', version: 2, draft_changed: false, channel_id: 'prov-1', channel_name: 'OpenAI', model_id: 'gpt-4o-mini', display_name: 'GPT-4o mini', model_type: 'CHAT_TEXT', tokenizer_family: 'o200k', context_window: 128000, max_output_tokens: 16384, support_stream: true, support_system_message: true, support_temperature: true, temperature_min: '0.0000', temperature_max: '2.0000', support_top_p: true, top_p_min: '0.0000', top_p_max: '1.0000', support_stop: true, max_stop_sequences: 4, max_stop_length: 128, default_temperature: null, default_top_p: null, default_max_tokens: null, default_stop: [], input_price: '0.15000000', output_price: '0.60000000', price_unit: 1000000, currency: 'USD', connection_status: 'UNKNOWN', last_check_at: null, last_error_code: null, route_candidate_count: 0, enabled: true, related_aliases: [], recent_checks: [] },
+  { id: 'model-3', version: 1, draft_changed: false, channel_id: 'prov-2', channel_name: 'DeepSeek', model_id: 'deepseek-chat', display_name: 'DeepSeek Chat', model_type: 'CHAT_TEXT', tokenizer_family: null, context_window: null, max_output_tokens: null, support_stream: null, support_system_message: null, support_temperature: null, temperature_min: null, temperature_max: null, support_top_p: null, top_p_min: null, top_p_max: null, support_stop: null, max_stop_sequences: null, max_stop_length: null, default_temperature: null, default_top_p: null, default_max_tokens: null, default_stop: [], input_price: '0.00000000', output_price: '0.00000000', price_unit: 1000000, currency: 'CNY', connection_status: 'UNKNOWN', last_check_at: null, last_error_code: null, route_candidate_count: 0, enabled: false, related_aliases: [], recent_checks: [] },
 ]
 
 const aliases: Row[] = [
@@ -80,8 +80,8 @@ const aliases: Row[] = [
 ]
 
 const candidates: Row[] = [
-  { id: 'cand-1', version: 2, draft_changed: true, alias_id: 'alias-1', provider_id: 'prov-1', provider_name: 'OpenAI', provider_model_id: 'model-1', provider_model_display_name: 'GPT-4o', provider_model_id_label: 'gpt-4o', credential_pool_id: 'pool-1', credential_pool_name: 'openai-main', priority: 10, weight: 1, enabled: true, support_stream: true, support_system_message: true, context_window: 128000, current_concurrency: 0, runtime_status: 'AVAILABLE', excluded_reason: null },
-  { id: 'cand-2', version: 1, draft_changed: false, alias_id: 'alias-1', provider_id: 'prov-1', provider_name: 'OpenAI', provider_model_id: 'model-2', provider_model_display_name: 'GPT-4o mini', provider_model_id_label: 'gpt-4o-mini', credential_pool_id: 'pool-1', credential_pool_name: 'openai-main', priority: 20, weight: 1, enabled: true, support_stream: true, support_system_message: true, context_window: 128000, current_concurrency: 0, runtime_status: 'AVAILABLE', excluded_reason: null },
+  { id: 'cand-1', version: 2, draft_changed: true, alias_id: 'alias-1', channel_id: 'prov-1', channel_name: 'OpenAI', upstream_model_id: 'model-1', upstream_model_name: 'GPT-4o', upstream_model_id_label: 'gpt-4o', priority: 10, weight: 1, enabled: true, support_stream: true, support_system_message: true, context_window: 128000, current_concurrency: 0, runtime_status: 'AVAILABLE', excluded_reason: null },
+  { id: 'cand-2', version: 1, draft_changed: false, alias_id: 'alias-1', channel_id: 'prov-1', channel_name: 'OpenAI', upstream_model_id: 'model-2', upstream_model_name: 'GPT-4o mini', upstream_model_id_label: 'gpt-4o-mini', priority: 20, weight: 1, enabled: true, support_stream: true, support_system_message: true, context_window: 128000, current_concurrency: 0, runtime_status: 'AVAILABLE', excluded_reason: null },
 ]
 
 interface ImportCandidateRow {
@@ -115,8 +115,8 @@ interface BatchJobRow {
   cancelled_count: number
   started_at: string | null
   ended_at: string | null
-  command: { provider_model_ids: string[]; credential_id: string; mode: string; timeout_ms: number }
-  items: { id: string; provider_model_id: string; provider_model_name: string; sequence: number; status: string; check_record_id: string | null; error_code: string | null }[]
+  command: { upstream_model_ids: string[]; channel_credential_id: string; mode: string; timeout_ms: number }
+  items: { id: string; upstream_model_id: string; upstream_model_name: string; sequence: number; status: string; check_record_id: string | null; error_code: string | null }[]
 }
 
 let batchJob: BatchJobRow | null = null
@@ -157,7 +157,7 @@ async function handle(
   const body = await readMockBody(req as import('vite').Connect.IncomingMessage)
 
   // —— Provider / 凭证池选项 ——
-  if (method === 'GET' && path === '/providers') {
+  if (method === 'GET' && path === '/channels') {
     ok(res, page([
       { id: 'prov-1', name: 'OpenAI', type: 'OPENAI', enabled: true },
       { id: 'prov-2', name: 'DeepSeek', type: 'DEEPSEEK', enabled: true },
@@ -272,18 +272,18 @@ async function handle(
   }
 
   // —— Provider Model ——
-  if (method === 'GET' && path === '/provider-models') {
-    const providerId = url.searchParams.get('provider_id')
-    const filtered = providerId ? models.filter((item) => item.provider_id === providerId) : models
+  if (method === 'GET' && path === '/upstream-models') {
+    const providerId = url.searchParams.get('channel_id')
+    const filtered = providerId ? models.filter((item) => item.channel_id === providerId) : models
     ok(res, page(filtered))
     return true
   }
-  if (method === 'POST' && path === '/provider-models') {
+  if (method === 'POST' && path === '/upstream-models') {
     const row: Row = {
       id: rid('model'),
       version: 1,
       draft_changed: true,
-      provider_name: 'OpenAI',
+      channel_name: 'OpenAI',
       connection_status: 'UNKNOWN',
       last_check_at: null,
       last_error_code: null,
@@ -296,11 +296,11 @@ async function handle(
     ok(res, opResult(row, requestId))
     return true
   }
-  if (method === 'GET' && path === '/provider-models/import') {
+  if (method === 'GET' && path === '/upstream-models/import') {
     ok(res, { data: { created: [], skipped: [], failed: [] } })
     return true
   }
-  if (method === 'POST' && path === '/provider-models/import') {
+  if (method === 'POST' && path === '/upstream-models/import') {
     const created: { model_id: string; id: string; version: number }[] = []
     const skipped: { model_id: string; reason: string }[] = []
     const failed: { model_id: string; error: string }[] = []
@@ -319,8 +319,8 @@ async function handle(
         id: rid('model'),
         version: 1,
         draft_changed: true,
-        provider_id: body.provider_id,
-        provider_name: 'OpenAI',
+        channel_id: body.channel_id,
+        channel_name: 'OpenAI',
         model_id: modelId,
         display_name: candidate.display_name ?? modelId,
         model_type: 'CHAT_TEXT',
@@ -346,8 +346,8 @@ async function handle(
     ok(res, { data: { created, skipped, failed } })
     return true
   }
-  if (method === 'POST' && path === '/provider-models/batch-check') {
-    const ids = (body.provider_model_ids ?? []) as string[]
+  if (method === 'POST' && path === '/upstream-models/batch-check') {
+    const ids = (body.upstream_model_ids ?? []) as string[]
     batchJob = {
       id: rid('job'),
       status: 'RUNNING',
@@ -358,11 +358,11 @@ async function handle(
       cancelled_count: 0,
       started_at: nowIso(),
       ended_at: null,
-      command: { provider_model_ids: ids, credential_id: String(body.credential_id), mode: String(body.mode), timeout_ms: Number(body.timeout_ms) },
+      command: { upstream_model_ids: ids, channel_credential_id: String(body.channel_credential_id), mode: String(body.mode), timeout_ms: Number(body.timeout_ms) },
       items: ids.map((id, index) => ({
         id: rid('item'),
-        provider_model_id: id,
-        provider_model_name: String(findRow(models, id)?.display_name ?? id),
+        upstream_model_id: id,
+        upstream_model_name: String(findRow(models, id)?.display_name ?? id),
         sequence: index + 1,
         status: 'PENDING',
         check_record_id: null,
@@ -421,12 +421,12 @@ async function handle(
   match = path.match(/^\/provider-models\/([^/]+)\/credential-pools$/)
   if (match && method === 'GET') {
     const row = findRow(models, match[1]!)
-    const list = row ? pools.filter((pool) => pool.provider_id === row.provider_id) : []
+    const list = row ? pools.filter((pool) => pool.channel_id === row.channel_id) : []
     ok(res, {
       data: list.map((pool) => ({
         id: pool.id,
         name: pool.name,
-        provider_id: pool.provider_id,
+        channel_id: pool.channel_id,
         credential_available: Number(pool.credential_available ?? 0),
         status: pool.status,
       })),
@@ -500,11 +500,11 @@ async function handle(
   }
 
   // —— Model Alias 与候选 ——
-  if (method === 'GET' && path === '/model-aliases') {
+  if (method === 'GET' && path === '/virtual-models') {
     ok(res, page(aliases))
     return true
   }
-  if (method === 'POST' && path === '/model-aliases') {
+  if (method === 'POST' && path === '/virtual-models') {
     if (aliases.some((item) => item.alias === body.alias)) {
       error(res, 400, 'FIELD_VALIDATION_FAILED', 'alias 已存在')
       return true
@@ -618,15 +618,15 @@ async function handle(
     }
     if (method === 'POST') {
       const duplicate = candidates.some(
-        (row) => row.alias_id === aliasId && row.provider_model_id === body.provider_model_id && row.credential_pool_id === body.credential_pool_id,
+        (row) => row.alias_id === aliasId && row.upstream_model_id === body.upstream_model_id && row.channel_id === body.channel_id,
       )
       if (duplicate) {
         error(res, 409, 'DUPLICATE_ROUTE_CANDIDATE', '相同的模型与凭证池组合已存在')
         return true
       }
-      const modelRow = findRow(models, String(body.provider_model_id))
-      const poolRow = findRow(pools, String(body.credential_pool_id))
-      if (!modelRow || !poolRow || modelRow.provider_id !== poolRow.provider_id) {
+      const modelRow = findRow(models, String(body.upstream_model_id))
+      const poolRow = findRow(pools, String(body.channel_id))
+      if (!modelRow || !poolRow || modelRow.channel_id !== poolRow.channel_id) {
         error(res, 400, 'OBJECT_REFERENCE_INVALID', '模型与凭证池必须属于同一 Provider')
         return true
       }
@@ -635,13 +635,11 @@ async function handle(
         version: 1,
         draft_changed: true,
         alias_id: aliasId,
-        provider_id: modelRow.provider_id,
-        provider_name: modelRow.provider_name,
-        provider_model_id: modelRow.id,
-        provider_model_display_name: modelRow.display_name,
-        provider_model_id_label: modelRow.model_id,
-        credential_pool_id: poolRow.id,
-        credential_pool_name: poolRow.name,
+        channel_id: modelRow.channel_id,
+        channel_name: modelRow.channel_name,
+        upstream_model_id: modelRow.id,
+        upstream_model_name: modelRow.display_name,
+        upstream_model_id_label: modelRow.model_id,
         priority: Number(body.priority),
         weight: Number(body.weight),
         enabled: body.enabled ?? true,

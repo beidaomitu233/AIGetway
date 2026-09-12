@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 模型导入向导（FE-016，附录 4.2.5.2）：选择 Provider 与来源 → 勾选候选模型 → 提交导入；
+// 模型导入向导（FE-016，附录 4.2.5.2）：选择 渠道 与来源 → 勾选候选模型 → 提交导入；
 // 未知能力显示“待补充”，导入默认停用；结果按 created/skipped/failed 逐项展示。
 import { computed, onMounted, ref, shallowRef } from 'vue'
 import PageState from '@/components/PageState.vue'
@@ -36,7 +36,7 @@ const submitError = ref('')
 const result = shallowRef<ImportResult | null>(null)
 
 const sourceOptions = [
-  { value: 'PROVIDER_API', label: 'Provider API（实时拉取）' },
+  { value: 'PROVIDER_API', label: '渠道 API（实时拉取）' },
   { value: 'ADAPTER_PRESET', label: 'Adapter 预置目录' },
 ]
 
@@ -88,7 +88,7 @@ async function loadCandidates(): Promise<void> {
   loadError.value = ''
   const controller = new AbortController()
   try {
-    const withCredential = source.value === 'PROVIDER_API' ? { credential_id: credentialId.value } : {}
+    const withCredential = source.value === 'PROVIDER_API' ? { channel_credential_id: credentialId.value } : {}
     const withKeyword = keyword.value.trim() === '' ? {} : { keyword: keyword.value.trim() }
     const list = await fetchAvailableModels(providerId.value, { source: source.value, ...withCredential, ...withKeyword }, controller.signal)
     candidates.value = list
@@ -115,9 +115,9 @@ async function submitImport(): Promise<void> {
   submitting.value = true
   submitError.value = ''
   try {
-    const importCredential = source.value === 'PROVIDER_API' ? { credential_id: credentialId.value } : {}
+    const importCredential = source.value === 'PROVIDER_API' ? { channel_credential_id: credentialId.value } : {}
     result.value = await importProviderModels({
-      provider_id: providerId.value,
+      channel_id: providerId.value,
       source: source.value,
       ...importCredential,
       model_ids: [...selectedModelIds.value],
@@ -181,7 +181,7 @@ onMounted(async () => {
               :key="item.model_id"
             >
               <RouterLink
-                :to="`/ui/provider-models/${item.id}`"
+                :to="`/ui/models/upstream/${item.id}`"
                 class="lai-link"
               >
                 {{ item.model_id }}
@@ -226,7 +226,7 @@ onMounted(async () => {
             继续导入
           </button>
           <RouterLink
-            to="/ui/provider-models"
+            to="/ui/models/upstream"
             class="lai-btn lai-btn-primary"
           >
             返回模型列表
@@ -246,7 +246,7 @@ onMounted(async () => {
         </legend>
         <div class="lai-form-grid">
           <FormField
-            label="Provider"
+            label="渠道"
             required
           >
             <select
@@ -258,7 +258,7 @@ onMounted(async () => {
                 value=""
                 disabled
               >
-                请选择 Provider
+                请选择 渠道
               </option>
               <option
                 v-for="item in providers"
@@ -291,7 +291,7 @@ onMounted(async () => {
             v-if="source === 'PROVIDER_API'"
             label="凭证"
             required
-            :hint="credentialLoading ? '加载中…' : '只显示同 Provider 的非停用凭证'"
+            :hint="credentialLoading ? '加载中…' : '只显示同 渠道 的非停用凭证'"
           >
             <select
               v-model="credentialId"
@@ -399,7 +399,7 @@ onMounted(async () => {
         </div>
         <p class="lai-hint">
           能力值为“待补充”的模型导入后保持停用，需在编辑页补齐能力后才能启用；
-          预置默认值来自 Adapter 版本，不代表 Provider 实时承诺。
+          预置默认值来自 Adapter 版本，不代表 渠道 实时承诺。
         </p>
       </fieldset>
 

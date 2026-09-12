@@ -42,54 +42,54 @@ public class ModelAliasController {
         this.candidateService = candidateService;
     }
 
-    @GetMapping("/admin/model-aliases")
+    @GetMapping("/admin/virtual-models")
     public ResponseEntity<String> list(HttpServletRequest request) {
         PageResult<ModelAliasDetail> page = aliasService.list(context(request), queryParams(request));
         return json(ManagementResponses.ok(page));
     }
 
-    @PostMapping("/admin/model-aliases")
-    public ResponseEntity<String> create(@RequestBody String body, HttpServletRequest request) {
+    @PostMapping("/admin/virtual-models")
+    public ResponseEntity<String> create(@RequestBody(required = false) String body, HttpServletRequest request) {
         ModelAliasSaveCommand command = CommandBodies.parse(body, ModelAliasSaveCommand.class);
         return json(ManagementResponses.ok(aliasService.create(context(request), command)));
     }
 
-    @GetMapping("/admin/model-aliases/{id}")
+    @GetMapping("/admin/virtual-models/{id}")
     public ResponseEntity<String> detail(@PathVariable String id, HttpServletRequest request) {
         return json(ManagementResponses.ok(aliasService.detail(context(request), id)));
     }
 
-    @PutMapping("/admin/model-aliases/{id}")
-    public ResponseEntity<String> update(@PathVariable String id, @RequestBody String body,
+    @PutMapping("/admin/virtual-models/{id}")
+    public ResponseEntity<String> update(@PathVariable String id, @RequestBody(required = false) String body,
                                          HttpServletRequest request) {
         ModelAliasSaveCommand command = CommandBodies.parse(body, ModelAliasSaveCommand.class);
         return json(ManagementResponses.ok(aliasService.update(context(request), id, command)));
     }
 
-    @GetMapping("/admin/model-aliases/{id}/impact")
+    @GetMapping("/admin/virtual-models/{id}/impact")
     public ResponseEntity<String> impact(@PathVariable String id, HttpServletRequest request) {
         return json(ManagementResponses.ok(aliasService.impact(context(request), id,
                 request.getParameter("operation"))));
     }
 
-    @PostMapping("/admin/model-aliases/{id}/enable")
-    public ResponseEntity<String> enable(@PathVariable String id, @RequestBody String body,
+    @PostMapping("/admin/virtual-models/{id}/enable")
+    public ResponseEntity<String> enable(@PathVariable String id, @RequestBody(required = false) String body,
                                          HttpServletRequest request) {
         VersionCommand command = CommandBodies.parse(body, VersionCommand.class);
         return json(ManagementResponses.ok(aliasService.setEnabled(
                 context(request), id, true, command.version(), null)));
     }
 
-    @PostMapping("/admin/model-aliases/{id}/disable")
-    public ResponseEntity<String> disable(@PathVariable String id, @RequestBody String body,
+    @PostMapping("/admin/virtual-models/{id}/disable")
+    public ResponseEntity<String> disable(@PathVariable String id, @RequestBody(required = false) String body,
                                           HttpServletRequest request) {
         ImpactConfirmCommand command = CommandBodies.parse(body, ImpactConfirmCommand.class);
         return json(ManagementResponses.ok(aliasService.setEnabled(
                 context(request), id, false, command.version(), command.confirmedImpactVersion())));
     }
 
-    @DeleteMapping("/admin/model-aliases/{id}")
-    public ResponseEntity<String> delete(@PathVariable String id, @RequestBody String body,
+    @DeleteMapping("/admin/virtual-models/{id}")
+    public ResponseEntity<String> delete(@PathVariable String id, @RequestBody(required = false) String body,
                                          HttpServletRequest request) {
         ImpactConfirmCommand command = CommandBodies.parse(body, ImpactConfirmCommand.class);
         return json(ManagementResponses.ok(aliasService.delete(
@@ -98,46 +98,46 @@ public class ModelAliasController {
 
     // ---------- 候选（BE-017/018） ----------
 
-    @GetMapping("/admin/model-aliases/{id}/candidates")
+    @GetMapping("/admin/virtual-models/{id}/routes")
     public ResponseEntity<String> candidates(@PathVariable String id, HttpServletRequest request) {
         List<RouteCandidateDetail> candidates = candidateService.candidates(context(request), id);
         return json(ManagementResponses.ok(candidates));
     }
 
-    @PostMapping("/admin/model-aliases/{id}/candidates")
-    public ResponseEntity<String> createCandidate(@PathVariable String id, @RequestBody String body,
+    @PostMapping("/admin/virtual-models/{id}/routes")
+    public ResponseEntity<String> createCandidate(@PathVariable String id, @RequestBody(required = false) String body,
                                                   HttpServletRequest request) {
         RouteCandidateSaveCommand command = CommandBodies.parse(body, RouteCandidateSaveCommand.class);
         return json(ManagementResponses.ok(candidateService.create(context(request), id, command)));
     }
 
-    @PutMapping("/admin/model-aliases/{id}/candidates/reorder")
-    public ResponseEntity<String> reorder(@PathVariable String id, @RequestBody String body,
+    @PutMapping("/admin/virtual-models/{id}/routes/reorder")
+    public ResponseEntity<String> reorder(@PathVariable String id, @RequestBody(required = false) String body,
                                           HttpServletRequest request) {
         ReorderCommand command = CommandBodies.parse(body, ReorderCommand.class);
         return json(ManagementResponses.ok(candidateService.reorder(context(request), id, command)));
     }
 
-    @PutMapping("/admin/route-candidates/{id}")
-    public ResponseEntity<String> updateCandidate(@PathVariable String id, @RequestBody String body,
+    @PutMapping("/admin/virtual-models/{virtualModelId}/routes/{id}")
+    public ResponseEntity<String> updateCandidate(@PathVariable String virtualModelId, @PathVariable String id, @RequestBody(required = false) String body,
                                                   HttpServletRequest request) {
         RouteCandidateSaveCommand command = CommandBodies.parse(body, RouteCandidateSaveCommand.class);
-        return json(ManagementResponses.ok(candidateService.update(context(request), id, command)));
+        return json(ManagementResponses.ok(candidateService.update(context(request), virtualModelId, id, command)));
     }
 
-    @DeleteMapping("/admin/route-candidates/{id}")
-    public ResponseEntity<String> deleteCandidate(@PathVariable String id, @RequestBody String body,
+    @DeleteMapping("/admin/virtual-models/{virtualModelId}/routes/{id}")
+    public ResponseEntity<String> deleteCandidate(@PathVariable String virtualModelId, @PathVariable String id, @RequestBody(required = false) String body,
                                                   HttpServletRequest request) {
         VersionCommand command = CommandBodies.parse(body, VersionCommand.class);
         return json(ManagementResponses.ok(candidateService.delete(
-                context(request), id, command.version())));
+                context(request), virtualModelId, id, command.version())));
     }
 
-    @PostMapping("/admin/route-candidates/{id}/check")
-    public ResponseEntity<String> checkCandidate(@PathVariable String id, @RequestBody String body,
+    @PostMapping("/admin/virtual-models/{virtualModelId}/routes/{id}/check")
+    public ResponseEntity<String> checkCandidate(@PathVariable String virtualModelId, @PathVariable String id, @RequestBody(required = false) String body,
                                                  HttpServletRequest request) {
         ChannelCheckCommand command = CommandBodies.parse(body, ChannelCheckCommand.class);
-        return json(ManagementResponses.ok(candidateService.probe(context(request), id, command)));
+        return json(ManagementResponses.ok(candidateService.probe(context(request), virtualModelId, id, command)));
     }
 
     private static RequestContext context(HttpServletRequest request) {

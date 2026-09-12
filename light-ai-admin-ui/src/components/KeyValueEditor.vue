@@ -1,91 +1,42 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-
-const props = withDefaults(
-  defineProps<{
-    modelValue: Record<string, string>
-    disabled?: boolean
-  }>(),
-  {
-    disabled: false,
-  },
-)
-
-const emit = defineEmits<{ 'update:modelValue': [value: Record<string, string>] }>()
-
-/** 禁止写入 default_headers 的认证与 Cookie 类请求头（不区分大小写）。 */
-const FORBIDDEN_HEADERS = [
-  'authorization',
-  'x-api-key',
-  'api-key',
-  'cookie',
-  'set-cookie',
-  'proxy-authorization',
-  'x-auth-token',
-  'x-goog-api-key',
-  'anthropic-api-key',
-]
-
-interface HeaderRow {
-  key: string
-  value: string
+import { computed, ref, watch } from 'vue'
+import { headerRowError, headersValid, type HeaderRow } from '@/utils/resourceValidation'
+const props = withDefaults(defineProps<{ modelValue: Record<string, string>; disabled?: boolean }>(), { disabled: false })
+const emit = defineEmits<{ 'update:modelValue': [value: Record<string, string>]; validity: [valid: boolean] }>()
+const rows = ref<HeaderRow[]>([])
+let lastEmitted: Record<string, string> | null = null
+watch(() => props.modelValue, (value) => {
+  if (value === lastEmitted) return
+  rows.value = Object.entries(value).map(([key, value]) => ({ key, value }))
+  emit('validity', headersValid(rows.value))
+}, { immediate: true })
+const atLimit = computed(() => rows.value.length >= 20)
+function publish(): void {
+  const valid = headersValid(rows.value)
+  emit('validity', valid)
+  // Keep invalid/blank rows locally; never silently collapse duplicates into a payload.
+  if (!valid) return
+  lastEmitted = Object.fromEntries(rows.value.map((row) => [row.key.trim(), row.value]))
+  emit('update:modelValue', lastEmitted)
 }
-
-const rows = computed<HeaderRow[]>(() =>
-  Object.entries(props.modelValue).map(([key, value]) => ({ key, value })),
-)
-
-const duplicateKeys = computed(() => {
-  const seen = new Set<string>()
-  const duplicates = new Set<string>()
-  for (const row of rows.value) {
-    const normalized = row.key.trim().toLowerCase()
-    if (normalized === '') continue
-    if (seen.has(normalized)) duplicates.add(normalized)
-    seen.add(normalized)
-  }
-  return duplicates
-})
-
-const forbiddenKeys = computed(() =>
-  rows.value.filter((row) => FORBIDDEN_HEADERS.includes(row.key.trim().toLowerCase())).map((row) => row.key),
-)
-
-const overLimit = computed(() => rows.value.length > 20)
-
-function emitRows(next: HeaderRow[]): void {
-  const result: Record<string, string> = {}
-  for (const row of next) {
-    if (row.key.trim() === '') continue
-    result[row.key.trim()] = row.value
-  }
-  emit('update:modelValue', result)
-}
-
 function onKeyChange(index: number, key: string): void {
-  const next = rows.value.map((row, i) => (i === index ? { ...row, key } : row))
-  emitRows(next)
+  rows.value[index]!.key = key
+  publish()
 }
-
 function onValueChange(index: number, value: string): void {
-  const next = rows.value.map((row, i) => (i === index ? { ...row, value } : row))
-  emitRows(next)
+  rows.value[index]!.value = value
+  publish()
 }
-
 function addRow(): void {
-  emitRows([...rows.value, { key: '', value: '' }])
+  if (props.disabled || atLimit.value) return
+  rows.value.push({ key: '', value: '' })
+  publish()
 }
-
 function removeRow(index: number): void {
-  emitRows(rows.value.filter((_, i) => i !== index))
+  rows.value.splice(index, 1)
+  publish()
 }
-
-function rowError(row: HeaderRow): string {
-  const normalized = row.key.trim().toLowerCase()
-  if (normalized !== '' && FORBIDDEN_HEADERS.includes(normalized)) return '禁止认证与 Cookie 类请求头'
-  if (normalized !== '' && duplicateKeys.value.has(normalized)) return '键名重复（不区分大小写）'
-  return ''
-}
+function rowError(row: HeaderRow): string { return headerRowError(row, rows.value) }
 </script>
 
 <template>
@@ -127,7 +78,7 @@ function rowError(row: HeaderRow): string {
       </span>
     </div>
     <p
-      v-if="overLimit"
+      v-if="atLimit"
       class="lai-form-message-error"
     >
       请求头最多 20 项
@@ -135,16 +86,10 @@ function rowError(row: HeaderRow): string {
     <button
       type="button"
       class="lai-btn"
-      :disabled="props.disabled || overLimit"
+      :disabled="props.disabled || atLimit"
       @click="addRow"
     >
       添加请求头
     </button>
-    <p
-      v-if="forbiddenKeys.length > 0"
-      class="lai-form-message-error"
-    >
-      含禁止请求头：{{ forbiddenKeys.join('、') }}
-    </p>
   </div>
 </template>

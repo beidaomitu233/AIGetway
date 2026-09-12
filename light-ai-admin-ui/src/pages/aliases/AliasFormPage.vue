@@ -1,8 +1,10 @@
 <script setup lang="ts">
-// Model Alias 新建/编辑表单（FE-017，附录 4.2.7.2）。
+// 虚拟模型 新建/编辑表单（FE-017，附录 4.2.7.2）。
 // alias 创建后只读：2—64 字符，仅字母、数字、点、短横线、下划线。
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useBootstrapStore } from '@/stores/bootstrap'
+import { Permission } from '@/app/permissions'
 import FormField from '@/components/FormField.vue'
 import PageState from '@/components/PageState.vue'
 import { useDirtyGuard } from '@/composables/useDirtyGuard'
@@ -13,6 +15,8 @@ import {
   updateModelAlias,
 } from '@/api/modelAliases'
 
+const store = useBootstrapStore()
+const canManage = computed(() => store.can(Permission.aliasManage))
 const route = useRoute()
 const router = useRouter()
 const aliasRecordId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''))
@@ -27,6 +31,7 @@ const form = reactive({
   description: '',
   enabled: true,
 })
+const loadedEnabled = ref(true)
 const version = ref<number | null>(null)
 const baseline = ref('')
 const dirty = ref(false)
@@ -54,7 +59,7 @@ function onInput(): void {
 useDirtyGuard(() => dirty.value)
 
 async function onSubmit(): Promise<void> {
-  if (formInvalid.value) return
+  if (!canManage.value || submitting.value || conflictError.value || formInvalid.value) return
   const description = form.description.trim() === '' ? null : form.description.trim()
   let savedId = ''
   const outcome = await doSubmit(async () => {
@@ -62,7 +67,7 @@ async function onSubmit(): Promise<void> {
       await updateModelAlias(aliasRecordId.value, {
         display_name: form.display_name.trim(),
         description,
-        enabled: form.enabled,
+        enabled: loadedEnabled.value,
         version: version.value!,
       })
       savedId = aliasRecordId.value
@@ -78,7 +83,7 @@ async function onSubmit(): Promise<void> {
   })
   if (outcome.ok) {
     dirty.value = false
-    void router.push(`/ui/model-aliases/${savedId}`)
+    void router.push(`/ui/models/virtual/${savedId}`)
   }
 }
 
@@ -90,6 +95,7 @@ onMounted(async () => {
       form.display_name = detail.display_name
       form.description = detail.description ?? ''
       form.enabled = detail.enabled
+      loadedEnabled.value = detail.enabled
       version.value = detail.version
     }
     markClean()
@@ -104,7 +110,7 @@ onMounted(async () => {
 <template>
   <section class="lai-page">
     <h1 class="lai-page-title">
-      {{ isEdit ? '编辑模型别名' : '新建 Model Alias' }}
+      {{ isEdit ? '编辑虚拟模型' : '新建 虚拟模型' }}
     </h1>
 
     <PageState
@@ -125,7 +131,7 @@ onMounted(async () => {
       @input="onInput"
     >
       <FormField
-        label="alias"
+        label="code"
         required
         :hint="isEdit ? 'alias 创建后不可修改；如需更名请创建新 Alias 并迁移接入方' : '业务调用入口，创建后不可修改'"
         :error="!isEdit && aliasInvalid ? '2—64 字符，仅字母、数字、点、短横线、下划线' : ''"
@@ -175,9 +181,16 @@ onMounted(async () => {
         >
       </FormField>
 
+      <p
+        v-if="isEdit"
+        class="lai-form-hint"
+      >
+        状态变更请返回列表核对影响后操作。
+      </p>
       <label class="lai-switch">
         <input
           v-model="form.enabled"
+          :disabled="isEdit || submitting || !canManage"
           type="checkbox"
         >
         启用（发布时必须至少有一个启用且引用完整的候选）
@@ -208,6 +221,7 @@ onMounted(async () => {
           取消
         </button>
         <button
+          v-if="canManage"
           type="submit"
           class="lai-btn lai-btn-primary"
           :disabled="submitting || formInvalid"

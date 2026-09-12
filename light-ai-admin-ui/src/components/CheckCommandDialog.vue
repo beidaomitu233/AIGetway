@@ -40,7 +40,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
-  confirm: [command: { provider_model_id?: string | undefined; credential_id?: string | undefined; mode: CheckMode; timeout_ms: number }]
+  confirm: [command: { upstream_model_id?: string | undefined; channel_credential_id?: string | undefined; mode: CheckMode; timeout_ms: number }]
 }>()
 
 const DEFAULT_TIMEOUT_MS = 10000
@@ -80,8 +80,8 @@ const confirmDisabled = computed(
 function confirm(): void {
   if (confirmDisabled.value) return
   emit('confirm', {
-    provider_model_id: props.requireModel ? providerModelId.value : undefined,
-    credential_id: props.requireCredential ? credentialId.value : undefined,
+    upstream_model_id: props.requireModel ? providerModelId.value : undefined,
+    channel_credential_id: props.requireCredential ? credentialId.value : undefined,
     mode: mode.value,
     timeout_ms: timeoutMs.value,
   })

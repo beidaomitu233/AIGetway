@@ -88,14 +88,15 @@
 |---|---|---|---|---|---|---|---|---|---|
 | FE-V2-BASELINE-001 | 前端执行模型 | 执行基线与任务领取 | 7669954 登记远程 V1 基线阻塞，FE-201～205 未领取 | 保留原提交历史，任务表重建为 V2 P20～P23 | applications | application/auth/quota | application 等 | 已完成 | 合并 c69af23 与 7669954；推送后从 origin/dev 创建功能分支，按 TASK_STATUS.md 领取。未产生前端代码占用。 |
 | ENV-V2-001 | 后端执行模型 | 本地执行环境 | 默认命令与专用 apply_patch 报 helper_unknown_error: setup refresh had errors | 失败后经 require_escalated 审批重试；补丁可直接调用已安装 codex.exe 的 --codex-run-as-apply-patch | 全部 | 全部 | 无 | 执行中 | 本机审批通道已验证可读写 Git/文档并启动 Node 20.19.6、Java 17.0.19；默认沙箱故障仍在。其他任务须各自验证，不得宣称其环境已恢复。 |
-| CONTRACT-V2-001 | 架构 | 应用接口收口 | ApplicationController 使用 data 包装，ApplicationKeyController 直接返回对象；计划部分 GET 子资源尚无对应映射 | BE-201/202 优先补精确请求响应契约及接口测试；前端以同一契约夹具推进 | api/applications.ts、应用页 | ApplicationController、ApplicationKeyController、client/application | 应用域 | 执行中 | 现有代码只作为差异证据；按 PRD data/error 契约收口，不能新增长期双结构兼容。仅相关接口联调等待契约，其余任务可继续。 |
+| CONTRACT-V2-001 | 架构 | 应用接口收口 | 原有密钥响应未包装、GET 子资源缺失及字段契约不一致 | 包装与子资源已交付，剩余字段按第 8 节处理 | api/applications.ts、应用页 | ApplicationController、ApplicationKeyController、client/application | 应用域 | 执行中 | bd95691 已统一 data 并补 GET models/quota，后端提供 16/16 目标测试记录；secret、allow_stream、周期与轮换仍待按 BE-P20 结论实现及跨端验收。不再将已补接口描述为缺失，不提供长期双结构。 |
 
 原阻塞登记提交 7669954 保留在 Git 历史；旧 V1 任务完成记录不迁入当前任务表。此前只完成静态资产检查，当前未宣布 V2 全量业务测试通过。
 
 开发假设按 PRD 建议用于实现和测试，仍需在相应任务验收前确认：身份接入可先通过可替换测试身份上下文验证四角色；创建/成员管理按显式权限控制，成员写入暂不开放；周期建议自然月、Asia/Shanghai，须显式传参；轮换建议最大 24 小时；密钥预算暂归应用、密钥只收紧模型与速率。这些假设不等于产品决策已确认，也不阻塞列表、表单、权限隔离和已明确业务规则的开发。
 
-当前应用接口证据：
-- ApplicationController：GET/POST /admin/applications，GET/PUT /admin/applications/{id}，POST /status，PUT /models，PUT /quota，GET/POST /quota/adjustments，POST /quota/reset，GET /members。
+当前应用接口证据（935d905；与第 8 节目标接口区分）：
+
+- ApplicationController：GET/POST /admin/applications，GET/PUT /admin/applications/{id}，POST /status，GET/PUT /models，GET/PUT /quota，GET/POST /quota/adjustments，POST /quota/reset，GET /members。
 - ApplicationKeyController：GET/POST /admin/applications/{id}/keys，POST /{keyId}/rotate、/status、/revoke。
 - DTO 源位置：light-ai-client/src/main/java/com/lightai/client/application；前端消费位置：light-ai-admin-ui/src/api/applications.ts。后端先审查并补齐契约，明确字段类型、必填、枚举、分页、版本、幂等与错误，不将 DTO 文件存在视为已验收。
 
@@ -103,7 +104,7 @@
 
 ## 7. BE-P20 审查差异（2026-09-12，后端执行模型 codex-be-0912）
 
-以下问题提出方均为后端执行模型，状态均为待确认；不以现有实现作为新版产品结论。
+以下为后端执行模型在 935d905 交付时登记的历史待确认问题；当前处理状态见第 8 节，不以现有实现作为新版产品结论。
 
 | 编号 | 任务 | 差异与影响 | 待确认处理 |
 |---|---|---|---|
@@ -123,7 +124,40 @@
 - 未验收：BE-201～205 均未勾选。真实 MySQL/PostgreSQL/Redis、Provider、企业身份、前后端首调 E2E 与性能未执行。不得以本次 H2/MockMvc 结果宣称生产链路成功。
 - 影响/回滚：密钥调用方应读取统一 data 包装，字段仍为当前 DTO，未提供双结构；必要回退 bd95691，数据库无迁移回滚需求。前端文件由 FE-P20 负责人维护。
 - 占用：BE-P20 改为阻塞，保留原负责人、暂停后续实现，未标记完成或解除占用。需架构确认 BE-P20-001～005 后继续，不重复领取或接管。
-## 8. FE-P20 部分交付与契约依赖（2026-09-12）
+
+## 8. BE-P20 阻塞处理结论（2026-09-12）
+
+本节替代第 7 节中等待架构决定的当前状态，历史部分交付与测试报告保留。用户要求继续处理并保留负责人/占用；本轮只更新技术契约及交接，不接管已占用产品文件，不执行真实 Provider 或企业身份接入。
+
+| 序号 | 提出方 | 问题类型 | 功能问题描述 | 优化说明 | 涉及前端文件/模块 | 涉及后端文件/模块 | 涉及数据库表 | 状态 | 处理结论 |
+|---|---|---|---|---|---|---|---|---|---|
+| BE-P20-001 | 后端执行模型 | 应用列表/归档 | code 冲突、筛选、摘要与归档准入互斥缺精确约定 | 明确 409 错误码、分页/预算口径、批量查询与应用行锁 | applications 列表/表单 | ApplicationService、错误码、准入 | application、budget_reservation、Trace/聚合 | 已确认 | 按 BACKEND_PLAN 同号小节执行；DB-201 提供查询/锁。已确认技术方案，未验收实现。 |
+| BE-P20-002 | 后端执行模型 | 密钥轮换 | 原地换摘要无法满足新记录、宽限和幂等 | secret/key_prefix 统一；新增 Key ID、关系与非敏感幂等结果 | ApplicationKeyPanel、api/applications | ApplicationKeyService、DTO | application_key、application_key_operation | 已确认 | 按 BACKEND_PLAN 同号小节及 DB-202 执行；宽限上限未确认时仅立即轮换。没有密钥原文持久化。 |
+| BE-P20-003 | 后端执行模型 | 模型授权 | 已有授权配置未表达已发布可路由状态 | 统一 allow_stream，区分 model-options 与已授权 models；活动快照共用可用性查询 | 应用模型选择/限制 | 授权服务、模型目录、Runtime | application_model_permission、config_snapshot | 已确认 | 技术契约已明确；非法历史约束不回退无上限；依赖 DB-205 和运行可用性端口。 |
+| BE-P20-004 | 后端执行模型 | 额度/周期 | 降低上限、周期历史、预约和剩余额度缺一致定义 | 允许降低；原周期结算；不可变策略历史；预约与已生效分开 | 额度页/流水 | ApplicationService、ApplicationQuotaPort | quota_policy、period/history、quota_adjustment、quota_operation、reservation、ledger | 已确认 | DB-203/204 按新增版本迁移实现；平台时区及产品默认值待确认，不静默猜测。 |
+| BE-P20-005 | 后端执行模型 | 身份权限 | 企业身份源未定，显式敏感权限及拒绝审计尚未闭环 | 先实施权限与范围校验、403 审计；成员只读 | 登录/成员/应用入口 | AuthContextProvider、RBAC、审计 | application_member、audit_log | 执行中 | 权限技术边界已明确；BP-001/002 企业身份及成员维护方案仍待确认，真实身份登录不能勾选。 |
+
+### 占用和接续
+
+- BE-P20 状态仍为阻塞，负责人保持后端执行模型 codex-be-0912，分支保持 feature/backend-p20-codex-be-0912，未解除占用、未勾选 BE-201～205。
+- FE-P20 的 codex-0912 占用保留；远端新增部分交付报告后整包状态同步为阻塞，见第 9/10 节。原负责人可按 FRONTEND_PLAN 的处理结论推进无依赖子项。
+- DB-P20 仍待领取；处理次序为 DB-201 查询/归档锁 → DB-202 轮换持久化 → DB-203/204 周期与调整 → DB-205 约束数据转换。数据库执行方正式领取后负责新增迁移；本轮未代其领取。
+- 原后端负责人可先完成新错误映射、批量查询端口、DTO/权限测试等不依赖未交付迁移的子项；整包状态保留阻塞，跨包联调需要 DB 与前端证据后再审查。不得因方案确认直接标记完成或释放占用。
+
+### 验收门槛与缺口
+
+| 门槛 | 当前状态 | 必要输入与出口证据 |
+|---|---|---|
+| 真实 Provider | 未验收 | 已授权测试渠道/模型、通过安全注入的测试凭证；同步、流式、取消、Usage/价格/Trace 对账；记录环境与 request_id，不记录密钥/正文。 |
+| 企业身份 | 未验收 | 部署方确认的协议、测试身份源、四角色与应用范围映射；成功登录/退出、过期、无角色、跨应用 403 与审计。 |
+| 应用首调 E2E | 未验收 | DB 迁移、身份源、已发布路由及前端就绪；创建应用→授权→配额→签发→/v1/models→Chat/SSE→Trace/账本，全流程真实结果一致。 |
+| PostgreSQL/MySQL/Redis | 未验收 | 提供目标测试连接；验证轮换/归档/额度并发、唯一终态及故障恢复。既有报告有 16 个环境跳过项，不作通过依据。 |
+
+本次核对基点为 935d905，读取了实际 DTO、权限字典、V2 双数据库迁移和原后端交付记录。原报告中的 16/16 目标测试、425 通过/16 跳过为 bd95691 交付方证据，本轮没有重新运行产品测试。此次只做文档引用、任务状态、占用保留和 Git 差异检查。
+
+## 9. FE-P20 部分交付与契约依赖（2026-09-12）
+
+本节保留前端 56347c7 的交付证据。密钥和额度技术决策适用第 8 节；新登记的数值传输、路由与审计/影响端点缺口见第 10 节，不能把技术结论当作已部署接口。
 
 | 序号 | 提出方 | 问题类型 | 功能问题描述 | 优化说明 | 涉及前端文件/模块 | 涉及后端文件/模块 | 涉及数据库表 | 状态 | 处理结论 |
 | -- | --- | ---- | ------ | ---- | --------- | --------- | ------ | -- | ---- |
@@ -143,6 +177,60 @@
 - 原始日志/截图位于独立工作目录 output/playwright，未提交；浏览器为明确标记测试夹具。未执行真实企业身份、DB/Redis/Provider/首调 E2E、完整预算/宽限/归档及性能验证。
 - 任务主勾选：FE-201～FE-205 全部保持未勾选；已完成的前端子项允许审查合入，完整任务包等待上述契约与真实联调，状态为阻塞。远程合入与占用最终状态由后续 TASK_STATUS.md 记录确认。
 
+## 10. 并发交付核对与前端补充处理（2026-09-12）
+
+合并期间已纳入远程 5b0b55d、前端状态登记 5f4615e 与后端占用补充 c98e3bb，保留前端 418218d/ef8a972/56347c7 和 BE-P21 领取 45ce9c9；本轮不改这些产品文件。第 9 节的测试数值保留为原交付方报告，没有在架构文档合并时重新运行。
+
+| 序号 | 提出方 | 问题类型 | 功能问题描述 | 优化说明 | 涉及前端文件/模块 | 涉及后端文件/模块 | 涉及数据库表 | 状态 | 处理结论 |
+|---|---|---|---|---|---|---|---|---|---|
+| FE-P20-001 | 前端执行模型 | 精度/入口/列表 | 长整型、峰值、路由与身份入口未收口 | 管理 Token/计数/版本用字符串；列表峰值不纳本轮；不猜登录地址 | applications、router、会话 | 应用 DTO、bootstrap | application、quota | 执行中 | 数值与列表口径按 BE/FE Plan 补充契约；/ui 仅过渡现状，V2 根路径及真实身份入口由 FE-P23/BE-205 验收，未解除整包阻塞。 |
+| FE-P20-002 | 前端执行模型 | 密钥 | 新记录/幂等/宽限未实现 | 接收 BE-P20-002 处理 | KeyPanel/SecretDialog | KeyService/DTO | key、key_operation | 已确认 | 技术契约已确认，FE-204 仍未验收，原字段需由原负责人同步切换。 |
+| FE-P20-003 | 前端执行模型 | 目录/影响/审计 | 创建前候选、影响和应用审计缺接口 | 定义无 ID 候选、impact、audit；明确范围和遗留缺口 | 表单/详情/审计页签 | 应用服务、审计端口 | application、key、audit_log | 已确认 | 按 BACKEND_PLAN 补充契约及 DB-201 实现；不能将已授权配置或全局模糊搜索当作替代验收。 |
+| FE-P20-004 | 前端执行模型 | 额度 | 前端预览与后端拒绝规则冲突 | 接收 BE-P20-004 处理 | QuotaSummary/详情 | quota port/service | period/history/operation/ledger | 已确认 | 允许降低、分周期结算和单维重置期初余额已明确；真实保存/结算尚未验收。 |
+
+状态口径：前端部分交付报告已明确整包阻塞，因此 TASK_STATUS 的 FE-P20 同步为阻塞，保留 codex-0912、原分支与文件占用，未勾选任务。BE-P20 保持阻塞及原占用，BE-P21 保留远端进行中领取；DB-P20 仍待领取。后续由各原负责人同步 origin/dev 后处理对应明确子项，不重复占用。
+
 ### FE-P20 远程交付确认
 
 2026-09-12：在独立 clone 的本地 dev 合入功能分支，再同步最新 origin/dev（含他人的 45ce9c9 任务登记），普通推送成功。fetch 验证远程 5b0b55d 包含 418218d、ef8a972、56347c7；合并后的 light-ai-admin-ui 文件树与全部门禁通过的 ef8a972 完全一致，git diff --check 通过。未推送功能分支，未强推，未修改其他负责人的任务记录。FE-P20 登记为阻塞，保留负责人，未解除占用；FE-201～FE-205 保持未勾选，等待 FE-P20-001～004/BE-P20-001～005 和真实联调完成后继续。
+
+
+## FE-P21 契约核对（2026-09-12，前端执行模型）
+
+以 origin/dev 344c398 为核对点，BE-P21 进行中。已确认路径目标不等于现有运行契约；待后端交付后再对齐，不构造未定义响应。
+
+| 序号 | 提出方 | 问题类型 | 功能问题描述 | 优化说明 | 涉及前端文件/模块 | 涉及后端文件/模块 | 涉及数据库表 | 状态 | 处理结论 |
+| -- | --- | ---- | ------ | ---- | --------- | --------- | ------ | -- | ---- |
+| FE-P21-001 | 前端执行模型 | 接口字段与路径 | Channel Controller 仍为 providers；列表无活动 Key 数、优先级/权重和最近成功；Key 仍挂 credential-pools，缺渠道嵌套影响与批量检测契约 | 请 BE-P21 公布完整路径、DTO、权限和批量终态契约，禁止把池数当 Key 数 | providers、credentials、导航/API | channel、check | channel、channel_credential | 待确认 | 先修复确定的输入安全与交互，不虚构数据 |
+| FE-P21-002 | 前端执行模型 | 同步契约缺失 | 上游模型仍用 provider-models 路径，但 Java DTO 已改 channel_id；缺同步新增/变化/下线/冲突及 locked_fields 预览提交契约 | 明确安全同步和人工字段锁定的服务端保证；前端不得用旧导入假装同步 | models、providerModels API | upstream | upstream_model、model_sync_job/item | 待确认 | 等待 BE-213 收口 |
+| FE-P21-003 | 前端执行模型 | 虚拟模型与路由冲突 | 旧候选前端提交 provider_model_id/credential_pool_id，Java 已为 upstream_model_id/channel_id；weight 最小 1 与计划允许 0 冲突；缺能力交集、授权应用影响及发布影响契约 | 需 BE-214/215 明确 code、嵌套路由、零权重及影响 DTO 后接入，避免擅自改变运行语义 | aliases、modelAliases API | alias、config-release、runtime | virtual_model、route_candidate | 待确认 | FE-214/215 完整验收待服务端契约与联调 |
+
+## BE-P21 执行审查（2026-09-12，codex-be-0912）
+
+提出方：后端执行模型。任务：BE-211～BE-215，领取提交 45ce9c9。按 BACKEND_PLAN 已明确路径推进渠道、嵌套凭证、上游模型、虚拟模型及嵌套路由；不保留旧 HTTP 路径双入口。内部类名可复用，不据此反推产品范围。
+
+| 编号 | 状态 | 差异及需确认的契约 |
+|---|---|---|
+| BE-P21-001 | 待确认 | Channel DTO 仍用 type/proxy_url/connect_timeout_ms/read_timeout_ms/default_headers/enabled，计划用 provider_type/proxy/timeouts/headers/status/health/priority/weight；需冻结精确请求和响应，不擅自添加双字段。紧急启停与草稿状态的独立命令、版本和运行广播契约尚未提供。 |
+| BE-P21-002 | 待确认 | 渠道 Key DTO 缺可编辑 priority，存在 rpm_limit/tpm_limit 命名；冷却/即时启停、最后可用 Key 影响与跨实例同步需确认；不以草稿写成功表示运行切换。 |
+| BE-P21-003 | 待确认 | 现有模型导入无同步预览/提交 token、请求幂等键与 model_sync_job/item，UpstreamModelRecord 无 locked_fields；需 DB-213 与架构确定预览快照、锁定字段及幂等事务契约，禁止通过临时内存状态冒充完成。 |
+| BE-P21-004 | 待确认 | 虚拟模型仍为 alias/display_name/routing_strategy/enabled，缺持久化安全能力交集、显式收紧和应用影响 DTO；等待 DB-214/215 与 BE-P20 已提出的运行可用性端口收口。 |
+| BE-P21-005 | 待确认 | route runtime_status 仅依据静态配置且 active_credential_count 当前写死 0，未反映固定快照/健康/容量；发布校验与运行状态响应需明确，不能以管理草稿视图声明运行成功。 |
+| BE-P21-006 | 待确认 | 实际迁移的 batch_check_job 缺仓储要求的 operator_id/command 等字段，批量检测无法持久化；需 DB-213 确认采用现有批量表还是统一 model_sync_job/item。已修复请求解析、输入归属、事务和连接释放；合法请求在当前 schema 明确返回 CONFIG_DATA_UNAVAILABLE/503，未验收成功批量检测。 |
+
+本次无需重新设计即可执行：按计划改为 /admin/channels、/admin/upstream-models、/admin/virtual-models、嵌套 credentials/routes；服务层校验 parent-child 归属；统一 ID 与参数错误；按 BE-215 允许零权重并验证更新不可暗换路径；补充真实 service/JDBC/H2/MockMvc 回归、事务和权限测试。跨包契约未确认项单独保留未验收。
+
+补充：沿用现有 ErrorCode，OBJECT_REFERENCE_INVALID 与 PROVIDER_ADAPTER_NOT_FOUND 为 HTTP 422，参数格式错误为 400，不能未确认擅改全局错误码。轮换审计使用现有配置动词 UPDATE 加敏感字段变更摘要，不新增审计枚举。凭证删除占用查询失败现拒绝操作；真实共享占用与删除互斥尚需运行端口验收。
+
+前端联调影响：本次 HTTP 路径切换为 channels/upstream-models/virtual-models 和嵌套 credentials/routes，原 providers/provider-models/model-aliases/route-candidates 不保留兼容映射；FE-P21 与应用模型选择器需由前端负责人同步。DTO 仅交付已存在且本次测试明确的字段，不宣称上述待确认 V2 字段齐备。
+
+
+## FE-P21 本次接入与交付复核（2026-09-12）
+
+已同步 BE-P21 的 c08d625：FE-P21-001～003 的旧 HTTP 路径问题已处理，原字段/业务缺口继续按 BE-P21-001～006 等待确认，不重复定义契约。前端消费 channels、嵌套 credentials、upstream-models、virtual-models 与嵌套 routes，检测传 upstream_model_id/channel_credential_id，批量传 channel_id/upstream_model_ids/channel_credential_id。Key 面板直挂渠道；路由所属渠道来自真实模型/渠道/Key 查询，不再查凭证池；零权重遵循已交付服务端规则。
+
+| 序号 | 提出方 | 问题类型 | 功能问题描述 | 优化说明 | 涉及前端文件/模块 | 涉及后端文件/模块 | 涉及数据库表 | 状态 | 处理结论 |
+| -- | --- | ---- | ------ | ---- | --------- | --------- | ------ | -- | ---- |
+| FE-P21-004 | 前端执行模型 | 页面壳适配 | 390px 浏览器中模型表单内部越界已修复，公共页面壳 documentWidth 仍为 410px | FE-P23 统一页面壳和导航窄屏验收；本包不扩展全局布局 | ModelFormPage、AppLayout | 无 | 无 | 待确认 | 1024/1366 资源桌面检查通过，不声称完整移动端验收 |
+
+本轮代码提交 def540e、b27689d、fd9014a；新增 resourceP21/resourceApiP21 两个测试文件，更新既有表单、路由、导航与契约夹具；最终 26 文件 226 项通过，类型/lint/build 通过，lint 81 项历史 warning。详细任务验收、命令、文件和浏览器边界见 FRONTEND_PLAN 的 FE-P21 交付附录。所有主任务保持未勾选；任务状态为阻塞并保留负责人。未修改后端、数据库、依赖锁文件；没有把缺失的同步/影响/运行态接口虚构为成功。最终远程合入由 TASK_STATUS 后续确认。

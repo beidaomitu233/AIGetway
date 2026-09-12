@@ -336,14 +336,7 @@ public class ModelAliasService {
     }
 
     public static UUID parseId(String rawId) {
-        if (rawId == null || rawId.isBlank()) {
-            throw new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "对象不存在或已删除");
-        }
-        try {
-            return UUID.fromString(rawId.strip());
-        } catch (IllegalArgumentException e) {
-            throw new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "对象不存在或已删除");
-        }
+        return com.lightai.admin.web.ResourceIds.parse(rawId);
     }
 
     private static long requireVersion(Long version) {

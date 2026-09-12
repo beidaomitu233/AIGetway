@@ -40,65 +40,65 @@ public class ChannelController {
         this.providerCheckService = providerCheckService;
     }
 
-    @GetMapping("/admin/providers")
+    @GetMapping("/admin/channels")
     public ResponseEntity<String> list(HttpServletRequest request) {
         PageResult<ChannelListItem> page = providerService.list(context(request), queryParams(request));
         return json(ManagementResponses.ok(page));
     }
 
-    @GetMapping("/admin/providers/{id}")
+    @GetMapping("/admin/channels/{id}")
     public ResponseEntity<String> detail(@PathVariable String id, HttpServletRequest request) {
         return json(ManagementResponses.ok(providerService.detail(context(request), id)));
     }
 
-    @PostMapping("/admin/providers")
-    public ResponseEntity<String> create(@RequestBody String body, HttpServletRequest request) {
+    @PostMapping("/admin/channels")
+    public ResponseEntity<String> create(@RequestBody(required = false) String body, HttpServletRequest request) {
         ChannelSaveCommand command = CommandBodies.parse(body, ChannelSaveCommand.class);
         ManagementOperationResult<ChannelDetail> result =
                 providerService.create(context(request), command);
         return json(ManagementResponses.ok(result));
     }
 
-    @PutMapping("/admin/providers/{id}")
-    public ResponseEntity<String> update(@PathVariable String id, @RequestBody String body,
+    @PutMapping("/admin/channels/{id}")
+    public ResponseEntity<String> update(@PathVariable String id, @RequestBody(required = false) String body,
                                          HttpServletRequest request) {
         ChannelSaveCommand command = CommandBodies.parse(body, ChannelSaveCommand.class);
         return json(ManagementResponses.ok(providerService.update(context(request), id, command)));
     }
 
-    @GetMapping("/admin/providers/{id}/impact")
+    @GetMapping("/admin/channels/{id}/impact")
     public ResponseEntity<String> impact(@PathVariable String id, HttpServletRequest request) {
         String operation = request.getParameter("operation");
         ImpactAnalysis analysis = providerService.impact(context(request), id, operation);
         return json(ManagementResponses.ok(analysis));
     }
 
-    @PostMapping("/admin/providers/{id}/check")
-    public ResponseEntity<String> check(@PathVariable String id, @RequestBody String body,
+    @PostMapping("/admin/channels/{id}/check")
+    public ResponseEntity<String> check(@PathVariable String id, @RequestBody(required = false) String body,
                                         HttpServletRequest request) {
         ChannelCheckCommand command = CommandBodies.parse(body, ChannelCheckCommand.class);
         ChannelCheckRecord record = providerCheckService.check(context(request), id, command);
         return json(ManagementResponses.ok(record));
     }
 
-    @PostMapping("/admin/providers/{id}/enable")
-    public ResponseEntity<String> enable(@PathVariable String id, @RequestBody String body,
+    @PostMapping("/admin/channels/{id}/enable")
+    public ResponseEntity<String> enable(@PathVariable String id, @RequestBody(required = false) String body,
                                          HttpServletRequest request) {
         VersionCommand command = CommandBodies.parse(body, VersionCommand.class);
         return json(ManagementResponses.ok(providerService.setEnabled(
                 context(request), id, true, command.version(), null)));
     }
 
-    @PostMapping("/admin/providers/{id}/disable")
-    public ResponseEntity<String> disable(@PathVariable String id, @RequestBody String body,
+    @PostMapping("/admin/channels/{id}/disable")
+    public ResponseEntity<String> disable(@PathVariable String id, @RequestBody(required = false) String body,
                                           HttpServletRequest request) {
         ImpactConfirmCommand command = CommandBodies.parse(body, ImpactConfirmCommand.class);
         return json(ManagementResponses.ok(providerService.setEnabled(
                 context(request), id, false, command.version(), command.confirmedImpactVersion())));
     }
 
-    @DeleteMapping("/admin/providers/{id}")
-    public ResponseEntity<String> delete(@PathVariable String id, @RequestBody String body,
+    @DeleteMapping("/admin/channels/{id}")
+    public ResponseEntity<String> delete(@PathVariable String id, @RequestBody(required = false) String body,
                                          HttpServletRequest request) {
         ImpactConfirmCommand command = CommandBodies.parse(body, ImpactConfirmCommand.class);
         return json(ManagementResponses.ok(providerService.delete(

@@ -37,20 +37,20 @@ describe('request', () => {
     const fetchMock = stubFetch(() =>
       Promise.resolve(jsonResponse(200, { data: { id: 'p-1', version: 2 } })),
     )
-    const data = await request<{ id: string; version: number }>({ path: '/providers/p-1' })
+    const data = await request<{ id: string; version: number }>({ path: '/channels/p-1' })
     expect(data).toEqual({ id: 'p-1', version: 2 })
-    expect(fetchMock).toHaveBeenCalledWith('/admin/providers/p-1', expect.anything())
+    expect(fetchMock).toHaveBeenCalledWith('/admin/channels/p-1', expect.anything())
   })
 
   it('查询参数序列化：跳过空值并展开数组', async () => {
     initRuntimeConfig()
     const fetchMock = stubFetch(() => Promise.resolve(jsonResponse(200, { data: {} })))
     await request({
-      path: '/providers',
+      path: '/channels',
       query: { keyword: 'openai', page: 2, enabled: true, empty: '', missing: null, tags: ['a', 'b'] },
     })
     const url = fetchMock.mock.calls[0][0] as string
-    expect(url).toBe('/admin/providers?keyword=openai&page=2&enabled=true&tags=a&tags=b')
+    expect(url).toBe('/admin/channels?keyword=openai&page=2&enabled=true&tags=a&tags=b')
   })
 
   it('400 字段错误按字段定位', async () => {
@@ -73,7 +73,7 @@ describe('request', () => {
       ),
     )
     const error = (await rejectionOf(
-      request({ path: '/providers', method: 'POST', body: {} }),
+      request({ path: '/channels', method: 'POST', body: {} }),
     )) as ApiError
     expect(error).toBeInstanceOf(ApiError)
     expect(error.code).toBe('FIELD_VALIDATION_FAILED')
@@ -96,7 +96,7 @@ describe('request', () => {
         }),
       ),
     )
-    const error = (await rejectionOf(request({ path: '/providers/p-1', method: 'PUT', body: {} }))) as ApiError
+    const error = (await rejectionOf(request({ path: '/channels/p-1', method: 'PUT', body: {} }))) as ApiError
     expect(error).toBeInstanceOf(ApiError)
     expect(error.isVersionConflict).toBe(true)
     expect(error.serverVersion).toBe(7)
@@ -111,7 +111,7 @@ describe('request', () => {
         }),
       ),
     )
-    const error = (await rejectionOf(request({ path: '/providers' }))) as ApiError
+    const error = (await rejectionOf(request({ path: '/channels' }))) as ApiError
     expect(error).toBeInstanceOf(ApiError)
     expect(error.retryable).toBe(true)
   })
@@ -125,7 +125,7 @@ describe('request', () => {
         }),
       ),
     )
-    const error = (await rejectionOf(request({ path: '/providers' }))) as ApiError
+    const error = (await rejectionOf(request({ path: '/channels' }))) as ApiError
     const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>
     expect(headers['X-Request-Id']).toBeTruthy()
     expect(error.requestId).toBe('srv-req-1')
@@ -135,8 +135,8 @@ describe('request', () => {
     initRuntimeConfig()
     const fetchMock = stubFetch(() => Promise.resolve(jsonResponse(200, { data: {} })))
     registerCsrfToken('csrf-token-1')
-    await request({ path: '/providers' })
-    await request({ path: '/providers', method: 'POST', body: {} })
+    await request({ path: '/channels' })
+    await request({ path: '/channels', method: 'POST', body: {} })
     const getHeaders = fetchMock.mock.calls[0][1].headers as Record<string, string>
     const postHeaders = fetchMock.mock.calls[1][1].headers as Record<string, string>
     expect(getHeaders['X-CSRF-Token']).toBeUndefined()
@@ -154,7 +154,7 @@ describe('request', () => {
           )
         }),
     )
-    const pending = request({ path: '/providers', signal: controller.signal })
+    const pending = request({ path: '/channels', signal: controller.signal })
     controller.abort()
     const error = await rejectionOf(pending)
     expect(isAbortError(error)).toBe(true)
@@ -168,7 +168,7 @@ describe('request', () => {
           init.signal!.addEventListener('abort', () => reject(init.signal!.reason))
         }),
     )
-    const error = (await rejectionOf(request({ path: '/providers', timeoutMs: 10 }))) as TimeoutError
+    const error = (await rejectionOf(request({ path: '/channels', timeoutMs: 10 }))) as TimeoutError
     expect(error).toBeInstanceOf(TimeoutError)
   })
 })

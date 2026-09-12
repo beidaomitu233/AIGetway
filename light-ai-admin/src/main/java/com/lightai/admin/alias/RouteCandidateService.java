@@ -95,7 +95,9 @@ public class RouteCandidateService {
                                                                   RouteCandidateSaveCommand command) {
         RequestPermissions.require(context, Permissions.ALIAS_MANAGE);
         UUID aliasId = parseId(rawAliasId);
-        command.validateForCreate();
+        try { command.validateForCreate(); } catch (IllegalArgumentException e) {
+            throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "路由参数不合法");
+        }
         UUID id = UUID.randomUUID();
         String requestId = context.requestId();
 
@@ -142,21 +144,29 @@ public class RouteCandidateService {
     }
 
     /** 候选更新：model/pool 不可变，仅 priority/weight/enabled。 */
-    public ManagementOperationResult<RouteCandidateDetail> update(RequestContext context, String rawId,
+    public ManagementOperationResult<RouteCandidateDetail> update(RequestContext context, String rawAliasId, String rawId,
                                                                   RouteCandidateSaveCommand command) {
         RequestPermissions.require(context, Permissions.ALIAS_MANAGE);
         UUID id = parseId(rawId);
-        command.validatePriorityWeight();
+        UUID parentId = parseId(rawAliasId);
+        try { command.validatePriorityWeight(); } catch (IllegalArgumentException e) {
+            throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "路由参数不合法");
+        }
         String requestId = context.requestId();
 
         DraftWriteResult result = draftWriteService.execute(new DraftWriteCommand(
                 requestId, context.authContext().userId(), sourceMode, context.sourceIpMasked(),
                 "UPDATE", ENTITY_TYPE.toLowerCase(), id.toString(), requireVersion(command.version()),
                 connection -> candidateRepository.lockLiveById(connection, id)
-                        .map(CandidateRecord::version).orElse(null),
+                        .map(record -> requireInModel(connection, parentId, record).version()).orElse(null),
                 connection -> {
-                    CandidateRecord current = candidateRepository.lockLiveById(connection, id)
-                            .orElseThrow(this::notFound);
+                    CandidateRecord current = requireInModel(connection, parentId,
+                            candidateRepository.lockLiveById(connection, id).orElseThrow(this::notFound));
+                    if ((command.channelId() != null && !command.channelId().equals(current.channelId()))
+                            || (command.upstreamModelId() != null
+                            && !command.upstreamModelId().equals(current.upstreamModelId()))) {
+                        throw new LightAiException(ErrorCode.CONFIG_FIELD_IMMUTABLE, "路由渠道和上游模型不可修改");
+                    }
                     CandidateRecord saved = candidateRepository.update(connection, new CandidateRecord(
                             current.id(), current.aliasId(), current.upstreamModelId(),
                             current.channelId(), command.priority(), command.weight(),
@@ -180,10 +190,11 @@ public class RouteCandidateService {
         }
     }
 
-    public ManagementOperationResult<RouteCandidateDetail> delete(RequestContext context, String rawId,
+    public ManagementOperationResult<RouteCandidateDetail> delete(RequestContext context, String rawAliasId, String rawId,
                                                                   Long version) {
         RequestPermissions.require(context, Permissions.ALIAS_MANAGE);
         UUID id = parseId(rawId);
+        UUID parentId = parseId(rawAliasId);
         if (version == null || version < 1) {
             throw fieldError("version", "REQUIRED", "version 必填");
         }
@@ -192,10 +203,10 @@ public class RouteCandidateService {
                 requestId, context.authContext().userId(), sourceMode, context.sourceIpMasked(),
                 "DELETE", ENTITY_TYPE.toLowerCase(), id.toString(), version,
                 connection -> candidateRepository.lockLiveById(connection, id)
-                        .map(CandidateRecord::version).orElse(null),
+                        .map(record -> requireInModel(connection, parentId, record).version()).orElse(null),
                 connection -> {
-                    CandidateRecord current = candidateRepository.lockLiveById(connection, id)
-                            .orElseThrow(this::notFound);
+                    CandidateRecord current = requireInModel(connection, parentId,
+                            candidateRepository.lockLiveById(connection, id).orElseThrow(this::notFound));
                     candidateRepository.markDeleted(connection, id);
                     return new DraftEntityChange(ENTITY_TYPE.toLowerCase(), id, "candidate",
                             "DELETE", current.version(), List.of());
@@ -213,7 +224,9 @@ public class RouteCandidateService {
                                               ReorderCommand command) {
         RequestPermissions.require(context, Permissions.ALIAS_MANAGE);
         UUID aliasId = parseId(rawAliasId);
-        command.validate();
+        try { command.validate(); } catch (IllegalArgumentException e) {
+            throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "路由参数不合法");
+        }
         String requestId = context.requestId();
 
         draftWriteService.execute(new DraftWriteCommand(
@@ -274,14 +287,15 @@ public class RouteCandidateService {
     }
 
     /** 候选探测：复用检测编排，目标锁定候选的模型与池。 */
-    public com.lightai.client.channel.ChannelCheckRecord probe(RequestContext context, String rawId,
+    public com.lightai.client.channel.ChannelCheckRecord probe(RequestContext context, String rawAliasId, String rawId,
                                                                  com.lightai.client.channel.ChannelCheckCommand command) {
         RequestPermissions.require(context, Permissions.PROVIDER_CHECK);
         UUID id = parseId(rawId);
+        UUID parentId = parseId(rawAliasId);
         CandidateRecord candidate;
         try (Connection connection = dataSource.getConnection()) {
-            candidate = candidateRepository.findLiveById(connection, id)
-                    .orElseThrow(this::notFound);
+            candidate = requireInModel(connection, parentId,
+                    candidateRepository.findLiveById(connection, id).orElseThrow(this::notFound));
         } catch (LightAiException e) {
             throw e;
         } catch (Exception e) {
@@ -299,8 +313,16 @@ public class RouteCandidateService {
         }
         return providerCheckService.check(context, model.channelId().toString(),
                 new com.lightai.client.channel.ChannelCheckCommand(
-                        null, model.id().toString(), candidate.channelId().toString(),
+                        null, model.id().toString(), command.channelCredentialId(),
                         command.resolvedMode(), command.resolvedTimeoutMs()));
+    }
+
+    private CandidateRecord requireInModel(Connection connection, UUID parentId, CandidateRecord record) {
+        aliasRepository.findLiveById(connection, parentId).orElseThrow(this::notFound);
+        if (!parentId.equals(record.aliasId())) {
+            throw new LightAiException(ErrorCode.OBJECT_REFERENCE_INVALID, "路由不属于指定虚拟模型");
+        }
+        return record;
     }
 
     private RouteCandidateDetail toDetail(Connection connection, CandidateRecord record) {
@@ -360,14 +382,7 @@ public class RouteCandidateService {
     }
 
     public static UUID parseId(String rawId) {
-        if (rawId == null || rawId.isBlank()) {
-            throw new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "对象不存在或已删除");
-        }
-        try {
-            return UUID.fromString(rawId.strip());
-        } catch (IllegalArgumentException e) {
-            throw new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "对象不存在或已删除");
-        }
+        return com.lightai.admin.web.ResourceIds.parse(rawId);
     }
 
     private static long requireVersion(Long version) {

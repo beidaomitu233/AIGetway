@@ -184,8 +184,13 @@ public class UpstreamModelService {
         UUID id = UUID.randomUUID();
         String requestId = context.requestId();
         validateCommand(command, true);
-        String actualModelId = (command.modelId() != null && !command.modelId().isBlank())
-                ? command.modelId().strip() : id.toString();
+        if (command.modelId() == null || command.modelId().isBlank() || command.modelId().length() > 128) {
+            throw fieldError("model_id", "INVALID", "model_id 必填且不超过 128 字符");
+        }
+        if (command.channelId() != null && !channelId.equals(ChannelService.parseId(command.channelId()))) {
+            throw new LightAiException(ErrorCode.OBJECT_REFERENCE_INVALID, "channel_id 与路径渠道不一致");
+        }
+        String actualModelId = command.modelId().strip();
 
         DraftWriteResult result = draftWriteService.execute(new DraftWriteCommand(
                 requestId, context.authContext().userId(), sourceMode, context.sourceIpMasked(),
@@ -239,6 +244,10 @@ public class UpstreamModelService {
                     UpstreamModelRecord current = modelRepository.lockLiveById(connection, id)
                             .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND,
                                     "模型不存在或已删除"));
+                    if ((command.channelId() != null && !current.channelId().equals(ChannelService.parseId(command.channelId())))
+                            || (command.modelId() != null && !current.modelId().equals(command.modelId().strip()))) {
+                        throw new LightAiException(ErrorCode.CONFIG_FIELD_IMMUTABLE, "上游模型 ID 和所属渠道不可修改");
+                    }
                     UpstreamModelRecord saved = modelRepository.update(connection, new UpstreamModelRecord(
                             current.id(), current.channelId(), current.modelId(),
                             command.displayName().strip(), current.modelType(),
@@ -295,6 +304,10 @@ public class UpstreamModelService {
                 if (!detail.capabilitiesComplete()) {
                     throw fieldError("capabilities", "INCOMPLETE",
                             "启用前必须补齐 tokenizer/context/能力声明");
+                }
+                if (current.inputPrice() == null || current.outputPrice() == null || current.priceUnit() == null
+                        || current.currency() == null || !validCurrency(current.currency())) {
+                    throw fieldError("prices", "INCOMPLETE", "启用模型必须提供完整价格和币种");
                 }
                 if (!detail.contextWindowValid()) {
                     throw fieldError("context_window", "INVALID", "context_window 必须大于 max_output_tokens");
@@ -470,12 +483,21 @@ public class UpstreamModelService {
                 || (command.outputPrice() != null && command.outputPrice().signum() < 0)) {
             throw fieldError("input_price", "INVALID", "价格不允许为负数");
         }
-        if (command.currency() != null && command.currency().length() != 3) {
+        if (command.enabled() && (command.inputPrice() == null || command.outputPrice() == null
+                || command.priceUnit() == null || command.currency() == null)) {
+            throw fieldError("prices", "INCOMPLETE", "启用模型必须提供完整价格和币种");
+        }
+        if (command.currency() != null && !validCurrency(command.currency())) {
             throw fieldError("currency", "INVALID", "currency 为 ISO4217 三位码");
         }
         if (command.priceUnit() != null && command.priceUnit() != 1000 && command.priceUnit() != 1000000) {
             throw fieldError("price_unit", "INVALID", "price_unit 仅允许 1000 或 1000000");
         }
+    }
+
+    private static boolean validCurrency(String currency) {
+        try { java.util.Currency.getInstance(currency); return true; }
+        catch (IllegalArgumentException e) { return false; }
     }
 
     private UpstreamModelRecord withEnabled(UpstreamModelRecord current, boolean enabled) {

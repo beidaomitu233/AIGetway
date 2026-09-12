@@ -158,7 +158,7 @@ const stateOptions = [
               <td>{{ row.provider_name }}</td>
               <td>
                 <RouterLink
-                  :to="`/ui/provider-models/${row.provider_model_id}`"
+                  :to="`/ui/models/upstream/${row.provider_model_id}`"
                   class="lai-link"
                 >
                   {{ row.provider_model_name }}

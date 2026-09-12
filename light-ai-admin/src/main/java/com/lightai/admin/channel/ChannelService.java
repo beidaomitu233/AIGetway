@@ -474,14 +474,7 @@ public class ChannelService {
     // ---------- 通用 ----------
 
     public static UUID parseId(String rawId) {
-        if (rawId == null || rawId.isBlank()) {
-            throw new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "对象不存在或已删除");
-        }
-        try {
-            return UUID.fromString(rawId.strip());
-        } catch (IllegalArgumentException e) {
-            throw new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "对象不存在或已删除");
-        }
+        return com.lightai.admin.web.ResourceIds.parse(rawId);
     }
 
     /** 列表排序需带表别名：name/created_at/updated_at 在 channel(c) 与 provider(p) 均存在。 */
