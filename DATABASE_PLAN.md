@@ -249,3 +249,17 @@ JSON 字段必须给出稳定 schema、最大长度和脱敏要求。MySQL 5.7 �
 测试证据：Windows、Java 17.0.19、项目 Maven（D:/IntelliJ IDEA 2025.2.3/plugins/maven/lib/maven3/bin/mvn.cmd）。`mvn -B verify`：14 模块 BUILD SUCCESS，443 通过、16 环境跳过（Redis 11、Provider 环境 5，缺 LAI_IT_REDIS_URI 等）、0 失败。其中 storage-jdbc 43 项，新增 ResourceDomainV5MigrationTest 8 项覆盖：虚拟模型更名读写与 status 双写、code/三元组/上游模型身份/渠道 Key 名称四类活行唯一、locked_fields、批量检测仓储对齐与汇总刷新、模型同步作业幂等与状态收敛、快照 JSON 键跨更名稳定。DefaultSchemaMigratorTest（V5 版本历史）、SchemaGuardTest（49 表）已同步更新。admin ResourceApiContractTest 批量检测用例由"schema 缺列返回 503"改为"合法请求真实落库 PENDING"（BE-P21-006 解除，涉及 BE-P21 占用文件的测试段，已在 COMMUNICATION 登记）。
 
 未执行：真实 PostgreSQL/MySQL（PostgresSchemaGuardIT/MySqlSchemaGuardIT 缺 LAI_IT_DB_URL/LAI_IT_MYSQL_URL 跳过，H2 验证不能替代）、MySQL 5.7（迁移沿用 V4 的 MySQL 8.0+ 前置）、Redis/真实 Provider 环境。`git diff --check` 通过；仓库无独立后端 lint 任务。
+
+## DB-P23 数据交付记录（2026-09-12，zcode-db-0912c）
+
+经用户确认转出后领取（5a9d76c）。基线 origin/dev 5a9d76c，V5=DB-P21（virtual_model_routes_and_sync，已合入）、V6=DB-P20、V7=DB-P22 均已登记占用，本包迁移占用 V8。DB-231～235 逐项结论如下；真实 PostgreSQL/MySQL/Redis 环境未运行，相应验收保持未勾选。
+
+| 任务 | 复核结论 | V8 交付 |
+| --- | --- | --- |
+| DB-231 配置快照 | config_snapshot（snapshot_no 唯一、content_checksum、状态、activated_at）、publish_record、publish_instance_result、runtime_instance 结构已支撑不可变快照、失败不覆盖旧版本与回滚生成新记录（语义由发布服务保证）；runtime_instance 缺实例巡检索引 | 新增 idx_runtime_instance_status_heartbeat (status, last_heartbeat_at)；快照域无其他 schema 缺口 |
+| DB-232 审计 | audit_log 自 V1 起无任何二级索引，AuditQueryService 按 request_id/operator_id/action/entity_type/result/created_at 筛选、created_at desc 排序，存在全表扫描热点 | 新增 5 个索引：idx_audit_log_created、idx_audit_log_request、idx_audit_log_entity (entity_type,entity_id)、idx_audit_log_operator (operator_id,created_at)、idx_audit_log_action (action,created_at)；审计只追加语义由仓储保证（仅 INSERT） |
+| DB-233 迁移兼容 | V1→V2 数据映射实质发生在 V4（资源域）与 V5（虚拟模型域更名）。新增 UpgradeCompatibilityTest：以 V1 基线脚本+正确校验值构造存量库，写入业务数据后前向升级到当前版本并逐表对账（provider→channel 2/2、credential→channel_credential 1/1、provider_model→upstream_model 2/2、model_alias→virtual_model 1/1、route_candidate 引用 remap 且 alias_id→virtual_model_id 可追溯、provider_check_record→channel_check_record）。已验证边界：脏 URL/缺价格随行迁移不校验内容；无密钥 provider 不产生 channel_credential；重复 provider name 因 uk_channel_name 唯一冲突阻断升级，修复数据后失败重跑可完成（历史行不重复执行）。 | UpgradeCompatibilityTest 2 项通过 |
+| DB-234 真实存储一致性 | 依赖真实 PostgreSQL/MySQL/Redis 与故障注入（LAI_IT_DB_URL/LAI_IT_REDIS_URI 缺失，16 项既有集成测试跳过） | 本轮无代码交付；环境就绪后按 BE-222/225 场景执行 |
+| DB-235 数据库交付门禁 | 门禁现状：SchemaGuard 校验表清单/列契约/迁移版本（LATEST_VERSION=8）；ExpectedSchema 49 表；无明文密钥（密钥均为 BYTEA 密文/摘要列）；全表扫描热点经 V8 审计索引消除；迁移历史校验值防篡改 | 门禁检查项与结果记入本表，真实数据库版本（PG/MySQL 5.7/8.0）报告待环境 |
+
+边界与协调：request_trace/request_attempt 更名与 DB-P21-008 移交的 trace.alias_id、usage_aggregate.alias_id、runtime_config.default_alias_id 等旧列名统一，涉及 BE-P22/BE-P23 已交付服务端读取代码（JdbcTraceStore 等），按包边界不由 DB-P23 单独执行，待与观测包负责人协调迁移号与代码同批切换；runtime_setting/retention_policy 新表等待 BE-P23 后端设置/留存契约确认后由后续迁移承载，不在 V8 冒进建表。

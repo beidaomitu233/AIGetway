@@ -323,3 +323,16 @@
 - 用户仲裁：DB-P21 由 zcode-db-0912b 完成并推送；zcode-db-0912c 的接管登记（d9d3579）作废，该会话未产生代码交付。zcode-db-0912b 交付分支 feature/database-p21-zcode-db-0912b（实现 c794043）在合并时与 BE-P21 接管交付（e51e56f）在 COMMUNICATION.md、TASK_STATUS.md、ResourceApiContractTest.java 三处产生冲突，已按"双方记录并留、批量检测断言取 V5 后真实行为（合法请求落库 PENDING）"解决，合并后复验结果见下行。合并暴露并修复 BE-P20 接管交付（c1bb917）新增查询对旧表/列名的三处引用（countRoutableEnabledModels 的 model_alias/rc.alias_id、existsEnabledCandidate 的 rc.alias_id、aliasIdsByChannel/providerOptionsByAlias 的 rc.alias_id），已同步为 virtual_model/virtual_model_id。
 - 合并后复验：mvn -B verify 14 模块 BUILD SUCCESS，473 项中 457 通过、16 环境跳过（Redis 11、Provider 5，缺 LAI_IT_REDIS_URI 等）、0 失败；git diff --check 通过。
 - 用户确认 DB-P22/P23 转由其他会话执行；TASK_STATUS 已释放原领取登记。接手会话请重新领取：迁移号自 V6 起分配（V5 已被 DB-P21 的 virtual_model_routes_and_sync 使用），不得修改 V1～V5 已发布迁移、不得重复建表；DB-P23 的 V1→V2 迁移兼容需覆盖 V5 引入的虚拟模型域更名与生成列语义。
+
+## DB-P23 交付记录（2026-09-12，数据库执行模型 zcode-db-0912c）
+
+经用户确认转出后领取 DB-P23（5a9d76c），交付 V8 迁移与 DB-231～235 复核，详见 DATABASE_PLAN「DB-P23 数据交付记录」。
+
+| 编号 | 提出方 | 问题描述 | 涉及任务/模块 | 影响与建议 | 待确认方 | 状态 | 处理结论 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| DB-P23-101 | 数据库执行模型/zcode-db-0912c | audit_log 无任何二级索引，审计查询按 created_at 排序与多维度筛选存在全表扫描热点 | DB-232、audit_log | V8 补 5 个筛选/排序索引；审计写入为只追加，索引不影响写路径语义 | 无需确认 | 已交付 | 真实数据库执行计划（DB-235）待环境验收 |
+| DB-P23-102 | 数据库执行模型/zcode-db-0912c | runtime_instance 缺实例巡检索引 | DB-231、runtime_instance | V8 新增 (status, last_heartbeat_at) 索引，支撑实例收敛与过期巡检 | 无需确认 | 已交付 | 同上 |
+| DB-P23-103 | 数据库执行模型/zcode-db-0912c | V1→V5 前向升级兼容已建立可回归的测试基线 | DB-233、UpgradeCompatibilityTest | 覆盖资源域/虚拟模型域数据映射逐表对账、脏数据随行迁移、唯一冲突阻断升级与失败重跑恢复；已验证重复 provider name 会因 uk_channel_name 阻断 V4，升级前需排重 | 无需确认 | 已交付 | 全新安装与逐版本升级在 H2 验证；真实 PG/MySQL 升级待环境 |
+| DB-P23-104 | 数据库执行模型/zcode-db-0912c | request_trace/request_attempt 更名与 alias_id 系旧列名统一涉及服务端读取代码 | DB-P21-008、BE-231 | 属跨包协调项：更名需与 BE-P22/BE-P23 观测代码同批切换，不由 DB-P23 单独迁移 | 观测包负责人（zcode-db-0912d/BE-P23 后端） | 待确认 | 建议由 DB-P22 的 V7 或后续协调迁移承载 |
+| DB-P23-105 | 数据库执行模型/zcode-db-0912c | runtime_setting/retention_policy 新表设计 | BE-234 | BE-P23 后端设置/留存接口契约尚未冻结（后端包进行中），不冒进建表 | BE-P23 后端负责人 | 待确认 | 契约冻结后由后续迁移承载 |
+| DB-P23-106 | 数据库执行模型/zcode-db-0912c | 迁移号合并顺序与版本号可能交错（V8 先于 V6/V7 合入时） | DefaultSchemaMigrator | apply 顺序以代码注册顺序为准、历史表逐版本校验值防重放；如 V6/V7 后合入，请在注册列表中按版本序插入 | DB-P20/DB-P22 负责人 | 待确认 | SchemaGuard 以 MAX(version)=LATEST 校验，功能不受影响 |
