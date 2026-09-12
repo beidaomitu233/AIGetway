@@ -323,3 +323,18 @@
 - 用户仲裁：DB-P21 由 zcode-db-0912b 完成并推送；zcode-db-0912c 的接管登记（d9d3579）作废，该会话未产生代码交付。zcode-db-0912b 交付分支 feature/database-p21-zcode-db-0912b（实现 c794043）在合并时与 BE-P21 接管交付（e51e56f）在 COMMUNICATION.md、TASK_STATUS.md、ResourceApiContractTest.java 三处产生冲突，已按"双方记录并留、批量检测断言取 V5 后真实行为（合法请求落库 PENDING）"解决，合并后复验结果见下行。合并暴露并修复 BE-P20 接管交付（c1bb917）新增查询对旧表/列名的三处引用（countRoutableEnabledModels 的 model_alias/rc.alias_id、existsEnabledCandidate 的 rc.alias_id、aliasIdsByChannel/providerOptionsByAlias 的 rc.alias_id），已同步为 virtual_model/virtual_model_id。
 - 合并后复验：mvn -B verify 14 模块 BUILD SUCCESS，473 项中 457 通过、16 环境跳过（Redis 11、Provider 5，缺 LAI_IT_REDIS_URI 等）、0 失败；git diff --check 通过。
 - 用户确认 DB-P22/P23 转由其他会话执行；TASK_STATUS 已释放原领取登记。接手会话请重新领取：迁移号自 V6 起分配（V5 已被 DB-P21 的 virtual_model_routes_and_sync 使用），不得修改 V1～V5 已发布迁移、不得重复建表；DB-P23 的 V1→V2 迁移兼容需覆盖 V5 引入的虚拟模型域更名与生成列语义。
+
+## BE-P23 首批交付登记（2026-09-12，后端执行模型 zcode-be-0912）
+
+实现提交 028e050，已合并最新 origin/dev（含 BE-P20/P21 接管交付、DB-P21 V5 迁移）后全仓复验通过（14 模块 BUILD SUCCESS，502 项 486 通过、16 环境跳过、0 失败）。交付范围与未验收项见 BACKEND_PLAN「BE-P23 本次执行记录」。以下为跨包契约与待确认项。
+
+| 序号 | 提出方 | 状态 | 登记内容与建议 |
+|---|---|---|---|
+| BE-P23-001 | 后端执行模型 zcode-be-0912 | 待确认 | 观测详情读路径已按「当前已发布 schema」适配并修正潜在缺陷：JdbcTraceDetailRepository 原查询引用迁移中不存在的列（recovery_decision 缺 source_attempt_id/action/scheduled_delay_ms/target_route_candidate_id/target_channel_credential_id/retries_used/credential_failovers_used/fallbacks_used/remaining_timeout_ms；queue_entry 缺 alias_id/sequence/blocking_policy_ids/estimated_tokens/acquired_at/ended_at/wake_reason/error_code；circuit_event 缺 trigger_trace_id；credential_secret 已在 V4 折叠），导致真实迁移库上 GET /admin/traces/{id} 必然 503（旧缺陷，无既有测试覆盖）。本轮改为旧列映射 + 空值/空集回退 + 掩码改读 channel_credential；建议 DB-222 迁移补齐上述扩展列后由本负责人恢复完整读取。补齐前恢复计数与来源 Attempt 关联为空值，运行时尚未持久化恢复决策/队列条目，空集属正常状态，不虚构数据。 |
+| BE-P23-002 | 后端执行模型 zcode-be-0912 | 待确认 | PRD 9.10 的预算告警阈值与企业身份适配设置缺 runtime_setting 对应列；/admin/settings 未虚设字段。建议 DB-P23 新增迁移（runtime_setting 或 runtime_config 扩展列）后由本负责人补齐设置项与校验。 |
+| BE-P23-003 | 后端执行模型 zcode-be-0912 | 待确认 | 回滚幂等桥接：publish_record.validation_id NOT NULL 且 UNIQUE，回滚记录以确定性 UUID validation 行（键=ROLLBACK:目标快照:幂等键，content_checksum=目标快照摘要，7 天保留）桥接复用既有状态机与 findByValidation 幂等重放。建议 DB-P23 迁移把 validation_id 改可空（或新增 operation 列）并持久化发布/回滚幂等键；收敛后同键不同目标可升级为 IDEMPOTENCY_KEY_CONFLICT/409。 |
+| BE-P23-004 | 后端执行模型 zcode-be-0912 | 待确认 | V2 契约口径：request_id 与既有 trace.trace_id 同值（/v1 网关 X-Request-Id），/admin/calls DTO 以 request_id 命名；过渡路径 /admin/traces*、/admin/usage/trends、/admin/usage/groups、/admin/runtime-config 暂保留（同口径复用或旧字段），FE-P22/P23 切换 V2 契约后由本负责人统一移除，不长期并存；/admin/calls/export CSV 列沿用 trace_id 命名，V2 列名待 FE-P22-001 契约确认后同批切换。 |
+| BE-P23-005 | 后端执行模型 zcode-be-0912 | 待确认 | /admin/usage/adjustments 现含两类事实：quota_adjustment（人工调整/重置/续期）与 usage_ledger SETTLEMENT 事件（BE-P22 现写）；请求预占/释放/周期重置事件待 BE-P20-004 与 DB-223 落地后随账本自然出现。跨应用合并流水分页窗口 5000 行/分支，超限明确 400 提示缩小范围；聚合延迟口径与导出列待 FE-P22-002 确认。summary 的预算使用率/单位请求成本未入本轮（跨应用预算口径需契约）。 |
+| BE-P23-006 | 后端执行模型 zcode-be-0912 | 待确认 | 关联 BE-P20-109/110：/admin/applications/{id}/audit 所需应用审计读取端口与 result=DENIED 审计枚举涉及本包审计域；本轮未改 audit_log 读路径（/admin/audit-logs 既有能力维持），待 DB-201 application_id 列与枚举契约确认后由本负责人统一补齐。 |
+
+协作提示：本轮起后端会话共享 TASK_STATUS 负责人标识时，须遵守 BE-P23-COEXIST-001 结论——同一负责人标识只允许一个在席会话；后到会话让出并将替代实现存档至 .worktrees/be-p23-alt-impl/（不入 Git）。本负责人交付未引用该存档实现。
