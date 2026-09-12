@@ -18,7 +18,7 @@
 | FE-P21 | FE-211～FE-215 | 未领取 | light-ai-admin-ui | 待领取 | 可领取；对应 BE/DB 契约联调后验收 |
 | FE-P22 | FE-221～FE-225 | 未领取 | light-ai-admin-ui | 待领取 | 可领取；对应 BE/DB 契约联调后验收 |
 | FE-P23 | FE-231～FE-235 | 未领取 | light-ai-admin-ui | 待领取 | 可领取；对应 BE/DB 契约联调后验收 |
-| BE-P20 | BE-201～BE-205 | 未领取 | client/admin/runtime/server/spi | 待领取 | 可领取；优先应用请求/响应契约及权限差异 |
+| BE-P20 | BE-201～BE-205 | 后端执行模型 codex-be-0912 / feature/backend-p20-codex-be-0912 | light-ai-admin 应用/API/权限与测试、light-ai-client/application、必要 server/runtime 应用鉴权测试；BACKEND_PLAN.md、COMMUNICATION.md；不修改前端和数据库迁移 | 进行中 | 2026-09-12 领取；优先 CONTRACT-V2-001；身份源及数据库契约缺口登记后待确认；独立 worktree .worktrees/backend-p20-codex-0912 |
 | BE-P21 | BE-211～BE-215 | 未领取 | client/admin/runtime/server/spi | 待领取 | 可领取；迁移与 DB 协调 |
 | BE-P22 | BE-221～BE-225 | 未领取 | client/admin/runtime/server/spi | 待领取 | 可领取；迁移与 DB 协调 |
 | BE-P23 | BE-231～BE-235 | 未领取 | client/admin/runtime/server/spi | 待领取 | 可领取；迁移与 DB 协调 |
