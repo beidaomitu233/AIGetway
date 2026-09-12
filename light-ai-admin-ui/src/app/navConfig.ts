@@ -47,6 +47,7 @@ export const navSections: NavSection[] = [
     items: [
       { title: '调用记录', to: '/ui/traces', permission: Permission.traceView },
       { title: '用量与成本', to: '/ui/usage', permission: Permission.usageView },
+      { title: '额度流水', to: '/ui/usage/adjustments', permission: Permission.applicationQuotaView },
     ],
   },
   {

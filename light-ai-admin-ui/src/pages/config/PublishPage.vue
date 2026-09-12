@@ -127,6 +127,8 @@ async function submitPublish(): Promise<void> {
 // —— 实例进度（FE-041）——
 const publishRecord = ref<PublishRecordDetail | null>(null)
 let progressTimer: ReturnType<typeof setInterval> | null = null
+// 轮询中断计数：失败保留最近进度并提示，恢复后清除（FE-223）
+const pollFailureCount = ref(0)
 
 const terminalStatuses = ['SUCCEEDED', 'FAILED']
 
@@ -137,6 +139,7 @@ function isTerminal(status: string): boolean {
 
 function startProgressPolling(): void {
   stopProgressPolling()
+  pollFailureCount.value = 0
   progressTimer = setInterval(async () => {
     if (document.visibilityState !== 'visible') return
     if (!publishRecord.value || isTerminal(publishRecord.value.status)) {
@@ -145,9 +148,11 @@ function startProgressPolling(): void {
     }
     try {
       publishRecord.value = await fetchPublishRecord(publishRecord.value.id)
+      pollFailureCount.value = 0
       void store.refreshDraftSummary()
     } catch {
-      // 单次轮询失败保留当前进度
+      // 单次轮询失败保留当前进度并提示中断
+      pollFailureCount.value += 1
     }
   }, PROGRESS_REFRESH_MS)
 }
@@ -470,6 +475,13 @@ function severityClass(severity: string): string {
         <h2 class="lai-card-title">
           第 3 步 · 实例准备与激活
         </h2>
+        <p
+          v-if="pollFailureCount > 0"
+          class="lai-form-message-error"
+          role="alert"
+        >
+          进度刷新暂时中断，正在自动重试；以下为最近一次进度。
+        </p>
         <div class="lai-summary-grid">
           <div class="lai-summary-item">
             <span class="lai-summary-label">发布状态</span>

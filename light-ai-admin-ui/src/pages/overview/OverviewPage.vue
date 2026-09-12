@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import TrendChart from '@/components/TrendChart.vue'
 import { useBootstrapStore } from '@/stores/bootstrap'
@@ -16,6 +16,7 @@ import {
   fetchOverviewSummary,
   fetchOverviewTrends,
 } from '@/api/overview'
+import { type UsageGroupRow, fetchUsageGroups, type UsageQuery } from '@/api/usage'
 import { ApiError, isAbortError } from '@/api/errors'
 import { formatDateTime } from '@/app/display'
 
@@ -24,6 +25,7 @@ const AUTO_REFRESH_ENABLED = true
 
 const store = useBootstrapStore()
 const router = useRouter()
+const route = useRoute()
 
 type AreaStatus = 'loading' | 'ready' | 'error'
 
@@ -79,6 +81,59 @@ const exceptions = ref<OverviewExceptionResult | null>(null)
 const exceptionStatus = ref<AreaStatus>('loading')
 const exceptionError = ref<unknown>(null)
 const exceptionFilter = ref('')
+
+// 应用排行（FE-225）：同口径时间范围内按请求数排序
+const rank = ref<UsageGroupRow[]>([])
+const rankStatus = ref<AreaStatus>('loading')
+const rankError = ref<unknown>(null)
+
+function routeQueryValue(key: string): string {
+  const value = route.query[key]
+  return typeof value === 'string' ? value : ''
+}
+
+/** 时间范围与共享筛选从 URL 还原（FE-225 深链/刷新一致）。 */
+function readFiltersFromRoute(): void {
+  const range = rangePresets.find((entry) => entry.value === routeQueryValue('range'))
+  applyPreset(range?.value ?? '1h')
+  query.application = routeQueryValue('application')
+  query.alias_id = routeQueryValue('alias_id')
+  query.provider_id = routeQueryValue('provider_id')
+  query.currency = routeQueryValue('currency')
+  const granularity = routeQueryValue('granularity')
+  if (granularity === 'HOUR' || granularity === 'DAY') query.granularity = granularity
+}
+
+function syncFiltersToRoute(): void {
+  void router.replace({
+    query: {
+      range: rangePreset.value,
+      granularity: query.granularity,
+      application: query.application || undefined,
+      alias_id: query.alias_id || undefined,
+      provider_id: query.provider_id || undefined,
+      currency: query.currency || undefined,
+    },
+  })
+}
+
+/** 概览口径 → 用量分组查询：应用排行按请求数倒序取前 10。 */
+function toRankQuery(base: OverviewQuery): UsageQuery {
+  const rankQuery: UsageQuery = {
+    start_at: base.start_at,
+    end_at: base.end_at,
+    granularity: base.granularity ?? 'DAY',
+    group_by: 'APPLICATION',
+    group_sort: '-REQUEST_COUNT',
+    group_page: 1,
+    group_page_size: 10,
+  }
+  if (base.application) rankQuery.application = [base.application]
+  if (base.alias_id) rankQuery.alias_id = [base.alias_id]
+  if (base.provider_id) rankQuery.provider_id = [base.provider_id]
+  if (base.currency) rankQuery.currency = base.currency
+  return rankQuery
+}
 
 const refreshing = ref(false)
 let refreshTimer: ReturnType<typeof setInterval> | null = null
@@ -155,17 +210,29 @@ async function loadAll(): Promise<void> {
       exceptionStatus.value = 'error'
     })
 
-  await Promise.all([summaryPromise, trendPromise, exceptionPromise])
+  const rankPromise = fetchUsageGroups(toRankQuery(base), signal)
+    .then((data) => {
+      rank.value = data.rows
+      rankStatus.value = 'ready'
+      rankError.value = null
+    })
+    .catch((e) => {
+      if (isAbortError(e)) return
+      rankError.value = e
+      rankStatus.value = 'error'
+    })
+
+  await Promise.all([summaryPromise, trendPromise, exceptionPromise, rankPromise])
   refreshing.value = false
 
-  const anyDenied = [summaryError.value, trendError.value, exceptionError.value].some(
+  const anyDenied = [summaryError.value, trendError.value, exceptionError.value, rankError.value].some(
     (error) => error instanceof ApiError && error.isAccessDenied,
   )
   if (anyDenied) {
     await router.push({ name: 'forbidden' })
     return
   }
-  const allFailed = summaryStatus.value === 'error' && trendStatus.value === 'error' && exceptionStatus.value === 'error'
+  const allFailed = summaryStatus.value === 'error' && trendStatus.value === 'error' && exceptionStatus.value === 'error' && rankStatus.value === 'error'
   consecutiveFailures = allFailed ? consecutiveFailures + 1 : 0
 }
 
@@ -175,6 +242,7 @@ function refresh(): void {
 
 function onFilterChange(): void {
   consecutiveFailures = 0
+  syncFiltersToRoute()
   refresh()
 }
 
@@ -189,7 +257,7 @@ function manualGranularity(event: Event): void {
 }
 
 onMounted(async () => {
-  applyPreset('1h')
+  readFiltersFromRoute()
   await loadFilters()
   await loadAll()
   refreshTimer = setInterval(() => {
@@ -361,6 +429,19 @@ function exceptionTarget(item: OverviewExceptionItem): { name: string; params: R
       return { name: 'trace-detail', params: { traceId: item.object_id } }
     default:
       return null
+  }
+}
+
+/** 排行行钻取：进入该应用在当前时间范围内的调用记录。 */
+function rankTarget(row: UsageGroupRow): { name: string; query: Record<string, string> } | null {
+  if (row.dimension_type !== 'APPLICATION' || !row.dimension_name) return null
+  return {
+    name: 'trace-list',
+    query: {
+      start_at: query.start_at,
+      end_at: query.end_at,
+      application: row.dimension_name,
+    },
   }
 }
 
@@ -706,6 +787,81 @@ const itemTypeLabels: Record<string, string> = {
             <span class="lai-related-meta">
               更新时间：{{ formatDateTime(trendUpdatedAt, store.timezone) }}
             </span>
+          </div>
+        </template>
+      </div>
+
+      <div class="lai-card">
+        <h2 class="lai-card-title">
+          应用排行
+        </h2>
+        <PageState
+          v-if="rankStatus === 'loading'"
+          status="loading"
+        />
+        <PageState
+          v-else-if="rankStatus === 'error' && rank.length === 0"
+          status="error"
+          :error="rankError"
+          @retry="refresh"
+        />
+        <template v-else>
+          <p
+            v-if="rankStatus === 'error'"
+            class="lai-form-message-error"
+            role="alert"
+          >
+            刷新失败，以下为上次数据：{{ errorText(rankError) }}
+          </p>
+          <div class="lai-table-wrap">
+            <table class="lai-table">
+              <thead>
+                <tr>
+                  <th>排名</th>
+                  <th>应用</th>
+                  <th>请求数</th>
+                  <th>成功率</th>
+                  <th>Token</th>
+                  <th>费用</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="(row, index) in rank"
+                  :key="`${row.dimension_id ?? row.dimension_name}-${row.currency}`"
+                >
+                  <td>{{ index + 1 }}</td>
+                  <td>{{ row.dimension_name }}</td>
+                  <td>{{ row.request_count }}</td>
+                  <td>{{ formatRate(row.success_rate) }}</td>
+                  <td>
+                    {{ row.total_tokens }}<span class="lai-related-meta">（实 {{ row.actual_tokens }} / 估 {{ row.estimated_tokens }}）</span>
+                  </td>
+                  <td>{{ row.total_cost }} {{ row.currency }}</td>
+                  <td>
+                    <RouterLink
+                      v-if="rankTarget(row)"
+                      :to="{ name: rankTarget(row)!.name, query: rankTarget(row)!.query }"
+                      class="lai-btn lai-btn-text"
+                    >
+                      调用记录
+                    </RouterLink>
+                    <template v-else>
+                      —
+                    </template>
+                  </td>
+                </tr>
+                <tr v-if="rank.length === 0">
+                  <td
+                    colspan="7"
+                    class="lai-table-empty"
+                  >
+                    当前范围无应用用量
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </template>
       </div>
