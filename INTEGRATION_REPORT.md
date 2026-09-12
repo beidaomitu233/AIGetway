@@ -73,8 +73,8 @@
 | FS-P20-003 | 应用授权模型的约束字段与后端不一致 | FS-203、模型授权 | 后端统一为 `allow_stream`（BE-P20-103），前端仍用 `stream_allowed` | 已验证：字段切换后 typecheck/测试/构建通过 | fsagent-0912 | 已验证 |
 | FS-P20-004 | Token 计数与额度版本为 64 位，前端按 `number` 运算，存在字符串拼接导致额度比较/剩余量错误的风险 | FS-203、额度展示与调整 | 后端按 BE-P20-102 以十进制字符串传输；前端改为字符串类型 + BigInt 定点展示与比较（`integerUnits`/`integerText`/`tokenUsageText`/`tokenRemainingText`） | 已验证：列表、详情、额度明细、调整预览均按定点展示；244 项测试通过 | fsagent-0912 | 已验证 |
 | FS-P20-005 | `GET /admin/usage/groups` 不带 `group_sort` 时返回 400「TOTAL_COST 排序必须指定单一 currency」 | FS-203、用量排行 | 后端按币种口径校验，属既定契约；前端排行实际传 `group_sort=-REQUEST_COUNT`，联调确认无影响 | 已验证：按前端参数请求 200 | fsagent-0912 | 已验证（非缺陷） |
-| FS-P20-006 | 应用列表 `version` 为字符串、应用详情 `version` 为数字，同一资源两种传输类型 | FS-203、应用域契约 | 后端列表视图与详情实体序列化口径不一致（BE-P20-102 声明版本用十进制字符串）；前端按实际类型声明并各自处理，本轮未改后端契约 | 已记录，未修复 | fsagent-0912 | 待定位 |
-| FS-P20-007 | 渠道创建：前端仍发 `type/proxy_url/connect_timeout_ms/read_timeout_ms/default_headers/enabled`，后端返回 400「请求体不合法」；后端要求 `provider_type/proxy/timeouts/headers/priority/weight` | FS-201 相邻流程、渠道接入 | 属 BE-P21-001 已登记的同批跨端切换项，FE-P21 负责人未完成字段切换 | 已复现（400），未在本轮修复 | fsagent-0912 | 待定位（下一批） |
+| FS-P20-006 | 应用列表 `version` 为字符串、应用详情 `version` 为数字，同一资源两种传输类型 | FS-203、应用域契约 | 根因已定位：`ApplicationListItem.version` 为 `String` 且列表服务显式转字符串；`ApplicationDetail.version` 为 `long` 并直接序列化数值。BE-P20-102 已声明十进制字符串；统一会影响管理写接口与 `ManagementOperationResult`，待 BE-P20/契约负责人确认 | 已按实际类型规避页面故障；未擅自改破坏性契约 | fsagent-0912 | 阻塞 |
+| FS-P20-007 | 渠道创建：前端仍发 `type/proxy_url/connect_timeout_ms/read_timeout_ms/default_headers/enabled`，后端返回 400「请求体不合法」；后端要求 `provider_type/proxy/timeouts/headers/priority/weight` | FS-201 相邻流程、渠道接入 | 根因已定位：前端 `providers.ts` 仍发旧 V1 DTO，后端已收口 BE-P21-001 V2 DTO；字段切换涉及表单、序列化、启停命令和夹具，属于 FE-P21/BE-P21 协同范围 | 已复现 400；本批不接管已占用前端范围 | fsagent-0912 | 阻塞（待 P21 协同） |
 
 ## 6. 测试命令与结果
 
