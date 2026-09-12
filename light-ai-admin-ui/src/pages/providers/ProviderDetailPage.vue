@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import StatusText from '@/components/StatusText.vue'
@@ -12,7 +12,6 @@ import {
   connectionStatusLabels,
   formatDateTime,
   formatDuration,
-  poolStatusLabels,
 } from '@/app/display'
 import { Permission } from '@/app/permissions'
 import {
@@ -26,7 +25,7 @@ import {
   getProviderImpact,
 } from '@/api/providers'
 import { listProviderModels } from '@/api/providerModels'
-import { listPools } from '@/api/credentialPools'
+import CredentialPanel from '@/components/credentials/CredentialPanel.vue'
 import { ApiError, isAbortError } from '@/api/errors'
 
 const route = useRoute()
@@ -40,36 +39,40 @@ const canCheck = computed(() => store.can(Permission.providerCheck))
 const state = ref<'loading' | 'ready' | 'error'>('loading')
 const error = ref<unknown>(null)
 const detail = ref<ProviderDetail | null>(null)
-const relatedPools = ref<Array<{ id: string; name: string; status: string }>>([])
 const relatedModels = ref<Array<{ id: string; display_name: string; model_id: string; connection_status: string }>>([])
 
+const modelsError = ref<unknown>(null)
+let loadSequence = 0
 let loadController: AbortController | null = null
 
 async function load(): Promise<void> {
+  const sequence = ++loadSequence
   loadController?.abort()
   loadController = new AbortController()
   state.value = 'loading'
   error.value = null
   try {
     const signal = loadController.signal
-    const [detailData, pools, models] = await Promise.all([
+    const [detailResult, models] = await Promise.allSettled([
       getProvider(providerId.value, signal),
-      listPools({ provider_id: providerId.value, page: 1, page_size: 10 }, signal).catch(() => null),
-      listProviderModels({ provider_id: providerId.value, page: 1, page_size: 10 }, signal).catch(() => null),
+      listProviderModels({ channel_id: providerId.value, page: 1, page_size: 10 }, signal),
     ])
-    detail.value = detailData
-    relatedPools.value = pools ? pools.items : []
-    relatedModels.value = models ? models.items : []
+    if (sequence !== loadSequence) return
+    if (detailResult.status === 'rejected') throw detailResult.reason
+    detail.value = detailResult.value
+    modelsError.value = models.status === 'rejected' ? models.reason : null
+    relatedModels.value = models.status === 'fulfilled' ? models.value.items : []
     state.value = 'ready'
   } catch (e) {
-    if (isAbortError(e)) return
+    if (sequence !== loadSequence || isAbortError(e)) return
     error.value = e
     state.value = 'error'
   }
 }
 onMounted(load)
 onMounted(() => void store.refreshDraftSummary())
-watch(providerId, () => void load())
+watch(providerId, () => { detail.value = null; checkOpen.value = false; void load() })
+onUnmounted(() => { loadSequence++; loadController?.abort() })
 
 const lifecycle = useLifecycleActions({
   getImpact: getProviderImpact,
@@ -93,6 +96,7 @@ const checkTarget = computed(() => ({
 }))
 
 function openCheck(): void {
+  if (!canCheck.value || checkLoading.value) return
   checkResult.value = null
   checkErrorText.value = ''
   checkOpen.value = true
@@ -111,6 +115,7 @@ watch(
 )
 
 async function submitCheck(command: Parameters<typeof checkProvider>[1]): Promise<void> {
+  if (!canCheck.value || checkLoading.value) return
   checkLoading.value = true
   checkErrorText.value = ''
   try {
@@ -134,7 +139,7 @@ const headerRows = computed(() => Object.entries(detail.value?.default_headers ?
   <section class="lai-page">
     <div class="lai-page-header">
       <h1 class="lai-page-title">
-        Provider 详情
+        渠道 详情
       </h1>
       <div class="lai-row-actions">
         <button
@@ -277,51 +282,36 @@ const headerRows = computed(() => Object.entries(detail.value?.default_headers ?
 
       <div class="lai-card">
         <h2 class="lai-card-title">
-          关联凭证池
+          渠道 Key
         </h2>
-        <ul
-          v-if="relatedPools.length > 0"
-          class="lai-related-list"
-        >
-          <li
-            v-for="pool in relatedPools"
-            :key="pool.id"
-          >
-            <RouterLink
-              :to="{ name: 'pool-detail', params: { id: pool.id } }"
-              class="lai-link"
-            >
-              {{ pool.name }}
-            </RouterLink>
-            <span class="lai-related-meta">
-              <StatusText
-                :value="pool.status"
-                :labels="poolStatusLabels"
-              />
-            </span>
-          </li>
-        </ul>
+        <CredentialPanel
+          v-if="store.can(Permission.credentialView)"
+          :key="detail.id"
+          :pool-id="detail.id"
+          :provider-id="detail.id"
+          :can-manage="store.can(Permission.credentialManage)"
+          :can-check="canCheck"
+        />
         <p
           v-else
-          class="lai-related-empty"
+          role="status"
         >
-          暂无关联凭证池
+          无渠道 Key 查看权限
         </p>
-        <RouterLink
-          v-if="relatedPools.length === 10"
-          :to="{ name: 'pool-list', query: { provider_id: detail.id } }"
-          class="lai-link"
-        >
-          查看全部凭证池
-        </RouterLink>
       </div>
 
       <div class="lai-card">
         <h2 class="lai-card-title">
           关联模型
         </h2>
+        <PageState
+          v-if="modelsError"
+          status="error"
+          :error="modelsError"
+          @retry="load"
+        />
         <ul
-          v-if="relatedModels.length > 0"
+          v-else-if="relatedModels.length > 0"
           class="lai-related-list"
         >
           <li
@@ -340,7 +330,7 @@ const headerRows = computed(() => Object.entries(detail.value?.default_headers ?
         </p>
         <RouterLink
           v-if="relatedModels.length === 10"
-          :to="{ name: 'model-list', query: { provider_id: detail.id } }"
+          :to="{ name: 'model-list', query: { channel_id: detail.id } }"
           class="lai-link"
         >
           查看全部模型
@@ -431,7 +421,7 @@ const headerRows = computed(() => Object.entries(detail.value?.default_headers ?
 
     <CheckDialog
       :open="checkOpen"
-      title="检测 Provider"
+      title="检测 渠道"
       :target="checkTarget"
       :loading="checkLoading"
       :result="checkResult"

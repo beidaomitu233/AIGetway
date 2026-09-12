@@ -3,7 +3,9 @@
 import { request, type QueryValue } from './http'
 import type { ManagementOperationResult, PageResult } from './contracts'
 import type { ProviderCheckCommand, ProviderCheckRecord } from './credentials'
-import { fetchEntityImpact } from './providerModels'
+import { fetchEntityImpact, fetchProviderModel } from './providerModels'
+import { getProvider } from './providers'
+import { fetchCredentials } from './credentials'
 
 export type RuntimeAvailability = 'AVAILABLE' | 'CAPACITY_EXHAUSTED' | 'CIRCUIT_OPEN' | 'DISABLED' | 'UNAVAILABLE'
 
@@ -58,13 +60,11 @@ export interface ModelAliasUpdateCommand {
 export interface RouteCandidateDetail {
   id: string
   alias_id: string
-  provider_id: string
-  provider_name: string
-  provider_model_id: string
-  provider_model_display_name: string
-  provider_model_id_label: string
-  credential_pool_id: string
-  credential_pool_name: string
+  channel_id: string
+  channel_name: string
+  upstream_model_id: string
+  upstream_model_name: string
+  upstream_model_id_label: string
   priority: number
   weight: number
   enabled: boolean
@@ -79,8 +79,8 @@ export interface RouteCandidateDetail {
 }
 
 export interface RouteCandidateCommand {
-  provider_model_id: string
-  credential_pool_id: string
+  upstream_model_id: string
+  channel_id: string
   priority: number
   weight: number
   enabled: boolean
@@ -95,7 +95,7 @@ export interface ReorderItem {
 export interface CredentialPoolOption {
   id: string
   name: string
-  provider_id: string
+  channel_id: string
   credential_available: number
   status: string
 }
@@ -105,25 +105,25 @@ export function fetchModelAliases(
   signal?: AbortSignal,
 ): Promise<PageResult<ModelAliasListItem>> {
   return request<PageResult<ModelAliasListItem>>({
-    path: '/model-aliases',
+    path: '/virtual-models',
     query: query as Record<string, QueryValue>,
     signal,
   })
 }
 
 export function fetchModelAlias(id: string, signal?: AbortSignal): Promise<ModelAliasDetail> {
-  return request<ModelAliasDetail>({ path: `/model-aliases/${id}`, signal })
+  return request<ModelAliasDetail>({ path: `/virtual-models/${id}`, signal })
 }
 
 export function createModelAlias(command: ModelAliasCreateCommand): Promise<ManagementOperationResult> {
-  return request<ManagementOperationResult>({ path: '/model-aliases', method: 'POST', body: command })
+  return request<ManagementOperationResult>({ path: '/virtual-models', method: 'POST', body: command })
 }
 
 export function updateModelAlias(
   id: string,
   command: ModelAliasUpdateCommand,
 ): Promise<ManagementOperationResult> {
-  return request<ManagementOperationResult>({ path: `/model-aliases/${id}`, method: 'PUT', body: command })
+  return request<ManagementOperationResult>({ path: `/virtual-models/${id}`, method: 'PUT', body: command })
 }
 
 export function fetchModelAliasImpact(path: string, operation: string, signal?: AbortSignal) {
@@ -131,19 +131,19 @@ export function fetchModelAliasImpact(path: string, operation: string, signal?: 
 }
 
 export function enableModelAlias(id: string, version: number): Promise<ManagementOperationResult> {
-  return request<ManagementOperationResult>({ path: `/model-aliases/${id}/enable`, method: 'POST', body: { version } })
+  return request<ManagementOperationResult>({ path: `/virtual-models/${id}/enable`, method: 'POST', body: { version } })
 }
 
 export function disableModelAlias(id: string, version: number): Promise<ManagementOperationResult> {
-  return request<ManagementOperationResult>({ path: `/model-aliases/${id}/disable`, method: 'POST', body: { version } })
+  return request<ManagementOperationResult>({ path: `/virtual-models/${id}/disable`, method: 'POST', body: { version } })
 }
 
 export function deleteModelAlias(id: string, version: number): Promise<ManagementOperationResult> {
-  return request<ManagementOperationResult>({ path: `/model-aliases/${id}`, method: 'DELETE', body: { version } })
+  return request<ManagementOperationResult>({ path: `/virtual-models/${id}`, method: 'DELETE', body: { version } })
 }
 
 export function fetchCandidates(aliasId: string, signal?: AbortSignal): Promise<RouteCandidateDetail[]> {
-  return request<RouteCandidateDetail[]>({ path: `/model-aliases/${aliasId}/candidates`, signal })
+  return request<RouteCandidateDetail[]>({ path: `/virtual-models/${aliasId}/routes`, signal })
 }
 
 export function createCandidate(
@@ -151,26 +151,27 @@ export function createCandidate(
   command: RouteCandidateCommand,
 ): Promise<ManagementOperationResult> {
   return request<ManagementOperationResult>({
-    path: `/model-aliases/${aliasId}/candidates`,
+    path: `/virtual-models/${aliasId}/routes`,
     method: 'POST',
     body: command,
   })
 }
 
 export function updateCandidate(
+  aliasId: string,
   candidateId: string,
   command: RouteCandidateCommand & { version: number },
 ): Promise<ManagementOperationResult> {
   return request<ManagementOperationResult>({
-    path: `/route-candidates/${candidateId}`,
+    path: `/virtual-models/${aliasId}/routes/${candidateId}`,
     method: 'PUT',
     body: command,
   })
 }
 
-export function deleteCandidate(candidateId: string, version: number): Promise<ManagementOperationResult> {
+export function deleteCandidate(aliasId: string, candidateId: string, version: number): Promise<ManagementOperationResult> {
   return request<ManagementOperationResult>({
-    path: `/route-candidates/${candidateId}`,
+    path: `/virtual-models/${aliasId}/routes/${candidateId}`,
     method: 'DELETE',
     body: { version },
   })
@@ -181,29 +182,27 @@ export function reorderCandidates(
   items: ReorderItem[],
 ): Promise<RouteCandidateDetail[]> {
   return request<RouteCandidateDetail[]>({
-    path: `/model-aliases/${aliasId}/candidates/reorder`,
+    path: `/virtual-models/${aliasId}/routes/reorder`,
     method: 'PUT',
     body: { items },
   })
 }
 
 export function checkCandidate(
+  aliasId: string,
   candidateId: string,
   command: ProviderCheckCommand,
 ): Promise<ProviderCheckRecord> {
   return request<ProviderCheckRecord>({
-    path: `/route-candidates/${candidateId}/check`,
+    path: `/virtual-models/${aliasId}/routes/${candidateId}/check`,
     method: 'POST',
     body: command,
   })
 }
 
-export function fetchModelCredentialPools(
-  modelId: string,
-  signal?: AbortSignal,
-): Promise<CredentialPoolOption[]> {
-  return request<CredentialPoolOption[]>({
-    path: `/provider-models/${modelId}/credential-pools`,
-    signal,
-  })
+/** 当前模型只能使用所属渠道的 Key；这里只查询配置，不推算运行容量。 */
+export async function fetchModelCredentialPools(modelId: string, signal?: AbortSignal): Promise<CredentialPoolOption[]> {
+  const model = await fetchProviderModel(modelId, signal)
+  const [channel, keys] = await Promise.all([getProvider(model.channel_id, signal), fetchCredentials(model.channel_id, { enabled: true, page_size: 100 }, signal)])
+  return [{ id: channel.id, name: channel.name, channel_id: channel.id, credential_available: keys.total, status: channel.enabled ? 'ACTIVE' : 'DISABLED' }]
 }

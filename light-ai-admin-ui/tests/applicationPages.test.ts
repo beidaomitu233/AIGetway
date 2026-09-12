@@ -49,7 +49,7 @@ describe('Application pages（V2 应用中心）', () => {
 
   it('创建应用提交基本信息、初始额度与模型授权', async () => {
     stub = installJsonFetchStub(({ url, method }) => {
-      if (method === 'GET' && url.pathname.endsWith('/admin/model-aliases')) {
+      if (method === 'GET' && url.pathname.endsWith('/admin/virtual-models')) {
         return pageEnvelope([{ id: 'alias-1', alias: 'chat-default', display_name: '默认对话', enabled: true }])
       }
       if (method === 'POST' && url.pathname.endsWith('/admin/applications')) {
@@ -207,7 +207,7 @@ describe('Application pages（V2 应用中心）', () => {
           operator_id: 'user-admin', created_at: '2026-09-08T07:00:00Z',
         }])
       }
-      if (method === 'GET' && url.pathname.endsWith('/admin/model-aliases')) {
+      if (method === 'GET' && url.pathname.endsWith('/admin/virtual-models')) {
         return pageEnvelope([
           { id: 'alias-1', alias: 'chat-default', display_name: '默认对话', enabled: true },
           { id: 'alias-2', alias: 'chat-backup', display_name: '备用对话', enabled: true },

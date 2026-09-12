@@ -16,7 +16,7 @@ export type CredentialHealthStatus =
 
 export interface CredentialListItem {
   id: string
-  pool_id: string
+  channel_id: string
   name: string
   masked_value: string
   secret_source: SecretSource
@@ -79,10 +79,10 @@ export interface CredentialRotateCommand {
 export type CheckMode = 'MINIMAL_CHAT' | 'CONNECTION_ONLY'
 
 export interface ProviderCheckCommand {
-  provider_model_id?: string | undefined
+  upstream_model_id?: string | undefined
   mode: CheckMode
   timeout_ms?: number | undefined
-  credential_id?: string | undefined
+  channel_credential_id?: string | undefined
 }
 
 export interface ProviderCheckRecord {
@@ -110,7 +110,7 @@ export function fetchCredentials(
   signal?: AbortSignal,
 ): Promise<PageResult<CredentialListItem>> {
   return request<PageResult<CredentialListItem>>({
-    path: `/credential-pools/${poolId}/credentials`,
+    path: `/channels/${poolId}/credentials`,
     query: query as Record<string, QueryValue>,
     signal,
   })
@@ -121,49 +121,52 @@ export function createCredential(
   command: CredentialCreateCommand,
 ): Promise<ManagementOperationResult> {
   return request<ManagementOperationResult>({
-    path: `/credential-pools/${poolId}/credentials`,
+    path: `/channels/${poolId}/credentials`,
     method: 'POST',
     body: command,
   })
 }
 
 export function updateCredential(
+  channelId: string,
   id: string,
   command: CredentialUpdateCommand,
 ): Promise<ManagementOperationResult> {
   return request<ManagementOperationResult>({
-    path: `/credentials/${id}`,
+    path: `/channels/${channelId}/credentials/${id}`,
     method: 'PUT',
     body: command,
   })
 }
 
 export function rotateCredential(
+  channelId: string,
   id: string,
   command: CredentialRotateCommand,
 ): Promise<ManagementOperationResult> {
   return request<ManagementOperationResult>({
-    path: `/credentials/${id}/rotate`,
+    path: `/channels/${channelId}/credentials/${id}/rotate`,
     method: 'POST',
     body: command,
   })
 }
 
 export function checkCredential(
+  channelId: string,
   id: string,
   command: ProviderCheckCommand,
 ): Promise<ProviderCheckRecord> {
-  return request<ProviderCheckRecord>({ path: `/credentials/${id}/check`, method: 'POST', body: command })
+  return request<ProviderCheckRecord>({ path: `/channels/${channelId}/credentials/${id}/check`, method: 'POST', body: command })
 }
 
-export function enableCredential(id: string, version: number): Promise<ManagementOperationResult> {
-  return request<ManagementOperationResult>({ path: `/credentials/${id}/enable`, method: 'POST', body: { version } })
+export function enableCredential(channelId: string, id: string, version: number): Promise<ManagementOperationResult> {
+  return request<ManagementOperationResult>({ path: `/channels/${channelId}/credentials/${id}/enable`, method: 'POST', body: { version } })
 }
 
-export function disableCredential(id: string, version: number): Promise<ManagementOperationResult> {
-  return request<ManagementOperationResult>({ path: `/credentials/${id}/disable`, method: 'POST', body: { version } })
+export function disableCredential(channelId: string, id: string, version: number): Promise<ManagementOperationResult> {
+  return request<ManagementOperationResult>({ path: `/channels/${channelId}/credentials/${id}/disable`, method: 'POST', body: { version } })
 }
 
-export function deleteCredential(id: string, version: number): Promise<ManagementOperationResult> {
-  return request<ManagementOperationResult>({ path: `/credentials/${id}`, method: 'DELETE', body: { version } })
+export function deleteCredential(channelId: string, id: string, version: number): Promise<ManagementOperationResult> {
+  return request<ManagementOperationResult>({ path: `/channels/${channelId}/credentials/${id}`, method: 'DELETE', body: { version } })
 }

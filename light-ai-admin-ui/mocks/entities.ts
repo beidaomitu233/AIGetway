@@ -30,7 +30,7 @@ export interface MockProvider {
 
 export interface MockPool {
   id: string
-  provider_id: string
+  channel_id: string
   name: string
   selection_strategy: string
   credential_total: number
@@ -118,7 +118,7 @@ const provider2: MockProvider = {
 
 const pool1: MockPool = {
   id: 'pool-001',
-  provider_id: 'prov-001',
+  channel_id: 'prov-001',
   name: 'OpenAI 主池',
   selection_strategy: 'LEAST_CONCURRENT',
   credential_total: 3,
@@ -139,7 +139,7 @@ const pool1: MockPool = {
 const pool2: MockPool = {
   ...pool1,
   id: 'pool-002',
-  provider_id: 'prov-002',
+  channel_id: 'prov-002',
   name: 'DeepSeek 备用池',
   selection_strategy: 'WEIGHTED_RANDOM',
   credential_total: 0,
@@ -225,7 +225,7 @@ export function providerListItem(row: MockProvider): Record<string, unknown> {
   return {
     ...row,
     provider_model_count: row.id === 'prov-001' ? 2 : 0,
-    credential_pool_count: mockDb.pools.filter((pool) => pool.provider_id === row.id).length,
+    credential_pool_count: mockDb.pools.filter((pool) => pool.channel_id === row.id).length,
   }
 }
 
@@ -355,7 +355,7 @@ export function handleProviderApi(req: Connect.IncomingMessage, url: URL, res: S
         sendError(res, 409, 'CONFIG_VERSION_CONFLICT', '对象已被其他管理员修改')
         return
       }
-      if (mockDb.pools.some((pool) => pool.provider_id === row.id)) {
+      if (mockDb.pools.some((pool) => pool.channel_id === row.id)) {
         sendError(res, 409, 'OBJECT_IN_USE', '对象仍被其他配置引用，不能删除')
         return
       }
@@ -367,7 +367,7 @@ export function handleProviderApi(req: Connect.IncomingMessage, url: URL, res: S
   if (action === 'impact' && method === 'GET') {
     const operation = url.searchParams.get('operation') ?? 'DISABLE'
     const references = mockDb.pools
-      .filter((pool) => pool.provider_id === row.id)
+      .filter((pool) => pool.channel_id === row.id)
       .map((pool) => ({
         entity_type: 'credential_pool',
         id: pool.id,
@@ -452,14 +452,14 @@ export function handlePoolApi(req: Connect.IncomingMessage, url: URL, res: Serve
     const [, id, action] = poolMatch
     if (!id && method === 'GET') {
       const keyword = url.searchParams.get('keyword') ?? ''
-      const providerFilter = url.searchParams.getAll('provider_id')
+      const providerFilter = url.searchParams.getAll('channel_id')
       const statusFilter = url.searchParams.getAll('status')
       const enabled = url.searchParams.get('enabled')
       const page = Number(url.searchParams.get('page') ?? '1')
       const pageSize = Number(url.searchParams.get('page_size') ?? '20')
       let rows = mockDb.pools
       if (keyword !== '') rows = rows.filter((row) => matchesKeyword(keyword, [row.name]))
-      if (providerFilter.length > 0) rows = rows.filter((row) => providerFilter.includes(row.provider_id))
+      if (providerFilter.length > 0) rows = rows.filter((row) => providerFilter.includes(row.channel_id))
       if (statusFilter.length > 0) rows = rows.filter((row) => statusFilter.includes(row.status))
       if (enabled === 'true' || enabled === 'false')
         rows = rows.filter((row) => String(row.enabled) === enabled)
@@ -475,14 +475,14 @@ export function handlePoolApi(req: Connect.IncomingMessage, url: URL, res: Serve
     }
     if (!id && method === 'POST') {
       void readBody(req).then((body) => {
-        const provider = mockDb.providers.find((item) => item.id === body.provider_id)
+        const provider = mockDb.providers.find((item) => item.id === body.channel_id)
         if (!provider) {
           sendError(res, 422, 'OBJECT_REFERENCE_INVALID', '引用的 Provider 不存在')
           return
         }
         const row: MockPool = {
           id: nextId('pool'),
-          provider_id: String(body.provider_id ?? ''),
+          channel_id: String(body.channel_id ?? ''),
           name: String(body.name ?? ''),
           selection_strategy: String(body.selection_strategy ?? 'LEAST_CONCURRENT'),
           credential_total: 0,
@@ -604,8 +604,8 @@ export function handlePoolApi(req: Connect.IncomingMessage, url: URL, res: Serve
 }
 
 function withProviderName(row: MockPool): Record<string, unknown> {
-  const provider = mockDb.providers.find((item) => item.id === row.provider_id)
-  return { ...row, provider_name: provider?.name ?? row.provider_id }
+  const provider = mockDb.providers.find((item) => item.id === row.channel_id)
+  return { ...row, channel_name: provider?.name ?? row.channel_id }
 }
 
 function operationResult(id: string, version: number, draftChanged: boolean): unknown {

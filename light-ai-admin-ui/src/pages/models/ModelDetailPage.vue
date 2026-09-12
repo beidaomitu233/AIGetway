@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Provider Model 详情页（FE-015，附录 4.2.6.3）：状态摘要、关联 Alias、最近检测记录与操作。
+// 上游模型 详情页（FE-015，附录 4.2.6.3）：状态摘要、关联虚拟模型、最近检测记录与操作。
 import { computed, onMounted, ref, shallowRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
@@ -20,8 +20,8 @@ const router = useRouter()
 const modelId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''))
 
 const store = useBootstrapStore()
-const canManage = store.can(Permission.modelManage)
-const canCheck = store.can(Permission.providerCheck)
+const canManage = computed(() => store.can(Permission.modelManage))
+const canCheck = computed(() => store.can(Permission.providerCheck))
 
 const loading = ref(true)
 const loadError = ref<unknown>(null)
@@ -31,6 +31,7 @@ async function load(): Promise<void> {
   loading.value = true
   try {
     detail.value = await fetchProviderModel(modelId.value)
+    loadError.value = null
   } catch (e) {
     loadError.value = e
   } finally {
@@ -50,13 +51,14 @@ async function openCheck(): Promise<void> {
   checkError.value = null
   checkResult.value = null
   try {
-    credentialOptions.value = await fetchProviderCredentials(detail.value?.provider_id ?? '')
+    credentialOptions.value = await fetchProviderCredentials(detail.value?.channel_id ?? '')
   } catch {
     credentialOptions.value = []
   }
 }
 
 async function submitCheck(command: ProviderCheckCommand): Promise<void> {
+  if (!canCheck.value || checkSubmitting.value) return
   checkSubmitting.value = true
   checkError.value = null
   try {
@@ -77,7 +79,7 @@ async function openDisable(): Promise<void> {
   disableLoading.value = true
   try {
     const impact = await fetchEntityImpact<{ impact_version: string; references: ImpactReference[] }>(
-      `/provider-models/${modelId.value}/impact`,
+      `/upstream-models/${modelId.value}/impact`,
       'DISABLE',
     )
     disableImpact.value = impact.references
@@ -94,7 +96,7 @@ async function submitDisable(): Promise<void> {
   disableLoading.value = true
   try {
     await request<ManagementOperationResult>({
-      path: `/provider-models/${modelId.value}/disable`,
+      path: `/upstream-models/${modelId.value}/disable`,
       method: 'POST',
       body: { version: detail.value?.version, confirmed_impact_version: disableImpactVersion.value },
     })
@@ -123,7 +125,7 @@ async function openDelete(): Promise<void> {
   deleteLoading.value = true
   try {
     const impact = await fetchEntityImpact<{ impact_version: string; references: ImpactReference[] }>(
-      `/provider-models/${modelId.value}/impact`,
+      `/upstream-models/${modelId.value}/impact`,
       'DELETE',
     )
     deleteImpact.value = impact.references
@@ -140,12 +142,12 @@ async function submitDelete(): Promise<void> {
   deleteLoading.value = true
   try {
     await request<ManagementOperationResult>({
-      path: `/provider-models/${modelId.value}`,
+      path: `/upstream-models/${modelId.value}`,
       method: 'DELETE',
       body: { version: detail.value?.version, confirmed_impact_version: deleteImpactVersion.value },
     })
     deleteOpen.value = false
-    void router.push('/ui/provider-models')
+    void router.push('/ui/models/upstream')
   } catch (e) {
     deleteOpen.value = false
     actionMessage.value =
@@ -163,7 +165,7 @@ function toggleEnabled(): void {
   }
   actionMessage.value = ''
   void request<ManagementOperationResult>({
-    path: `/provider-models/${modelId.value}/enable`,
+    path: `/upstream-models/${modelId.value}/enable`,
     method: 'POST',
     body: { version: detail.value.version },
   }).then(() => load())
@@ -176,10 +178,10 @@ const aliasSummary = computed(() => detail.value?.related_aliases ?? [])
 const recentChecks = computed(() => detail.value?.recent_checks ?? [])
 
 function goUsage(): void {
-  void router.push({ path: '/ui/usage', query: { provider_model_id: modelId.value } })
+  void router.push({ path: '/ui/usage', query: { upstream_model_id: modelId.value } })
 }
 function goTraces(): void {
-  void router.push({ path: '/ui/traces', query: { provider_model_id: modelId.value } })
+  void router.push({ path: '/ui/traces', query: { upstream_model_id: modelId.value } })
 }
 </script>
 
@@ -206,7 +208,7 @@ function goTraces(): void {
         </button>
         <RouterLink
           v-if="canManage"
-          :to="`/ui/provider-models/${modelId}/edit`"
+          :to="`/ui/models/upstream/${modelId}/edit`"
           class="lai-btn"
         >
           编辑
@@ -251,7 +253,7 @@ function goTraces(): void {
             <dt>模型标识</dt><dd class="lai-cell-mono">
               {{ detail.model_id }}
             </dd>
-            <dt>Provider</dt><dd>{{ detail.provider_name }}</dd>
+            <dt>渠道</dt><dd>{{ detail.channel_name }}</dd>
             <dt>上下文 / 最大输出</dt>
             <dd>{{ detail.context_window?.toLocaleString('zh-CN') ?? '待补充' }} / {{ detail.max_output_tokens?.toLocaleString('zh-CN') ?? '待补充' }}</dd>
             <dt>流式 / system</dt>
@@ -261,8 +263,9 @@ function goTraces(): void {
             </dd>
             <dt>价格（输入/输出）</dt>
             <dd class="lai-cell-mono">
-              {{ detail.input_price }} / {{ detail.output_price }}（每 {{ detail.price_unit }} tokens · {{ detail.currency }}）
+              {{ detail.input_price ?? '待补充' }} / {{ detail.output_price ?? '待补充' }}（每 {{ detail.price_unit }} tokens · {{ detail.currency }}）
             </dd>
+            <dt>来源</dt><dd>{{ detail.import_source ?? '未提供' }}</dd>
             <dt>启停</dt><dd>{{ detail.enabled ? '启用' : '停用' }}</dd>
             <dt>待发布</dt><dd>{{ detail.draft_changed ? '待发布' : '—' }}</dd>
           </dl>
@@ -299,19 +302,19 @@ function goTraces(): void {
 
       <div class="lai-detail-card">
         <h2 class="lai-section-title">
-          关联 Alias
+          关联虚拟模型
         </h2>
         <PageState
           v-if="aliasSummary.length === 0"
           status="empty"
-          message="暂无候选引用"
+          :message="detail.related_aliases === undefined ? '接口尚未提供关联虚拟模型信息' : '暂无候选引用'"
         />
         <table
           v-else
           class="lai-table"
         >
           <thead>
-            <tr><th>Alias</th><th>priority</th><th>weight</th><th>凭证池</th><th>候选状态</th></tr>
+            <tr><th>虚拟模型</th><th>priority</th><th>weight</th><th>渠道</th><th>候选状态</th></tr>
           </thead>
           <tbody>
             <tr
@@ -320,7 +323,7 @@ function goTraces(): void {
             >
               <td>
                 <RouterLink
-                  :to="`/ui/model-aliases/${item.alias_id}`"
+                  :to="`/ui/models/virtual/${item.alias_id}`"
                   class="lai-link"
                 >
                   {{ item.alias }}
@@ -328,7 +331,7 @@ function goTraces(): void {
               </td>
               <td>{{ item.priority }}</td>
               <td>{{ item.weight }}</td>
-              <td>{{ item.credential_pool_name }}</td>
+              <td>{{ item.channel_name }}</td>
               <td>{{ item.candidate_status }}</td>
             </tr>
           </tbody>
@@ -342,7 +345,7 @@ function goTraces(): void {
         <PageState
           v-if="recentChecks.length === 0"
           status="empty"
-          message="未检测"
+          :message="detail.recent_checks === undefined ? '接口尚未提供检测记录' : '未检测'"
         />
         <table
           v-else

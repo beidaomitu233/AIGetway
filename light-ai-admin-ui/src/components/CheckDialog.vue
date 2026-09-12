@@ -55,8 +55,8 @@ function submit(): void {
   emit('submit', {
     mode: mode.value,
     timeout_ms: timeoutMs.value,
-    ...(mode.value === 'MINIMAL_CHAT' ? { provider_model_id: modelId.value } : {}),
-    ...(credentialId.value !== '' ? { credential_id: credentialId.value } : {}),
+    ...(mode.value === 'MINIMAL_CHAT' ? { upstream_model_id: modelId.value } : {}),
+    ...(credentialId.value !== '' ? { channel_credential_id: credentialId.value } : {}),
   })
 }
 </script>

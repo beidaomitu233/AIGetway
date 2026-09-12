@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { resourceHost } from '@/utils/resourceValidation'
 import { useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import DataTable, { type TableColumn } from '@/components/DataTable.vue'
@@ -68,7 +69,7 @@ const columns: TableColumn[] = [
   { key: 'base_url', label: '服务地址' },
   { key: 'connection_status', label: '连接状态' },
   { key: 'provider_model_count', label: '模型数' },
-  { key: 'credential_pool_count', label: '凭证池数' },
+  { key: 'channel_keys', label: '渠道 Key' },
   { key: 'last_check_at', label: '最近检测' },
   { key: 'enabled', label: '启用' },
   { key: 'draft_changed', label: '变更' },
@@ -87,6 +88,7 @@ const lifecycle = useLifecycleActions({
 })
 
 function onToggleEnabled(row: ProviderListItem): void {
+  if (!canManage.value) return
   if (row.enabled) {
     void lifecycle.requestDisable(row.id, row.version)
   } else {
@@ -99,7 +101,7 @@ function onToggleEnabled(row: ProviderListItem): void {
   <section class="lai-page">
     <div class="lai-page-header">
       <h1 class="lai-page-title">
-        Provider
+        渠道
       </h1>
       <button
         v-if="canManage"
@@ -107,7 +109,7 @@ function onToggleEnabled(row: ProviderListItem): void {
         class="lai-btn lai-btn-primary"
         @click="router.push({ name: 'provider-new' })"
       >
-        新建 Provider
+        新建 渠道
       </button>
     </div>
 
@@ -201,8 +203,8 @@ function onToggleEnabled(row: ProviderListItem): void {
         <template #base_url="{ row }">
           <span
             class="lai-ellipsis"
-            :title="row.base_url"
-          >{{ row.base_url }}</span>
+            :title="resourceHost(row.base_url)"
+          >{{ resourceHost(row.base_url) }}</span>
         </template>
         <template #connection_status="{ row }">
           <StatusText
@@ -213,18 +215,18 @@ function onToggleEnabled(row: ProviderListItem): void {
         </template>
         <template #provider_model_count="{ row }">
           <RouterLink
-            :to="{ name: 'model-list', query: { provider_id: row.id } }"
+            :to="{ name: 'model-list', query: { channel_id: row.id } }"
             class="lai-link"
           >
             {{ row.provider_model_count }}
           </RouterLink>
         </template>
-        <template #credential_pool_count="{ row }">
+        <template #channel_keys="{ row }">
           <RouterLink
-            :to="{ name: 'pool-list', query: { provider_id: row.id } }"
+            :to="{ name: 'provider-detail', params: { id: row.id } }"
             class="lai-link"
           >
-            {{ row.credential_pool_count }}
+            管理 Key
           </RouterLink>
         </template>
         <template #last_check_at="{ row }">

@@ -66,6 +66,9 @@ const enabled = ref(true)
 watch(
   () => props.open,
   (open) => {
+    secretValue.value = ''
+    secretValueConfirm.value = ''
+    secretRef.value = ''
     if (!open) return
     const source = props.credential
     name.value = source?.name ?? ''
@@ -157,9 +160,15 @@ function confirm(): void {
     secret_value: secretSource.value === 'INLINE_ENCRYPTED' ? secretValue.value : undefined,
     secret_ref: secretSource.value === 'EXTERNAL_REF' ? secretRef.value : undefined,
   })
+  secretValue.value = ''
+  secretValueConfirm.value = ''
+  secretRef.value = ''
 }
 
 function close(): void {
+  if (props.submitting) return
+  secretValue.value = ''
+  secretValueConfirm.value = ''
   emit('update:open', false)
 }
 </script>
@@ -246,6 +255,7 @@ function close(): void {
             <SecretInput
               id="lai-cred-secret"
               v-model="secretValue"
+              :disabled="submitting"
               placeholder="1—4096 字符"
             />
             <p
@@ -266,6 +276,7 @@ function close(): void {
             <SecretInput
               id="lai-cred-secret-confirm"
               v-model="secretValueConfirm"
+              :disabled="submitting"
               placeholder="再次输入密钥"
             />
             <p

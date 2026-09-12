@@ -61,7 +61,7 @@ async function mountDetail(role: keyof typeof bootstrapFixtures) {
     adapters: [...(bootstrapFixtures.SYSTEM_ADMIN.adapters ?? [])],
   })
   const router = createRouter({ history: createMemoryHistory(), routes })
-  void router.push('/ui/providers/prov-1')
+  void router.push('/ui/channels/prov-1')
   await router.isReady()
   const wrapper = mount(
     { template: '<RouterView />' },
@@ -83,13 +83,13 @@ describe('ProviderDetailPage（FE-009/FE-010）', () => {
       if (url.pathname.endsWith('/admin/bootstrap')) {
         return dataEnvelope(bootstrapFixtures.SYSTEM_ADMIN)
       }
-      if (method === 'GET' && url.pathname.endsWith('/admin/providers/prov-1')) {
+      if (method === 'GET' && url.pathname.endsWith('/admin/channels/prov-1')) {
         return dataEnvelope(detail)
       }
       if (url.pathname.includes('/admin/credential-pools')) {
         return pageEnvelope([])
       }
-      if (url.pathname.includes('/admin/provider-models')) {
+      if (url.pathname.includes('/admin/upstream-models')) {
         return pageEnvelope([
           { id: 'pm-1', display_name: 'GPT-4o', model_id: 'gpt-4o', connection_status: 'AVAILABLE', enabled: true, draft_changed: false },
         ])
@@ -117,7 +117,7 @@ describe('ProviderDetailPage（FE-009/FE-010）', () => {
       const base = baseHandler()(context)
       if (base) return base
       const { url, method } = context
-      if (method === 'POST' && url.pathname.endsWith('/admin/providers/prov-1/check')) {
+      if (method === 'POST' && url.pathname.endsWith('/admin/channels/prov-1/check')) {
         return dataEnvelope({
           id: 'chk-2',
           target_type: 'PROVIDER',
@@ -158,7 +158,7 @@ describe('ProviderDetailPage（FE-009/FE-010）', () => {
     const checkCall = stub.calls.find((call) => call.url.includes('/check'))
     expect(checkCall).toBeDefined()
     expect(checkCall!.body.mode).toBe('MINIMAL_CHAT')
-    expect(checkCall!.body.provider_model_id).toBe('pm-1')
+    expect(checkCall!.body.upstream_model_id).toBe('pm-1')
     expect(checkCall!.body.timeout_ms).toBe(10000)
   })
 

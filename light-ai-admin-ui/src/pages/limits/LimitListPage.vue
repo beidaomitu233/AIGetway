@@ -15,8 +15,8 @@ import type { LimitPolicyListItem } from '@/api/limitPolicies'
 import { useListActions } from '../listActions'
 
 function scopeLink(row: LimitPolicyListItem): string {
-  if (row.scope_type === 'MODEL_ALIAS') return `/ui/model-aliases/${row.scope_id}`
-  if (row.scope_type === 'PROVIDER_MODEL') return `/ui/provider-models/${row.scope_id}`
+  if (row.scope_type === 'MODEL_ALIAS') return `/ui/models/virtual/${row.scope_id}`
+  if (row.scope_type === 'PROVIDER_MODEL') return `/ui/models/upstream/${row.scope_id}`
   return '/ui/credential-pools'
 }
 

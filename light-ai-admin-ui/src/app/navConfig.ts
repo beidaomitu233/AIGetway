@@ -28,10 +28,9 @@ export const navSections: NavSection[] = [
   {
     title: 'AI 资源',
     items: [
-      { title: '渠道', to: '/ui/providers', permission: Permission.providerView },
-      { title: '上游 Key 池', to: '/ui/credential-pools', permission: Permission.credentialView },
-      { title: '上游模型', to: '/ui/provider-models', permission: Permission.modelView },
-      { title: '虚拟模型与路由', to: '/ui/model-aliases', permission: Permission.aliasView },
+      { title: '渠道', to: '/ui/channels', permission: Permission.providerView },
+      { title: '上游模型', to: '/ui/models/upstream', permission: Permission.modelView },
+      { title: '虚拟模型与路由', to: '/ui/models/virtual', permission: Permission.aliasView },
     ],
   },
   {

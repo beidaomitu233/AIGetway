@@ -28,11 +28,9 @@ const secretValueConfirm = ref('')
 
 watch(
   () => props.open,
-  (open) => {
-    if (open) {
-      secretValue.value = ''
-      secretValueConfirm.value = ''
-    }
+  () => {
+    secretValue.value = ''
+    secretValueConfirm.value = ''
   },
   { immediate: true },
 )
@@ -52,9 +50,14 @@ function confirm(): void {
     secret_value_confirm: secretValueConfirm.value,
     version: props.version,
   })
+  secretValue.value = ''
+  secretValueConfirm.value = ''
 }
 
 function close(): void {
+  if (props.submitting) return
+  secretValue.value = ''
+  secretValueConfirm.value = ''
   emit('update:open', false)
 }
 </script>
@@ -90,6 +93,7 @@ function close(): void {
           <SecretInput
             id="lai-rotate-secret"
             v-model="secretValue"
+            :disabled="submitting"
             placeholder="1—4096 字符"
           />
         </div>
@@ -104,6 +108,7 @@ function close(): void {
           <SecretInput
             id="lai-rotate-confirm"
             v-model="secretValueConfirm"
+            :disabled="submitting"
             placeholder="再次输入新密钥"
           />
           <p
