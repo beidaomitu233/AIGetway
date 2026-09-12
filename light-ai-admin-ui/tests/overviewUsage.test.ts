@@ -252,6 +252,87 @@ describe('OverviewPage（FE-031~033）', () => {
     expect(wrapper.text()).toContain('观测数据暂不可读')
     expect(wrapper.text()).toContain('428')
   })
+
+  it('时间范围与筛选进入 URL 并可还原（FE-225）', async () => {
+    stub = installJsonFetchStub(handler())
+    const { wrapper, router } = await mountPage('/ui/overview?range=24h', 'SYSTEM_ADMIN')
+    const summaryCall = stub.calls.find((call) => call.url.includes('/admin/overview/summary'))
+    expect(summaryCall!.url).toContain('granularity=HOUR')
+    const appSelect = wrapper.findAll('select').find((select) => select.attributes('aria-label') === '应用')
+    await appSelect!.setValue('app-demo')
+    await flushPromises()
+    expect(router.currentRoute.value.query.application).toBe('app-demo')
+    expect(router.currentRoute.value.query.range).toBe('24h')
+    // 深链筛选参数进入请求
+    const summaryWithFilter = stub.calls.filter((call) => call.url.includes('/admin/overview/summary')).at(-1)!
+    expect(summaryWithFilter.url).toContain('application=app-demo')
+  })
+
+  it('深链还原范围与筛选参数（FE-225）', async () => {
+    stub = installJsonFetchStub(handler())
+    await mountPage('/ui/overview?range=7d&application=app-demo&currency=CNY', 'SYSTEM_ADMIN')
+    const summaryCall = stub.calls.find((call) => call.url.includes('/admin/overview/summary'))
+    expect(summaryCall!.url).toContain('granularity=DAY')
+    expect(summaryCall!.url).toContain('application=app-demo')
+    expect(summaryCall!.url).toContain('currency=CNY')
+  })
+
+  it('应用排行展示并可进入预设筛选列表（FE-225）', async () => {
+    stub = installJsonFetchStub(({ url, method }) => {
+      if (method === 'GET' && url.pathname.endsWith('/admin/usage/groups')) {
+        return dataEnvelope({
+          query_fingerprint: 'fp-rank',
+          data_updated_at: '2026-09-05T10:00:00Z',
+          total: 2,
+          page: 1,
+          page_size: 10,
+          rows: [
+            {
+              dimension_type: 'APPLICATION', dimension_id: null, dimension_name: 'app-demo', currency: 'USD',
+              request_count: 300, success_count: 290, failure_count: 10, success_rate: 0.9667, attempt_count: 310,
+              initial_count: 300, retry_count: 2, credential_failover_count: 1, fallback_count: 1, half_open_probe_count: 0,
+              actual_tokens: 60000, estimated_tokens: 5000, total_tokens: 65000,
+              input_cost: '0.60000000', output_cost: '0.80000000', total_cost: '1.40000000',
+              request_share: 0.7, token_share: 0.66, cost_share: 0.76,
+            },
+            {
+              dimension_type: 'APPLICATION', dimension_id: null, dimension_name: 'app-other', currency: 'USD',
+              request_count: 128, success_count: 111, failure_count: 9, success_rate: 0.8672, attempt_count: 130,
+              initial_count: 128, retry_count: 1, credential_failover_count: 0, fallback_count: 0, half_open_probe_count: 0,
+              actual_tokens: 20220, estimated_tokens: 3230, total_tokens: 33450,
+              input_cost: '0.20000000', output_cost: '0.24230000', total_cost: '0.44230000',
+              request_share: 0.3, token_share: 0.34, cost_share: 0.24,
+            },
+          ],
+        })
+      }
+      const base = handler()({ url, method })
+      if (base) return base
+      return undefined
+    })
+    const { wrapper } = await mountPage('/ui/overview', 'SYSTEM_ADMIN')
+    const text = wrapper.text()
+    expect(text).toContain('应用排行')
+    expect(text).toContain('app-demo')
+    expect(text).toContain('1.40000000')
+    const link = wrapper.findAll('a').find((a) => a.text() === '调用记录')
+    expect(link!.attributes('href')).toContain('application=app-demo')
+    expect(link!.attributes('href')).toContain('start_at=')
+  })
+
+  it('应用排行失败独立展示错误，不影响摘要（FE-225）', async () => {
+    stub = installJsonFetchStub(({ url, method }) => {
+      if (method === 'GET' && url.pathname.endsWith('/admin/usage/groups')) {
+        return errorEnvelope(503, 'OBSERVATION_DATA_UNAVAILABLE', '排行数据暂不可读')
+      }
+      const base = handler()({ url, method })
+      if (base) return base
+      return undefined
+    })
+    const { wrapper } = await mountPage('/ui/overview', 'SYSTEM_ADMIN')
+    expect(wrapper.text()).toContain('428')
+    expect(wrapper.text()).toContain('排行数据暂不可读')
+  })
 })
 
 describe('UsagePage（FE-034~036）', () => {
@@ -446,5 +527,36 @@ describe('UsagePage（FE-034~036）', () => {
     stub = installJsonFetchStub(handler())
     const { wrapper } = await mountPage('/ui/usage', 'VIEWER')
     expect(wrapper.findAll('button').some((button) => button.text() === '导出 CSV')).toBe(false)
+  })
+
+  it('输入/输出 Token 与共享筛选按 URL 还原（FE-222）', async () => {
+    stub = installJsonFetchStub(handler())
+    const { wrapper } = await mountPage('/ui/usage?range=24h&application=app-demo&currency=USD', 'SYSTEM_ADMIN')
+    const text = wrapper.text()
+    expect(text).toContain('输入 Token')
+    expect(text).toContain('输出 Token')
+    expect(text).toContain('400100')
+    expect(text).toContain('112200')
+    const summaryCall = stub.calls.find((call) => call.url.includes('/admin/usage/summary'))
+    expect(summaryCall!.url).toContain('application=app-demo')
+    expect(summaryCall!.url).toContain('currency=USD')
+    expect(summaryCall!.url).toContain('granularity=HOUR')
+  })
+
+  it('修改筛选写入 URL 并携带查询参数（FE-222）', async () => {
+    stub = installJsonFetchStub(handler())
+    const { wrapper, router } = await mountPage('/ui/usage', 'SYSTEM_ADMIN')
+    await flushPromises()
+    const aliasInput = wrapper
+      .findAll('input')
+      .find((input) => input.attributes('placeholder') === '虚拟模型 ID')
+    await aliasInput!.setValue('alias-1')
+    await aliasInput!.trigger('change')
+    await flushPromises()
+    const lastCall = stub.calls.filter((call) => call.url.includes('/admin/usage/summary')).at(-1)!
+    expect(lastCall.url).toContain('alias_id=alias-1')
+    expect(router.currentRoute.value.query.alias_id).toBe('alias-1')
+    // 深链参数同步进入 URL，刷新后可还原
+    expect(router.currentRoute.value.query.range).toBe('7d')
   })
 })

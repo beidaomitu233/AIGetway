@@ -7,6 +7,7 @@ import { useBootstrapStore } from '@/stores/bootstrap'
 import { bootstrapFixtures } from '../mocks/fixtures/bootstrap'
 import {
   dataEnvelope,
+  errorEnvelope,
   installJsonFetchStub,
   type FetchStub,
 } from './helpers/fetchStub'
@@ -258,6 +259,7 @@ describe('PublishPage（FE-039~041）', () => {
   afterEach(() => {
     stub?.restore()
     vi.restoreAllMocks()
+    vi.useRealTimers()
   })
 
   const validationOk = {
@@ -424,6 +426,83 @@ describe('PublishPage（FE-039~041）', () => {
     await wrapper.findAll('button').find((button) => button.text() === '开始校验')!.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('校验已过期')
+  })
+
+  it('发布进度轮询中断提示并自动恢复（FE-223）', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const recordOk = {
+      id: 'pub-1',
+      snapshot_no: 13,
+      from_snapshot_no: 12,
+      target_snapshot_no: 13,
+      status: 'SUCCEEDED',
+      published_by_name: '系统管理员',
+      publish_note: '首次发布',
+      published_at: '2026-09-05T10:05:00Z',
+      completed_at: '2026-09-05T10:05:05Z',
+      duration_ms: 5000,
+      draft_revision: 36,
+      content_checksum: 'a3f1',
+      change_summary: 'change',
+      affected_alias_ids: ['alias-1'],
+      acknowledged_warning_ids: ['CONNECTION_CHECK_STALE'],
+      instance_results: [
+        {
+          instance_id: 'instance-a',
+          runtime_mode: 'STANDALONE_SERVER',
+          runtime_version: '1.0.0',
+          supported_schema_versions: ['1'],
+          loaded_adapter_types: ['OPENAI'],
+          from_snapshot_no: 12,
+          target_snapshot_no: 13,
+          status: 'LOADED',
+          retry_count: 0,
+          load_duration_ms: 800,
+          error_code: null as string | null,
+          error_summary: null as string | null,
+          updated_at: '2026-09-05T10:05:04Z',
+        },
+      ],
+      first_round_completed_at: '2026-09-05T10:05:05Z',
+      converged_at: '2026-09-05T10:05:05Z',
+    }
+    let recordCalls = 0
+    const baseHandler = handler()
+    stub = installJsonFetchStub(({ url, method, body }) => {
+      if (method === 'POST' && url.pathname.endsWith('/admin/config/publish')) {
+        return dataEnvelope({ ...recordOk, status: 'ACTIVATING', completed_at: null, converged_at: null })
+      }
+      if (method === 'GET' && url.pathname.endsWith('/admin/config/publish-records/pub-1')) {
+        recordCalls += 1
+        if (recordCalls === 1) {
+          return errorEnvelope(503, 'PUBLISH_RECORD_UNAVAILABLE', '发布进度暂不可用')
+        }
+        return dataEnvelope(recordOk)
+      }
+      return baseHandler({ url, method, body })
+    })
+    const { wrapper } = await mountPage('/ui/config/publish', 'SYSTEM_ADMIN')
+    await wrapper.findAll('button').find((button) => button.text() === '开始校验')!.trigger('click')
+    await flushPromises()
+    await wrapper.find('input[type="checkbox"]').setValue(true)
+    await wrapper.find('#publish-note').setValue('首次发布')
+    await wrapper.findAll('button').find((button) => button.text() === '提交发布')!.trigger('click')
+    await flushPromises()
+    await flushPromises()
+    expect(wrapper.text()).toContain('第 3 步')
+    expect(wrapper.text()).toContain('instance-a')
+    // 第一次轮询失败：提示中断，保留最近进度
+    vi.advanceTimersByTime(3000)
+    await flushPromises()
+    expect(recordCalls).toBe(1)
+    expect(wrapper.text()).toContain('进度刷新暂时中断')
+    expect(wrapper.text()).toContain('instance-a')
+    // 第二次轮询成功：提示消失并更新为最终状态
+    vi.advanceTimersByTime(3000)
+    await flushPromises()
+    expect(recordCalls).toBe(2)
+    expect(wrapper.text()).not.toContain('进度刷新暂时中断')
+    expect(wrapper.text()).toContain('已加载')
   })
 
   it('只读角色不显示校验按钮', async () => {

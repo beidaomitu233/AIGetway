@@ -18,7 +18,7 @@ import {
   type TraceDetail,
   fetchTrace,
 } from '@/api/traces'
-import { ApiError, isAbortError } from '@/api/errors'
+import { ApiError, isAbortError, toErrorMessage } from '@/api/errors'
 
 const DETAIL_REFRESH_MS = 5000
 
@@ -32,6 +32,9 @@ const canDiagnostics = computed(() => store.can(Permission.traceDiagnostics))
 const state = ref<'loading' | 'ready' | 'error'>('loading')
 const loadError = ref<unknown>(null)
 const detail = ref<TraceDetail | null>(null)
+// 运行中自动刷新保留旧数据，不打乱时间线（FE-221）
+const refreshing = ref(false)
+const refreshError = ref('')
 
 const diagnosticsRequested = ref(false)
 const diagnosticsError = ref('')
@@ -53,17 +56,25 @@ async function copyText(value: string): Promise<void> {
 let controller: AbortController | null = null
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
-async function load(): Promise<void> {
+async function load(options: { silent?: boolean } = {}): Promise<void> {
+  const silent = options.silent === true
+  if (silent && (refreshing.value || !detail.value)) return
   controller?.abort()
   controller = new AbortController()
-  state.value = 'loading'
-  loadError.value = null
+  if (silent) {
+    refreshing.value = true
+  } else {
+    state.value = 'loading'
+    loadError.value = null
+  }
   try {
     detail.value = await fetchTrace(traceId.value, {
       includeDiagnostics: diagnosticsRequested.value,
       signal: controller.signal,
     })
     state.value = 'ready'
+    loadError.value = null
+    refreshError.value = ''
     if (diagnosticsRequested.value) diagnosticsError.value = ''
   } catch (e) {
     if (isAbortError(e)) return
@@ -73,8 +84,15 @@ async function load(): Promise<void> {
       diagnosticsRequested.value = false
       return
     }
-    loadError.value = e
-    state.value = 'error'
+    if (silent) {
+      // 静默刷新失败保留上次数据，不打断当前时间线
+      refreshError.value = toErrorMessage(e)
+    } else {
+      loadError.value = e
+      state.value = 'error'
+    }
+  } finally {
+    if (silent) refreshing.value = false
   }
 }
 
@@ -86,7 +104,7 @@ onMounted(() => {
   void load()
   refreshTimer = setInterval(() => {
     if (document.visibilityState !== 'visible') return
-    if (isRunning(detail.value)) void load()
+    if (isRunning(detail.value)) void load({ silent: true })
   }, DETAIL_REFRESH_MS)
 })
 onUnmounted(() => {
@@ -97,6 +115,7 @@ watch(traceId, () => {
   detail.value = null
   diagnosticsRequested.value = false
   diagnosticsDenied.value = false
+  refreshError.value = ''
   void load()
 })
 
@@ -201,6 +220,11 @@ const sampleSectionVisible = computed(
           v-if="copyState"
           class="lai-related-meta"
         >{{ copyState }}</span>
+        <span
+          v-if="refreshing"
+          class="lai-related-meta"
+          role="status"
+        >刷新中…</span>
       </div>
     </div>
 
@@ -215,6 +239,13 @@ const sampleSectionVisible = computed(
       @retry="load"
     />
     <template v-else-if="detail">
+      <p
+        v-if="refreshError"
+        class="lai-form-message-error"
+        role="alert"
+      >
+        刷新失败，以下为上次数据：{{ refreshError }}
+      </p>
       <div class="lai-card">
         <h2 class="lai-card-title">
           Trace 摘要

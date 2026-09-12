@@ -12,6 +12,7 @@ import {
   pageEnvelope,
   type FetchStub,
 } from './helpers/fetchStub'
+import type { TraceDetail } from '@/api/traces'
 
 const listRow = {
   trace_id: 'trace-retry-001',
@@ -165,7 +166,7 @@ describe('TraceListPage（FE-025/026）', () => {
 describe('TraceDetailPage（FE-027~030）', () => {
   let stub: FetchStub
 
-  const detailPayload = {
+  const detailPayload: TraceDetail = {
     trace: {
       ...listRow,
       config_snapshot_no: 12,
@@ -174,6 +175,7 @@ describe('TraceDetailPage（FE-027~030）', () => {
       response_input_tokens: 140,
       response_output_tokens: 45,
       response_total_tokens: 185,
+      updated_by: 'system',
       input_tokens: 400,
       output_tokens: 45,
       total_tokens: 445,
@@ -214,10 +216,19 @@ describe('TraceDetailPage（FE-027~030）', () => {
         credential_name_snapshot: 'sk-****a1b2',
         route_candidate_id: 'cand-0',
         started_at: '2026-09-05T02:00:00Z',
+        provider_started_at: '2026-09-05T02:00:00Z',
+        response_headers_at: null,
+        first_token_at: null,
+        dispatch_ms: 40,
+        response_header_ms: 320,
+        first_token_ms: null,
         ended_at: '2026-09-05T02:00:01Z',
         total_ms: 800,
+        response_committed: false,
         http_status: 502,
         endpoint_host: 'api.openai.com',
+        retryable: true,
+        retry_after_ms: null,
         provider_request_id: null,
         finish_reason: null,
         error_code: 'NETWORK_ERROR',
@@ -247,10 +258,19 @@ describe('TraceDetailPage（FE-027~030）', () => {
         credential_name_snapshot: 'sk-****9f8e',
         route_candidate_id: 'cand-1',
         started_at: '2026-09-05T02:00:01Z',
+        provider_started_at: '2026-09-05T02:00:01Z',
+        response_headers_at: '2026-09-05T02:00:01Z',
+        first_token_at: '2026-09-05T02:00:02Z',
+        dispatch_ms: 30,
+        response_header_ms: 260,
+        first_token_ms: 640,
         ended_at: '2026-09-05T02:00:03Z',
         total_ms: 2100,
+        response_committed: true,
         http_status: 200,
         endpoint_host: 'api.deepseek.com',
+        retryable: false,
+        retry_after_ms: null,
         provider_request_id: 'req-batch-777',
         finish_reason: 'stop',
         error_code: null,
@@ -320,7 +340,20 @@ describe('TraceDetailPage（FE-027~030）', () => {
   afterEach(() => {
     stub?.restore()
     vi.restoreAllMocks()
+    vi.useRealTimers()
   })
+
+  function runningDetail(): typeof detailPayload {
+    const payload = structuredClone(detailPayload)
+    payload.trace = {
+      ...payload.trace,
+      status: 'RUNNING',
+      ended_at: null as string | null,
+      total_ms: null as number | null,
+    }
+    payload.timeline = payload.timeline.filter((item) => item.type !== 'TRACE_ENDED')
+    return payload
+  }
 
   it('详情展示摘要、时间线、Attempt 明细与响应用量对账', async () => {
     stub = installJsonFetchStub(detailHandler())
@@ -395,5 +428,57 @@ describe('TraceDetailPage（FE-027~030）', () => {
     })
     const { wrapper } = await mountPage('/ui/traces/trace-retry-001', 'SYSTEM_ADMIN')
     expect(wrapper.text()).toContain('对象不存在或已删除')
+  })
+
+  it('运行中自动刷新保留时间线并更新数据（FE-221）', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    let calls = 0
+    stub = installJsonFetchStub(({ url, method }) => {
+      if (method === 'GET' && url.pathname.endsWith('/admin/traces/trace-retry-001')) {
+        calls += 1
+        if (calls === 1) return dataEnvelope(runningDetail())
+        const payload = structuredClone(detailPayload)
+        payload.trace.attempt_count = 4
+        return dataEnvelope(payload)
+      }
+      if (url.pathname.endsWith('/admin/bootstrap')) {
+        return dataEnvelope(bootstrapFixtures.SYSTEM_ADMIN)
+      }
+      return undefined
+    })
+    const { wrapper } = await mountPage('/ui/traces/trace-retry-001', 'SYSTEM_ADMIN')
+    expect(wrapper.text()).toContain('运行中')
+    expect(wrapper.find('.lai-timeline').exists()).toBe(true)
+    vi.advanceTimersByTime(5000)
+    await flushPromises()
+    expect(calls).toBe(2)
+    // 静默刷新不把页面重置为 loading，时间线保留并展示更新后的数据
+    expect(wrapper.find('.lai-timeline').exists()).toBe(true)
+    expect(wrapper.text()).toContain('尝试次数')
+    expect(wrapper.text()).not.toContain('刷新失败')
+  })
+
+  it('运行中自动刷新失败保留上次数据并提示（FE-221）', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    let calls = 0
+    stub = installJsonFetchStub(({ url, method }) => {
+      if (method === 'GET' && url.pathname.endsWith('/admin/traces/trace-retry-001')) {
+        calls += 1
+        if (calls === 1) return dataEnvelope(runningDetail())
+        return errorEnvelope(503, 'TRACE_DATA_UNAVAILABLE', '观测数据暂不可用')
+      }
+      if (url.pathname.endsWith('/admin/bootstrap')) {
+        return dataEnvelope(bootstrapFixtures.SYSTEM_ADMIN)
+      }
+      return undefined
+    })
+    const { wrapper } = await mountPage('/ui/traces/trace-retry-001', 'SYSTEM_ADMIN')
+    expect(wrapper.find('.lai-timeline').exists()).toBe(true)
+    vi.advanceTimersByTime(5000)
+    await flushPromises()
+    // 失败不吞掉已有详情，展示可读提示
+    expect(wrapper.find('.lai-timeline').exists()).toBe(true)
+    expect(wrapper.text()).toContain('刷新失败，以下为上次数据')
+    expect(wrapper.text()).toContain('观测数据暂不可用')
   })
 })

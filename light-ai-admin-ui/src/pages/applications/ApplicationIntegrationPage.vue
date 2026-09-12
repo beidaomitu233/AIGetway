@@ -117,42 +117,94 @@ const errorRows = [
   <section class="lai-page">
     <div class="integration-header">
       <div>
-        <h1 class="lai-page-title">开发接入</h1>
-        <p v-if="detail"><span class="lai-cell-mono">{{ detail.code }}</span> · {{ detail.name }}</p>
+        <h1 class="lai-page-title">
+          开发接入
+        </h1>
+        <p v-if="detail">
+          <span class="lai-cell-mono">{{ detail.code }}</span> · {{ detail.name }}
+        </p>
       </div>
-      <RouterLink v-if="detail" :to="`/ui/applications/${detail.id}`" class="lai-btn">返回应用详情</RouterLink>
+      <RouterLink
+        v-if="detail"
+        :to="`/ui/applications/${detail.id}`"
+        class="lai-btn"
+      >
+        返回应用详情
+      </RouterLink>
     </div>
 
-    <PageState v-if="loading" status="loading" />
-    <PageState v-else-if="loadError || !detail" status="error" :error="loadError" @retry="load" />
+    <PageState
+      v-if="loading"
+      status="loading"
+    />
+    <PageState
+      v-else-if="loadError || !detail"
+      status="error"
+      :error="loadError"
+      @retry="load"
+    />
     <template v-else>
       <div class="lai-detail-card">
-        <h2 class="lai-section-title">连接信息</h2>
+        <h2 class="lai-section-title">
+          连接信息
+        </h2>
         <dl class="lai-dl">
           <dt>统一 Base URL</dt>
-          <dd class="lai-cell-mono">{{ baseUrlText }}</dd>
+          <dd class="lai-cell-mono">
+            {{ baseUrlText }}
+          </dd>
           <dt>认证方式</dt>
           <dd>Authorization: Bearer &lt;应用密钥&gt;（{{ authLabels[context?.authentication_type ?? 'BEARER_TOKEN'] }}）</dd>
           <dt>请求路径</dt>
-          <dd class="lai-cell-mono">GET /v1/models · POST /v1/chat/completions</dd>
+          <dd class="lai-cell-mono">
+            GET /v1/models · POST /v1/chat/completions
+          </dd>
           <dt>应用当前限制</dt>
           <dd>{{ quotaText }}</dd>
           <dt>可用虚拟模型</dt>
           <dd>{{ authorizedModels.length }} 个</dd>
         </dl>
-        <p class="lai-note">业务系统只持有应用密钥，上游供应商 Key 不下发。示例中的密钥位置固定为占位符，请勿把真实密钥写入代码仓库或浏览器存储。</p>
+        <p class="lai-note">
+          业务系统只持有应用密钥，上游供应商 Key 不下发。示例中的密钥位置固定为占位符，请勿把真实密钥写入代码仓库或浏览器存储。
+        </p>
       </div>
 
-      <PageState v-if="authorizedModels.length === 0" status="empty" message="该应用尚未授权任何可调用的虚拟模型，请先在“可用模型”页签完成授权" />
+      <p
+        v-if="detail.active_key_count === 0"
+        class="lai-form-message-error"
+        role="alert"
+        data-testid="no-active-key"
+      >
+        该应用当前没有活动密钥，测试与业务调用都会因认证失败被拒绝；请先在应用详情“接入密钥”页签签发应用密钥。
+      </p>
+
+      <PageState
+        v-if="authorizedModels.length === 0"
+        status="empty"
+        message="该应用尚未授权任何可调用的虚拟模型，请先在“可用模型”页签完成授权"
+      />
       <template v-else>
         <div class="lai-detail-card">
-          <h2 class="lai-section-title">模型选择</h2>
-          <select v-model="selectedAliasId" class="lai-input lai-dev-select" aria-label="选择应用已授权模型">
-            <option v-for="item in authorizedModels" :key="item.alias_id" :value="item.alias_id">
+          <h2 class="lai-section-title">
+            模型选择
+          </h2>
+          <select
+            v-model="selectedAliasId"
+            class="lai-input lai-dev-select"
+            aria-label="选择应用已授权模型"
+          >
+            <option
+              v-for="item in authorizedModels"
+              :key="item.alias_id"
+              :value="item.alias_id"
+            >
               {{ item.display_name }}（{{ item.alias }}）
             </option>
           </select>
-          <dl v-if="selectedAlias" class="lai-dl">
+          <dl
+            v-if="selectedAlias"
+            class="lai-dl"
+          >
             <dt>流式 / system</dt>
             <dd>{{ selectedAlias.support_stream ? '支持流式' : '不支持流式' }} / {{ selectedAlias.support_system_message ? '支持 system' : '不支持 system' }}</dd>
             <dt>上下文 / 最大输出</dt>
@@ -161,33 +213,54 @@ const errorRows = [
         </div>
 
         <div class="lai-detail-card">
-          <h2 class="lai-section-title">调用示例</h2>
-          <CodeSamplePanel :alias-id="selectedAliasId" :mode="accessMode" />
+          <h2 class="lai-section-title">
+            调用示例
+          </h2>
+          <CodeSamplePanel
+            :alias-id="selectedAliasId"
+            :mode="accessMode"
+          />
         </div>
 
         <div class="lai-detail-card">
-          <h2 class="lai-section-title">在线测试</h2>
-          <p class="lai-note">测试请求与正式请求共用同一准入、路由与结算链路，并标记调用来源为管理端测试。</p>
-          <ChatTestPanel :alias="selectedAlias" :can-test="canTest" />
+          <h2 class="lai-section-title">
+            在线测试
+          </h2>
+          <p class="lai-note">
+            测试请求与正式请求共用同一准入、路由与结算链路，并标记调用来源为管理端测试。
+          </p>
+          <ChatTestPanel
+            :alias="selectedAlias"
+            :can-test="canTest"
+          />
         </div>
       </template>
 
       <div class="lai-detail-card">
-        <h2 class="lai-section-title">错误处理</h2>
+        <h2 class="lai-section-title">
+          错误处理
+        </h2>
         <table class="lai-table">
           <thead>
             <tr><th>code</th><th>HTTP</th><th>可重试</th><th>说明</th></tr>
           </thead>
           <tbody>
-            <tr v-for="row in errorRows" :key="row.code">
-              <td class="lai-cell-mono">{{ row.code }}</td>
+            <tr
+              v-for="row in errorRows"
+              :key="row.code"
+            >
+              <td class="lai-cell-mono">
+                {{ row.code }}
+              </td>
               <td>{{ row.http }}</td>
               <td>{{ row.retry }}</td>
               <td>{{ row.note }}</td>
             </tr>
           </tbody>
         </table>
-        <p class="lai-note">错误响应统一为 error 对象，包含 code、message、request_id、retryable；不返回密钥、认证头或上游凭证。</p>
+        <p class="lai-note">
+          错误响应统一为 error 对象，包含 code、message、request_id、retryable；不返回密钥、认证头或上游凭证。
+        </p>
       </div>
     </template>
   </section>

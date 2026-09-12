@@ -16,6 +16,7 @@ const pages = {
   traceDetail: () => import('@/pages/traces/TraceDetailPage.vue'),
   overview: () => import('@/pages/overview/OverviewPage.vue'),
   usage: () => import('@/pages/usage/UsagePage.vue'),
+  usageAdjustments: () => import('@/pages/usage/UsageAdjustmentsPage.vue'),
   drafts: () => import('@/pages/config/DraftsPage.vue'),
   publish: () => import('@/pages/config/PublishPage.vue'),
   publishRecord: () => import('@/pages/config/PublishRecordDetailPage.vue'),
@@ -101,6 +102,7 @@ export const routes: RouteRecordRaw[] = [
   moduleRoute('trace-detail', '/ui/traces/:traceId', 'Trace 详情', Permission.traceView, pages.traceDetail),
 
   moduleRoute('usage', '/ui/usage', 'Usage 与 Cost', Permission.usageView, pages.usage),
+  moduleRoute('usage-adjustments', '/ui/usage/adjustments', '额度流水', Permission.applicationQuotaView, pages.usageAdjustments),
 
   moduleRoute('drafts', '/ui/config/drafts', '待发布变更', Permission.draftView, pages.drafts),
   moduleRoute('publish', '/ui/config/publish', '配置发布', Permission.publishView, pages.publish),

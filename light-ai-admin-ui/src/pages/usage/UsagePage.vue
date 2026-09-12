@@ -37,12 +37,18 @@ const query = reactive<UsageQuery>({
   start_at: '',
   end_at: '',
   granularity: 'DAY',
+  application: undefined,
+  currency: undefined,
   group_by: 'ALIAS',
   group_sort: '-REQUEST_COUNT',
   group_page: 1,
   group_page_size: 20,
   trend_metric: 'REQUEST_COUNT',
 })
+// 单值筛选以输入串维护，请求时包装为数组（API 契约为 string[]）
+const aliasFilter = ref('')
+const providerFilter = ref('')
+const providerModelFilter = ref('')
 const rangePreset = ref('7d')
 const rangePresets = [
   { value: '24h', label: '最近 24 小时', ms: 24 * 3600_000, granularity: 'HOUR' as const },
@@ -57,6 +63,52 @@ function applyPreset(preset: string): void {
   query.end_at = new Date().toISOString()
   query.start_at = new Date(Date.now() - item.ms).toISOString()
   query.granularity = item.granularity
+}
+
+function routeQueryValue(key: string): string {
+  const value = route.query[key]
+  return typeof value === 'string' ? value : ''
+}
+
+/** 从 URL 还原筛选与时间范围（FE-222 深链/刷新一致）。 */
+function readFiltersFromRoute(): void {
+  const application = route.query.application
+  if (typeof application === 'string' && application !== '') {
+    query.application = [application]
+  } else if (Array.isArray(application)) {
+    const items = application.filter((value): value is string => typeof value === 'string' && value !== '')
+    query.application = items.length > 0 ? items : undefined
+  } else {
+    query.application = undefined
+  }
+  const aliasId = routeQueryValue('alias_id')
+  aliasFilter.value = aliasId
+  const providerId = routeQueryValue('provider_id')
+  providerFilter.value = providerId
+  const providerModelId = routeQueryValue('provider_model_id')
+  providerModelFilter.value = providerModelId
+  const currency = routeQueryValue('currency')
+  query.currency = currency === '' ? undefined : currency
+  const preset = rangePresets.find((entry) => entry.value === routeQueryValue('range'))
+  applyPreset(preset?.value ?? '7d')
+  const manualGranularity = routeQueryValue('granularity')
+  if (manualGranularity === 'HOUR' || manualGranularity === 'DAY') query.granularity = manualGranularity
+}
+
+/** 筛选与时间范围写入 URL；刷新/后退后口径一致。 */
+function syncFiltersToRoute(): void {
+  void router.replace({
+    query: {
+      ...route.query,
+      range: rangePreset.value,
+      granularity: query.granularity,
+      application: query.application,
+      alias_id: aliasFilter.value || undefined,
+      provider_id: providerFilter.value || undefined,
+      provider_model_id: providerModelFilter.value || undefined,
+      currency: query.currency,
+    },
+  })
 }
 
 const summary = ref<UsageSummaryResult | null>(null)
@@ -85,15 +137,9 @@ async function loadAll(): Promise<void> {
   fingerprintMismatch.value = false
 
   const requestQuery: UsageQuery = { ...query }
-  const applicationQuery = route.query.application
-  if (typeof applicationQuery === 'string' && applicationQuery !== '') {
-    requestQuery.application = [applicationQuery]
-  } else if (Array.isArray(applicationQuery)) {
-    requestQuery.application = applicationQuery.filter((value): value is string => typeof value === 'string' && value !== '')
-  }
-  if (typeof route.query.currency === 'string' && route.query.currency !== '') {
-    requestQuery.currency = route.query.currency
-  }
+  if (aliasFilter.value !== '') requestQuery.alias_id = [aliasFilter.value]
+  if (providerFilter.value !== '') requestQuery.provider_id = [providerFilter.value]
+  if (providerModelFilter.value !== '') requestQuery.provider_model_id = [providerModelFilter.value]
 
   const [summaryResult, trendResult, groupResult] = await Promise.allSettled([
     fetchUsageSummary(requestQuery, signal),
@@ -165,7 +211,7 @@ function isAbortErrorFromAny(results: Array<PromiseSettledResult<unknown>>): boo
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 onMounted(async () => {
-  applyPreset('7d')
+  readFiltersFromRoute()
   await loadAll()
   refreshTimer = setInterval(() => {
     if (document.visibilityState !== 'visible') return
@@ -179,11 +225,30 @@ onUnmounted(() => {
 
 function onFilterChange(): void {
   query.group_page = 1
+  syncFiltersToRoute()
   void loadAll()
 }
 
 function onPresetChange(event: Event): void {
   applyPreset((event.target as HTMLSelectElement).value)
+  onFilterChange()
+}
+
+function onGranularityChange(event: Event): void {
+  query.granularity = (event.target as HTMLSelectElement).value as 'HOUR' | 'DAY'
+  onFilterChange()
+}
+
+function onTextFilterChange(key: 'alias_id' | 'provider_id' | 'provider_model_id' | 'currency', value: string): void {
+  if (key === 'alias_id') aliasFilter.value = value
+  else if (key === 'provider_id') providerFilter.value = value
+  else if (key === 'provider_model_id') providerModelFilter.value = value
+  else query.currency = value === '' ? undefined : value
+  onFilterChange()
+}
+
+function onApplicationFilterChange(value: string): void {
+  query.application = value === '' ? undefined : [value]
   onFilterChange()
 }
 
@@ -268,7 +333,7 @@ function groupSortValue(column: string): string {
 }
 
 function applyGroupSort(column: string): void {
-  if (column === 'TOTAL_COST' && !query.currency && !route.query.currency) {
+  if (column === 'TOTAL_COST' && !query.currency) {
     return
   }
   query.group_sort = groupSortValue(column)
@@ -420,7 +485,7 @@ const costDelayActive = computed(() => {
         class="lai-select"
         :value="query.granularity"
         aria-label="粒度"
-        @change="query.granularity = ($event.target as HTMLSelectElement).value as 'HOUR' | 'DAY'; onFilterChange()"
+        @change="onGranularityChange"
       >
         <option value="HOUR">
           按小时
@@ -432,10 +497,44 @@ const costDelayActive = computed(() => {
       <input
         class="lai-input lai-filter-keyword"
         type="text"
-        placeholder="币种（留空分币种展示）"
-        :value="typeof route.query.currency === 'string' ? route.query.currency : ''"
-        @change="router.replace({ query: { ...route.query, currency: ($event.target as HTMLInputElement).value || undefined } }); onFilterChange()"
+        placeholder="应用"
+        :value="(query.application ?? []).join(',')"
+        @change="onApplicationFilterChange(($event.target as HTMLInputElement).value.trim())"
       >
+      <input
+        class="lai-input lai-filter-keyword"
+        type="text"
+        placeholder="虚拟模型 ID"
+        :value="aliasFilter"
+        @change="onTextFilterChange('alias_id', ($event.target as HTMLInputElement).value.trim())"
+      >
+      <input
+        class="lai-input lai-filter-keyword"
+        type="text"
+        placeholder="渠道 ID"
+        :value="providerFilter"
+        @change="onTextFilterChange('provider_id', ($event.target as HTMLInputElement).value.trim())"
+      >
+      <input
+        class="lai-input lai-filter-keyword"
+        type="text"
+        placeholder="上游模型 ID"
+        :value="providerModelFilter"
+        @change="onTextFilterChange('provider_model_id', ($event.target as HTMLInputElement).value.trim())"
+      >
+      <input
+        class="lai-input lai-filter-keyword"
+        type="text"
+        placeholder="币种（留空分币种展示）"
+        :value="query.currency ?? ''"
+        @change="onTextFilterChange('currency', ($event.target as HTMLInputElement).value.trim())"
+      >
+      <RouterLink
+        class="lai-btn"
+        :to="{ name: 'usage-adjustments' }"
+      >
+        额度流水
+      </RouterLink>
     </div>
 
     <div class="lai-card">
@@ -476,6 +575,14 @@ const costDelayActive = computed(() => {
           <div class="lai-metric-card">
             <span class="lai-summary-label">总 Token</span>
             <strong class="lai-metric-value">{{ summary.total_tokens }}</strong>
+          </div>
+          <div class="lai-metric-card">
+            <span class="lai-summary-label">输入 Token</span>
+            <strong class="lai-metric-value">{{ summary.input_tokens }}</strong>
+          </div>
+          <div class="lai-metric-card">
+            <span class="lai-summary-label">输出 Token</span>
+            <strong class="lai-metric-value">{{ summary.output_tokens }}</strong>
           </div>
           <div class="lai-metric-card">
             <span class="lai-summary-label">实际 / 估算 Token</span>
