@@ -3,6 +3,8 @@
 // 能力开关关闭时隐藏对应范围与默认值；价格保持字符串精度；启用要求能力字段完整。
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useBootstrapStore } from '@/stores/bootstrap'
+import { Permission } from '@/app/permissions'
 import FormField from '@/components/FormField.vue'
 import PageState from '@/components/PageState.vue'
 import { useDirtyGuard } from '@/composables/useDirtyGuard'
@@ -10,6 +12,8 @@ import { useFormSubmit } from '@/composables/useFormSubmit'
 import { fetchProviderModel, createProviderModel, updateProviderModel, fetchProviderOptions } from '@/api/providerModels'
 import type { ProviderModelCommand, ProviderModelDetail, ProviderOption } from '@/api/providerModels'
 
+const store = useBootstrapStore()
+const canManage = computed(() => store.can(Permission.modelManage))
 const route = useRoute()
 const router = useRouter()
 const modelId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''))
@@ -26,23 +30,23 @@ const form = reactive({
   tokenizer_family: '',
   context_window: '',
   max_output_tokens: '',
-  support_stream: true,
-  support_system_message: true,
-  support_temperature: false,
+  support_stream: null as boolean | null,
+  support_system_message: null as boolean | null,
+  support_temperature: null as boolean | null,
   temperature_min: '',
   temperature_max: '',
-  support_top_p: false,
+  support_top_p: null as boolean | null,
   top_p_min: '',
   top_p_max: '',
-  support_stop: false,
+  support_stop: null as boolean | null,
   max_stop_sequences: '',
   max_stop_length: '',
   default_temperature: '',
   default_top_p: '',
   default_max_tokens: '',
   default_stop: [] as string[],
-  input_price: '0',
-  output_price: '0',
+  input_price: '',
+  output_price: '',
   price_unit: 1000000,
   currency: 'USD',
   enabled: true,
@@ -53,7 +57,7 @@ const baseline = ref('')
 const { submitting, conflictError, errorText, submit: doSubmit, reset: resetSubmit } = useFormSubmit()
 
 function positiveInt(value: string): boolean {
-  return /^\d+$/.test(value) && Number(value) >= 1
+  return /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) >= 1
 }
 
 const displayNameInvalid = computed(() => form.display_name.trim().length < 2 || form.display_name.trim().length > 64)
@@ -65,14 +69,14 @@ const outputInvalid = computed(
 const temperatureRangeInvalid = computed(() => {
   if (!form.support_temperature) return false
   if (form.temperature_min === '' || form.temperature_max === '') return true
-  return Number(form.temperature_max) < Number(form.temperature_min)
+  return !Number.isFinite(Number(form.temperature_min)) || !Number.isFinite(Number(form.temperature_max)) || Number(form.temperature_max) < Number(form.temperature_min)
 })
 const topPRangeInvalid = computed(() => {
   if (!form.support_top_p) return false
   if (form.top_p_min === '' || form.top_p_max === '') return true
   const min = Number(form.top_p_min)
   const max = Number(form.top_p_max)
-  return min < 0 || max < 0 || min > 1 || max > 1 || max < min
+  return !Number.isFinite(min) || !Number.isFinite(max) || min < 0 || max < 0 || min > 1 || max > 1 || max < min
 })
 const stopRangeInvalid = computed(() => {
   if (!form.support_stop) return false
@@ -84,14 +88,14 @@ const defaultTemperatureInvalid = computed(() => {
   if (form.default_temperature === '') return false
   if (form.support_temperature && form.temperature_min !== '' && form.temperature_max !== '') {
     const value = Number(form.default_temperature)
-    return value < Number(form.temperature_min) || value > Number(form.temperature_max)
+    return !Number.isFinite(value) || value < Number(form.temperature_min) || value > Number(form.temperature_max)
   }
   return !/^-?\d+(\.\d{1,4})?$/.test(form.default_temperature)
 })
 const defaultTopPInvalid = computed(() => {
   if (form.default_top_p === '') return false
   const value = Number(form.default_top_p)
-  if (value < 0 || value > 1) return true
+  if (!Number.isFinite(value) || value < 0 || value > 1) return true
   if (form.support_top_p && form.top_p_min !== '' && form.top_p_max !== '') {
     return value < Number(form.top_p_min) || value > Number(form.top_p_max)
   }
@@ -107,8 +111,8 @@ const stopListInvalid = computed(() => {
   return new Set(form.default_stop).size !== form.default_stop.length
 })
 const priceInvalid = computed(() => {
-  const pattern = /^\d+(\.\d{1,8})?$/
-  return !pattern.test(form.input_price) || !pattern.test(form.output_price)
+  const pattern = /^\d{1,12}(\.\d{1,8})?$/
+  return [form.input_price, form.output_price].some((price) => price === '' ? form.enabled : !pattern.test(price))
 })
 const currencyInvalid = computed(() => !/^[A-Z]{3}$/.test(form.currency))
 
@@ -117,7 +121,8 @@ const capabilityIncomplete = computed(
     form.enabled &&
     (form.tokenizer_family.trim() === '' ||
       form.context_window === '' ||
-      form.max_output_tokens === ''),
+      form.max_output_tokens === '' ||
+      [form.support_stream, form.support_system_message, form.support_temperature, form.support_top_p, form.support_stop].some((value) => value === null)),
 )
 const formInvalid = computed(
   () =>
@@ -133,6 +138,7 @@ const formInvalid = computed(
     defaultMaxTokensInvalid.value ||
     stopListInvalid.value ||
     priceInvalid.value ||
+    ![1000, 1000000].includes(form.price_unit) ||
     currencyInvalid.value ||
     capabilityIncomplete.value ||
     form.provider_id === '',
@@ -158,23 +164,23 @@ function applyDetail(detail: ProviderModelDetail): void {
   form.tokenizer_family = detail.tokenizer_family ?? ''
   form.context_window = detail.context_window?.toString() ?? ''
   form.max_output_tokens = detail.max_output_tokens?.toString() ?? ''
-  form.support_stream = detail.support_stream ?? true
-  form.support_system_message = detail.support_system_message ?? true
-  form.support_temperature = detail.support_temperature ?? false
+  form.support_stream = detail.support_stream ?? null
+  form.support_system_message = detail.support_system_message ?? null
+  form.support_temperature = detail.support_temperature ?? null
   form.temperature_min = detail.temperature_min ?? ''
   form.temperature_max = detail.temperature_max ?? ''
-  form.support_top_p = detail.support_top_p ?? false
+  form.support_top_p = detail.support_top_p ?? null
   form.top_p_min = detail.top_p_min ?? ''
   form.top_p_max = detail.top_p_max ?? ''
-  form.support_stop = detail.support_stop ?? false
+  form.support_stop = detail.support_stop ?? null
   form.max_stop_sequences = detail.max_stop_sequences?.toString() ?? ''
   form.max_stop_length = detail.max_stop_length?.toString() ?? ''
   form.default_temperature = detail.default_temperature ?? ''
   form.default_top_p = detail.default_top_p ?? ''
   form.default_max_tokens = detail.default_max_tokens?.toString() ?? ''
   form.default_stop = [...detail.default_stop]
-  form.input_price = detail.input_price
-  form.output_price = detail.output_price
+  form.input_price = detail.input_price ?? ''
+  form.output_price = detail.output_price ?? ''
   form.price_unit = detail.price_unit
   form.currency = detail.currency
   form.enabled = detail.enabled
@@ -205,8 +211,8 @@ function buildCommand(): ProviderModelCommand {
     default_top_p: form.default_top_p === '' ? null : form.default_top_p,
     default_max_tokens: form.default_max_tokens === '' ? null : Number(form.default_max_tokens),
     default_stop: [...new Set(form.default_stop)],
-    input_price: form.input_price,
-    output_price: form.output_price,
+    input_price: form.input_price || null,
+    output_price: form.output_price || null,
     price_unit: form.price_unit,
     currency: form.currency,
     enabled: form.enabled,
@@ -215,7 +221,7 @@ function buildCommand(): ProviderModelCommand {
 }
 
 async function onSubmit(): Promise<void> {
-  if (formInvalid.value) return
+  if (!canManage.value || submitting.value || conflictError.value || formInvalid.value) return
   const command = buildCommand()
   let savedId = ''
   const outcome = await doSubmit(async () => {
@@ -244,6 +250,7 @@ async function reload(): Promise<void> {
   if (!isEdit.value) return
   resetSubmit()
   loading.value = true
+  loadError.value = null
   try {
     applyDetail(await fetchProviderModel(modelId.value))
   } catch (e) {
@@ -400,24 +407,45 @@ onMounted(async () => {
             >
           </FormField>
         </div>
-        <label class="lai-switch"><input
-          v-model="form.support_stream"
-          type="checkbox"
-        > 支持流式</label>
-        <label class="lai-switch"><input
-          v-model="form.support_system_message"
-          type="checkbox"
-        > 支持 system 消息</label>
+        <label class="lai-switch">支持流式
+          <select
+            v-model="form.support_stream"
+            class="lai-input"
+            aria-label="stream"
+          >
+            <option :value="null">待确认</option>
+            <option :value="true">支持</option>
+            <option :value="false">不支持</option>
+          </select>
+        </label>
+        <label class="lai-switch">支持 system 消息
+          <select
+            v-model="form.support_system_message"
+            class="lai-input"
+            aria-label="system_message"
+          >
+            <option :value="null">待确认</option>
+            <option :value="true">支持</option>
+            <option :value="false">不支持</option>
+          </select>
+        </label>
       </fieldset>
 
       <fieldset class="lai-fieldset">
         <legend class="lai-legend">
           参数能力
         </legend>
-        <label class="lai-switch"><input
-          v-model="form.support_temperature"
-          type="checkbox"
-        > 支持 temperature</label>
+        <label class="lai-switch">支持 temperature
+          <select
+            v-model="form.support_temperature"
+            class="lai-input"
+            aria-label="temperature"
+          >
+            <option :value="null">待确认</option>
+            <option :value="true">支持</option>
+            <option :value="false">不支持</option>
+          </select>
+        </label>
         <div
           v-if="form.support_temperature"
           class="lai-form-grid"
@@ -446,10 +474,17 @@ onMounted(async () => {
             >
           </FormField>
         </div>
-        <label class="lai-switch"><input
-          v-model="form.support_top_p"
-          type="checkbox"
-        > 支持 top_p</label>
+        <label class="lai-switch">支持 top_p
+          <select
+            v-model="form.support_top_p"
+            class="lai-input"
+            aria-label="top_p"
+          >
+            <option :value="null">待确认</option>
+            <option :value="true">支持</option>
+            <option :value="false">不支持</option>
+          </select>
+        </label>
         <div
           v-if="form.support_top_p"
           class="lai-form-grid"
@@ -478,10 +513,17 @@ onMounted(async () => {
             >
           </FormField>
         </div>
-        <label class="lai-switch"><input
-          v-model="form.support_stop"
-          type="checkbox"
-        > 支持 stop</label>
+        <label class="lai-switch">支持 stop
+          <select
+            v-model="form.support_stop"
+            class="lai-input"
+            aria-label="stop"
+          >
+            <option :value="null">待确认</option>
+            <option :value="true">支持</option>
+            <option :value="false">不支持</option>
+          </select>
+        </label>
         <div
           v-if="form.support_stop"
           class="lai-form-grid"
@@ -661,7 +703,7 @@ onMounted(async () => {
           v-if="capabilityIncomplete"
           class="lai-form-message-error"
         >
-          启用模型必须补齐 Tokenizer、上下文窗口和最大输出
+          启用模型必须补齐 Tokenizer、上下文窗口和最大输出，并明确声明各项能力及价格
         </p>
         <p
           v-if="conflictError"
@@ -694,6 +736,7 @@ onMounted(async () => {
             取消
           </button>
           <button
+            v-if="canManage"
             type="submit"
             class="lai-btn lai-btn-primary"
             :disabled="submitting || formInvalid"

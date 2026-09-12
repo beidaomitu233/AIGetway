@@ -41,12 +41,13 @@ const poolOptions = ref<CredentialPoolOption[]>([])
 const poolsLoading = ref(false)
 const poolsError = ref('')
 
+let poolRequest = 0
 const isEdit = computed(() => props.candidate !== null)
 
 watch(
   () => props.open,
   async (open) => {
-    if (!open) return
+    if (!open) { poolRequest++; poolsLoading.value = false; return }
     poolsError.value = ''
     if (props.candidate) {
       providerModelId.value = props.candidate.provider_model_id
@@ -74,6 +75,7 @@ async function onModelChange(): Promise<void> {
 }
 
 async function refreshPoolOptions(modelId: string): Promise<void> {
+  const sequence = ++poolRequest
   if (modelId === '') {
     poolOptions.value = []
     return
@@ -81,11 +83,12 @@ async function refreshPoolOptions(modelId: string): Promise<void> {
   poolsLoading.value = true
   poolsError.value = ''
   try {
-    poolOptions.value = await props.loadPools(modelId)
+    const options = await props.loadPools(modelId)
+    if (sequence === poolRequest && props.open) poolOptions.value = options
   } catch (e) {
-    poolsError.value = toErrorMessage(e)
+    if (sequence === poolRequest && props.open) poolsError.value = toErrorMessage(e)
   } finally {
-    poolsLoading.value = false
+    if (sequence === poolRequest) poolsLoading.value = false
   }
 }
 
@@ -94,7 +97,7 @@ const poolInvalid = computed(() => credentialPoolId.value === '')
 const priorityInvalid = computed(() => !Number.isInteger(priority.value) || priority.value < 1 || priority.value > 100)
 const weightInvalid = computed(() => !Number.isInteger(weight.value) || weight.value < 1 || weight.value > 100)
 const confirmDisabled = computed(
-  () => props.submitting || modelInvalid.value || poolInvalid.value || priorityInvalid.value || weightInvalid.value,
+  () => !props.open || props.submitting || poolsLoading.value || !!poolsError.value || !poolOptions.value.some((pool) => pool.id === credentialPoolId.value && pool.credential_available > 0) || modelInvalid.value || poolInvalid.value || priorityInvalid.value || weightInvalid.value,
 )
 
 function confirm(): void {
@@ -110,6 +113,8 @@ function confirm(): void {
 }
 
 function close(): void {
+  if (props.submitting) return
+  poolRequest++
   emit('update:open', false)
 }
 </script>

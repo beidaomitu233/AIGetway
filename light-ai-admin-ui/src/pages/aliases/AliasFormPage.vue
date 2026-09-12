@@ -3,6 +3,8 @@
 // alias 创建后只读：2—64 字符，仅字母、数字、点、短横线、下划线。
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useBootstrapStore } from '@/stores/bootstrap'
+import { Permission } from '@/app/permissions'
 import FormField from '@/components/FormField.vue'
 import PageState from '@/components/PageState.vue'
 import { useDirtyGuard } from '@/composables/useDirtyGuard'
@@ -13,6 +15,8 @@ import {
   updateModelAlias,
 } from '@/api/modelAliases'
 
+const store = useBootstrapStore()
+const canManage = computed(() => store.can(Permission.aliasManage))
 const route = useRoute()
 const router = useRouter()
 const aliasRecordId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''))
@@ -54,7 +58,7 @@ function onInput(): void {
 useDirtyGuard(() => dirty.value)
 
 async function onSubmit(): Promise<void> {
-  if (formInvalid.value) return
+  if (!canManage.value || submitting.value || conflictError.value || formInvalid.value) return
   const description = form.description.trim() === '' ? null : form.description.trim()
   let savedId = ''
   const outcome = await doSubmit(async () => {
@@ -208,6 +212,7 @@ onMounted(async () => {
           取消
         </button>
         <button
+          v-if="canManage"
           type="submit"
           class="lai-btn lai-btn-primary"
           :disabled="submitting || formInvalid"

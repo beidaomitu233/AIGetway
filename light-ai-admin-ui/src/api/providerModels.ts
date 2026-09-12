@@ -84,23 +84,23 @@ export interface ProviderModelCommand {
   tokenizer_family: string | null
   context_window: number | null
   max_output_tokens: number | null
-  support_stream: boolean
-  support_system_message: boolean
-  support_temperature: boolean
+  support_stream: boolean | null
+  support_system_message: boolean | null
+  support_temperature: boolean | null
   temperature_min?: string | null
   temperature_max?: string | null
-  support_top_p: boolean
+  support_top_p: boolean | null
   top_p_min?: string | null
   top_p_max?: string | null
-  support_stop: boolean
+  support_stop: boolean | null
   max_stop_sequences?: number | null
   max_stop_length?: number | null
   default_temperature?: string | null
   default_top_p?: string | null
   default_max_tokens?: number | null
   default_stop: string[]
-  input_price: string
-  output_price: string
+  input_price: string | null
+  output_price: string | null
   price_unit: number
   currency: string
   enabled: boolean

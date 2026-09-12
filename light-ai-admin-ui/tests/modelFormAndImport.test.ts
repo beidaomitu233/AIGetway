@@ -1,3 +1,5 @@
+import { useBootstrapStore } from '@/stores/bootstrap'
+import { Permission } from '@/app/permissions'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
@@ -55,6 +57,7 @@ async function mountForm(route = '/ui/provider-models/new'): Promise<{ wrapper: 
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  useBootstrapStore().$patch({ permissions: [Permission.modelManage] })
 })
 
 afterEach(() => {
@@ -104,6 +107,8 @@ describe('ModelFormPage（FE-015）', () => {
     await windows[1]!.setValue('16384')
     const prices = wrapper.findAll('input[inputmode="decimal"]')
     await prices[0]!.setValue('2.50000000')
+    await prices[1]!.setValue('0.00000000')
+    for (const select of wrapper.findAll('select[aria-label]')) await select.setValue('false')
     await flushPromises()
     await wrapper.find('form').trigger('submit')
     await flushPromises()

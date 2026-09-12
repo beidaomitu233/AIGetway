@@ -146,3 +146,14 @@
 ### FE-P20 远程交付确认
 
 2026-09-12：在独立 clone 的本地 dev 合入功能分支，再同步最新 origin/dev（含他人的 45ce9c9 任务登记），普通推送成功。fetch 验证远程 5b0b55d 包含 418218d、ef8a972、56347c7；合并后的 light-ai-admin-ui 文件树与全部门禁通过的 ef8a972 完全一致，git diff --check 通过。未推送功能分支，未强推，未修改其他负责人的任务记录。FE-P20 登记为阻塞，保留负责人，未解除占用；FE-201～FE-205 保持未勾选，等待 FE-P20-001～004/BE-P20-001～005 和真实联调完成后继续。
+
+
+## FE-P21 契约核对（2026-09-12，前端执行模型）
+
+以 origin/dev 344c398 为核对点，BE-P21 进行中。已确认路径目标不等于现有运行契约；待后端交付后再对齐，不构造未定义响应。
+
+| 序号 | 提出方 | 问题类型 | 功能问题描述 | 优化说明 | 涉及前端文件/模块 | 涉及后端文件/模块 | 涉及数据库表 | 状态 | 处理结论 |
+| -- | --- | ---- | ------ | ---- | --------- | --------- | ------ | -- | ---- |
+| FE-P21-001 | 前端执行模型 | 接口字段与路径 | Channel Controller 仍为 providers；列表无活动 Key 数、优先级/权重和最近成功；Key 仍挂 credential-pools，缺渠道嵌套影响与批量检测契约 | 请 BE-P21 公布完整路径、DTO、权限和批量终态契约，禁止把池数当 Key 数 | providers、credentials、导航/API | channel、check | channel、channel_credential | 待确认 | 先修复确定的输入安全与交互，不虚构数据 |
+| FE-P21-002 | 前端执行模型 | 同步契约缺失 | 上游模型仍用 provider-models 路径，但 Java DTO 已改 channel_id；缺同步新增/变化/下线/冲突及 locked_fields 预览提交契约 | 明确安全同步和人工字段锁定的服务端保证；前端不得用旧导入假装同步 | models、providerModels API | upstream | upstream_model、model_sync_job/item | 待确认 | 等待 BE-213 收口 |
+| FE-P21-003 | 前端执行模型 | 虚拟模型与路由冲突 | 旧候选前端提交 provider_model_id/credential_pool_id，Java 已为 upstream_model_id/channel_id；weight 最小 1 与计划允许 0 冲突；缺能力交集、授权应用影响及发布影响契约 | 需 BE-214/215 明确 code、嵌套路由、零权重及影响 DTO 后接入，避免擅自改变运行语义 | aliases、modelAliases API | alias、config-release、runtime | virtual_model、route_candidate | 待确认 | FE-214/215 完整验收待服务端契约与联调 |

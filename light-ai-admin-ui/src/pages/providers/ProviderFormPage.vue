@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { normalizeResourceUrl, headersValid } from '@/utils/resourceValidation'
 import FormField from '@/components/FormField.vue'
 import PageState from '@/components/PageState.vue'
 import KeyValueEditor from '@/components/KeyValueEditor.vue'
@@ -39,6 +40,7 @@ const form = reactive({
   default_headers: {} as Record<string, string>,
   enabled: true,
 })
+const headerValid = ref(true)
 const version = ref<number | null>(null)
 const localErrors = ref<Record<string, string>>({})
 
@@ -69,39 +71,23 @@ function onTypeChange(type: string): void {
   markDirty()
 }
 
-function normalizeBaseUrl(raw: string): string | null {
-  const trimmed = raw.trim().replace(/\/+$/, '')
-  let parsed: URL
-  try {
-    parsed = new URL(trimmed)
-  } catch {
-    return null
-  }
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null
-  return trimmed
-}
-
 function validate(): boolean {
   const errors: Record<string, string> = {}
   const name = form.name.trim()
   if (name.length < 2 || name.length > 64) {
     errors.name = '名称长度为 2—64 字符'
   }
-  if (!isEdit.value && form.type === '') {
+  if (!isEdit.value && !adapterOptions.value.some((option) => option.value === form.type)) {
     errors.type = '请选择 Provider 类型'
   }
-  if (normalizeBaseUrl(form.base_url) === null) {
-    errors.base_url = '必须为合法的 http(s) 绝对地址'
+  if (normalizeResourceUrl(form.base_url) === null) {
+    errors.base_url = '必须为合法的 http(s) 绝对地址，且不含认证信息、查询参数与片段'
   }
-  if (form.proxy_url.trim() !== '') {
-    try {
-      const parsed = new URL(form.proxy_url.trim())
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        errors.proxy_url = '代理仅支持 http 或 https 协议'
-      }
-    } catch {
-      errors.proxy_url = '代理地址格式不正确'
-    }
+  if (form.proxy_url.trim() && normalizeResourceUrl(form.proxy_url) === null) {
+    errors.proxy_url = '代理必须为不含认证信息、查询参数与片段的 http(s) 地址'
+  }
+  if (!headerValid.value || !headersValid(Object.entries(form.default_headers).map(([key, value]) => ({ key, value })))) {
+    errors.default_headers = '请修正请求头，禁止携带认证信息'
   }
   if (!Number.isInteger(form.connect_timeout_ms) || form.connect_timeout_ms < 100 || form.connect_timeout_ms > 60000) {
     errors.connect_timeout_ms = '连接超时为 100—60000 的整数'
@@ -153,20 +139,23 @@ async function reloadLatest(): Promise<void> {
   reset()
   try {
     applyDetail(await getProvider(providerId.value))
-  } catch {
-    router.push({ name: 'provider-list' })
+    loadState.value = 'ready'
+    loadError.value = null
+  } catch (error) {
+    loadError.value = error
+    loadState.value = 'error'
   }
 }
 
 async function save(): Promise<void> {
-  if (!validate()) return
+  if (!canManage.value || submitting.value || conflictError.value || !validate()) return
   // 路由在保存跳转后变化，先固化当前编辑态，避免误走编辑分支。
   const editing = isEdit.value
   const targetId = providerId.value
   const payload: ProviderSavePayload = {
     name: form.name.trim(),
     type: form.type,
-    base_url: normalizeBaseUrl(form.base_url)!,
+    base_url: normalizeResourceUrl(form.base_url)!,
     proxy_url: form.proxy_url.trim() === '' ? null : form.proxy_url.trim(),
     connect_timeout_ms: form.connect_timeout_ms,
     read_timeout_ms: form.read_timeout_ms,
@@ -277,7 +266,7 @@ function fieldError(field: string): string | undefined {
         for-id="provider-base-url"
         required
         :error="fieldError('base_url')"
-        hint="HTTPS 为默认要求；保存后建议重新检测"
+        hint="不得包含认证信息；服务端验证 DNS、目标网络及重定向，保存后需检测"
       >
         <input
           id="provider-base-url"
@@ -346,6 +335,8 @@ function fieldError(field: string): string | undefined {
       >
         <KeyValueEditor
           v-model="form.default_headers"
+          :disabled="submitting || !canManage"
+          @validity="headerValid = $event"
           @update:model-value="markDirty"
         />
       </FormField>
@@ -385,7 +376,7 @@ function fieldError(field: string): string | undefined {
           v-if="canManage"
           type="submit"
           class="lai-btn lai-btn-primary"
-          :disabled="submitting || conflictError !== null"
+          :disabled="submitting || !headerValid || conflictError !== null"
         >
           {{ submitting ? '保存中…' : '保存' }}
         </button>
