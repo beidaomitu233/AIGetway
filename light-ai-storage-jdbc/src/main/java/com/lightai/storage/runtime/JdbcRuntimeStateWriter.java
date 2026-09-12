@@ -210,7 +210,7 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
         String qualifiedTable = qualify(connection, "object_runtime_state");
         if (d.supportsArrayType()) {
             String sql = "SELECT entity_id, connection_status, health_status, last_success_at, "
-                    + "last_checked_at, last_error_code FROM " + qualifiedTable
+                    + "last_checked_at, last_error_code, reset_at FROM " + qualifiedTable
                     + " WHERE entity_type = ? AND entity_id = ANY(?)";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, entityType);
@@ -221,7 +221,7 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
             }
         } else {
             String sql = "SELECT entity_id, connection_status, health_status, last_success_at, "
-                    + "last_checked_at, last_error_code FROM " + qualifiedTable
+                    + "last_checked_at, last_error_code, reset_at FROM " + qualifiedTable
                     + " WHERE entity_type = ? AND entity_id IN (" + inPlaceholders(entityIds.size()) + ")";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 int idx = 1;
@@ -247,7 +247,8 @@ public class JdbcRuntimeStateWriter extends AbstractJdbcRepository {
                                 rs.getString("health_status"),
                                 d.readOffsetDateTime(rs, "last_success_at"),
                                 d.readOffsetDateTime(rs, "last_checked_at"),
-                                rs.getString("last_error_code")));
+                                rs.getString("last_error_code"),
+                                d.readOffsetDateTime(rs, "reset_at")));
             }
             return Map.copyOf(states);
         }

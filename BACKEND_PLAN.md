@@ -318,3 +318,23 @@ Windows、Temurin Java 17.0.19，Maven 使用 `D:/IntelliJ IDEA 2025.2.3/plugins
 COMMUNICATION.md 已登记 BE-P21-001～006，均待确认。BE-211～215 均未达到整项完成标准，不勾选；仅交付以上已验证子项，整包阻塞并保留原负责人，避免其他 Agent 重复实现。后续数据库迁移与契约确认后由原负责人继续验收。
 
 集成交付：功能提交 c08d625，文档提交 36e1cbc；2304acf 保留最新架构与前端记录后合入独立本地 dev。独立集成目录再次 mvn -B verify：14 模块成功，453 项中 437 通过、16 环境跳过，0 失败/错误；git diff --check 通过。普通推送远程结果以 TASK_STATUS.md 最终记录为准。
+
+## BE-P21 接管执行记录（2026-09-12，zcode-be-0912c）
+
+负责人 zcode-be-0912c；经用户确认原领取（codex-be-0912）会话中断、剩余子项未实际执行，由本负责人接管推进。领取提交 9cdd65a，基线 origin/dev 5a11054（含 c08d625 已交付路径收口、安全与 JDBC 修复）。独立目录 .worktrees/backend-p21-zcode-be-0912c。本轮只修改后端与执行文档，无前端与数据库迁移。
+
+| 任务 | 本次交付 | 未满足验收，保持未勾选 |
+|---|---|---|
+| BE-211 | Channel DTO 按 BACKEND_PLAN BE-211 字段清单收口：请求 provider_type/base_url/proxy/timeouts{connect_ms,read_ms,stream_idle_ms}/headers/priority/weight/version（新 nested ChannelTimeouts；priority/weight 可编辑，缺省 10/1，范围 1—100）；响应 provider_type/proxy/status/health/priority/weight/upstream_model_count/credential_count；列表过滤 type/enabled/connection_status 改为 provider_type/status/health；创建默认 ACTIVE，启停仅经 enable/disable 独立命令；审计字段标签同步（status/proxy/timeouts.*/headers.count/priority/weight） | 即时状态运行广播契约、SSRF/DNS 重绑定/TLS 真实环境验收、运行影响与禁用影响真实数据验收（BE-P21-001 余项） |
+| BE-212 | Key priority 全操作可编辑（创建/更新/列表/详情，范围 1—100，缺省 10）；rate_limit_reset_at 读取修复：RuntimeStateSnapshot 增加 reset_at（BE-P22 已写入），响应不再用 last_checked_at 冒充冷却复位时间；最后可用 Key 保护：停用/删除渠道最后一个 ACTIVE Key 返回 OBJECT_IN_USE/409 | 429 冷却与真实上游联动、最后可用 Key 与共享占用互斥的运行端口验收、跨实例同步、真实 Provider 检测（BE-P21-002 余项） |
+| BE-213 | （无新增；DB-213 未交付） | 同步预览/提交、model_sync_job/item、locked_fields 依赖 DB-213 迁移；合法批量检测仍 503 |
+| BE-214 | （无新增；DB-214 未交付） | 能力交集持久化、显式收紧、应用影响依赖 DB-214/215 迁移 |
+| BE-215 | 候选 runtime_status 纳入渠道运行健康维度：渠道 object_runtime_state.connection_status=UNAVAILABLE 时候选置 UNAVAILABLE/「渠道最近检测不可用」；修复 raw SQL 表名未按方言 qualify 的缺陷（draft_change 同类隐患一并修复） | 活动快照、容量/熔断维度与发布验收依赖运行可用性端口与 DB-P21（BE-P21-005 余项） |
+
+主要文件：client/channel 下 ChannelSaveCommand（重写）、ChannelTimeouts（新增）、ChannelListItem、ChannelDetail、ChannelCredentialCreateCommand/UpdateCommand/ListItem/Detail（+priority/reset_at 语义）；storage-jdbc 下 JdbcObjectRuntimeStateRepository、JdbcRuntimeStateWriter（快照+reset_at）、JdbcChannelRepository（ChannelFilter providerType/status/health）、JdbcChannelCredentialRepository（countActiveLiveInChannel）；admin 下 ChannelService、ChannelCredentialService、RouteCandidateService；测试 ResourceApiContractTest（11→14 项）、ChannelCredentialCreateCommandTest（5→6 项）。
+
+前端影响（FE-P21 负责人后续切换，沿用 COMMUNICATION 第 8/10 节先例）：渠道字段 type→provider_type、proxy_url→proxy、connect/read_timeout_ms→timeouts 嵌套、default_headers→headers、enabled/connection_status→status/health；列表新增 priority/weight/upstream_model_count/credential_count；Key 命令与响应新增 priority；metrics 路径不变。
+
+测试环境 Windows / Java 17.0.19 / 项目 Maven 与 JUnit5、MockMvc、H2 迁移、真实 JDBC/服务/AES-GCM。全仓 mvn -B verify：14 模块 BUILD SUCCESS，471 项中 455 通过、16 环境跳过（MySQL 2、PostgreSQL 3、Redis 11，缺 LAI_IT_MYSQL_URL/LAI_IT_DB_URL/LAI_IT_REDIS_URI），0 失败/错误；git diff --check 通过。真实 MySQL/PostgreSQL/Redis、真实 Provider、企业身份、前后端 E2E 与性能未执行，H2 验证不替代真实数据库验收。
+
+BE-211～215 均未达到整项完成标准，不勾选；已交付子项随本轮提交进入远程 dev，整包状态以 TASK_STATUS.md 记录为准。

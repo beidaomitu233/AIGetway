@@ -255,3 +255,18 @@
 ### FE-P22 远程交付确认
 
 2026-09-12：origin/dev eb2843a 已包含实现 fc0e955 与文档 eaa32e3，TASK_STATUS 于 24a19e4 登记 FE-P22 为阻塞并保留负责人；测试计数修正 d709a6b 经本地 dev 合入后以 b4a344c 普通推送，fetch 回读确认。合并后文件树在独立 worktree 复跑门禁：typecheck 通过、28 文件/244 项测试通过、0 失败/0 跳过；lint 0 error/37 warning（仅未修改的审计页历史格式）；build 通过；git diff --check 通过。1280 宽度浏览器冒烟检查总览页应用排行与用量页新筛选/输入输出 Token 卡片，无额外横向溢出。FE-P22 保持阻塞并保留 zcode-0912 负责人，未解除占用；FE-221～225 未勾选，等待 FE-P22-001～005 与 BE-P22/BE-P23 契约及真实联调。未推送功能分支，未强推，未修改其他负责人记录。
+
+## BE-P21 接管交付复核（2026-09-12，后端执行模型 zcode-be-0912c）
+
+经用户确认原领取（codex-be-0912）会话中断、剩余子项未实际执行，由 zcode-be-0912c 接管推进（领取 9cdd65a，基线 5a11054）。本轮以 BACKEND_PLAN BE-211～215 字段清单为已确认技术契约执行（沿用第 8 节「按 BACKEND_PLAN 同号小节执行」先例），交付可无迁移完成的子项；依赖 DB-P21 迁移与运行端口的子项保持未验收。
+
+| 编号 | 状态 | 本轮处理与剩余缺口 |
+|---|---|---|
+| BE-P21-001 | 已确认（技术契约），跨端切换待 FE-P21 | Channel 请求/响应已按计划字段收口：provider_type/base_url/proxy/timeouts{connect_ms,read_ms,stream_idle_ms}/headers/priority/weight；响应 status（ACTIVE/DISABLED）与 health（UNKNOWN/AVAILABLE/UNAVAILABLE，源自 object_runtime_state）分列；创建默认 ACTIVE，启停仅走 enable/disable 独立命令（版本+停用影响票据）。无双字段兼容。FE-P21 需由原负责人同步切换字段（同 FE-P20-002 处理口径）。运行广播契约与真实环境验收仍开放。 |
+| BE-P21-002 | 部分交付，余项待运行端口 | Key priority 全操作可编辑（1—100，缺省 10）；rate_limit_reset_at 读取修复（快照新增 reset_at，不再以 last_checked_at 冒充冷却复位）；新增最后可用 Key 保护：停用/删除渠道最后一个 ACTIVE Key 返回 OBJECT_IN_USE/409——该行为为本轮实现决策，请架构复核；429 冷却真实联动、共享占用互斥、跨实例同步仍依赖运行端口验收。 |
+| BE-P21-003 | 待确认（不变） | 依赖 DB-213：model_sync_job/item、locked_fields、同步预览/提交幂等事务契约；本轮未动，合法批量检测仍 CONFIG_DATA_UNAVAILABLE/503。 |
+| BE-P21-004 | 待确认（不变） | 依赖 DB-214/215：virtual_model 持久化能力交集、显式收紧与应用影响 DTO；本轮未动。 |
+| BE-P21-005 | 部分交付 | 候选 runtime_status 纳入渠道运行健康：渠道 UNAVAILABLE 时候选 UNAVAILABLE/「渠道最近检测不可用」（UNKNOWN 不拦截，避免未检测渠道被误排除）；容量/熔断维度与固定快照发布验收仍依赖运行可用性端口与 DB-P21。顺带修复 raw SQL 未按方言 qualify 的缺陷（object_runtime_state/draft_change，MySQL/H2 下原实现静默失败）。 |
+| BE-P21-006 | 待确认（不变） | 依赖 DB-213 对批量表（operator_id/command 列）或统一 model_sync_job/item 的决策；本轮未动。 |
+
+自检与测试：全仓 mvn -B verify 14 模块 BUILD SUCCESS，471 项中 455 通过、16 环境跳过（真实 MySQL/PostgreSQL/Redis 缺失），0 失败/错误；git diff --check 通过。新增/更新测试：渠道 V2 字段回显与 status/health 分列、provider_type/status 过滤、Key priority 编辑与校验、最后可用 Key 停用/删除拒绝、runtime_status 健康派生。未执行：真实数据库、真实 Provider、企业身份、前后端 E2E、性能。

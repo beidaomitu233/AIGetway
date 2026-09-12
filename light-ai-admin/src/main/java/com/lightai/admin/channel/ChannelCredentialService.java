@@ -46,8 +46,7 @@ import javax.sql.DataSource;
 public class ChannelCredentialService {
 
     public static final String ENTITY_TYPE = "CHANNEL_CREDENTIAL";
-    private static final int DEFAULT_PRIORITY = 10;
-    private static final Set<String> SORTABLE = Set.of("name", "weight", "updated_at", "created_at");
+    private static final Set<String> SORTABLE = Set.of("name", "weight", "priority", "updated_at", "created_at");
     private static final Set<String> HEALTH_STATUSES = Set.of(
             "HEALTHY", "UNKNOWN", "RATE_LIMITED", "INVALID", "UNAVAILABLE", "DISABLED");
 
@@ -181,7 +180,7 @@ public class ChannelCredentialService {
                     }
                     ChannelCredentialRecord record = new ChannelCredentialRecord(id, channelId, command.name(),
                             ciphertext, refCiphertext, secretCipher.keyId(), maskedValue, 1L, OffsetDateTime.now(),
-                            DEFAULT_PRIORITY, command.weight(), command.rpmLimit(),
+                            command.priorityOrDefault(), command.weight(), command.rpmLimit(),
                             command.tpmLimit(), command.concurrentLimit(),
                             command.enabled() ? ChannelCredentialRecord.STATUS_ACTIVE
                                     : ChannelCredentialRecord.STATUS_DISABLED,
@@ -238,18 +237,26 @@ public class ChannelCredentialService {
                             || command.weight() > ChannelCredentialCreateCommand.WEIGHT_MAX) {
                         throw fieldError("weight", "OUT_OF_RANGE", "weight 范围 1—100");
                     }
+                    if (command.priority() == null
+                            || command.priority() < ChannelCredentialCreateCommand.PRIORITY_MIN
+                            || command.priority() > ChannelCredentialCreateCommand.PRIORITY_MAX) {
+                        throw fieldError("priority", "OUT_OF_RANGE",
+                                "priority 范围 " + ChannelCredentialCreateCommand.PRIORITY_MIN + "—"
+                                        + ChannelCredentialCreateCommand.PRIORITY_MAX);
+                    }
                     validateLimits(command.rpmLimit(), command.tpmLimit(), command.concurrentLimit());
                     ChannelCredentialRecord updated = credentialRepository.update(connection, new ChannelCredentialRecord(
                             current.id(), current.channelId(), command.name().strip(),
                             current.secretCiphertext(), current.secretRefCiphertext(), current.keyId(),
                             current.maskedValue(), current.secretVersion(), current.rotatedAt(),
-                            current.priority(), command.weight(), command.rpmLimit(),
+                            command.priority(), command.weight(), command.rpmLimit(),
                             command.tpmLimit(), command.concurrentLimit(),
                             command.enabled() ? ChannelCredentialRecord.STATUS_ACTIVE
                                     : ChannelCredentialRecord.STATUS_DISABLED,
                             current.health(), current.version(), current.createdAt(), current.updatedAt()));
                     return new DraftEntityChange(ENTITY_TYPE.toLowerCase(), id, command.name(),
                             "UPDATE", updated.version(), List.of(
+                            FieldChange.changed("priority", current.priority(), command.priority()),
                             FieldChange.changed("weight", current.weight(), command.weight()),
                             FieldChange.changed("enabled", current.enabled(), command.enabled())));
                 }));
@@ -338,6 +345,12 @@ public class ChannelCredentialService {
                             credentialRepository.lockLiveById(connection, id)
                                     .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND,
                                             "渠道 Key 不存在或已删除")));
+                    // 最后可用 Key 保护：停用后渠道将无可调度 Key，拒绝操作
+                    if (!enabled && credentialRepository.countActiveLiveInChannel(
+                            connection, current.channelId(), id) == 0) {
+                        throw new LightAiException(ErrorCode.OBJECT_IN_USE,
+                                "渠道最后一个可用 Key 不能停用");
+                    }
                     ChannelCredentialRecord saved = credentialRepository.setEnabled(connection, id, enabled);
                     return new DraftEntityChange(ENTITY_TYPE.toLowerCase(), id, current.name(),
                             enabled ? "ENABLE" : "DISABLE", saved.version(),
@@ -374,6 +387,13 @@ public class ChannelCredentialService {
                             credentialRepository.lockLiveById(connection, id)
                                     .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND,
                                             "渠道 Key 不存在或已删除")));
+                    // 最后可用 Key 保护：删除后渠道将无可调度 Key，拒绝操作
+                    if (current.enabled()
+                            && credentialRepository.countActiveLiveInChannel(
+                            connection, current.channelId(), id) == 0) {
+                        throw new LightAiException(ErrorCode.OBJECT_IN_USE,
+                                "渠道最后一个可用 Key 不能删除");
+                    }
                     // 运行占用检查：仍有并发 Attempt 占用时不能删除（容量运行时 BE-P04 提供判定）
                     long activeReservations = countActiveReservations(connection, id);
                     if (activeReservations > 0) {
@@ -473,10 +493,10 @@ public class ChannelCredentialService {
         return new ChannelCredentialListItem(
                 record.id().toString(), record.channelId().toString(), record.name(),
                 maskedValueOf(record), secretRefDisplay(record),
-                record.secretSource(), record.weight(),
+                record.secretSource(), record.priority(), record.weight(),
                 record.rpmLimit(), record.tpmLimit(), record.concurrentLimit(), 0,
                 state == null || state.healthStatus() == null ? "UNKNOWN" : state.healthStatus(),
-                state == null ? null : state.lastCheckedAt(),
+                state == null ? null : state.resetAt(),
                 state == null ? null : state.lastSuccessAt(),
                 state == null ? null : state.lastCheckedAt(),
                 record.enabled(),
@@ -490,10 +510,10 @@ public class ChannelCredentialService {
         return new ChannelCredentialDetail(
                 record.id().toString(), record.channelId().toString(), record.name(),
                 maskedValueOf(record), secretRefDisplay(record),
-                record.secretSource(), record.weight(), record.rpmLimit(), record.tpmLimit(),
+                record.secretSource(), record.priority(), record.weight(), record.rpmLimit(), record.tpmLimit(),
                 record.concurrentLimit(), 0,
                 state == null || state.healthStatus() == null ? "UNKNOWN" : state.healthStatus(),
-                state == null ? null : state.lastCheckedAt(),
+                state == null ? null : state.resetAt(),
                 state == null ? null : state.lastSuccessAt(),
                 state == null ? null : state.lastCheckedAt(),
                 record.enabled(),

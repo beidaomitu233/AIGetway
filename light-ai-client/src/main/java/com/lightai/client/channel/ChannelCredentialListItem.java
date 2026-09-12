@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.OffsetDateTime;
 
 /**
- * Credential 列表项（BACKEND_PLAN 4.2.9.2；字段对齐 FE-013）。
+ * Credential 列表项（BACKEND_PLAN BE-212：Key 级 priority/weight 与限额、冷却可见）。
  * 响应只含 masked_value/secret_source/secret_ref_display，
  * secret_value 与 token_hash 永不出现在任何响应中。
  */
@@ -16,6 +16,7 @@ public record ChannelCredentialListItem(
         String maskedValue,
         String secretRefDisplay,
         String secretSource,
+        int priority,
         int weight,
         Long rpmLimit,
         Long tpmLimit,
