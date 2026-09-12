@@ -2,6 +2,7 @@ package com.lightai.admin.usage;
 
 import com.lightai.admin.web.ManagementResponses;
 import com.lightai.admin.web.RequestContext;
+import com.lightai.client.usage.UsageResults.UsageAdjustmentsResult;
 import com.lightai.client.usage.UsageResults.UsageGroupResult;
 import com.lightai.client.usage.UsageResults.UsageSummaryResult;
 import com.lightai.client.usage.UsageResults.UsageTrendResult;
@@ -14,8 +15,10 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 /**
- * Usage 与 Cost 接口（BE-035/036）。
- * summary/trends/groups 对同一组筛选字段返回相同 query_fingerprint；
+ * Usage 与 Cost 接口（BE-232；PRD 9.8）。
+ * V2 路径 summary/trend/breakdown/adjustments/export 对同一组筛选字段返回
+ * 相同 query_fingerprint（adjustments 直接读账本，无聚合指纹）；
+ * trends/groups 为既有过渡路径，FE-P22 切换 V2 契约后由原负责人移除。
  * /admin/usage/export 为系统管理员与运维人员的流式 CSV。
  */
 @RestController
@@ -23,10 +26,13 @@ public class UsageController {
 
     private final UsageService usageService;
     private final UsageExportService usageExportService;
+    private final UsageAdjustmentService adjustmentService;
 
-    public UsageController(UsageService usageService, UsageExportService usageExportService) {
+    public UsageController(UsageService usageService, UsageExportService usageExportService,
+                           UsageAdjustmentService adjustmentService) {
         this.usageService = usageService;
         this.usageExportService = usageExportService;
+        this.adjustmentService = adjustmentService;
     }
 
     @GetMapping("/admin/usage/summary")
@@ -35,15 +41,22 @@ public class UsageController {
         return json(ManagementResponses.ok(result));
     }
 
-    @GetMapping("/admin/usage/trends")
+    @GetMapping({"/admin/usage/trend", "/admin/usage/trends"})
     public ResponseEntity<String> trends(HttpServletRequest request) {
         UsageTrendResult result = usageService.trends(context(request), multiParams(request));
         return json(ManagementResponses.ok(result));
     }
 
-    @GetMapping("/admin/usage/groups")
+    @GetMapping({"/admin/usage/breakdown", "/admin/usage/groups"})
     public ResponseEntity<String> groups(HttpServletRequest request) {
         UsageGroupResult result = usageService.groups(context(request), multiParams(request));
+        return json(ManagementResponses.ok(result));
+    }
+
+    @GetMapping("/admin/usage/adjustments")
+    public ResponseEntity<String> adjustments(HttpServletRequest request) {
+        UsageAdjustmentsResult result =
+                adjustmentService.adjustments(context(request), singleParams(request));
         return json(ManagementResponses.ok(result));
     }
 
@@ -63,6 +76,16 @@ public class UsageController {
 
     static Map<String, List<String>> multiParams(HttpServletRequest request) {
         return UsageQueryParser.toMultiMap(request.getParameterMap());
+    }
+
+    private static Map<String, String> singleParams(HttpServletRequest request) {
+        Map<String, String> params = new java.util.LinkedHashMap<>();
+        request.getParameterMap().forEach((name, values) -> {
+            if (values != null && values.length > 0) {
+                params.put(name, values[0]);
+            }
+        });
+        return params;
     }
 
     private static ResponseEntity<String> json(String body) {

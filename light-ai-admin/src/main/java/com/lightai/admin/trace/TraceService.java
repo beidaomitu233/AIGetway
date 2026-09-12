@@ -97,7 +97,7 @@ public class TraceService {
                 || scopeApplications.contains(application);
     }
 
-    static List<String> scopeApplications(RequestContext context) {
+    public static List<String> scopeApplications(RequestContext context) {
         return context == null || context.authContext() == null
                 ? List.of() : context.authContext().applicationScope();
     }

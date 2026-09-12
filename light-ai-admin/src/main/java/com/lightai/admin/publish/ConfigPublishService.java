@@ -7,6 +7,7 @@ import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.FieldIssue;
 import com.lightai.client.error.LightAiException;
 import com.lightai.client.publish.ConfigPublishCommand;
+import com.lightai.client.publish.ConfigRollbackCommand;
 import com.lightai.client.publish.ConfigValidationIssueView;
 import com.lightai.client.publish.ConfigSnapshotContentView;
 import com.lightai.client.publish.ConfigSnapshotSummaryView;
@@ -221,6 +222,143 @@ public class ConfigPublishService {
         }
     }
 
+    /** 指定发布记录的全部实例结果（/admin/config-releases/{id}/instances）。 */
+    public List<PublishInstanceResultView> instanceResults(UUID publishId) {
+        Connection connection = DataSourceUtils.getConnection(dataSource);
+        try {
+            publishRecordRepository.find(connection, publishId)
+                    .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "发布记录不存在"));
+            return instanceResultRepository.listByPublish(connection, publishId).stream()
+                    .map(ConfigPublishService::toInstanceView).toList();
+        } finally {
+            DataSourceUtils.releaseConnection(connection, dataSource);
+        }
+    }
+
+    // ---------- 回滚（BE-233；PRD 9.5：回滚生成新发布记录） ----------
+
+    private static final long ROLLBACK_LINK_RETENTION_SECONDS = 7L * 24 * 3600;
+
+    /**
+     * 回滚 = 以新发布记录重新激活历史不可变快照，完整复用准备→激活→实例确认状态机；
+     * 失败保留旧活动版本。幂等键经确定性 validation 行桥接（publish_record.validation_id
+     * NOT NULL 的过渡实现，BE-P23-001 登记 DB-P23 迁移建议）：作用域为回滚操作+目标快照，
+     * 同键同目标重放返回同一记录；同键不同目标视为新请求（键持久化列待 DB-P23）。
+     */
+    public PublishRecordDetailView rollback(String requestId, String operatorId,
+                                            String sourceIpMasked, ConfigRollbackCommand command) {
+        try {
+            return transaction.execute(status -> {
+                Connection connection = DataSourceUtils.getConnection(dataSource);
+                OffsetDateTime now = OffsetDateTime.now(clock);
+                sweepUnfinished(connection);
+                if (command.idempotencyKey() == null || command.idempotencyKey().isBlank()
+                        || command.idempotencyKey().length() > 128) {
+                    throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
+                            "idempotency_key 必填（1～128 字符）",
+                            List.of(new FieldIssue("idempotency_key", "REQUIRED",
+                                    "idempotency_key 必填（1～128 字符）")));
+                }
+                if (command.reason() == null || command.reason().isBlank()) {
+                    throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "reason 必填",
+                            List.of(new FieldIssue("reason", "REQUIRED", "reason 必填")));
+                }
+                ConfigSnapshotRecord active = snapshotRepository.findActive(connection)
+                        .orElseThrow(() -> new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE,
+                                "当前没有活动快照"));
+                long target = command.targetSnapshotNo() == null
+                        ? previousPublishedSource(connection, active.snapshotNo())
+                        : command.targetSnapshotNo();
+                if (target == active.snapshotNo()) {
+                    throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
+                            "回滚目标不能是当前活动版本",
+                            List.of(new FieldIssue("target_snapshot_no", "INVALID",
+                                    "目标快照已是活动版本")));
+                }
+                ConfigSnapshotRecord targetSnapshot = snapshotRepository.find(connection, target)
+                        .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "目标快照不存在"));
+                if (!ConfigSnapshotRecord.STATUS_SUPERSEDED.equals(targetSnapshot.status())) {
+                    throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
+                            "回滚目标必须是历史已发布快照",
+                            List.of(new FieldIssue("target_snapshot_no", "INVALID",
+                                    "目标快照状态为 " + targetSnapshot.status())));
+                }
+                UUID validationId = UUID.nameUUIDFromBytes(("ROLLBACK:" + target + ":"
+                        + command.idempotencyKey().trim()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                var replay = publishRecordRepository.findByValidation(connection, validationId);
+                if (replay.isPresent()) {
+                    return toDetail(connection, replay.get());
+                }
+                if (!publishRecordRepository.listUnfinished(connection).isEmpty()) {
+                    throw new LightAiException(ErrorCode.CONFIG_PUBLISH_IN_PROGRESS,
+                            "已有发布或回滚进行中");
+                }
+                DraftStateSnapshot locked = draftStateRepository.lock(connection);
+                if (locked.status() == DraftStatus.PUBLISHING) {
+                    throw new LightAiException(ErrorCode.CONFIG_PUBLISH_IN_PROGRESS, "已有发布占用草稿锁");
+                }
+                List<RuntimeInstanceRecord> targets = runtimeInstanceRepository.findOnline(connection);
+                if (targets.isEmpty()) {
+                    throw new LightAiException(ErrorCode.NO_ONLINE_RUNTIME_INSTANCE,
+                            "当前没有可参与回滚的在线运行实例");
+                }
+                if (validationRepository.find(connection, validationId).isEmpty()) {
+                    validationRepository.insert(connection, new ConfigValidationRecord(
+                            validationId, active.snapshotNo(), target, locked.draftRevision(),
+                            targetSnapshot.contentChecksum(), ConfigValidationRecord.STATUS_PASSED,
+                            0, 0, now, now.plusSeconds(ROLLBACK_LINK_RETENTION_SECONDS), operatorId,
+                            null, rollbackLinkJson(command, targetSnapshot), List.of(), "[]"), List.of());
+                }
+                UUID publishId = UUID.randomUUID();
+                draftPublishStateRepository.markPublishing(connection, publishId);
+                PublishRecordRecord record = new PublishRecordRecord(
+                        publishId, validationId, active.snapshotNo(), target,
+                        locked.draftRevision(), PublishRecordRecord.STATUS_PREPARING,
+                        operatorId, command.reason(), List.of(),
+                        targets.stream().map(RuntimeInstanceRecord::instanceId).toList(),
+                        null, null, null, null, null, now, now);
+                publishRecordRepository.insert(connection, record);
+                instanceResultRepository.insertPending(connection, publishId,
+                        active.snapshotNo(), target,
+                        targets.stream().map(RuntimeInstanceRecord::instanceId).toList());
+                validationRepository.markUsed(connection, validationId, publishId);
+                auditService.recordSuccess(connection, AuditRecord.succeeded(
+                        UUID.randomUUID(), requestId, operatorId, "PUBLISH_ROLLBACK",
+                        "publish_record", publishId.toString(), List.of(),
+                        properties.getRuntimeMode(), sourceIpMasked));
+                return toDetail(connection, record);
+            });
+        } catch (LightAiException e) {
+            recordFailure(requestId, operatorId, properties.getRuntimeMode(), sourceIpMasked, e, null);
+            throw e;
+        } catch (RuntimeException e) {
+            recordFailure(requestId, operatorId, properties.getRuntimeMode(), sourceIpMasked, e, null);
+            throw e;
+        }
+    }
+
+    /** 最近一次发布到 currentActive 的来源快照；无历史发布时拒绝默认回滚。 */
+    private long previousPublishedSource(Connection connection, long currentActive) {
+        var filter = new PublishRecordRepository.PublishRecordFilter(
+                Set.of(PublishRecordRecord.STATUS_SUCCEEDED), null, currentActive, null, null, null);
+        List<PublishRecordRecord> rows = publishRecordRepository.list(connection, filter,
+                "created_at desc", 1, 0L);
+        if (rows.isEmpty()) {
+            throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
+                    "没有可回滚的历史版本，请显式指定 target_snapshot_no",
+                    List.of(new FieldIssue("target_snapshot_no", "REQUIRED",
+                            "没有发布到当前活动版本的成功记录")));
+        }
+        return rows.get(0).fromSnapshotNo();
+    }
+
+    /** 桥接 validation 行的变更摘要：只含操作元数据，不含密钥或正文。 */
+    private static String rollbackLinkJson(ConfigRollbackCommand command,
+                                           ConfigSnapshotRecord target) {
+        return "{\"operation\":\"ROLLBACK\",\"target_snapshot_no\":" + target.snapshotNo()
+                + ",\"content_checksum\":\"" + target.contentChecksum() + "\"}";
+    }
+
     public ConfigSnapshotSummaryView snapshotSummary(long snapshotNo) {
         Connection connection = DataSourceUtils.getConnection(dataSource);
         try {
@@ -397,7 +535,15 @@ public class ConfigPublishService {
                           List<PublishInstanceResultRecord> results, OffsetDateTime now) {
         publishRecordRepository.updateOutcome(connection, publishId,
                 PublishRecordRecord.STATUS_ACTIVATING, null, null, null, null, null);
-        snapshotRepository.activate(connection, record.targetSnapshotNo());
+        // 普通发布激活 CREATED 快照；回滚激活 SUPERSEDED 历史快照（BE-233）
+        if (snapshotRepository.find(connection, record.targetSnapshotNo())
+                .map(ConfigSnapshotRecord::status)
+                .map(ConfigSnapshotRecord.STATUS_SUPERSEDED::equals)
+                .orElse(false)) {
+            snapshotRepository.reactivate(connection, record.targetSnapshotNo());
+        } else {
+            snapshotRepository.activate(connection, record.targetSnapshotNo());
+        }
         draftStateRepository.find(connection)
                 .ifPresent(state -> draftPublishStateRepository.activateBaseline(
                         connection, record.targetSnapshotNo()));

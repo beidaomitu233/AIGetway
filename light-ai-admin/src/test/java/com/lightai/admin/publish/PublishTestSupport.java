@@ -298,6 +298,22 @@ final class PublishTestSupport {
         }
 
         @Override
+        public void reactivate(Connection connection, long targetSnapshotNo) {
+            // 与 activate 同一原子语义，但目标允许 SUPERSEDED（BE-233 回滚）
+            calls.add("reactivate-snapshot");
+            events.add("REACTIVATE:" + targetSnapshotNo);
+            snapshots.values().stream()
+                    .filter(snapshot -> ConfigSnapshotRecord.STATUS_ACTIVE.equals(snapshot.status()))
+                    .forEach(snapshot -> snapshots.put(snapshot.snapshotNo(),
+                            superseded(snapshot)));
+            ConfigSnapshotRecord target = snapshots.get(targetSnapshotNo);
+            snapshots.put(targetSnapshotNo, new ConfigSnapshotRecord(target.snapshotNo(),
+                    target.schemaVersion(), ConfigSnapshotRecord.STATUS_ACTIVE, target.contentJson(),
+                    target.contentChecksum(), target.contentSummaryJson(), OffsetDateTime.now(),
+                    target.createdBy(), target.createdAt(), OffsetDateTime.now()));
+        }
+
+        @Override
         public void activate(Connection connection, long targetSnapshotNo) {
             calls.add("activate-snapshot");
             events.add("ACTIVATE:" + targetSnapshotNo);

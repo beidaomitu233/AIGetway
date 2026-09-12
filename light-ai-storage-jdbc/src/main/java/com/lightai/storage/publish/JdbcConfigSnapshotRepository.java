@@ -90,6 +90,33 @@ public final class JdbcConfigSnapshotRepository extends AbstractJdbcRepository i
         }
     }
 
+    /** 回滚激活（BE-233）：旧 ACTIVE → SUPERSEDED，SUPERSEDED 目标 → ACTIVE。 */
+    @Override
+    public void reactivate(Connection connection, long targetSnapshotNo) {
+        DatabaseDialect d = dialect(connection);
+        String supersede = "UPDATE " + qualify(connection, "config_snapshot")
+                + " SET status = 'SUPERSEDED', updated_at = " + d.nowFunction() + " WHERE status = 'ACTIVE'";
+        String activate = "UPDATE " + qualify(connection, "config_snapshot")
+                + " SET status = 'ACTIVE', activated_at = " + d.nowFunction() + ", updated_at = " + d.nowFunction()
+                + " WHERE snapshot_no = ? AND status = 'SUPERSEDED'";
+        String pointer = "UPDATE " + qualify(connection, "runtime_config")
+                + " SET current_snapshot_no = ?, published_at = " + d.nowFunction() + ", updated_at = " + d.nowFunction()
+                + " WHERE singleton_key = 1";
+        try (PreparedStatement s1 = connection.prepareStatement(supersede);
+             PreparedStatement s2 = connection.prepareStatement(activate);
+             PreparedStatement s3 = connection.prepareStatement(pointer)) {
+            s1.executeUpdate();
+            s2.setLong(1, targetSnapshotNo);
+            if (s2.executeUpdate() != 1) {
+                throw new IllegalStateException("回滚目标不存在或状态非 SUPERSEDED，激活被拒绝");
+            }
+            s3.setLong(1, targetSnapshotNo);
+            s3.executeUpdate();
+        } catch (SQLException e) {
+            throw translate("快照回滚激活失败", e);
+        }
+    }
+
     /** 原子激活：旧 ACTIVE → SUPERSEDED，目标 → ACTIVE；必须位于发布激活事务内。 */
     @Override
     public void activate(Connection connection, long targetSnapshotNo) {

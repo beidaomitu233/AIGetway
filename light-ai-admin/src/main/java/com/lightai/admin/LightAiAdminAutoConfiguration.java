@@ -701,11 +701,54 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        public com.lightai.storage.trace.JdbcUsageAdjustmentRepository lightAiUsageAdjustmentRepository() {
+            return new com.lightai.storage.trace.JdbcUsageAdjustmentRepository();
+        }
+
+        @Bean
+        public com.lightai.admin.usage.UsageAdjustmentService lightAiUsageAdjustmentService(
+                DataSource dataSource,
+                com.lightai.storage.trace.JdbcUsageAdjustmentRepository adjustmentRepository,
+                Clock clock) {
+            return new com.lightai.admin.usage.UsageAdjustmentService(dataSource,
+                    adjustmentRepository, clock);
+        }
+
+        @Bean
         @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.usage.UsageController lightAiUsageController(
                 com.lightai.admin.usage.UsageService usageService,
-                com.lightai.admin.usage.UsageExportService usageExportService) {
-            return new com.lightai.admin.usage.UsageController(usageService, usageExportService);
+                com.lightai.admin.usage.UsageExportService usageExportService,
+                com.lightai.admin.usage.UsageAdjustmentService usageAdjustmentService) {
+            return new com.lightai.admin.usage.UsageController(usageService, usageExportService,
+                    usageAdjustmentService);
+        }
+
+        @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+        public com.lightai.admin.calls.CallObservationController lightAiCallObservationController(
+                com.lightai.admin.trace.TraceService traceService,
+                com.lightai.admin.trace.TraceDetailService traceDetailService,
+                com.lightai.admin.trace.TraceExportService traceExportService) {
+            return new com.lightai.admin.calls.CallObservationController(
+                    new com.lightai.admin.calls.CallObservationService(traceService, traceDetailService),
+                    traceExportService);
+        }
+
+        @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+        public com.lightai.admin.publish.ConfigReleaseController lightAiConfigReleaseController(
+                com.lightai.admin.publish.ConfigValidationService validationService,
+                com.lightai.admin.publish.ConfigPublishService publishService) {
+            return new com.lightai.admin.publish.ConfigReleaseController(validationService,
+                    publishService);
+        }
+
+        @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+        public com.lightai.admin.settings.SettingsController lightAiSettingsController(
+                com.lightai.admin.runtimeconfig.RuntimeConfigAdminService service) {
+            return new com.lightai.admin.settings.SettingsController(service);
         }
 
         @Bean
