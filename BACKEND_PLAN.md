@@ -194,3 +194,47 @@
   实现说明：分别报告 PostgreSQL、MySQL、Redis 和 Provider 环境；Mock 不替代真实结果。
   验收标准：应用创建到用量结算闭环；附加延迟、吞吐和流并发只报告实测值。
   测试要求：无未解释跳过；失败项写入 COMMUNICATION 并保持任务未勾选。
+
+## BE-P20 本次执行记录（2026-09-12）
+
+负责人：后端执行模型 codex-be-0912。分支：feature/backend-p20-codex-be-0912。领取提交 ea68d2e 已推送 dev。以下为已验证子项，不等同 BE-201～205 全量验收；主任务均保持未勾选，待确认差异见 COMMUNICATION.md 第 7 节。
+
+| 任务 | 本次结果 | 尚未满足的验收 |
+|---|---|---|
+| BE-201 | 应用请求体为空统一 400，UUID 严格校验；应用列表/详情/分页/范围接口回归 | 重复 code 409 精确错误码、归档运行请求互斥、列表筛选/摘要与 N+1 |
+| BE-202 | 全部密钥接口 data 包装及 snake_case；no-store；非法 ID/请求体 400；签发/启停/版本冲突/旧轮换/撤销 HTTP 回归 | 新记录轮换/宽限/幂等与 secret/key_prefix 契约；本次旧轮换测试仅验证响应与版本，不代表通过 V2 轮换验收 |
+| BE-203 | 新增 GET models，复用授权视图与模型查看权限，验证范围和空列表 | 已发布可路由模型、能力交集与 allow_stream 字段收口 |
+| BE-204 | 新增 GET quota，复用额度查看权限和 decimal 字符串；缺策略明确 503 | 降低到已用以下、周期历史与自动滚动、PUT 调整账本及剩余额度字段 |
+| BE-205 | API 回归验证四角色读取、只读角色拒绝写入、成员/应用数据范围 | 企业身份源、显式敏感授权、跨应用拒绝审计；测试身份不是企业登录实现 |
+
+### 本次可联调接口与当前 DTO 证据
+
+公共前缀 `/admin/applications/{id}`。path id/keyId 必须为标准 UUID。管理身份沿用现有管理认证拦截器；新 GET 在服务层再次校验 `APPLICATION_MODEL_VIEW`/`APPLICATION_QUOTA_VIEW` 和应用范围。接口成功为 `{data: T}`，错误为 `{error: ...}`，字段序列化统一 snake_case。下列现有 DTO 与计划不一致之处仍需架构确认，不据此修改新版产品要求。
+
+| 方法与路径 | 参数位置 | data 类型与状态 | 权限 |
+|---|---|---|---|
+| GET /models | path id | 200；ApplicationModelPermissionView[]，直接复用详情 models | APPLICATION_MODEL_VIEW + 应用范围 |
+| GET /quota | path id | 200；ApplicationQuotaPolicyView，直接复用详情 quota；缺策略 503 | APPLICATION_QUOTA_VIEW + 应用范围 |
+| GET /keys | path id | 200；ApplicationKeyView[]，无原文/摘要 | APPLICATION_KEY_VIEW + 应用范围 |
+| POST /keys | body ApplicationKeyCreateCommand | 201；ApplicationKeySecretResult，一次返回 key_value | APPLICATION_KEY_MANAGE + 应用范围 |
+| POST /keys/{keyId}/rotate | body version（正整数）、reason（必填） | 200；ApplicationKeySecretResult；新记录/幂等契约待确认 | APPLICATION_KEY_MANAGE + 应用范围 |
+| POST /keys/{keyId}/status | body status、version、reason | 200；ManagementOperationResult<ApplicationKeyView> | APPLICATION_KEY_MANAGE + 应用范围 |
+| POST /keys/{keyId}/revoke | body version、reason | 200；ManagementOperationResult<ApplicationKeyView> | APPLICATION_KEY_MANAGE + 应用范围 |
+
+- models 当前字段：id、virtual_model_id、virtual_model_code（字符串），enabled（布尔），max_output_tokens（可空整数），stream_allowed（可空布尔），version（整数）。这是授权配置，不能作为已发布可调用目录。
+- quota 当前字段：id、token_limit（可空整数）、tokens_used、tokens_reserved（整数），amount_limit（可空 decimal 字符串）、amount_used、amount_reserved（decimal 字符串），currency（字符串）、rpm/tpm（可空整数）、period_type、period_start/period_end（可空 ISO 时间）、version。
+- key 创建 body：name（必填），ip_allowlist（可选字符串数组），expires_at（可选 ISO 时间），rpm/tpm（可选正整数且不放宽应用），virtual_model_ids（可选 UUID 数组）。结果当前字段 key_id、application_id、key_value、masked_value、issued_at、rotation_generation、version；计划要求的 secret/key_prefix/grace_expires_at 未冒充已交付。
+- status 仅 ACTIVE/DISABLED；REVOKED 不可恢复。写操作冲突返回 409 CONFIG_VERSION_CONFLICT/CONFIG_FIELD_IMMUTABLE。非法请求返回 400 FIELD_VALIDATION_FAILED，权限 403 ACCESS_DENIED，不存在 404 OBJECT_NOT_FOUND，读取异常 503 CONFIG_DATA_UNAVAILABLE。
+- GET applications 当前 query：page 默认 1，page_size 默认 20/最大 100，sort 白名单默认 updated_at desc，keyword/status/environment/owner_id；data 为 items/total/page/page_size/sort/query_started_at/data_updated_at。部门、预算和 24h 摘要缺口已登记。
+- 密钥成功响应 Cache-Control: no-store；解析错误不回传原始字段值。所有管理命令拒绝空白/null 请求体，未知字段及类型错误保持严格拒绝。
+
+### 测试证据
+
+Windows、Temurin Java 17.0.19，Maven 使用 `D:/IntelliJ IDEA 2025.2.3/plugins/maven/lib/maven3/bin/mvn.cmd`。
+
+1. `mvn -B -pl light-ai-admin -am -Dtest=ApplicationApiContractTest,ApplicationServiceTest,ApplicationKeyServiceTest -Dsurefire.failIfNoSpecifiedTests=false test`：16 项通过，无失败/跳过。新增 ApplicationApiContractTest 6 项，使用真实 service/repository、H2 迁移、MockMvc、测试身份上下文。
+2. `mvn -B verify`：14 模块构建成功；441 项中 425 通过、16 跳过、0 失败/错误。覆盖 Java 编译类型检查、单元/API 回归和构建。
+3. `git diff --check`：通过。仓库未配置独立后端 lint 任务，不将空白检查冒称 lint 通过；未新增框架。
+4. 真实环境跳过：MySQL 2 项缺 LAI_IT_MYSQL_URL，PostgreSQL 3 项缺 LAI_IT_DB_URL，Redis 11 项缺 LAI_IT_REDIS_URI/lightai.it.redis-uri。真实 Provider、企业身份登录、前后端首调 E2E 和性能场景未执行。
+
+未修改数据库 schema/迁移及 DATABASE_PLAN 勾选；本次读取 application、application_member、application_model_permission、application_quota_policy，密钥回归使用 application_key 与 audit_log。未提交前端或临时日志。

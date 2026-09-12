@@ -100,3 +100,26 @@
 - DTO 源位置：light-ai-client/src/main/java/com/lightai/client/application；前端消费位置：light-ai-admin-ui/src/api/applications.ts。后端先审查并补齐契约，明确字段类型、必填、枚举、分页、版本、幂等与错误，不将 DTO 文件存在视为已验收。
 
 环境复核命令：node --version、java -version；Maven 可使用 D:/IntelliJ IDEA 2025.2.3/plugins/maven/lib/maven3/bin/mvn.cmd。前端在 light-ai-admin-ui 下使用 npm run lint、npm run typecheck、npm test、npm run build。Maven 未在 PATH 时使用该绝对路径，不据此认定 Maven 未安装。默认沙箱失败时走产品审批机制；审批被拒绝才记录具体受阻命令。
+
+## 7. BE-P20 审查差异（2026-09-12，后端执行模型 codex-be-0912）
+
+以下问题提出方均为后端执行模型，状态均为待确认；不以现有实现作为新版产品结论。
+
+| 编号 | 任务 | 差异与影响 | 待确认处理 |
+|---|---|---|---|
+| BE-P20-001 | BE-201 | code 重复当前返回 FIELD_VALIDATION_FAILED/400，计划要求 409 但未定义重复应用错误码；列表缺部门/预算筛选及 24h 摘要，查询存在逐应用子查询；归档未检查运行请求 | 架构确认错误码、筛选/摘要 DTO 与归档准入互斥契约，DB-201 提供批量查询及运行请求检查端口；不私自新增字段/错误码 |
+| BE-P20-002 | BE-202 | DTO 使用 key_value/masked_value，计划要求 secret/key_prefix/grace_expires_at；rotate 原地覆盖摘要，没有新记录、幂等键与宽限持久化 | 架构与 DB-202 确认新记录轮换、幂等结果持久化及精确 DTO；本次仅按已确认 CONTRACT-V2-001 统一 data 包装，不提供双结构兼容 |
+| BE-P20-003 | BE-203 | 当前仅校验虚拟模型存在与 enabled，没有验证已发布可路由及候选能力交集；DTO stream_allowed 与计划 allow_stream 不一致 | 架构确认能力与活动快照查询端口、字段收口及应用负责人授权上限；本次补 GET /models 读取现有授权视图，不宣称其为运行可用目录 |
+| BE-P20-004 | BE-204 | 当前拒绝降低到已用+预占以下，违反 PRD 4.5；仅当前额度行，PUT 未生成调整单，缺周期历史/自然周期滚动/预约与时区参数，缺 remaining/reset_at | 架构与 DB-203/204 确认策略历史、调整账本及周期 DTO；禁止修改已发布迁移，本次补 GET /quota，不宣称额度治理完成 |
+| BE-P20-005 | BE-205 | 企业身份源未确认；角色权限主要由固定角色映射，创建/成员维护显式权限与跨应用拒绝审计尚需闭环 | 沿用 C-V2-002/003，保持成员只读，以测试身份验证既有四角色；不自行选择企业身份协议 |
+
+本次已明确可执行范围：应用/密钥成功响应 data 包装、GET models/quota、请求体与 ID 的 400 校验、解析错误脱敏，以及对应真实 service + H2 + MockMvc 测试。H2 与测试身份不替代真实数据库或企业身份验收。全部 BE-201～205 完整任务在依赖未确认与未验证前保持未勾选。
+### BE-P20 部分交付与暂停记录
+
+- 提出方：后端执行模型。状态：执行中（已交付子项，任务包阻塞待确认）。
+- 分支 feature/backend-p20-codex-be-0912；领取 ea68d2e；实现 bd95691（fix(backend): align BE-201-BE-204 application api envelopes）。已在独立集成目录本地 dev 合入并普通推送，随后 fetch 验证 origin/dev 包含 bd95691。
+- 自检：仅后端 4 个生产文件、1 个新增 API 测试与计划/沟通文档；无前端、DDL 或数据库迁移修改。data 包装、GET 子资源和解析安全修复符合 CONTRACT-V2-001；整体 V2 契约仍待本节 BE-P20-001～005 确认。
+- 测试：Java 17.0.19；目标测试 16/16；功能目录与独立 dev 集成目录分别执行 mvn -B verify，14 模块成功，441 项中 425 通过、16 环境跳过，0 失败/错误。跳过原因及命令见 BACKEND_PLAN.md 本次执行记录；无独立后端 lint 配置，git diff --check 通过。
+- 未验收：BE-201～205 均未勾选。真实 MySQL/PostgreSQL/Redis、Provider、企业身份、前后端首调 E2E 与性能未执行。不得以本次 H2/MockMvc 结果宣称生产链路成功。
+- 影响/回滚：密钥调用方应读取统一 data 包装，字段仍为当前 DTO，未提供双结构；必要回退 bd95691，数据库无迁移回滚需求。前端文件由 FE-P20 负责人维护。
+- 占用：BE-P20 改为阻塞，保留原负责人、暂停后续实现，未标记完成或解除占用。需架构确认 BE-P20-001～005 后继续，不重复领取或接管。
