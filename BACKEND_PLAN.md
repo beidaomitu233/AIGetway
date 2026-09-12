@@ -2,7 +2,7 @@
 
 ## 1. 执行边界
 
-开发基线统一为 origin/dev。BE-P20 可从 TASK_STATUS.md 领取；BE-201/202 首先处理 COMMUNICATION.md 的 CONTRACT-V2-001，交付应用和密钥的精确字段、响应包装及接口测试供前端使用。身份源等未决项仅限制对应任务；执行环境故障按 ENV-V2-001 验证审批通道。
+开发基线统一为 origin/dev。BE-P20 已由 codex-be-0912 领取且保持阻塞，不得重复领取或接管；当前占用以 TASK_STATUS.md 为准。CONTRACT-V2-001 的响应包装和 GET 子资源已部分交付，剩余精确契约按本文 BE-P20 架构处理结论和 COMMUNICATION.md 第 8 节执行。身份源等未决项仅限制对应子项；执行环境故障按 ENV-V2-001 验证审批通道。
 
 任务包从 P20 编号，用于避免与既有提交记录中的编号冲突。技术栈沿用 Java 17 字节码、Spring Boot Standalone、模块化 Maven、JDBC、PostgreSQL/MySQL、Redis 原子脚本和 JDK HttpClient。V2 首期权威配置位于集中式服务，公共 client/spi/runtime 不依赖 Spring，Adapter 只承担单次调用与协议映射。
 
@@ -38,7 +38,7 @@
 - [ ] 任务编号：BE-203
   模块：应用模型权限
   目标：授权已发布且可路由的虚拟模型，并支持应用/密钥级参数收紧。
-  接口：`GET/PUT /admin/applications/{id}/models`、`GET /v1/models`。
+  接口：`GET/PUT /admin/applications/{id}/models`、`GET /admin/applications/{id}/model-options`、`GET /v1/models`。
   请求/响应：virtual_model_id、enabled、max_output_tokens、allow_stream、version。
   业务流程：验证模型活动与路由 → 验证能力边界 → 保存权限 → 新请求即时生效。
   异常处理：无路由、能力越界、应用/密钥范围放宽、版本冲突。
@@ -48,10 +48,10 @@
 - [ ] 任务编号：BE-204
   模块：应用额度与调整
   目标：完成 Token/金额/RPM/TPM、周期、续期、增减和人工重置。
-  接口：`GET/PUT /quota`、`POST /quota/adjustments`、`POST /quota/reset`。
+  接口：`GET/PUT /quota`、`POST /quota/adjustments`、`POST /quota/reset`、`POST /quota/renew`；均位于 `/admin/applications/{id}` 下。
   请求/响应：limit、used、reserved、remaining、currency、period、reset_at、version、reason。
   业务流程：校验 → 幂等调整单 → 原子更新当前策略 → 审计；历史账本不改写。
-  异常处理：币种冲突、非法周期、减少至已用以下、重复请求、版本冲突。
+  异常处理：币种冲突、非法周期、重复请求、版本冲突；减少至已用以下允许保存并拒绝新准入，不作为校验错误。
   数据表：application_quota_policy、quota_adjustment、usage_ledger。
   验收/测试：重复提交不重复加额；降低后立即拒绝新请求；自然周期按统一时区滚动。
 
@@ -238,3 +238,52 @@ Windows、Temurin Java 17.0.19，Maven 使用 `D:/IntelliJ IDEA 2025.2.3/plugins
 4. 真实环境跳过：MySQL 2 项缺 LAI_IT_MYSQL_URL，PostgreSQL 3 项缺 LAI_IT_DB_URL，Redis 11 项缺 LAI_IT_REDIS_URI/lightai.it.redis-uri。真实 Provider、企业身份登录、前后端首调 E2E 和性能场景未执行。
 
 未修改数据库 schema/迁移及 DATABASE_PLAN 勾选；本次读取 application、application_member、application_model_permission、application_quota_policy，密钥回归使用 application_key 与 audit_log。未提交前端或临时日志。
+
+## BE-P20 架构处理结论（2026-09-12）
+
+本节为 BE-P20-001～005 的实施决策，优先于上方历史执行记录中的“待架构确认”。仅确认下列技术实现口径；BP 产品选项和真实环境验收仍保留原状态。BE-P20 保持阻塞、原负责人和占用不变；原负责人可推进已明确子项，依赖迁移完成后再联调。
+
+### BE-P20-001：列表、冲突与归档
+
+- 新增 DUPLICATE_APPLICATION_CODE：HTTP 409、retryable=false、details.field=code。唯一约束并发冲突映射此码；格式非法仍为 FIELD_VALIDATION_FAILED/400。跨应用范围检查先于详情与影响读取。
+- 保留 page/page_size，默认 1/20，page_size 最大 100。keyword、status、environment、owner_id 保留；新增 department（精确匹配）、budget_status（NORMAL/EXHAUSTED/UNLIMITED）。任一有限维度 used+reserved>=limit 为 EXHAUSTED；两维都无限制为 UNLIMITED；其余 NORMAL。总数与分页使用相同权限和筛选条件。
+- 列表保留已明确基础字段，补 budget_status、requests_24h（非负整数）、success_rate_24h（0～1 decimal 字符串，无请求为 null）；model_count 表示授权且运行可用模型数。按 last_called_at desc、id asc 稳定排序，空最后调用时间排末尾；其他排序必须白名单。
+- 统一 query_started_at 为本页统计时间，24h 区间为 [query_started_at-24h,query_started_at)。先分页取应用，再按本页 ID 集合批量查模型、Key、额度和运行摘要；禁止逐应用查询。聚合失败返回明确错误，不填成功零值。
+- 归档只允许 DISABLED 且无运行请求/有效预占；存在占用返回 OBJECT_IN_USE/409。归档事务与准入登记统一锁定 application 行：准入在锁内复核 ACTIVE 并创建 Reservation，归档在锁内复核状态及占用；不能先查运行数后无锁写状态。旧请求通过 Reservation 持有占用直到终态，回收完成前阻止归档。
+- DB-201 提供按应用范围分页/批量摘要查询及归档互斥所需存储操作；后端可先实现端口与测试，真实并发须双数据库验收。
+
+### BE-P20-002：一次性密钥与轮换
+
+- 最终响应字段固定为 secret、key_prefix、masked_value；key_value 退出最终接口。创建/轮换 data 包含 key_id、application_id、secret、key_prefix、masked_value、status、issued_at、expires_at、version，以及轮换时 old_key_id、grace_expires_at。普通 Key 视图新增 key_prefix，不包含 secret/digest。
+- 创建新增 idempotency_key；轮换 body 为 version、reason、idempotency_key、grace_period_seconds。幂等键为 1～128 字符非空字符串，作用域为应用+操作+目标 Key；同键不同规范化请求返回 IDEMPOTENCY_KEY_CONFLICT/409。
+- 轮换必须新增 Key ID 和摘要，复制旧 Key 的收紧策略。grace_period_seconds 默认 0；正值上限读取部署配置，未确认 BP-005 前仅开放 0，24 小时仍是待确认建议。旧 Key 宽限到期按有效截止时间拒绝，撤销立即失效；不可恢复 REVOKED。
+- 旧 Key 存 replaced_by_key_id 和 grace_expires_at；已被替换的 Key 不再轮换，只允许撤销。新 Key 到期不得晚于旧 Key 原到期。轮换行锁、旧 Key 版本更新、新 Key、幂等记录及审计处于同一数据库事务。
+- 幂等重放返回同一非敏感结果、secret=null、secret_available=false；首次成功 secret_available=true。服务端仅存摘要和非敏感结果，响应丢失后通过新轮换恢复，不持久化可解密原文。前端重放提示原文不可再次获取，不能提示已复制。
+- 名称是显示标签，轮换继承名称，不对历史代际强制 application_id+name 唯一；摘要全局唯一，旧 Key 保留历史引用。FE/BE 在同次联调切换 secret 字段，不长期并存两套字段。
+
+### BE-P20-003：模型字段与运行可用性
+
+- allow_stream 为统一 API/约束 JSON 名；stream_allowed 通过新增迁移转换历史 JSON，不能因未知/非法字段回退为无约束。null 表示继承上级，false 表示禁止，true 也不能突破上级能力；max_output_tokens 取所有生效上限的最小值。
+- 新增应用授权候选读取 GET /admin/applications/{id}/model-options，返回 data.items，每项 virtual_model_id、code、max_output_tokens、allow_stream、snapshot_no。仅返回身份允许授权且已发布、存在可用候选的模型。GET /models 继续展示已有授权配置，含失效配置及不可用原因，不能用它替代运行目录。
+- 后端统一提供运行模型可用性查询：输入应用/密钥上下文与固定活动快照，输出可路由模型、能力上限和不可用原因。授权写、model-options、/v1/models 和 Chat 共用规则；不存在独立前端推算。
+- 能力交集取同一快照全部可切换启用候选，不因短时健康下降放宽能力；运行可用性另行检查状态、Key、价格、健康和容量。发布版本中不存在的模型不得授权；共享状态不可查时明确拒绝。
+- 应用负责人只能在可信身份赋予的可授权模型集合内变更；无显式集合时只能收紧已有授权，新增授权默认拒绝。管理员仍须通过运行可用性校验。
+
+### BE-P20-004：降低额度、周期与流水
+
+- PRD 4.5 优先：允许非负新上限低于 used+reserved，保存成功并立即阻止后续新准入。已准入请求按原上下文结算，历史消耗不回滚；GET 返回 tokens_remaining=max(0,limit-used-reserved)，amount_remaining 同理，无限额返回 null。
+- 保留 token_limit、tokens_used、tokens_reserved、amount_limit、amount_used、amount_reserved、currency、rpm、tpm、period_type/start/end、version；新增 period_id、policy_version、timezone、reset_at、tokens_remaining、amount_remaining、admission_blocked。金额 decimal 字符串；reset_at 生命周期/自定义周期为 null，自然周期为下一边界。
+- 本轮时区从平台配置读取并写入周期快照，前端只读展示；默认自然月/Asia/Shanghai 仍为 BP-004 建议，禁止在未配置时静默猜测。自然周期按该时区日/月边界转 UTC，区间左闭右开；自定义起止必须显式提供。
+- PUT /quota 使用 version、reason 和新增 idempotency_key；和调整、重置一样事务内追加变更流水与不可变策略版本，不能只改当前行。每个 Reservation 绑定 period_id/policy_version；晚到结算记回原周期，不能扣到新周期。
+- 自然周期到期懒切换与后台滚动共用一个应用行锁和周期唯一约束；历史周期不覆盖。已有消费时 PUT 不允许改写周期/币种，返回 CONFIG_FIELD_IMMUTABLE/409 并指向续期；RPM/TPM 调整不得清空当前速率窗口。
+- 新增 POST /quota/renew：body 为 quota_version、reason、idempotency_key、token_limit、amount_limit、currency、period_type、period_end。首期仅立即续期；period_start 由服务端固定为操作生效时刻，自然日/月结束于下一自然边界，生命周期结束为空，自定义 period_end 必填且晚于生效时刻，非自定义不得传 period_end。服务端校验后以新 period_id 和递增 policy_version 建立当前周期、保留旧账本。人工续期与人工重置均在应用行锁内要求无未终态 Reservation，否则 OBJECT_IN_USE/409；用户应先禁用应用并等待排空。自然周期滚动不受此人工操作限制，晚到结算仍归原周期。
+- POST /quota/reset 保留 dimension=TOKEN_USAGE 或 AMOUNT_USAGE、confirmation_code（必须等于应用 code）、quota_version、reason、idempotency_key。新周期段保留原币种/时区/策略/下一自然边界，目标维度 opening_used=0，另一维度 opening_used=原已用，预占必须为 0；总已用=opening_used+该段实际消耗。数据库保存前后周期关联和期初余额，账本可解释非重置维度延续，不复制历史请求账本。旧周期只读，不能把重置解释为修改历史请求成本。
+- 预约调整通过已有 POST /quota/adjustments 增加可选 effective_at；请求保留 dimension=TOKEN_LIMIT/AMOUNT_LIMIT、delta、reason、idempotency_key、quota_version。只允许正 delta 预约；Token 必须整数，金额为 decimal 字符串，无限额不能做增减。未来时间返回 202/SCHEDULED，立即执行返回 200/APPLIED。到期执行时锁应用、校验策略版本；版本已变化标为 CONFLICT，不静默覆盖。创建预约不改变当前额度；前端须区分已预约和已生效。
+- 以上命令统一 data={operation_id,status,effective_at,quota}，未生效时 quota=null；GET /quota/adjustments 的 data.items 合并按权限过滤的预约状态与已生效流水（同一 operation_id 只显示一项），可按 operation_id 查询，无数据返回空列表。服务端将请求 version/quota_version 校验为当前行乐观锁，同时在操作记录保存对应 policy_version；同幂等键先比较请求摘要再重放，不因原版本已变化创建第二次操作。
+
+### BE-P20-005：权限与身份验收边界
+
+- 管理身份、应用密钥完全隔离。管理员之外，创建应用、扩展授权、额度调整分别要求可信身份显式授权；角色映射不自动授予所有敏感操作。应用范围在服务和查询层共同执行。
+- 成员读取可继续；成员写入方式、OIDC/SAML/可信网关头的最终选择仍待 BP-001/002 决策。允许通过既有 AuthContextProvider 端口完成权限单测，不能据此验收企业登录。
+- 跨应用拒绝返回 ACCESS_DENIED/403，审计只记 actor、action、target_id、request_id、result=DENIED；不得带出他人应用名称、Key 或请求正文。
+- BE-205 企业身份验收、真实 Provider 和应用首调 E2E 保持未验收；迁移、真实存储、权限和联调证据满足后由原负责人提请审查，任务表才能变更状态。
