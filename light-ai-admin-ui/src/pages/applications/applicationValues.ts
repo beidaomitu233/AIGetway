@@ -29,6 +29,42 @@ export function positiveAmount(value: string): boolean {
 export function positiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 }
+
+/**
+ * Token 计数为 64 位，后端以十进制字符串传输（BE-P20-102）。
+ * 页面展示与比较统一走 BigInt，避免 JS Number 精度丢失与字符串拼接。
+ */
+export function integerUnits(value: string): bigint | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return /^-?\d+$/.test(trimmed) ? BigInt(trimmed) : null
+}
+export function integerText(value: bigint): string {
+  return value.toLocaleString('en-US')
+}
+export function tokenUsageText(used: string, reserved: string, limit: string | null): string {
+  const u = integerUnits(used), r = integerUnits(reserved)
+  if (u === null || r === null) return '数据异常'
+  const consumed = u + r
+  if (limit === null) return `${integerText(consumed)} / 不限`
+  const cap = integerUnits(limit)
+  return cap === null ? '数据异常' : `${integerText(consumed)} / ${integerText(cap)}`
+}
+export function tokenRemainingText(used: string, reserved: string, limit: string | null): string {
+  if (limit === null) return '不限'
+  const u = integerUnits(used), r = integerUnits(reserved), cap = integerUnits(limit)
+  return u === null || r === null || cap === null ? '数据异常' : integerText(cap - u - r)
+}
+export function positiveIntegerText(value: string): boolean {
+  const units = integerUnits(value)
+  return units !== null && units > 0n
+}
+/** 表单数值输入回填：仅接受可安全表示的非负整数，超出范围返回 null 由校验拦截。 */
+export function toSafeInteger(value: string | null): number | null {
+  if (value === null) return null
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) ? parsed : null
+}
 export function validPeriod(type: string, start: string, end: string): boolean {
   if (!['LIFECYCLE', 'DAY', 'MONTH', 'CUSTOM'].includes(type)) return false
   return type !== 'CUSTOM' || (Number.isFinite(Date.parse(start)) && Number.isFinite(Date.parse(end)) && Date.parse(start) < Date.parse(end))

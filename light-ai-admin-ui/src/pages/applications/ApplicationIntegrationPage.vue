@@ -17,6 +17,7 @@ import {
   type DeveloperAliasSummary,
 } from '@/api/developerAccess'
 import { isAbortError } from '@/api/errors'
+import { integerUnits, integerText } from './applicationValues'
 
 const route = useRoute()
 const store = useBootstrapStore()
@@ -94,7 +95,7 @@ const baseUrlText = computed(() => {
 const quotaText = computed(() => {
   const quota = detail.value?.quota
   if (!quota) return '—'
-  const token = quota.token_limit === null ? '不限' : quota.token_limit.toLocaleString()
+  const token = quota.token_limit === null ? '不限' : integerText(integerUnits(quota.token_limit) ?? 0n)
   const amount = quota.amount_limit === null ? '不限' : `${quota.amount_limit} ${quota.currency}`
   const rpm = quota.rpm === null ? '不限' : String(quota.rpm)
   const tpm = quota.tpm === null ? '不限' : quota.tpm.toLocaleString()

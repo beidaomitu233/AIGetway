@@ -464,7 +464,7 @@ onScopeDispose(clearScope)
 
   <ApplicationKeySecretDialog
     v-if="secret"
-    :value="secret.key_value"
+    :value="secret.secret"
     @close="closeSecret"
   />
 </template>

@@ -8,7 +8,7 @@ import { useListQuery, type FilterValue } from '@/composables/useListQuery'
 import { fetchApplications, type ApplicationListItem } from '@/api/applications'
 import { formatDateTime } from '@/app/display'
 import { ApiError } from '@/api/errors'
-import { amountUsage, applicationStatusLabels as statusLabel, applicationEnvironmentLabels as environmentLabel } from './applicationValues'
+import { amountUsage, integerUnits, integerText, applicationStatusLabels as statusLabel, applicationEnvironmentLabels as environmentLabel } from './applicationValues'
 
 const store = useBootstrapStore()
 const canManage = computed(() => store.can(Permission.applicationManage))
@@ -50,10 +50,15 @@ watch(() => [store.userId, store.permissions.join(','), store.applicationScope.j
 
 const hasFilters = computed(() => Object.values(state).some(value => value !== ''))
 
-function ratio(used: number, reserved: number, limit: number | null): string {
-  if (limit == null) return `${(used + reserved).toLocaleString()} / 不限`
-  const percent = limit === 0 ? 100 : Math.min(100, Math.round(((used + reserved) / limit) * 100))
-  return `${(used + reserved).toLocaleString()} / ${limit.toLocaleString()}（${percent}%）`
+function ratio(used: string, reserved: string, limit: string | null): string {
+  const u = integerUnits(used), r = integerUnits(reserved)
+  if (u === null || r === null) return '数据异常'
+  const consumed = u + r
+  if (limit == null) return `${integerText(consumed)} / 不限`
+  const cap = integerUnits(limit)
+  if (cap === null) return '数据异常'
+  const percent = cap === 0n ? 100 : Math.min(100, Math.round((Number(consumed) / Number(cap)) * 100))
+  return `${integerText(consumed)} / ${integerText(cap)}（${percent}%）`
 }
 
 function amount(row: ApplicationListItem): string {

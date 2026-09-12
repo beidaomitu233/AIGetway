@@ -6,9 +6,10 @@ export type ApplicationEnvironment = 'DEV' | 'TEST' | 'STAGING' | 'PROD'
 
 export interface ApplicationQuotaPolicy {
   id: string
-  token_limit: number | null
-  tokens_used: number
-  tokens_reserved: number
+  /** 64 位计数以十进制字符串传输（BE-P20-102），避免超出 JS 安全整数范围。 */
+  token_limit: string | null
+  tokens_used: string
+  tokens_reserved: string
   amount_limit: string | null
   amount_used: string
   amount_reserved: string
@@ -18,7 +19,14 @@ export interface ApplicationQuotaPolicy {
   period_type: 'LIFECYCLE' | 'DAY' | 'MONTH' | 'CUSTOM'
   period_start: string | null
   period_end: string | null
-  version: number
+  period_id: string | null
+  policy_version: string | null
+  timezone: string | null
+  reset_at: string | null
+  tokens_remaining: string
+  amount_remaining: string
+  admission_blocked: boolean
+  version: string
 }
 
 export interface ApplicationModelPermission {
@@ -27,7 +35,8 @@ export interface ApplicationModelPermission {
   virtual_model_code: string | null
   enabled: boolean
   max_output_tokens: number | null
-  stream_allowed: boolean | null
+  /** BE-P20-103：约束字段统一为 allow_stream。 */
+  allow_stream: boolean | null
   version: number
 }
 
@@ -35,7 +44,7 @@ export interface ApplicationModelPermission {
 export interface ApplicationModelConstraintPayload {
   virtual_model_id: string
   max_output_tokens: number | null
-  stream_allowed: boolean | null
+  allow_stream: boolean | null
 }
 
 export interface ApplicationListItem {
@@ -49,9 +58,9 @@ export interface ApplicationListItem {
   status: ApplicationStatus
   model_count: number
   active_key_count: number
-  token_limit: number | null
-  tokens_used: number
-  tokens_reserved: number
+  token_limit: string | null
+  tokens_used: string
+  tokens_reserved: string
   amount_limit: string | null
   amount_used: string
   amount_reserved: string
@@ -60,7 +69,7 @@ export interface ApplicationListItem {
   tpm: number | null
   last_called_at: string | null
   updated_at: string
-  version: number
+  version: string
 }
 
 export interface ApplicationDetail {
@@ -102,12 +111,16 @@ export interface ApplicationKeyView {
   virtual_model_ids: string[]
 }
 
+/** 创建/轮换成功时的一次性密钥结果；secret 原文只在此响应出现（BE-P20-101）。 */
 export interface ApplicationKeySecretResult {
   key_id: string
   application_id: string
-  key_value: string
+  secret: string
+  key_prefix: string
   masked_value: string
+  status: ApplicationKeyView['status']
   issued_at: string
+  expires_at: string | null
   rotation_generation: number
   version: number
 }

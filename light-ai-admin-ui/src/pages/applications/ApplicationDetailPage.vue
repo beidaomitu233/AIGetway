@@ -2,7 +2,7 @@
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ApiError, isAbortError } from '@/api/errors'
-import { amountUsage, decimalUnits, decimalText, positiveAmount, positiveInteger, validPeriod, applicationStatusLabels as statusLabel, applicationEnvironmentLabels as environmentLabel } from './applicationValues'
+import { amountUsage, decimalUnits, decimalText, positiveAmount, positiveInteger, validPeriod, integerUnits, integerText, tokenUsageText, positiveIntegerText, toSafeInteger, applicationStatusLabels as statusLabel, applicationEnvironmentLabels as environmentLabel } from './applicationValues'
 import ApplicationQuotaSummary from './ApplicationQuotaSummary.vue'
 import FormField from '@/components/FormField.vue'
 import PageState from '@/components/PageState.vue'
@@ -189,9 +189,8 @@ const adjustmentLabel: Record<ApplicationQuotaAdjustment['dimension'], string> =
   AMOUNT_USAGE_RESET: '金额用量重置',
 }
 
-function usageText(used: number, reserved: number, limit: number | null): string {
-  const consumed = used + reserved
-  return limit == null ? `${consumed.toLocaleString()} / 不限` : `${consumed.toLocaleString()} / ${limit.toLocaleString()}`
+function usageText(used: string, reserved: string, limit: string | null): string {
+  return tokenUsageText(used, reserved, limit)
 }
 
 function amountText(): string {
@@ -240,7 +239,7 @@ function openQuotaDialog(): void {
   quotaSubmission.reset()
   const quota = detail.value.quota
   quotaForm.token_limited = quota.token_limit != null
-  quotaForm.token_limit = quota.token_limit ?? 1
+  quotaForm.token_limit = toSafeInteger(quota.token_limit) ?? 1
   quotaForm.amount_limited = quota.amount_limit != null
   quotaForm.amount_limit = quota.amount_limit ?? '1'
   quotaForm.currency = quota.currency
@@ -270,17 +269,22 @@ const quotaStopsAdmission = computed(() => {
   const quota = detail.value.quota
   const amount = decimalUnits(quotaForm.amount_limit)
   const used = decimalUnits(quota.amount_used), reserved = decimalUnits(quota.amount_reserved)
-  return (quotaForm.token_limited && positiveInteger(quotaForm.token_limit) && quotaForm.token_limit < quota.tokens_used + quota.tokens_reserved)
+  const tokensUsed = integerUnits(quota.tokens_used), tokensReserved = integerUnits(quota.tokens_reserved)
+  const formTokens = quotaForm.token_limit === null ? null : BigInt(quotaForm.token_limit)
+  return (quotaForm.token_limited && positiveInteger(quotaForm.token_limit) && formTokens !== null && tokensUsed !== null && tokensReserved !== null && formTokens < tokensUsed + tokensReserved)
     || (quotaForm.amount_limited && amount !== null && used !== null && reserved !== null && amount < used + reserved)
 })
 const adjustmentPreview = computed(() => {
   if (!detail.value || adjustmentInvalid.value) return null
   const quota = detail.value.quota
   const delta = decimalUnits(adjustmentForm.delta)
-  const current = adjustmentForm.dimension === 'TOKEN_LIMIT' ? (quota.token_limit === null ? null : decimalUnits(String(quota.token_limit))) : (quota.amount_limit === null ? null : decimalUnits(quota.amount_limit))
+  const current = adjustmentForm.dimension === 'TOKEN_LIMIT' ? (quota.token_limit === null ? null : decimalUnits(quota.token_limit)) : (quota.amount_limit === null ? null : decimalUnits(quota.amount_limit))
   if (delta === null || current === null) return null
   const after = current + delta
-  const consumed = adjustmentForm.dimension === 'TOKEN_LIMIT' ? decimalUnits(String(quota.tokens_used + quota.tokens_reserved)) : (decimalUnits(quota.amount_used) ?? 0n) + (decimalUnits(quota.amount_reserved) ?? 0n)
+  const tokensUsed = integerUnits(quota.tokens_used), tokensReserved = integerUnits(quota.tokens_reserved)
+  const consumed = adjustmentForm.dimension === 'TOKEN_LIMIT'
+    ? (tokensUsed === null || tokensReserved === null ? null : tokensUsed + tokensReserved)
+    : (decimalUnits(quota.amount_used) ?? 0n) + (decimalUnits(quota.amount_reserved) ?? 0n)
   return { after: decimalText(after), stops: consumed !== null && after < consumed }
 })
 async function saveQuota(): Promise<void> {
@@ -296,7 +300,7 @@ async function saveQuota(): Promise<void> {
       period_type: quotaForm.period_type,
       period_start: quotaForm.period_type === 'CUSTOM' ? asOffsetDateTime(quotaForm.period_start) : null,
       period_end: quotaForm.period_type === 'CUSTOM' ? asOffsetDateTime(quotaForm.period_end) : null,
-      version: detail.value!.quota.version,
+      version: Number(detail.value!.quota.version),
       reason: quotaForm.reason.trim(),
     })
     if (context === contextVersion && response.entity) detail.value = response.entity
@@ -330,7 +334,7 @@ async function saveAdjustment(): Promise<void> {
       delta: adjustmentForm.delta.trim(),
       reason: adjustmentForm.reason.trim(),
       idempotency_key: adjustmentForm.idempotency_key,
-      quota_version: detail.value!.quota.version,
+      quota_version: Number(detail.value!.quota.version),
     })
     if (context === contextVersion && response.entity) detail.value = response.entity
   })
@@ -343,7 +347,7 @@ async function saveAdjustment(): Promise<void> {
 function openResetDialog(): void {
   if (!canManageQuota.value || !detail.value) return
   resetSubmission.reset()
-  resetForm.dimension = detail.value.quota.tokens_used > 0 ? 'TOKEN_USAGE' : 'AMOUNT_USAGE'
+  resetForm.dimension = positiveIntegerText(detail.value.quota.tokens_used) ? 'TOKEN_USAGE' : 'AMOUNT_USAGE'
   resetForm.reason = ''
   resetForm.confirmation_code = ''
   resetForm.idempotency_key = crypto.randomUUID()
@@ -354,7 +358,7 @@ const resetInvalid = computed(() => !detail.value
   || !resetForm.reason.trim()
   || resetForm.confirmation_code !== detail.value.code
   || (resetForm.dimension === 'TOKEN_USAGE'
-    ? detail.value.quota.tokens_used <= 0
+    ? !positiveIntegerText(detail.value.quota.tokens_used)
     : !positiveAmount(detail.value.quota.amount_used)))
 
 async function saveReset(): Promise<void> {
@@ -366,7 +370,7 @@ async function saveReset(): Promise<void> {
       reason: resetForm.reason.trim(),
       confirmation_code: resetForm.confirmation_code,
       idempotency_key: resetForm.idempotency_key,
-      quota_version: detail.value!.quota.version,
+      quota_version: Number(detail.value!.quota.version),
     })
     if (context === contextVersion && response.entity) detail.value = response.entity
   })
@@ -400,8 +404,8 @@ function modelConstraintText(model: ApplicationModelPermission): string {
   if (model.max_output_tokens !== null) {
     parts.push(`最大输出 ${model.max_output_tokens.toLocaleString()} Token`)
   }
-  if (model.stream_allowed !== null) {
-    parts.push(model.stream_allowed ? '允许流式' : '禁止流式')
+  if (model.allow_stream !== null) {
+    parts.push(model.allow_stream ? '允许流式' : '禁止流式')
   }
   return parts.join(' · ')
 }
@@ -417,7 +421,7 @@ async function openModelDialog(): Promise<void> {
     if (!item.enabled) continue
     modelConstraints.value[item.virtual_model_id] = {
       maxOutputTokens: item.max_output_tokens === null ? '' : String(item.max_output_tokens),
-      streamAllowed: item.stream_allowed === null ? '' : item.stream_allowed ? 'allow' : 'deny',
+      streamAllowed: item.allow_stream === null ? '' : item.allow_stream ? 'allow' : 'deny',
     }
   }
   modelReason.value = ''
@@ -473,12 +477,12 @@ const modelConstraintInvalid = computed(() =>
 function modelConstraintPayload(): {
   virtual_model_id: string
   max_output_tokens: number | null
-  stream_allowed: boolean | null
+  allow_stream: boolean | null
 }[] {
   const payload: {
     virtual_model_id: string
     max_output_tokens: number | null
-    stream_allowed: boolean | null
+    allow_stream: boolean | null
   }[] = []
   for (const modelId of selectedModelIds.value) {
     const form = modelConstraints.value[modelId]
@@ -491,7 +495,7 @@ function modelConstraintPayload(): {
     payload.push({
       virtual_model_id: modelId,
       max_output_tokens: maxOutputTokens,
-      stream_allowed: streamAllowed,
+      allow_stream: streamAllowed,
     })
   }
   return payload
@@ -748,7 +752,7 @@ onScopeDispose(clearContext)
                   v-if="canViewQuota"
                   class="lai-summary-item"
                 >
-                  <span class="lai-summary-label">已用 Token</span>{{ detail.quota.tokens_used.toLocaleString() }}
+                  <span class="lai-summary-label">已用 Token</span>{{ integerText(integerUnits(detail.quota.tokens_used) ?? 0n) }}
                 </div>
               </div>
               <ul
@@ -893,7 +897,7 @@ onScopeDispose(clearContext)
               <button
                 type="button"
                 class="lai-btn lai-btn-small"
-                :disabled="detail.quota.tokens_used <= 0 && !positiveAmount(detail.quota.amount_used)"
+                :disabled="!positiveIntegerText(detail.quota.tokens_used) && !positiveAmount(detail.quota.amount_used)"
                 @click="openResetDialog"
               >
                 重置用量
@@ -1417,8 +1421,8 @@ onScopeDispose(clearContext)
           >
             <option
               value="TOKEN_USAGE"
-              :disabled="detail.quota.tokens_used <= 0"
-            >Token 已用量（当前 {{ detail.quota.tokens_used.toLocaleString() }}）</option>
+              :disabled="!positiveIntegerText(detail.quota.tokens_used)"
+            >Token 已用量（当前 {{ integerText(integerUnits(detail.quota.tokens_used) ?? 0n) }}）</option>
             <option
               value="AMOUNT_USAGE"
               :disabled="!positiveAmount(detail.quota.amount_used)"
