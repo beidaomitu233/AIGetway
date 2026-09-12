@@ -366,3 +366,18 @@
 | DB-P22-105 | 迁移号：V5=DB-P21、V6=DB-P20 已登记，V7=DB-P22；V7 仅依赖 V1～V4 对象，与 V5/V6 合入顺序无耦合 | DB-P21（zcode-db-0912c）、DB-P20（zcode-0912） | 已确认 | SchemaGuard 校验已注册最高版本；三包合入后 fresh 数据库按 V1→V7 顺序应用 |
 
 自检与测试：全仓 mvn -B verify 14 模块 BUILD SUCCESS，486 项中 470 通过、16 环境跳过（真实 MySQL/PostgreSQL/Redis 缺失），0 失败/错误；git diff --check 通过。新增 AdmissionLedgerSchemaV7Test 5 项约束验收；storage-redis 静态复核 SETTLE/RELEASE 幂等守卫无缺陷。未执行：真实数据库升级/并发/崩溃恢复、真实 Redis 并发、归档与留存的运行验证。
+
+## DB-P20 接管交付复核（2026-09-12，数据库执行模型 zcode-db-0912d）
+
+经用户确认原领取（zcode-0912）会话中断、无交付、无远程分支，由 zcode-db-0912d 接管（领取 33a256f，基线 c7b3559；本会话亦持有 DB-P22/V7）。交付 V6 双方言迁移（应用域）并注册 DefaultSchemaMigrator/SchemaContract，ExpectedSchema 产品表 50→54；明细见 DATABASE_PLAN「DB-P20 接管执行记录」。
+
+| 编号 | 影响与建议 | 待确认方 | 状态 | 处理结论 |
+| --- | --- | --- | --- | --- |
+| DB-P20-101 | application_key 新增 replaced_by_key_id/grace_expires_at 与 application_key_operation 幂等操作表（创建 target_key=''），BE-202 轮换代际/宽限/幂等重放的数据库依赖已就绪 | BE-P20（zcode-be-0912b） | 已交付待接线 | 轮换同事务写操作记录，唯一冲突后读原结果并校验 request_hash；宽限上限仍待 BE-P20-002 结论 |
+| DB-P20-102 | application_quota_period/policy_history/quota_operation 三表与 current_period_id/policy_version 指针已就绪并完成既有策略回填（第 1 周期、opening_*=0、已用/预占显式映射）；BE-204 周期快照与预约调整可接线 | BE-P20（zcode-be-0912b） | 已交付待接线 | NOT NULL 收紧与准入/结算写入切换由 BE-P20 在同一批完成，避免空窗；旧周期语义字段 period_start/end 沿用现有列 |
+| DB-P20-103 | budget_reservation/usage_ledger 新增 period_id/policy_version（可空）与 context_origin（存量 LEGACY_UNKNOWN，新写默认 V2，CHECK 限定词汇）；BE-222/225 写入须携带 period_id/policy_version | BE-P22（codex-be-0912）、BE-P20 | 已交付待接线 | Reservation 终态按原 period_id 更新用量，不按当前周期补扣；索引 (application_id,period_id) 支持对账 |
+| DB-P20-104 | audit_log 新增 application_id 并按可证明关系回填（application 自身事件与 application_key 事件）；应用审计读取输出 legacy_partial | BE-P20（zcode-be-0912b，BE-P20-109） | 已交付待接线 | 非应用域事件保持 NULL，禁止模糊匹配文案回填 |
+| DB-P20-105 | DB-205 存量转换完成：constraints_json 仅改写遗留 stream_allowed 键名；同时存在/类型错误行由门禁阻止迁移。MySQL/H2 路径的门禁依赖写入端紧凑 JSON（Jackson 无空格）约定，若未来写入端改变序列化格式需同步门禁谓词 | BE-P20、前端 | 已交付 | 读侧兼容历史键（ApplicationModelConstraint）保留至 FE/BE 契约确认后移除 |
+| DB-P20-106 | H2 兼容性约束登记：迁移脚本不得使用 UPDATE..JOIN 多表形式与 DO 块（迁移器分号切分不识别美元引用）；本迁移已用关联子查询与单语句门禁改写 | DB-P21/P22/P23 后续迁移负责人 | 已确认 | 后续 V9+ 迁移沿用该约定，避免 H2 门禁失败 |
+
+自检与测试：全仓 mvn -B verify 14 模块 BUILD SUCCESS，516 项中 500 通过、16 环境跳过（真实 MySQL/PostgreSQL/Redis 缺失），0 失败/错误；git diff --check 通过。新增 ApplicationQuotaLifecycleV6Test 6 项（约束/回填/转换/门禁）。未执行：真实数据库升级对账、并发结算/轮换/归档、回滚演练。

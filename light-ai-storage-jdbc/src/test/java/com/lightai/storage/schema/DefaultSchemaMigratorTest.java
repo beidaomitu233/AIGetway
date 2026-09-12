@@ -87,6 +87,12 @@ class DefaultSchemaMigratorTest {
             assertThat(resultSet.getString("checksum")).hasSize(64);
             assertThat(resultSet.getBoolean("success")).isTrue();
             assertThat(resultSet.next()).isTrue();
+            assertThat(resultSet.getInt("version")).isEqualTo(6);
+            assertThat(resultSet.getString("description"))
+                    .isEqualTo("application_quota_lifecycle");
+            assertThat(resultSet.getString("checksum")).hasSize(64);
+            assertThat(resultSet.getBoolean("success")).isTrue();
+            assertThat(resultSet.next()).isTrue();
             assertThat(resultSet.getInt("version")).isEqualTo(7);
             assertThat(resultSet.getString("description"))
                     .isEqualTo("admission_ledger_observation_retention");

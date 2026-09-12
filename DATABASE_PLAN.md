@@ -285,3 +285,25 @@ storage-redis 复核：RedisCapacityStore 的 SETTLE/RELEASE Lua 脚本均以 st
 测试环境 Windows / Java 17.0.19 / H2（MySQL 模式）迁移 + 真实仓储。新增 AdmissionLedgerSchemaV7Test（5 项）：状态词汇约束、账本 event_type 默认与 event_key 防重放、Attempt 序号防重、聚合幂等唯一键（同键异币种独立分组）、删除批次唯一与领域词汇约束；DefaultSchemaMigratorTest 同步 V7 历史行断言。全仓 mvn -B verify：14 模块 BUILD SUCCESS，486 项中 470 通过、16 环境跳过（MySQL 2、PostgreSQL 3、Redis 11），0 失败/错误；git diff --check 通过。真实 PostgreSQL/MySQL/Redis 升级、并发与恢复验收未执行，H2 验证不替代真实数据库验收。
 
 DB-221～225 均未达到整项完成标准，不勾选；整包状态以 TASK_STATUS.md 记录为准。
+
+## DB-P20 接管执行记录（2026-09-12，zcode-db-0912d）
+
+负责人 zcode-db-0912d（本会话亦持有 DB-P22，已交付 V7）；经用户确认原领取（zcode-0912）会话中断、无交付、无远程分支，由本负责人接管。领取提交 33a256f，基线 origin/dev c7b3559。独立目录 .worktrees/database-p20-zcode-db-0912d。本轮只修改 storage-jdbc 迁移/注册与执行文档，无前端与 admin/client/runtime/server 生产代码。
+
+交付：单一 V6 迁移（双方言 `V6__application_quota_lifecycle.sql`）按「BE-P20 数据库交付契约」实现应用域五项任务的数据库缺口，并注册 DefaultSchemaMigrator/SchemaContract，ExpectedSchema 产品表 50→54，LATEST_VERSION 保持 8。
+
+| 任务 | 本次交付（DDL+回填） | 未满足验收，保持未勾选 |
+|---|---|---|
+| DB-201 | audit_log 新增 application_id（可空）与 (application_id,created_at,id) 索引；按可证明关系回填（entity_type=application 直接映射、application_key 经密钥表关联，遗留保持 NULL 输出 legacy_partial）；application 补 (status,last_called_at,id) 分页索引；budget_reservation 的 (application_id,status) 索引已由 V7 交付不重复创建；application/application_member 复核（code 唯一、subject 索引已具备） | 真实 PostgreSQL/MySQL 迁移对账、并发更新与归档竞争未执行 |
+| DB-202 | application_key 新增 replaced_by_key_id/grace_expires_at；新建 application_key_operation（唯一 (application_id,operation,target_key,idempotency_key)，创建 target_key 固定空串，result_json 不含 secret）；digest 唯一与 rotation_generation 复核 V2 已有 | 摘要碰撞、到期扫描与双并发轮换需真实环境；BE-202 后端接线待 BE-P20 接续 |
+| DB-203 | 新建 application_quota_period（唯一 (application_id,period_no)，状态 OPEN/CLOSING/CLOSED，opening_* 承接未重置维度）与 application_quota_policy_history（唯一 (application_id,policy_version)，policy_json 固定存策略与周期口径）；application_quota_policy 新增 current_period_id/policy_version 并回填为 1/首周期（NOT NULL 收紧随 BE-P20 写入切换执行，本迁移保持可空）；budget_reservation/usage_ledger 新增 period_id/policy_version（可空，新写由服务保证） | 周期边界、时区、并发版本与多币种需真实环境；BE-204 后端接线待 BE-P20 接续 |
+| DB-204 | quota_adjustment 新增 before/after_policy_version 与 change_json（整体策略变更 dimension=POLICY 时数值列可空）；新建 application_quota_operation（唯一 (application_id,idempotency_key)，扫描索引 (status,effective_at)，状态 SCHEDULED/APPLIED/CONFLICT/FAILED）；原唯一 (application_id,idempotency_key) 复核 V2 已有 | 幂等并发、预约生效与审计关联需真实环境 |
+| DB-205 | application_model_permission.constraints_json 的 stream_allowed→allow_stream 规范键存量转换；同时存在或非布尔值行由门禁阻止迁移（PG 错误消息携带示例 id；MySQL/H2 经 CHECK 门禁表中止，键名文本匹配依赖写入端紧凑 JSON 约定）；constraints_json 复用，规范键 allow_stream/max_output_tokens | 迁移回滚与历史快照只读验收需真实环境 |
+
+回填口径：仅为每个既有策略建立第 1 周期（period_no=1、status=OPEN、opening_*=0，已用/预占显式映射到当前周期）、策略历史第 1 版与 current_period_id/policy_version=1 指针；语句幂等（NOT EXISTS 守卫），已结束请求按契约不伪造历史（context_origin=LEGACY_UNKNOWN）。
+
+迁移号协调：V5=DB-P21、V7=DB-P22、V8=DB-P23 已交付；V6 仅依赖 V1～V4 对象，与 V5/V7/V8 无顺序耦合（SchemaGuard 校验已注册最高版本 8）。H2 兼容性约束：MySQL 脚本不使用 UPDATE..JOIN 多表形式（H2 不支持，已用关联子查询改写）；DB-205 门禁在 MySQL/H2 路径以临时门禁表 CHECK 中止。
+
+测试环境 Windows / Java 17.0.19 / H2（MySQL 模式）迁移 + 真实仓储。新增 ApplicationQuotaLifecycleV6Test（6 项）：密钥操作幂等唯一、代际/宽限列、周期与额度操作唯一及状态词汇、context_origin 默认 V2 与词汇约束、DB-205 转换幂等且仅改写遗留行、门禁拦截同时存在与类型错误行、既有策略回填（周期/指针/历史与重复回填幂等）；DefaultSchemaMigratorTest 同步 V6 历史行断言。全仓 mvn -B verify：14 模块 BUILD SUCCESS，516 项中 500 通过、16 环境跳过（MySQL 2、PostgreSQL 3、Redis 11），0 失败/错误；git diff --check 通过。真实 PostgreSQL/MySQL/Redis 升级、并发与回滚验收未执行，H2 验证不替代真实数据库验收。
+
+DB-201～205 均未达到整项完成标准，不勾选；整包状态以 TASK_STATUS.md 记录为准。
