@@ -97,7 +97,7 @@ public class TraceService {
                 || scopeApplications.contains(application);
     }
 
-    static List<String> scopeApplications(RequestContext context) {
+    public static List<String> scopeApplications(RequestContext context) {
         return context == null || context.authContext() == null
                 ? List.of() : context.authContext().applicationScope();
     }
@@ -131,8 +131,8 @@ public class TraceService {
                 row.status(), anomalous, row.attemptCount(), row.retryCount(),
                 row.credentialFailoverCount(), row.fallbackCount(), row.queuedMs(),
                 row.firstTokenMs() == null ? null : row.firstTokenMs().longValue(),
-                totalMs, row.usageSource(), row.totalTokens(),
-                noCost ? null : totalCost, row.currency(), row.errorCode());
+                totalMs, row.usageSource(), row.inputTokens(), row.outputTokens(),
+                row.totalTokens(), noCost ? null : totalCost, row.currency(), row.errorCode());
     }
 
     private OffsetDateTime now() {

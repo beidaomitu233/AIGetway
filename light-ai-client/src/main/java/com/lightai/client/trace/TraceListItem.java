@@ -32,6 +32,8 @@ public record TraceListItem(
         Long firstTokenMs,
         Long totalMs,
         String usageSource,
+        long inputTokens,
+        long outputTokens,
         long totalTokens,
         BigDecimal totalCost,
         String currency,

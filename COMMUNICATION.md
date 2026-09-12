@@ -336,3 +336,33 @@
 | DB-P23-104 | 数据库执行模型/zcode-db-0912c | request_trace/request_attempt 更名与 alias_id 系旧列名统一涉及服务端读取代码 | DB-P21-008、BE-231 | 属跨包协调项：更名需与 BE-P22/BE-P23 观测代码同批切换，不由 DB-P23 单独迁移 | 观测包负责人（zcode-db-0912d/BE-P23 后端） | 待确认 | 建议由 DB-P22 的 V7 或后续协调迁移承载 |
 | DB-P23-105 | 数据库执行模型/zcode-db-0912c | runtime_setting/retention_policy 新表设计 | BE-234 | BE-P23 后端设置/留存接口契约尚未冻结（后端包进行中），不冒进建表 | BE-P23 后端负责人 | 待确认 | 契约冻结后由后续迁移承载 |
 | DB-P23-106 | 数据库执行模型/zcode-db-0912c | 迁移号合并顺序与版本号可能交错（V8 先于 V6/V7 合入时） | DefaultSchemaMigrator | apply 顺序以代码注册顺序为准、历史表逐版本校验值防重放；如 V6/V7 后合入，请在注册列表中按版本序插入 | DB-P20/DB-P22 负责人 | 待确认 | SchemaGuard 以 MAX(version)=LATEST 校验，功能不受影响 |
+
+合并补充（V7/V8 顺序收敛）：DB-P22 的 V7 与 BE-P23 首批交付已先于本包合入 origin/dev，本包 V8 已按"注册列表按版本序插入"完成合并解冲突（V1→V5→V7→V8，LATEST_VERSION=8，历史行断言同步）。同时对齐 BE-P23 首批登记的两项请求：BE-P23-002（runtime_setting）与 BE-P23-003（publish_record.validation_id 可空/操作列）由本负责人在设置/发布幂等列契约冻结后以 V9 承载，本包 V8 不冒进；DB-P22-104 已在 V7 落地 trace.application_id/application_key_id，DB-P23-104 中相关列名统一项随之部分收敛。
+
+## BE-P23 首批交付登记（2026-09-12，后端执行模型 zcode-be-0912）
+
+实现提交 028e050，已合并最新 origin/dev（含 BE-P20/P21 接管交付、DB-P21 V5 迁移）后全仓复验通过（14 模块 BUILD SUCCESS，502 项 486 通过、16 环境跳过、0 失败）。交付范围与未验收项见 BACKEND_PLAN「BE-P23 本次执行记录」。以下为跨包契约与待确认项。
+
+| 序号 | 提出方 | 状态 | 登记内容与建议 |
+|---|---|---|---|
+| BE-P23-001 | 后端执行模型 zcode-be-0912 | 待确认 | 观测详情读路径已按「当前已发布 schema」适配并修正潜在缺陷：JdbcTraceDetailRepository 原查询引用迁移中不存在的列（recovery_decision 缺 source_attempt_id/action/scheduled_delay_ms/target_route_candidate_id/target_channel_credential_id/retries_used/credential_failovers_used/fallbacks_used/remaining_timeout_ms；queue_entry 缺 alias_id/sequence/blocking_policy_ids/estimated_tokens/acquired_at/ended_at/wake_reason/error_code；circuit_event 缺 trigger_trace_id；credential_secret 已在 V4 折叠），导致真实迁移库上 GET /admin/traces/{id} 必然 503（旧缺陷，无既有测试覆盖）。本轮改为旧列映射 + 空值/空集回退 + 掩码改读 channel_credential；建议 DB-222 迁移补齐上述扩展列后由本负责人恢复完整读取。补齐前恢复计数与来源 Attempt 关联为空值，运行时尚未持久化恢复决策/队列条目，空集属正常状态，不虚构数据。 |
+| BE-P23-002 | 后端执行模型 zcode-be-0912 | 待确认 | PRD 9.10 的预算告警阈值与企业身份适配设置缺 runtime_setting 对应列；/admin/settings 未虚设字段。建议 DB-P23 新增迁移（runtime_setting 或 runtime_config 扩展列）后由本负责人补齐设置项与校验。 |
+| BE-P23-003 | 后端执行模型 zcode-be-0912 | 待确认 | 回滚幂等桥接：publish_record.validation_id NOT NULL 且 UNIQUE，回滚记录以确定性 UUID validation 行（键=ROLLBACK:目标快照:幂等键，content_checksum=目标快照摘要，7 天保留）桥接复用既有状态机与 findByValidation 幂等重放。建议 DB-P23 迁移把 validation_id 改可空（或新增 operation 列）并持久化发布/回滚幂等键；收敛后同键不同目标可升级为 IDEMPOTENCY_KEY_CONFLICT/409。 |
+| BE-P23-004 | 后端执行模型 zcode-be-0912 | 执行中 | V2 契约口径：request_id 与既有 trace.trace_id 同值（/v1 网关 X-Request-Id），/admin/calls DTO 以 request_id 命名；过渡路径 /admin/traces*、/admin/usage/trends、/admin/usage/groups、/admin/runtime-config 暂保留（同口径复用或旧字段），FE-P22/P23 切换 V2 契约后由本负责人统一移除，不长期并存；/admin/calls/export CSV 列沿用 trace_id 命名，V2 列名待 FE-P22-001 契约确认后同批切换。响应 DB-P22-104：V7 新增 trace.application_id/application_key_id UUID 维度，/admin/calls 列表/详情 DTO 当前沿用 application_code（名称列）展示，UUID 维度与历史回填策略将随 FE-P22 联调同批加入 DTO，不强制回填历史。 |
+| BE-P23-005 | 后端执行模型 zcode-be-0912 | 待确认 | /admin/usage/adjustments 现含两类事实：quota_adjustment（人工调整/重置/续期）与 usage_ledger 账本事件。已随 DB-P22 V7 升级为直接读取 usage_ledger.event_type 列（当前写入方经默认值落 SETTLE；缺列历史数据回退 event_key 前缀解析）。请求预占/释放/周期重置事件待 BE-P20-004 与 DB-223 落地后随账本自然出现；预占/释放/重置/人工调整是否统一入账本（DB-P22-103）属写入路径决策，建议保持 quota_adjustment 与账本并存、由 adjustments 端点合并呈现，待确认。跨应用合并流水分页窗口 5000 行/分支，超限明确 400 提示缩小范围；聚合延迟口径与导出列待 FE-P22-002 确认。summary 的预算使用率/单位请求成本未入本轮（跨应用预算口径需契约）。 |
+| BE-P23-006 | 后端执行模型 zcode-be-0912 | 待确认 | 关联 BE-P20-109/110：/admin/applications/{id}/audit 所需应用审计读取端口与 result=DENIED 审计枚举涉及本包审计域；本轮未改 audit_log 读路径（/admin/audit-logs 既有能力维持），待 DB-201 application_id 列与枚举契约确认后由本负责人统一补齐。 |
+
+协作提示：本轮起后端会话共享 TASK_STATUS 负责人标识时，须遵守 BE-P23-COEXIST-001 结论——同一负责人标识只允许一个在席会话；后到会话让出并将替代实现存档至 .worktrees/be-p23-alt-impl/（不入 Git）。本负责人交付未引用该存档实现。
+## DB-P22 接管交付复核（2026-09-12，数据库执行模型 zcode-db-0912d）
+
+经用户确认原领取（zcode-db-0912b）会话中断、无交付、无远程分支，由 zcode-db-0912d 接管（领取 c3e2e6f，基线 1d210b5）。交付 V7 双方言迁移（准入/账本/观测/留存域）并注册 DefaultSchemaMigrator，LATEST_VERSION 升至 7；明细见 DATABASE_PLAN「DB-P22 接管执行记录」。
+
+| 编号 | 影响与建议 | 待确认方 | 状态 | 处理结论 |
+| --- | --- | --- | --- | --- |
+| DB-P22-101 | usage_aggregate 此前缺少聚合幂等唯一键，JdbcUsageAggregateRepository 的 ON CONFLICT/ON DUPLICATE (granularity, bucket_start, dimension_key, currency) 在真实 PostgreSQL 上会因无唯一约束失败、MySQL/H2 上静默重复；V7 已补唯一索引 | BE-P22（codex-be-0912）、BE-P23（zcode-be-0912） | 已交付待验收 | 后端聚合/观测联调可直接依赖该键；已有聚合行的旧环境升级前需先去重 |
+| DB-P22-102 | attempt 新增 (trace_id, sequence) 唯一约束，运行时 Attempt 写入必须保证同 trace 内 sequence 递增不重复 | BE-P22、BE-P23 | 已交付待验收 | 如后端存在补写历史 Attempt 场景需改为显式新序号，不得复用旧序号 |
+| DB-P22-103 | usage_ledger 新增 event_type（默认 SETTLE）；预占/释放/周期重置/人工调整事件写入账本属后端行为变更 | BE-P22、BE-P23 | 待确认 | 当前周期重置与人工调整仍写 quota_adjustment，是否统一入账本由后端确认后再改写入路径 |
+| DB-P22-104 | trace 新增 application_id/application_key_id UUID 维度（application 名称列保留），需要运行时写入路径回填 | BE-P22、BE-P23 | 待确认 | 名称列与 UUID 列并存，不强制回填历史；回填策略由 BE-P23 观测改造决定 |
+| DB-P22-105 | 迁移号：V5=DB-P21、V6=DB-P20 已登记，V7=DB-P22；V7 仅依赖 V1～V4 对象，与 V5/V6 合入顺序无耦合 | DB-P21（zcode-db-0912c）、DB-P20（zcode-0912） | 已确认 | SchemaGuard 校验已注册最高版本；三包合入后 fresh 数据库按 V1→V7 顺序应用 |
+
+自检与测试：全仓 mvn -B verify 14 模块 BUILD SUCCESS，486 项中 470 通过、16 环境跳过（真实 MySQL/PostgreSQL/Redis 缺失），0 失败/错误；git diff --check 通过。新增 AdmissionLedgerSchemaV7Test 5 项约束验收；storage-redis 静态复核 SETTLE/RELEASE 幂等守卫无缺陷。未执行：真实数据库升级/并发/崩溃恢复、真实 Redis 并发、归档与留存的运行验证。

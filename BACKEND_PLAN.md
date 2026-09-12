@@ -370,3 +370,21 @@ COMMUNICATION.md 已登记 BE-P21-001～006，均待确认。BE-211～215 均未
 测试环境 Windows / Java 17.0.19 / 项目 Maven 与 JUnit5、MockMvc、H2 迁移、真实 JDBC/服务/AES-GCM。全仓 mvn -B verify：14 模块 BUILD SUCCESS，471 项中 455 通过、16 环境跳过（MySQL 2、PostgreSQL 3、Redis 11，缺 LAI_IT_MYSQL_URL/LAI_IT_DB_URL/LAI_IT_REDIS_URI），0 失败/错误；git diff --check 通过。真实 MySQL/PostgreSQL/Redis、真实 Provider、企业身份、前后端 E2E 与性能未执行，H2 验证不替代真实数据库验收。
 
 BE-211～215 均未达到整项完成标准，不勾选；已交付子项随本轮提交进入远程 dev，整包状态以 TASK_STATUS.md 记录为准。
+
+## BE-P23 本次执行记录（2026-09-12）
+
+负责人：后端执行模型 zcode-be-0912。分支：feature/backend-p23-zcode-be-0912（独立 worktree .worktrees/backend-p23-zcode-be-0912）。实现提交 028e050，基于 origin/dev（含 BE-P20/P21 接管交付与 DB-P21 V5 迁移）合并后复验。本轮只修改后端与执行文档，无前端修改、无新增迁移；详情读路径对已发布 schema 的适配属查询层修复，不改表结构。以下为已验证子项，不等同 BE-231～235 全量验收；主任务均保持未勾选，差异登记 COMMUNICATION BE-P23-001～006。
+
+| 任务 | 本次交付 | 尚未满足的验收 |
+|---|---|---|
+| BE-231 | 新增 /admin/calls、/admin/calls/{requestId}、/admin/calls/export（V2 契约 DTO，request_id=既有 trace_id 同值）；复用既有筛选白名单、应用数据范围、凭证掩码与诊断权限；详情时间线覆盖准入/路由/Attempt/恢复/流提交/结算/终态；默认无正文 | 真实运行数据与 FE-P22 联调；详情子表扩展列（恢复计数/来源 Attempt）待 DB-222 迁移；导出 CSV 列名仍为 trace_id，V2 列名切换待契约确认 |
+| BE-232 | 新增 /admin/usage/adjustments（quota_adjustment + usage_ledger 单 SQL UNION ALL 合并，按 occurred_at desc 统一排序，跨应用流水以 application.code 落身份范围，分页窗口 5000 行上限）；V2 路由 trend/breakdown（与 trends/groups 同口径复用） | 聚合延迟与导出契约待 FE-P22-002 确认；预算使用率与单位请求成本未入 summary（跨应用口径待契约）；预占/释放/重置账本事件待 BE-P20-004/DB-223 落地 |
+| BE-233 | 新增 /admin/config-releases 列表/详情/实例结果/发布/回滚；回滚生成新 PREPARING 记录并完整复用准备→激活→实例确认状态机（reactivate 支持 SUPERSEDED 目标，失败保留旧活动版本，幂等键经确定性 validation 行桥接） | 快照校验、实例失败与回滚收敛须真实多实例验收；validation_id NOT NULL 的桥接需 DB-P23 迁移收敛（BE-P23-003）；同键不同目标暂视为新请求 |
+| BE-234 | 新增 /admin/settings GET/PUT 与 retention-impact（复用 RuntimeConfigAdminService：默认时区、日志留存、诊断采样、网络目标策略、运行默认值；修改走版本乐观锁+审计） | 预算告警阈值与企业身份适配设置缺 runtime_setting 扩展列（BE-P23-002），未虚设字段；真实环境验收待门禁 |
+| BE-235 | 全仓 mvn -B verify 门禁（见下）；13 项新测试覆盖 request_id 贯穿、四角色矩阵、范围隔离、404/403/409、幂等重放、回滚状态机收敛、多源合并排序 | 真实 PostgreSQL/MySQL/Redis、真实 Provider、企业身份与首调 E2E 未执行，不勾选 |
+
+新增/变更主要文件：admin 下 calls/CallObservationController+Service、usage/UsageAdjustmentService、publish/ConfigReleaseController、settings/SettingsController；client 下 calls/CallResults、usage/UsageResults（新增流水 DTO）、publish/ConfigRollbackCommand；storage-jdbc 下 trace/JdbcUsageAdjustmentRepository、trace/JdbcTraceDetailRepository（详情读路径按已发布 schema 适配：recovery_decision/queue_entry 旧列映射、circuit_event 无 trigger 关联返回空集、凭证掩码改读 channel_credential）、publish/ConfigSnapshotRepository+Jdbc（新增 reactivate）；admin/trace/TraceService（scopeApplications 改公共）、TraceDetailService、TimelineBuilder（空安全）；TraceListItem 增补 input_tokens/output_tokens；LightAiAdminAutoConfiguration 装配。
+
+测试环境 Windows / Temurin Java 17.0.11 / 项目 Maven（IntelliJ Maven 3.9.6）与 JUnit5、MockMvc、H2 迁移、真实 JDBC/服务。新增 13 项测试：CallObservationApiTest（3）、UsageAdjustmentApiTest（3）、ConfigReleaseRollbackTest（5）、SettingsApiTest（2）。合并 origin/dev 后全仓 mvn -B verify：14 模块 BUILD SUCCESS，502 项中 486 通过、16 环境跳过（Redis 11、Provider 5，缺 LAI_IT_REDIS_URI 等），0 失败/错误；git diff --check 通过。真实 MySQL/PostgreSQL/Redis、真实 Provider、企业身份、前后端 E2E 与性能未执行，H2 验证不替代真实数据库验收。
+
+BE-231～235 均未达到整项完成标准，不勾选；已交付子项随本轮提交进入远程 dev，整包状态以 TASK_STATUS.md 记录为准。并行会话冲突已按 COMMUNICATION BE-P23-COEXIST-001 处理：后到会话让出，本负责人保留交付。

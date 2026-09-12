@@ -58,24 +58,29 @@ public class JdbcTraceDetailRepository extends AbstractJdbcRepository {
                 dl.readOffsetDateTime(rs, "created_at")));
     }
 
+    /**
+     * 队列读取：当前已发布迁移的 queue_entry 只有 queue_position/expires_at/dequeued_at
+     * 等旧列（BE-P23-001），alias/blocking/estimate/wake 等扩展字段暂以空值映射，
+     * 待 DB-222 迁移补齐后恢复完整读取；运行时尚未持久化队列条目，空集合属正常状态。
+     */
     public List<QueueEntryRow> queueEntries(Connection connection, String traceId) {
-        String sql = "SELECT id, trace_id, alias_id, sequence, blocking_policy_ids, estimated_tokens, "
-                + "status, enqueued_at, deadline_at, acquired_at, ended_at, wake_reason, error_code "
-                + "FROM " + qualify(connection, "queue_entry") + " WHERE trace_id = ? ORDER BY sequence ASC";
+        String sql = "SELECT id, trace_id, queue_position, status, enqueued_at, expires_at, "
+                + "dequeued_at FROM " + qualify(connection, "queue_entry")
+                + " WHERE trace_id = ? ORDER BY queue_position ASC";
         return query(connection, sql, traceId, (rs, dl) -> new QueueEntryRow(
                 dl.readUuid(rs, "id"),
                 rs.getString("trace_id"),
-                dl.readUuid(rs, "alias_id"),
-                rs.getLong("sequence"),
-                fromJsonList(rs.getString("blocking_policy_ids")),
-                rs.getLong("estimated_tokens"),
+                null,
+                rs.getLong("queue_position"),
+                List.of(),
+                0L,
                 rs.getString("status"),
                 dl.readOffsetDateTime(rs, "enqueued_at"),
-                dl.readOffsetDateTime(rs, "deadline_at"),
-                dl.readOffsetDateTime(rs, "acquired_at"),
-                dl.readOffsetDateTime(rs, "ended_at"),
-                rs.getString("wake_reason"),
-                rs.getString("error_code")));
+                dl.readOffsetDateTime(rs, "expires_at"),
+                null,
+                dl.readOffsetDateTime(rs, "dequeued_at"),
+                null,
+                null));
     }
 
     /** 预占与其 item 的 policy_ids 一次装配。 */
@@ -98,8 +103,10 @@ public class JdbcTraceDetailRepository extends AbstractJdbcRepository {
             return List.of();
         }
         Map<UUID, List<String>> policyIds = new HashMap<>();
+        // 已发布迁移的 capacity_reservation_item 无 policy_ids 列（BE-P23-001），
+        // 暂按空集合装配，待 DB-222 迁移补齐后恢复策略链路。
         StringBuilder itemSql = new StringBuilder("SELECT id, reservation_id, scope_id, scope_type, "
-                + "policy_ids FROM ").append(qualify(connection, "capacity_reservation_item"))
+                + "'[]' AS policy_ids FROM ").append(qualify(connection, "capacity_reservation_item"))
                 .append(" WHERE reservation_id IN (");
         List<Object> params = new ArrayList<>();
         for (ReservationRow row : rows) {
@@ -126,42 +133,39 @@ public class JdbcTraceDetailRepository extends AbstractJdbcRepository {
     public record ReservationWithItems(ReservationRow reservation, List<String> policyIds) {
     }
 
+    /**
+     * 恢复决策读取：当前已发布迁移只有 failed_attempt_sequence/decision_type/
+     * target_candidate_id/target_credential_id 列（BE-P23-001），先按现映射返回，
+     * action 取 decision_type，关联 Attempt 与恢复计数等扩展列待 DB-222 迁移补齐；
+     * 运行时尚未持久化恢复决策，历史与现网数据为空集合属正常状态。
+     */
     public List<RecoveryDecisionRow> recoveryDecisions(Connection connection, String traceId) {
-        String sql = "SELECT id, trace_id, sequence, source_attempt_id, action, reason_code, "
-                + "scheduled_delay_ms, target_route_candidate_id, target_channel_credential_id, retries_used, "
-                + "credential_failovers_used, fallbacks_used, remaining_timeout_ms, created_at FROM "
+        String sql = "SELECT id, trace_id, sequence, failed_attempt_sequence, decision_type, "
+                + "reason_code, target_candidate_id, target_credential_id, created_at FROM "
                 + qualify(connection, "recovery_decision") + " WHERE trace_id = ? ORDER BY sequence ASC";
         return query(connection, sql, traceId, (rs, dl) -> new RecoveryDecisionRow(
                 dl.readUuid(rs, "id"),
                 rs.getString("trace_id"),
                 rs.getInt("sequence"),
-                dl.readUuid(rs, "source_attempt_id"),
-                rs.getString("action"),
+                null,
+                rs.getString("decision_type"),
                 rs.getString("reason_code"),
-                rs.getInt("scheduled_delay_ms"),
-                dl.readUuid(rs, "target_route_candidate_id"),
-                dl.readUuid(rs, "target_channel_credential_id"),
-                rs.getInt("retries_used"),
-                rs.getInt("credential_failovers_used"),
-                rs.getInt("fallbacks_used"),
-                rs.getInt("remaining_timeout_ms"),
+                0,
+                dl.readUuid(rs, "target_candidate_id"),
+                dl.readUuid(rs, "target_credential_id"),
+                0,
+                0,
+                0,
+                0,
                 dl.readOffsetDateTime(rs, "created_at")));
     }
 
-    /** 仅读取 trigger_trace_id 等于本 Trace 的事件（FE-027）。 */
+    /**
+     * 熔断事件读取：已发布迁移的 circuit_event 无 trigger_trace_id 关联列（BE-P23-001），
+     * 无法按 Trace 过滤；在 DB-222 迁移补齐关联列前返回空集合，不虚构造事件。
+     */
     public List<CircuitEventRow> circuitEvents(Connection connection, String traceId) {
-        String sql = "SELECT id, circuit_id, from_state, to_state, trigger_type, error_code, reason, "
-                + "occurred_at FROM " + qualify(connection, "circuit_event") + " "
-                + "WHERE trigger_trace_id = ? ORDER BY occurred_at ASC, created_at ASC";
-        return query(connection, sql, traceId, (rs, dl) -> new CircuitEventRow(
-                dl.readUuid(rs, "id"),
-                dl.readUuid(rs, "circuit_id"),
-                rs.getString("from_state"),
-                rs.getString("to_state"),
-                rs.getString("trigger_type"),
-                rs.getString("error_code"),
-                rs.getString("reason"),
-                dl.readOffsetDateTime(rs, "occurred_at")));
+        return List.of();
     }
 
     public Optional<ContentSampleRow> contentSample(Connection connection, String traceId) {
@@ -191,8 +195,9 @@ public class JdbcTraceDetailRepository extends AbstractJdbcRepository {
             return Map.of();
         }
         DatabaseDialect d = dialect(connection);
-        StringBuilder sql = new StringBuilder("SELECT channel_credential_id, masked_value FROM ")
-                .append(qualify(connection, "credential_secret")).append(" WHERE channel_credential_id IN (")
+        // credential_secret 已在 V4 折叠进 channel_credential，掩码改从新表读取
+        StringBuilder sql = new StringBuilder("SELECT id, masked_value FROM ")
+                .append(qualify(connection, "channel_credential")).append(" WHERE id IN (")
                 .append(inPlaceholders(channelCredentialIds.size()))
                 .append(")");
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
@@ -203,7 +208,7 @@ public class JdbcTraceDetailRepository extends AbstractJdbcRepository {
             try (ResultSet rs = statement.executeQuery()) {
                 Map<UUID, String> masks = new HashMap<>();
                 while (rs.next()) {
-                    masks.put(d.readUuid(rs, "channel_credential_id"), rs.getString("masked_value"));
+                    masks.put(d.readUuid(rs, "id"), rs.getString("masked_value"));
                 }
                 return Map.copyOf(masks);
             }

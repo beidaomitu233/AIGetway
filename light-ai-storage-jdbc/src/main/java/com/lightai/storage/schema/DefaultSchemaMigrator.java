@@ -58,6 +58,12 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
     private static final Migration MYSQL_VIRTUAL_MODEL_ROUTES_AND_SYNC = new Migration(
             5, "virtual_model_routes_and_sync",
             "db/migration/mysql/V5__virtual_model_routes_and_sync.sql");
+    private static final Migration POSTGRES_ADMISSION_LEDGER_OBSERVATION = new Migration(
+            7, "admission_ledger_observation_retention",
+            "db/migration/postgres/V7__admission_ledger_observation_retention.sql");
+    private static final Migration MYSQL_ADMISSION_LEDGER_OBSERVATION = new Migration(
+            7, "admission_ledger_observation_retention",
+            "db/migration/mysql/V7__admission_ledger_observation_retention.sql");
     private static final Migration POSTGRES_AUDIT_AND_INSTANCE_GATE_INDEXES = new Migration(
             8, "audit_and_instance_gate_indexes",
             "db/migration/postgres/V8__audit_and_instance_gate_indexes.sql");
@@ -89,6 +95,7 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
                     apply(connection, MYSQL_APPLICATION_KEY_MODEL_SCOPE, h2);
                     apply(connection, MYSQL_RESOURCE_DOMAIN_CHANNELS, h2);
                     apply(connection, MYSQL_VIRTUAL_MODEL_ROUTES_AND_SYNC, h2);
+                    apply(connection, MYSQL_ADMISSION_LEDGER_OBSERVATION, h2);
                     apply(connection, MYSQL_AUDIT_AND_INSTANCE_GATE_INDEXES, h2);
                 } else {
                     apply(connection, POSTGRES_BASELINE, h2);
@@ -96,6 +103,7 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
                     apply(connection, POSTGRES_APPLICATION_KEY_MODEL_SCOPE, h2);
                     apply(connection, POSTGRES_RESOURCE_DOMAIN_CHANNELS, h2);
                     apply(connection, POSTGRES_VIRTUAL_MODEL_ROUTES_AND_SYNC, h2);
+                    apply(connection, POSTGRES_ADMISSION_LEDGER_OBSERVATION, h2);
                     apply(connection, POSTGRES_AUDIT_AND_INSTANCE_GATE_INDEXES, h2);
                 }
                 if (dialect.databaseType() == DatabaseType.POSTGRESQL) {

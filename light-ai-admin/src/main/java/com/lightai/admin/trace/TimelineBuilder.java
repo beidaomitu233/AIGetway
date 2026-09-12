@@ -83,7 +83,9 @@ public final class TimelineBuilder {
         for (RecoveryDecisionRow recovery : recoveryDecisions) {
             items.add(new TraceTimelineItem("RECOVERY_DECIDED:" + recovery.id(), "RECOVERY_DECIDED",
                     recovery.createdAt(), recovery.id().toString(), (long) recovery.sequence(),
-                    recovery.sourceAttemptId().toString(), recovery.reasonCode()));
+                    recovery.sourceAttemptId() == null ? null
+                            : recovery.sourceAttemptId().toString(),
+                    recovery.reasonCode()));
         }
 
         for (CircuitEventRow event : circuitEvents) {

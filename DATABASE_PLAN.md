@@ -263,3 +263,25 @@ JSON 字段必须给出稳定 schema、最大长度和脱敏要求。MySQL 5.7 �
 | DB-235 数据库交付门禁 | 门禁现状：SchemaGuard 校验表清单/列契约/迁移版本（LATEST_VERSION=8）；ExpectedSchema 49 表；无明文密钥（密钥均为 BYTEA 密文/摘要列）；全表扫描热点经 V8 审计索引消除；迁移历史校验值防篡改 | 门禁检查项与结果记入本表，真实数据库版本（PG/MySQL 5.7/8.0）报告待环境 |
 
 边界与协调：request_trace/request_attempt 更名与 DB-P21-008 移交的 trace.alias_id、usage_aggregate.alias_id、runtime_config.default_alias_id 等旧列名统一，涉及 BE-P22/BE-P23 已交付服务端读取代码（JdbcTraceStore 等），按包边界不由 DB-P23 单独执行，待与观测包负责人协调迁移号与代码同批切换；runtime_setting/retention_policy 新表等待 BE-P23 后端设置/留存契约确认后由后续迁移承载，不在 V8 冒进建表。
+
+## DB-P22 接管执行记录（2026-09-12，zcode-db-0912d）
+
+负责人 zcode-db-0912d；经用户确认原领取（zcode-db-0912b）会话中断、无交付、无远程分支，由本负责人接管。领取提交 c3e2e6f，基线 origin/dev 1d210b5。独立目录 .worktrees/database-p22-zcode-db-0912d。本轮只修改 storage-jdbc 迁移/注册与执行文档，无前端与 admin/client/runtime/server 服务代码。
+
+交付：单一 V7 迁移（双方言 `V7__admission_ledger_observation_retention.sql`）覆盖五项任务的数据库缺口，并在 DefaultSchemaMigrator 双方言注册、LATEST_VERSION 升至 7。
+
+| 任务 | 本次交付（DDL） | 未满足验收，保持未勾选 |
+|---|---|---|
+| DB-221 | budget_reservation 状态词汇约束 ACTIVE/SETTLED/RELEASED/EXPIRED；新增 (application_id, status) 索引。request_id 唯一与过期回收索引 V2 已有，终态幂等由仓储 WHERE status='ACTIVE' 守卫 | 并发结算/释放/过期与进程崩溃恢复需真实 PostgreSQL/MySQL 验证 |
+| DB-222 | trace 新增 application_id/application_key_id（UUID 维度，application 名称列保留）及查询索引；attempt 增加 (trace_id, sequence) 唯一约束防序号重复 | 策略/快照/价格/流提交/用量来源字段 V1 已有（config_snapshot_no、response_committed、usage_source、价格列）；剩余验收需 BE-P23 V2 链路字段契约确认后对齐 |
+| DB-223 | usage_ledger 新增 event_type（默认 SETTLE，支持 RESERVE/SETTLE/RELEASE/PERIOD_RESET/ADJUSTMENT 扩展）；新增 (event_type, created_at)、(channel_id, created_at) 索引；event_key 唯一 V2 已有 | 事件重放、多币种、ESTIMATED→ACTUAL 的真实环境并发验证 |
+| DB-224 | 修复聚合幂等缺陷：usage_aggregate 此前无唯一键而 JdbcUsageAggregateRepository 的 ON CONFLICT/ON DUPLICATE 依赖 (granularity, bucket_start, dimension_key, currency)，本迁移补该唯一索引；新增 application_key_id 维度列与 application/channel/model 时间桶索引 | 已有真实环境存在重复聚合行时需先去重再加唯一键（当前无已验收环境）；账本重算对账与大范围分页验证待真实库 |
+| DB-225 | 新建 retention_deletion_batch 删除批次表（domain+cutoff_at 唯一实现批次幂等，domain/status 词汇约束）；留存策略口径沿用 runtime_config 各 retention_days 字段，影响报告沿用 retention_impact 表，不重复建表 | 边界时间、失败恢复、归档一致性及不长时间锁表需真实环境验证 |
+
+storage-redis 复核：RedisCapacityStore 的 SETTLE/RELEASE Lua 脚本均以 status!='ACTIVE' 返回 0 守卫终态，配合 EXPIRE/ZREM 清理，静态语义满足单次释放与幂等要求，未发现缺陷；真实 Redis 并发验收保持未勾选（缺 LAI_IT_REDIS_URI）。
+
+迁移号协调：V5=DB-P21、V6=DB-P20 均已登记占用；V7 仅依赖 V1～V4 对象，与 V5/V6 合入顺序无耦合（SchemaGuard 按已注册最高版本校验）。MySQL DDL 隐式提交的失败重跑风险与 V4 惯例一致，已在脚本头注明。
+
+测试环境 Windows / Java 17.0.19 / H2（MySQL 模式）迁移 + 真实仓储。新增 AdmissionLedgerSchemaV7Test（5 项）：状态词汇约束、账本 event_type 默认与 event_key 防重放、Attempt 序号防重、聚合幂等唯一键（同键异币种独立分组）、删除批次唯一与领域词汇约束；DefaultSchemaMigratorTest 同步 V7 历史行断言。全仓 mvn -B verify：14 模块 BUILD SUCCESS，486 项中 470 通过、16 环境跳过（MySQL 2、PostgreSQL 3、Redis 11），0 失败/错误；git diff --check 通过。真实 PostgreSQL/MySQL/Redis 升级、并发与恢复验收未执行，H2 验证不替代真实数据库验收。
+
+DB-221～225 均未达到整项完成标准，不勾选；整包状态以 TASK_STATUS.md 记录为准。

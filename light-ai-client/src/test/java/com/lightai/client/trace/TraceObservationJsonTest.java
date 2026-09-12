@@ -19,7 +19,7 @@ class TraceObservationJsonTest {
                 "trace-1", OffsetDateTime.parse("2026-09-06T00:00:00Z"), "EMBEDDED",
                 "standalone-key", "app-a", "proj", "tenant", "alias-x",
                 "provider-b", "model-b", true, "SUCCEEDED", false,
-                2, 1, 0, 1, 120L, 800L, 9000L, "MIXED", 300L,
+                2, 1, 0, 1, 120L, 800L, 9000L, "MIXED", 100L, 200L, 300L,
                 new BigDecimal("0.003"), "USD", null);
         String json = ProtocolJson.protocol().writeValueAsString(item);
         JsonNode node = ProtocolJson.protocol().readTree(json);

@@ -19,5 +19,8 @@ public interface ConfigSnapshotRepository {
 
     void activate(Connection connection, long targetSnapshotNo);
 
+    /** 回滚激活（BE-233）：把 SUPERSEDED 的历史快照重新置为 ACTIVE；单一活动版本由事务维护。 */
+    void reactivate(Connection connection, long targetSnapshotNo);
+
     void transitionStatus(Connection connection, long snapshotNo, String newStatus);
 }

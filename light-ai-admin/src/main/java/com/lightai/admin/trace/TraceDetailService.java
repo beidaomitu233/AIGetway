@@ -209,7 +209,8 @@ public class TraceDetailService {
                         r.reservation().settledAt()))
                 .toList();
         List<RecoveryDecisionItem> recoveries = recoveryRows.stream().map(r -> new RecoveryDecisionItem(
-                r.sequence(), r.sourceAttemptId().toString(), r.action(), r.reasonCode(),
+                r.sequence(), r.sourceAttemptId() == null ? null : r.sourceAttemptId().toString(),
+                r.action(), r.reasonCode(),
                 r.scheduledDelayMs(), idOrNull(r.targetRouteCandidateId()),
                 idOrNull(r.targetCredentialId()), r.retriesUsed(), r.credentialFailoversUsed(),
                 r.fallbacksUsed(), r.remainingTimeoutMs(), r.createdAt())).toList();
