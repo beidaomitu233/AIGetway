@@ -113,7 +113,7 @@ Spring Boot Starter —— 全部 SUCCESS
 
 | 项 | 状态 |
 |---|---|
-| 代码提交 | fix(fullstack): FS-P20-001 网关 stream 缺省解析；fix(fullstack): FS-P20-002/003/004 应用域跨端契约对齐 |
-| 远程合并 | 待本批次合入 origin/dev 后回读确认 |
+| 代码提交 | deb93f4（FS-P20-001 修复）；71e19a4（FS-202 回归）；88d158b（FS-P20-002/003/004 修复）；cdbd584（FS-203 夹具）；f46d8a1（联调记录） |
+| 远程合并 | 已普通推送至 `origin/dev`；`git ls-remote origin refs/heads/dev` 回读为 `f46d8a1ca7a86c83d79abb81a5e02be2a8252031`，未强推；FS-P20 已登记完成并解除本批占用 |
 | 联调通过 | FS-201/FS-202/FS-203 在 H2 + 单机 Redis + 真实浏览器链路通过 |
 | 上线验收 | 未进行；上述未验证环节不得视为生产可用 |
