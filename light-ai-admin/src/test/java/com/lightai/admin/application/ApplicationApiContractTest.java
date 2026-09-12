@@ -14,6 +14,7 @@ import com.lightai.admin.web.RequestIdFilter;
 import com.lightai.client.application.ApplicationCreateCommand;
 import com.lightai.client.json.ProtocolJson;
 import com.lightai.client.protocol.Roles;
+import com.lightai.runtime.ports.ConfigSnapshotPort;
 import com.lightai.spi.auth.AuthContext;
 import com.lightai.storage.alias.JdbcAliasRepository;
 import com.lightai.storage.application.JdbcApplicationKeyRepository;
@@ -55,7 +56,8 @@ class ApplicationApiContractTest {
         var audits = new AuditService(new JdbcAuditRepository(), database, tx, (record, cause) -> { });
         var applications = new JdbcApplicationRepository();
         var service = new ApplicationService(database, applications, new JdbcAliasRepository(),
-                audits, tx, new PageResultFactory(clock), clock, "STANDALONE_SERVER");
+                audits, tx, new PageResultFactory(clock), clock, "STANDALONE_SERVER",
+                () -> new ConfigSnapshotPort.ActiveSnapshot(1, List.of()));
         var keys = new ApplicationKeyService(database, applications, new JdbcApplicationKeyRepository(),
                 new AccessTokenService(AccessTokenService.fixedPepper(1, "test-only-pepper")),
                 audits, tx, clock, "STANDALONE_SERVER");
@@ -108,14 +110,16 @@ class ApplicationApiContractTest {
         String created = mvc.perform(asOwner(post(base() + "/keys")).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"deployment\",\"ip_allowlist\":[\"127.0.0.1\"],\"rpm\":30}"))
                 .andExpect(status().isCreated()).andExpect(header().string("Cache-Control", "no-store"))
-                .andExpect(jsonPath("$.data.key_value").isString()).andExpect(jsonPath("$.key_value").doesNotExist())
+                .andExpect(jsonPath("$.data.secret").isString()).andExpect(jsonPath("$.secret").doesNotExist())
+                .andExpect(jsonPath("$.data.key_prefix").isString())
                 .andReturn().getResponse().getContentAsString();
         JsonNode issued = read(created).path("data");
         String key = issued.path("key_id").asText();
-        String secret = issued.path("key_value").asText();
+        String secret = issued.path("secret").asText();
         String path = base() + "/keys/" + key;
         String listed = mvc.perform(asOwner(get(base() + "/keys"))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].application_id").value(applicationId))
+                .andExpect(jsonPath("$.data[0].secret").doesNotExist())
                 .andExpect(jsonPath("$.data[0].key_value").doesNotExist())
                 .andReturn().getResponse().getContentAsString();
         assertThat(listed).doesNotContain(secret);
@@ -130,10 +134,10 @@ class ApplicationApiContractTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.entity.status").value("ACTIVE"));
         String rotated = mvc.perform(asOwner(post(path + "/rotate")).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"version\":3,\"reason\":\"rotate\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.version").value(4))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.version").value("4"))
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andReturn().getResponse().getContentAsString();
-        assertThat(read(rotated).path("data").path("key_value").asText()).isNotEqualTo(secret);
+        assertThat(read(rotated).path("data").path("secret").asText()).isNotEqualTo(secret);
         mvc.perform(asOwner(post(path + "/revoke")).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"version\":4,\"reason\":\"retire\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.entity.status").value("REVOKED"));

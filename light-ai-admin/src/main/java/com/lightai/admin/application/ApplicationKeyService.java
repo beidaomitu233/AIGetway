@@ -115,8 +115,9 @@ public final class ApplicationKeyService {
                                 FieldChange.sensitiveChanged("key_value")),
                         sourceMode, context.sourceIpMasked()));
             });
-            return new ApplicationKeySecretResult(id.toString(), applicationId.toString(), issued.tokenValue(),
-                    issued.maskedValue(), now, 1L, 1L);
+            return new ApplicationKeySecretResult(id.toString(), applicationId.toString(),
+                    issued.tokenValue(), issued.prefix(), issued.maskedValue(), "ACTIVE",
+                    now, value.expiresAt(), 1L, 1L);
         } catch (LightAiException e) {
             throw e;
         } catch (Exception e) {
@@ -157,8 +158,9 @@ public final class ApplicationKeyService {
                                 FieldChange.changed("reason", null, command.reason().trim())),
                         sourceMode, context.sourceIpMasked()));
             });
-            return new ApplicationKeySecretResult(keyId.toString(), applicationId.toString(), issued.tokenValue(),
-                    issued.maskedValue(), now, updated[0].rotationGeneration(), updated[0].version());
+            return new ApplicationKeySecretResult(keyId.toString(), applicationId.toString(),
+                    issued.tokenValue(), issued.prefix(), issued.maskedValue(), "ACTIVE",
+                    now, updated[0].expiresAt(), updated[0].rotationGeneration(), updated[0].version());
         } catch (JdbcApplicationKeyRepository.OptimisticLockException e) {
             throw new LightAiException(ErrorCode.CONFIG_VERSION_CONFLICT,
                     "应用密钥版本已变化，请刷新后重试");

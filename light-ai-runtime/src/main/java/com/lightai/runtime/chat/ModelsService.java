@@ -54,7 +54,7 @@ public class ModelsService {
         }
         com.lightai.client.application.ApplicationModelConstraint constraint =
                 principal.constraintFor(alias.alias());
-        return !Boolean.FALSE.equals(constraint == null ? null : constraint.streamAllowed());
+        return !Boolean.FALSE.equals(constraint == null ? null : constraint.allowStream());
     }
 
     private static Long effectiveMaxOutput(AccessTokenPort.Principal principal,

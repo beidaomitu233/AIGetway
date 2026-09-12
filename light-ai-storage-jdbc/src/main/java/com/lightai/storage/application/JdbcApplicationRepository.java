@@ -11,6 +11,7 @@ import java.sql.Types;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -396,11 +397,25 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
     public List<ApplicationRecord> list(Connection connection, Filter filter, String sort,
                                         int limit, long offset) {
         DatabaseDialect dialect = dialect(connection);
-        StringBuilder sql = new StringBuilder("SELECT ").append(APPLICATION_COLUMNS)
-                .append(" FROM ").append(qualify(connection, "application")).append(" WHERE 1=1");
+        StringBuilder sql = new StringBuilder("SELECT ");
+        boolean joinQuota = filter.budgetStatus() != null && !filter.budgetStatus().isBlank();
+        if (joinQuota) {
+            // JOIN 后 id 等列名有歧义，SELECT 列必须限定表名
+            sql.append(qualifyColumns(connection, APPLICATION_COLUMNS));
+        } else {
+            sql.append(APPLICATION_COLUMNS);
+        }
+        sql.append(" FROM ").append(qualify(connection, "application"));
+        if (joinQuota) {
+            sql.append(" LEFT JOIN ").append(qualify(connection, "application_quota_policy"))
+                    .append(" q ON q.application_id = ").append(qualify(connection, "application"))
+                    .append(".id");
+        }
+        sql.append(" WHERE 1=1");
         List<Object> values = new ArrayList<>();
         appendFilter(sql, values, filter, dialect);
-        sql.append(" ORDER BY ").append(sort).append(", id ASC ")
+        sql.append(" ORDER BY ").append(orderExpression(sort)).append(", ")
+                .append(qualify(connection, "application")).append(".id ASC ")
                 .append(dialect.limitOffsetClause(limit, offset));
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
             bindParameters(statement, values, dialect);
@@ -416,10 +431,40 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
         }
     }
 
+    private String qualifyColumns(Connection connection, String columns) {
+        String table = qualify(connection, "application");
+        return java.util.Arrays.stream(columns.split(","))
+                .map(String::trim)
+                .map(column -> table + "." + column)
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("");
+    }
+
+    /**
+     * BE-P20-001：默认 last_called_at desc 时空值排在末尾，保证未调用过的应用不压倒活跃应用。
+     */
+    private static String orderExpression(String sort) {
+        String trimmed = sort.trim();
+        String lower = trimmed.toLowerCase();
+        if (lower.startsWith("last_called_at")) {
+            String column = trimmed.substring(0, trimmed.indexOf(' ') < 0
+                    ? trimmed.length() : trimmed.indexOf(' '));
+            String direction = lower.contains(" asc") ? "ASC" : "DESC";
+            return "(" + column + " IS NULL) ASC, " + column + " " + direction;
+        }
+        return trimmed;
+    }
+
     public long count(Connection connection, Filter filter) {
         DatabaseDialect dialect = dialect(connection);
         StringBuilder sql = new StringBuilder("SELECT count(*) FROM ")
-                .append(qualify(connection, "application")).append(" WHERE 1=1");
+                .append(qualify(connection, "application"));
+        if (filter.budgetStatus() != null && !filter.budgetStatus().isBlank()) {
+            sql.append(" LEFT JOIN ").append(qualify(connection, "application_quota_policy"))
+                    .append(" q ON q.application_id = ").append(qualify(connection, "application"))
+                    .append(".id");
+        }
+        sql.append(" WHERE 1=1");
         List<Object> values = new ArrayList<>();
         appendFilter(sql, values, filter, dialect);
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
@@ -502,6 +547,221 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
         }
     }
 
+    /**
+     * BE-P20-001：按本页应用 ID 集合批量读取额度策略，替代逐应用查询。
+     */
+    public Map<UUID, ApplicationQuotaRecord> findQuotas(Connection connection,
+                                                        java.util.Collection<UUID> applicationIds) {
+        if (applicationIds.isEmpty()) return Map.of();
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT " + QUOTA_COLUMNS + " FROM "
+                + qualify(connection, "application_quota_policy")
+                + " WHERE application_id IN (" + inPlaceholders(applicationIds.size()) + ")";
+        try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
+            int index = 1;
+            for (UUID id : applicationIds) dialect.bindUuid(statement, index++, id);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                Map<UUID, ApplicationQuotaRecord> result = new java.util.LinkedHashMap<>();
+                while (resultSet.next()) {
+                    ApplicationQuotaRecord record = mapQuota(resultSet, dialect);
+                    result.put(record.applicationId(), record);
+                }
+                return java.util.Collections.unmodifiableMap(result);
+            }
+        } catch (SQLException e) {
+            throw translate("应用额度批量读取失败", e);
+        }
+    }
+
+    /**
+     * 授权且运行可用的模型数（BE-P20-001）：授权启用、虚拟模型启用未删除且存在启用的路由候选。
+     */
+    public Map<UUID, Long> countRoutableEnabledModels(Connection connection,
+                                                      java.util.Collection<UUID> applicationIds) {
+        if (applicationIds.isEmpty()) return Map.of();
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT p.application_id, COUNT(DISTINCT p.virtual_model_id) AS model_count FROM "
+                + qualify(connection, "application_model_permission") + " p"
+                + " JOIN " + qualify(connection, "model_alias")
+                + " a ON a.id = p.virtual_model_id AND a.enabled = true AND a.deleted_at IS NULL"
+                + " JOIN " + qualify(connection, "route_candidate")
+                + " c ON c.alias_id = a.id AND c.enabled = true AND c.deleted_at IS NULL"
+                + " WHERE p.enabled = true AND p.application_id IN ("
+                + inPlaceholders(applicationIds.size()) + ") GROUP BY p.application_id";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            int index = 1;
+            for (UUID id : applicationIds) dialect.bindUuid(statement, index++, id);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                Map<UUID, Long> result = new java.util.LinkedHashMap<>();
+                while (resultSet.next()) {
+                    result.put(dialect.readUuid(resultSet, "application_id"), resultSet.getLong("model_count"));
+                }
+                return java.util.Collections.unmodifiableMap(result);
+            }
+        } catch (SQLException e) {
+            throw translate("应用运行可用模型批量统计失败", e);
+        }
+    }
+
+    /** 按应用 ID 集合批量统计当前有效密钥数量。 */
+    public Map<UUID, Long> countActiveKeysBatch(Connection connection,
+                                                java.util.Collection<UUID> applicationIds) {
+        if (applicationIds.isEmpty()) return Map.of();
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT application_id, COUNT(*) AS key_count FROM "
+                + qualify(connection, "application_key")
+                + " WHERE status = 'ACTIVE' AND (expires_at IS NULL OR expires_at > "
+                + dialect.nowFunction() + ") AND application_id IN ("
+                + inPlaceholders(applicationIds.size()) + ") GROUP BY application_id";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            int index = 1;
+            for (UUID id : applicationIds) dialect.bindUuid(statement, index++, id);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                Map<UUID, Long> result = new java.util.LinkedHashMap<>();
+                while (resultSet.next()) {
+                    result.put(dialect.readUuid(resultSet, "application_id"), resultSet.getLong("key_count"));
+                }
+                return java.util.Collections.unmodifiableMap(result);
+            }
+        } catch (SQLException e) {
+            throw translate("应用有效密钥批量统计失败", e);
+        }
+    }
+
+    /**
+     * 归档与准入互斥（BE-P20-001）：锁定应用行供事务内复核状态与占用。
+     * 准入侧 lockAndValidateKey 以同行为锁对象，两者在行锁上串行化。
+     */
+    public Optional<ApplicationRecord> lockById(Connection connection, UUID id) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT " + APPLICATION_COLUMNS + " FROM "
+                + qualify(connection, "application") + " WHERE id = ? " + dialect.forUpdateClause();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, id);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? Optional.of(mapApplication(resultSet, dialect)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw translate("应用行锁读取失败", e);
+        }
+    }
+
+    /** 归档前置检查：仍在有效期内的预占数量；终态（RELEASED 等）不计入。 */
+    public long countActiveReservations(Connection connection, UUID applicationId) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT COUNT(*) FROM " + qualify(connection, "budget_reservation")
+                + " WHERE application_id = ? AND status = 'ACTIVE'";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, applicationId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getLong(1);
+            }
+        } catch (SQLException e) {
+            throw translate("应用预占数量读取失败", e);
+        }
+    }
+
+    /** 授权写入校验（BE-P20-003）：虚拟模型必须存在启用的路由候选才可授权。 */
+    public boolean existsEnabledCandidate(Connection connection, UUID aliasId) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT COUNT(*) FROM " + qualify(connection, "route_candidate")
+                + " WHERE alias_id = ? AND enabled = true AND deleted_at IS NULL";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, aliasId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getLong(1) > 0;
+            }
+        } catch (SQLException e) {
+            throw translate("路由候选存在性读取失败", e);
+        }
+    }
+
+    /** 24h 运行摘要（BE-P20-001）：requests 为窗口内全部请求，terminal/succeeded 用于成功率。 */
+    public Map<String, TraceSummary> summarize24h(Connection connection, java.util.Collection<String> codes,
+                                                  OffsetDateTime from, OffsetDateTime to) {
+        if (codes.isEmpty()) return Map.of();
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT application, COUNT(*) AS requests, "
+                + "SUM(CASE WHEN status IN ('SUCCEEDED','FAILED','STREAM_INTERRUPTED') THEN 1 ELSE 0 END) AS terminal, "
+                + "SUM(CASE WHEN status = 'SUCCEEDED' THEN 1 ELSE 0 END) AS succeeded FROM "
+                + qualify(connection, "trace")
+                + " WHERE started_at >= ? AND started_at < ? AND application IN ("
+                + inPlaceholders(codes.size()) + ") GROUP BY application";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, from);
+            statement.setObject(2, to);
+            int index = 3;
+            for (String code : codes) statement.setString(index++, code);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                Map<String, TraceSummary> result = new java.util.LinkedHashMap<>();
+                while (resultSet.next()) {
+                    result.put(resultSet.getString("application"), new TraceSummary(
+                            resultSet.getLong("requests"), resultSet.getLong("terminal"),
+                            resultSet.getLong("succeeded")));
+                }
+                return java.util.Collections.unmodifiableMap(result);
+            }
+        } catch (SQLException e) {
+            throw translate("应用运行摘要读取失败", e);
+        }
+    }
+
+    /** 影响预览（FE-P20 补充契约）：返回前 limit+1 条有效密钥 ID，调用方以超量判定 has_more。 */
+    public List<UUID> listActiveKeyIds(Connection connection, UUID applicationId, int limit) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT id FROM " + qualify(connection, "application_key")
+                + " WHERE application_id = ? AND status = 'ACTIVE' AND (expires_at IS NULL OR expires_at > "
+                + dialect.nowFunction() + ") ORDER BY id " + dialect.limitOffsetClause(limit, 0);
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, applicationId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<UUID> ids = new ArrayList<>();
+                while (resultSet.next()) ids.add(dialect.readUuid(resultSet, "id"));
+                return List.copyOf(ids);
+            }
+        } catch (SQLException e) {
+            throw translate("应用密钥清单读取失败", e);
+        }
+    }
+
+    /**
+     * 模型移除影响（FE-P20 补充契约）：受影响密钥为无独立模型范围（继承应用授权）
+     * 或范围命中被移除模型的有效密钥。返回前 limit+1 条用于 has_more 判定。
+     */
+    public List<UUID> listAffectedKeyIdsForModelRemoval(Connection connection, UUID applicationId,
+                                                        java.util.Collection<UUID> removedModelIds,
+                                                        int limit) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT k.id FROM " + qualify(connection, "application_key") + " k"
+                + " WHERE k.application_id = ? AND k.status = 'ACTIVE'"
+                + " AND (k.expires_at IS NULL OR k.expires_at > " + dialect.nowFunction() + ")"
+                + " AND (NOT EXISTS (SELECT 1 FROM " + qualify(connection, "application_key_model_permission")
+                + " kp WHERE kp.application_key_id = k.id)"
+                + (removedModelIds.isEmpty() ? ""
+                : " OR EXISTS (SELECT 1 FROM " + qualify(connection, "application_key_model_permission")
+                + " kp2 WHERE kp2.application_key_id = k.id AND kp2.virtual_model_id IN ("
+                + inPlaceholders(removedModelIds.size()) + "))")
+                + ") ORDER BY k.id " + dialect.limitOffsetClause(limit, 0);
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, applicationId);
+            int index = 2;
+            for (UUID modelId : removedModelIds) dialect.bindUuid(statement, index++, modelId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<UUID> ids = new ArrayList<>();
+                while (resultSet.next()) ids.add(dialect.readUuid(resultSet, "id"));
+                return List.copyOf(ids);
+            }
+        } catch (SQLException e) {
+            throw translate("模型移除影响读取失败", e);
+        }
+    }
+
+    /** 应用 24h 运行摘要。 */
+    public record TraceSummary(long requests, long terminal, long succeeded) {
+    }
+
     private void appendFilter(StringBuilder sql, List<Object> values, Filter filter,
                               DatabaseDialect dialect) {
         if (filter.keyword() != null && !filter.keyword().isBlank()) {
@@ -522,6 +782,18 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
         if (filter.ownerId() != null && !filter.ownerId().isBlank()) {
             sql.append(" AND owner_id = ?");
             values.add(filter.ownerId());
+        }
+        if (filter.department() != null && !filter.department().isBlank()) {
+            sql.append(" AND department = ?");
+            values.add(filter.department().trim());
+        }
+        if (filter.budgetStatus() != null && !filter.budgetStatus().isBlank()) {
+            sql.append(" AND CASE WHEN q.token_limit IS NULL AND q.amount_limit IS NULL")
+                    .append(" THEN 'UNLIMITED'")
+                    .append(" WHEN (q.token_limit IS NOT NULL AND q.tokens_used + q.tokens_reserved >= q.token_limit)")
+                    .append(" OR (q.amount_limit IS NOT NULL AND q.amount_used + q.amount_reserved >= q.amount_limit)")
+                    .append(" THEN 'EXHAUSTED' ELSE 'NORMAL' END = ?");
+            values.add(filter.budgetStatus().trim().toUpperCase());
         }
         if (filter.allowedCodes() != null && !filter.allowedCodes().isEmpty()) {
             sql.append(" AND code IN (").append(inPlaceholders(filter.allowedCodes().size())).append(")");
@@ -589,7 +861,12 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
     }
 
     public record Filter(String keyword, String status, String environment, String ownerId,
-                         List<String> allowedCodes) {
+                         String department, String budgetStatus, List<String> allowedCodes) {
+
+        public Filter(String keyword, String status, String environment, String ownerId,
+                      List<String> allowedCodes) {
+            this(keyword, status, environment, ownerId, null, null, allowedCodes);
+        }
     }
 
     public static final class OptimisticLockException extends RuntimeException {
