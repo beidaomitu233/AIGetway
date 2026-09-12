@@ -24,6 +24,24 @@ public final class PageResultFactory {
         return create(items, total, query.page(), query.pageSize(), query.sort(), dataUpdatedAt);
     }
 
+    /**
+     * BE-P20-001：24h 统计窗口与 query_started_at 必须同源，允许调用方传入本次查询起点。
+     */
+    public <T> PageResult<T> create(List<T> items, long total, ListQuerySupport.ListQuery query,
+                                    OffsetDateTime dataUpdatedAt, OffsetDateTime queryStartedAt) {
+        OffsetDateTime startedAt = queryStartedAt == null
+                ? OffsetDateTime.now(clock) : queryStartedAt;
+        OffsetDateTime updated = dataUpdatedAt == null ? startedAt : dataUpdatedAt;
+        return PageResult.of(
+                items == null ? List.of() : List.copyOf(items),
+                total,
+                query.page(),
+                query.pageSize(),
+                query.sort() == null ? "" : query.sort(),
+                startedAt,
+                updated);
+    }
+
     public <T> PageResult<T> create(List<T> items, long total, int page, int pageSize,
                                     String sort, OffsetDateTime dataUpdatedAt) {
         OffsetDateTime startedAt = OffsetDateTime.now(clock);
