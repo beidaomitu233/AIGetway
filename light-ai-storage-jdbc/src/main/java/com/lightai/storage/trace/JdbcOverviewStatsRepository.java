@@ -357,11 +357,11 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
 
     public List<UnavailableCandidateItem> unavailableCandidateItems(Connection connection) {
         String sql = """
-                SELECT rc.id, ma.alias AS alias_name, p.name AS channel_name,
+                SELECT rc.id, ma.code AS alias_name, p.name AS channel_name,
                        pm.display_name AS model_name, s.updated_at
                   FROM %s rc
                   JOIN %s pm ON pm.id = rc.upstream_model_id
-                  JOIN %s ma ON ma.id = rc.alias_id
+                  JOIN %s ma ON ma.id = rc.virtual_model_id
                   LEFT JOIN %s p ON p.id = pm.channel_id
                   JOIN %s s
                     ON s.entity_type = 'UPSTREAM_MODEL' AND s.entity_id = rc.upstream_model_id
@@ -370,7 +370,7 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
                 """.strip().formatted(
                         qualify(connection, "route_candidate"),
                         qualify(connection, "upstream_model"),
-                        qualify(connection, "model_alias"),
+                        qualify(connection, "virtual_model"),
                         qualify(connection, "channel"),
                         qualify(connection, "object_runtime_state"));
         return queryList(connection, sql, List.of(), (rs, dl) -> new UnavailableCandidateItem(
@@ -494,8 +494,8 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
     }
 
     public List<OptionRef> aliasOptions(Connection connection) {
-        String sql = "SELECT id, alias AS name FROM " + qualify(connection, "model_alias")
-                + " WHERE deleted_at IS NULL ORDER BY alias ASC";
+        String sql = "SELECT id, code AS name FROM " + qualify(connection, "virtual_model")
+                + " WHERE deleted_at IS NULL ORDER BY code ASC";
         return queryList(connection, sql, List.of(), (rs, dl) -> new OptionRef(
                 dl.readUuid(rs, "id"), rs.getString("name")));
     }
@@ -514,7 +514,7 @@ public class JdbcOverviewStatsRepository extends AbstractJdbcRepository {
                   FROM %s rc
                   JOIN %s pm ON pm.id = rc.upstream_model_id
                   JOIN %s p ON p.id = pm.channel_id
-                 WHERE rc.alias_id = ?
+                 WHERE rc.virtual_model_id = ?
                  ORDER BY p.name ASC
                 """.strip().formatted(
                         qualify(connection, "route_candidate"),

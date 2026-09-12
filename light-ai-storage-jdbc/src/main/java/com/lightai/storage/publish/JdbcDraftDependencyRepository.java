@@ -23,7 +23,7 @@ public final class JdbcDraftDependencyRepository extends AbstractJdbcRepository 
             new Relation("channel", "upstream_model", "channel_id"),
             new Relation("channel", "route_candidate", "channel_id"),
             new Relation("upstream_model", "route_candidate", "upstream_model_id"),
-            new Relation("model_alias", "route_candidate", "alias_id"));
+            new Relation("model_alias", "route_candidate", "virtual_model_id"));
 
     public JdbcDraftDependencyRepository(String schemaName) {
         super(schemaName);
