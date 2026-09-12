@@ -449,3 +449,11 @@
 - 关键根因与修复：`ChannelDetail` 缺 `version` 导致渠道详情页全部写操作 400（本批新增 FS-P20-008）；应用 `version` 按 BE-P20-102 统一为十进制字符串。
 - 联调环境与证据见 INTEGRATION_REPORT.md §10；环境差异记录：本机沙箱下后端默认配置实际绑定 8800（配置声明为 8080），本批显式以 `--server.port=18080` 启动，Vite 以 `VITE_BACKEND_TARGET` 指向该端口，未启用 Mock。
 - 未验收：渠道检测的真实上游连通、上游模型/虚拟模型/路由的发布生效链路、渠道页面浏览器点击级写操作。上述未完成项不作为联调通过依据。
+
+
+## FS-RV-P20-001 / FS-RV-P20-002 联调补记（2026-09-13，当前工作区复验）
+
+| 编号 | 问题与复现步骤 | 涉及流程/模块 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+|---|---|---|---|---|---|---|
+| FS-RV-P20-001 | 发布校验切换到 V2 `channels/channel_credentials` 后，既有 V1 草稿夹具使用 `providers/credential_pools/credentials` 时有效草稿被判失败，跨渠道与未注册 Adapter 错误码退化为 `REFERENCE_INVALID` | 配置发布校验、ConfigValidationService | V2 键切换未保留旧草稿读取兼容；校验服务增加 V2 优先、V1 键回退，解析旧候选的 credential_pool→provider 关系，并回退 `type` 字段 | `ConfigValidationServiceTest` 8 项、`ConfigPublishServiceTest` 16 项全部通过；V2 快照路径保留 | 联调模型 / 当前任务 | 已验证 |
+| FS-RV-P20-002 | 应用列表使用 `budget_status=NORMAL` 并按 `updated_at desc` 排序时，真实 H2 查询可能报 ambiguous column `updated_at` | 应用列表、JdbcApplicationRepository | 预算筛选 JOIN quota 表后排序字段未限定表名；排序表达式统一加 `application` 表限定，保留最近调用空值排序 | H2 真实仓储回归通过；真实 HTTP 创建应用后 `GET /admin/applications?budget_status=NORMAL&sort=updated_at desc` 返回 200 且正确回显 | 联调模型 / 当前任务 | 已验证 |

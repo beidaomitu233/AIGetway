@@ -325,3 +325,43 @@ Spring Boot Starter —— 全部 SUCCESS
 | 联调通过 | FS-P21-001/002/003 在 H2 + 单机 Redis + 真实 jar + 真实页面渲染链路通过 |
 | 主任务状态 | FE-P21 / BE-P21 主任务勾选状态与负责人占用**均未改动**（保持阻塞、保留原负责人） |
 | 上线验收 | 未进行；§11.6 未验证环节不得视为生产可用 |
+
+
+## 12. RV-P20 应用域跨层复验（2026-09-13）
+
+### 12.1 范围与环境
+
+| 项 | 实际值 |
+|---|---|
+| 代码基线 | 当前工作区分支 `fix-review-rvp20-rvagent-0912`；保留并复验已有 RV-P20 未提交改动 |
+| 后端 | 重新打包 `light-ai-server-0.1.0-SNAPSHOT.jar`，实际监听 `127.0.0.1:18080` |
+| 前端 | Vite 7.3.6，`127.0.0.1:5173`，`VITE_BACKEND_TARGET=http://127.0.0.1:18080`，未启用 Mock |
+| 数据库 / 共享状态 | H2 内存库（MySQL 模式，启动自动迁移 V1～V8）/ 本机 Redis `127.0.0.1:6379` |
+| 浏览器 | Chromium 1223 headless，真实访问 Vite 页面并 dump DOM |
+
+### 12.2 流程结果
+
+| 编号 | 流程 | 结果 | 证据 |
+|---|---|---|---|
+| FS-RV-201 | 创建应用 → H2 持久化 → 预算/部门筛选 → `updated_at` 排序 → 页面回显 | 通过 | `POST /admin/applications` 返回 201；真实列表筛选返回 200、`budget_status=NORMAL`；页面渲染名称、部门、额度、预算状态 |
+| FS-RV-202 | 创建页加载活动配置模型候选 | 通过（空态） | `GET /admin/applications/model-options` 返回 200 空数组；真实创建页显示“当前没有可授权的虚拟模型”，基本信息表单仍可用 |
+| FS-RV-203 | 发布校验 V1/V2 快照兼容 | 通过 | `ConfigValidationServiceTest` 8 项 + `ConfigPublishServiceTest` 16 项全通过；V2 优先、V1 回退 |
+
+### 12.3 实际验证命令
+
+| 范围 | 命令 | 结果 |
+|---|---|---|
+| 前端类型 | `npm run typecheck` | 通过 |
+| 前端测试 | `npm test -- --run` | 28 文件 / 247 项通过 |
+| 后端发布校验 | `mvn -B -pl light-ai-admin -am -Dtest=ConfigValidationServiceTest,ConfigPublishServiceTest -Dsurefire.failIfNoSpecifiedTests=false test` | 24 项通过 |
+| 后端应用契约 | `mvn -B -pl light-ai-admin -am -Dtest=ApplicationApiContractTest -Dsurefire.failIfNoSpecifiedTests=false test` | 7 项通过 |
+| 存储仓储 | `mvn -B -pl light-ai-storage-jdbc -am -Dtest=JdbcApplicationRepositoryTest test` | 1 项通过，覆盖预算筛选+更新时间排序 |
+| 后端构建 | `mvn -B -DskipTests package` | 14 模块构建成功 |
+| 真实 HTTP | H2+Redis 后端：创建应用、列表筛选、模型候选接口 | 创建 201；筛选/候选均 200 |
+| 真实页面 | Chromium 1223：`/ui/applications`、`/ui/applications/new` | 应用列表真实回显“Budget Integration / 客户成功部 / 0 / 1,000,000 / 额度正常”；创建页真实空态与表单回显 |
+
+### 12.4 未验证项
+
+- 真实 PostgreSQL/MySQL/Redis 集群迁移、并发与故障恢复仍未执行。
+- 无已发布路由候选的隔离库无法验证 model-options 非空能力交集；当前已验证其真实空态与错误边界。
+- 真实 Provider 成功调用、企业身份四角色与页面点击级写操作仍沿用既有报告的未验证结论。
