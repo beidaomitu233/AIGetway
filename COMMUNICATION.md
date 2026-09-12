@@ -320,5 +320,6 @@
 
 ## DB-P21 仲裁与 DB-P22/P23 转出（2026-09-12，zcode-db-0912b）
 
-- 用户仲裁：DB-P21 由 zcode-db-0912b 完成并推送；zcode-db-0912c 的接管登记（d9d3579）作废，该会话未产生代码交付。zcode-db-0912b 交付分支 feature/database-p21-zcode-db-0912b（实现 c794043）在合并时与 BE-P21 接管交付（e51e56f）在 COMMUNICATION.md、TASK_STATUS.md、ResourceApiContractTest.java 三处产生冲突，已按"双方记录并留、批量检测断言取 V5 后真实行为（合法请求落库 PENDING）"解决，合并后复验结果见下行。
+- 用户仲裁：DB-P21 由 zcode-db-0912b 完成并推送；zcode-db-0912c 的接管登记（d9d3579）作废，该会话未产生代码交付。zcode-db-0912b 交付分支 feature/database-p21-zcode-db-0912b（实现 c794043）在合并时与 BE-P21 接管交付（e51e56f）在 COMMUNICATION.md、TASK_STATUS.md、ResourceApiContractTest.java 三处产生冲突，已按"双方记录并留、批量检测断言取 V5 后真实行为（合法请求落库 PENDING）"解决，合并后复验结果见下行。合并暴露并修复 BE-P20 接管交付（c1bb917）新增查询对旧表/列名的三处引用（countRoutableEnabledModels 的 model_alias/rc.alias_id、existsEnabledCandidate 的 rc.alias_id、aliasIdsByChannel/providerOptionsByAlias 的 rc.alias_id），已同步为 virtual_model/virtual_model_id。
+- 合并后复验：mvn -B verify 14 模块 BUILD SUCCESS，473 项中 457 通过、16 环境跳过（Redis 11、Provider 5，缺 LAI_IT_REDIS_URI 等）、0 失败；git diff --check 通过。
 - 用户确认 DB-P22/P23 转由其他会话执行；TASK_STATUS 已释放原领取登记。接手会话请重新领取：迁移号自 V6 起分配（V5 已被 DB-P21 的 virtual_model_routes_and_sync 使用），不得修改 V1～V5 已发布迁移、不得重复建表；DB-P23 的 V1→V2 迁移兼容需覆盖 V5 引入的虚拟模型域更名与生成列语义。
