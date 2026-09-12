@@ -1,6 +1,8 @@
 package com.lightai.client.application;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -22,7 +24,7 @@ public record ApplicationDetail(
         OffsetDateTime lastCalledAt,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt,
-        long version) {
+        @JsonSerialize(using = ToStringSerializer.class) long version) {
 
     public ApplicationDetail {
         models = models == null ? List.of() : List.copyOf(models);

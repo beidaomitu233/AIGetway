@@ -192,10 +192,10 @@ function submit(): void {
             耗时：{{ result.total_ms ?? '—' }} ms
           </p>
           <p
-            v-if="result.provider_request_id"
+            v-if="result.channel_request_id"
             class="lai-dialog-message"
           >
-            Provider Request ID：{{ result.provider_request_id }}
+            Channel Request ID：{{ result.channel_request_id }}
           </p>
           <p
             v-if="result.error_code"

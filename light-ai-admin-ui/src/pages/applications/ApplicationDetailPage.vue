@@ -300,7 +300,7 @@ async function saveQuota(): Promise<void> {
       period_type: quotaForm.period_type,
       period_start: quotaForm.period_type === 'CUSTOM' ? asOffsetDateTime(quotaForm.period_start) : null,
       period_end: quotaForm.period_type === 'CUSTOM' ? asOffsetDateTime(quotaForm.period_end) : null,
-      version: Number(detail.value!.quota.version),
+      version: detail.value!.quota.version,
       reason: quotaForm.reason.trim(),
     })
     if (context === contextVersion && response.entity) detail.value = response.entity
@@ -334,7 +334,7 @@ async function saveAdjustment(): Promise<void> {
       delta: adjustmentForm.delta.trim(),
       reason: adjustmentForm.reason.trim(),
       idempotency_key: adjustmentForm.idempotency_key,
-      quota_version: Number(detail.value!.quota.version),
+      quota_version: detail.value!.quota.version,
     })
     if (context === contextVersion && response.entity) detail.value = response.entity
   })
@@ -370,7 +370,7 @@ async function saveReset(): Promise<void> {
       reason: resetForm.reason.trim(),
       confirmation_code: resetForm.confirmation_code,
       idempotency_key: resetForm.idempotency_key,
-      quota_version: Number(detail.value!.quota.version),
+      quota_version: detail.value!.quota.version,
     })
     if (context === contextVersion && response.entity) detail.value = response.entity
   })

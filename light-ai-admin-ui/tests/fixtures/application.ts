@@ -23,7 +23,7 @@ export const application = {
   last_called_at: '2026-09-08T08:00:00Z',
   created_at: '2026-09-01T08:00:00Z',
   updated_at: '2026-09-08T08:00:00Z',
-  version: 2,
+  version: '2',
   quota: {
     id: 'quota-1', token_limit: '1000000', tokens_used: '1200', tokens_reserved: '100',
     amount_limit: '1000', amount_used: '12.5', amount_reserved: '0.5', currency: 'CNY',

@@ -17,17 +17,19 @@ import {
 const adminProvider = {
   id: 'prov-1',
   name: 'OpenAI 生产',
-  type: 'OPENAI',
+  provider_type: 'OPENAI',
   base_url: 'https://api.openai.com/v1/',
-  proxy_url: null,
-  connection_status: 'AVAILABLE',
-  last_check_at: '2026-09-05T02:00:00Z',
+  proxy: null,
+  status: 'ACTIVE',
+  health: 'AVAILABLE',
+  priority: 5,
+  weight: 10,
+  upstream_model_count: 2,
+  credential_count: 1,
+  draft_changed: true,
+  last_checked_at: '2026-09-05T02:00:00Z',
   last_check_latency_ms: 430,
   last_error_code: null,
-  provider_model_count: 2,
-  credential_pool_count: 1,
-  enabled: true,
-  draft_changed: true,
   version: 3,
   updated_at: '2026-09-05T01:00:00Z',
 }
@@ -79,7 +81,7 @@ describe('ProviderListPage（FE-007）', () => {
     await keyword.setValue('openai')
     const statusTrigger = wrapper
       .findAll('.lai-multiselect-trigger')
-      .find((button) => button.text().includes('连接状态'))
+      .find((button) => button.text().includes('健康状态'))
     await statusTrigger!.trigger('click')
     const availableOption = wrapper
       .findAll('.lai-multiselect-option')
@@ -90,7 +92,7 @@ describe('ProviderListPage（FE-007）', () => {
     const listCall = stub.calls.filter((call) => call.url.includes('/admin/channels?')).at(-1)
     expect(listCall).toBeDefined()
     expect(listCall!.url).toContain('keyword=openai')
-    expect(listCall!.url).toContain('connection_status=AVAILABLE')
+    expect(listCall!.url).toContain('health=AVAILABLE')
   })
 
   it('管理员可见编辑/停用/删除，只读角色仅有查看', async () => {
@@ -153,9 +155,8 @@ describe('ProviderFormPage（FE-008）', () => {
       if (method === 'GET' && url.pathname.endsWith('/admin/channels/prov-1')) {
         return dataEnvelope({
           ...adminProvider,
-          connect_timeout_ms: 3000,
-          read_timeout_ms: 120000,
-          default_headers: {},
+          timeouts: { connect_ms: 3000, read_ms: 120000, stream_idle_ms: 120000 },
+          headers: {},
           created_by: 'a',
           created_at: '2026-09-01T00:00:00Z',
           updated_by: 'a',
@@ -168,6 +169,14 @@ describe('ProviderFormPage（FE-008）', () => {
       }
       if (method === 'POST' && url.pathname.endsWith('/admin/channels')) {
         expect(body.name).toBe('合法名称')
+        expect(body.provider_type).toBe('OPENAI')
+        expect(body.proxy).toBeNull()
+        expect(body.timeouts).toEqual({ connect_ms: 3000, read_ms: 120000, stream_idle_ms: 120000 })
+        expect(body.headers).toEqual({})
+        expect(body.priority).toBe(10)
+        expect(body.weight).toBe(1)
+        expect(body).not.toHaveProperty('type')
+        expect(body).not.toHaveProperty('enabled')
         return dataEnvelope({ id: 'prov-2', version: 1, entity: null, draft_changed: true, draft_revision: 9, request_id: 'r1' })
       }
       return undefined
@@ -223,7 +232,7 @@ describe('ProviderFormPage（FE-008）', () => {
 describe('FE-211/212 渠道异常状态', () => {
   it('关联资源失败保持独立错误，不伪装为空数据', async () => {
     const stub = installJsonFetchStub(({ url }) => {
-      if (url.pathname.endsWith('/channels/prov-1')) return dataEnvelope({ ...adminProvider, default_headers: {}, recent_check_records: [], connect_timeout_ms: 3000, read_timeout_ms: 120000 })
+      if (url.pathname.endsWith('/channels/prov-1')) return dataEnvelope({ ...adminProvider, headers: {}, recent_check_records: [], timeouts: { connect_ms: 3000, read_ms: 120000, stream_idle_ms: 120000 } })
       if (url.pathname.endsWith('/channels/prov-1/credentials')) return errorEnvelope(403, 'ACCESS_DENIED', '无渠道 Key 查看权限')
       if (url.pathname.endsWith('/upstream-models')) return errorEnvelope(503, 'UNAVAILABLE', '上游模型查询失败')
       return undefined

@@ -228,7 +228,7 @@ describe('Application pages（V2 应用中心）', () => {
         return dataEnvelope({
           id: application.id,
           version: 3,
-          entity: { ...application, version: 3 },
+          entity: { ...application, version: '3' },
           draft_changed: false,
           draft_revision: null,
           request_id: 'req-model',
@@ -272,7 +272,7 @@ describe('Application pages（V2 应用中心）', () => {
     await quotaDialog.findAll('button').find((button) => button.text() === '保存调整')!.trigger('click')
     await flushPromises()
     expect(stub.calls.find((call) => call.method === 'PUT' && call.url.endsWith('/quota'))?.body)
-      .toMatchObject({ token_limit: 2_000_000, version: 1, reason: '扩大生产额度' })
+      .toMatchObject({ token_limit: 2_000_000, version: '1', reason: '扩大生产额度' })
 
     const adjustmentButton = wrapper.findAll('button').find((button) => button.text() === '人工增减')!
     await adjustmentButton.trigger('click')
@@ -283,7 +283,7 @@ describe('Application pages（V2 应用中心）', () => {
     await flushPromises()
     expect(stub.calls.find((call) => call.method === 'POST' && call.url.endsWith('/quota/adjustments'))?.body)
       .toMatchObject({
-        dimension: 'TOKEN_LIMIT', delta: '500000', quota_version: 2,
+        dimension: 'TOKEN_LIMIT', delta: '500000', quota_version: '2',
         reason: '活动期间临时扩容',
       })
 
@@ -297,7 +297,7 @@ describe('Application pages（V2 应用中心）', () => {
     await flushPromises()
     expect(stub.calls.find((call) => call.method === 'POST' && call.url.endsWith('/quota/reset'))?.body)
       .toMatchObject({
-        dimension: 'TOKEN_USAGE', confirmation_code: 'customer-service-prod', quota_version: 3,
+        dimension: 'TOKEN_USAGE', confirmation_code: 'customer-service-prod', quota_version: '3',
         reason: '新结算周期人工重置',
       })
 
@@ -319,7 +319,7 @@ describe('Application pages（V2 应用中心）', () => {
         constraints: [{
           virtual_model_id: 'alias-2', max_output_tokens: 256, allow_stream: false,
         }],
-        application_version: 2,
+        application_version: '2',
         reason: '增加备用模型',
       })
   })

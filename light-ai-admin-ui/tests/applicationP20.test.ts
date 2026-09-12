@@ -166,7 +166,7 @@ describe('FE-P20 页面边界（同契约夹具，非真实联调）', () => {
     let latest = false
     const stub = installJsonFetchStub(({ method }) => {
       if (method === 'PUT') { latest = true; return errorEnvelope(409, 'CONFIG_VERSION_CONFLICT', '版本冲突') }
-      return dataEnvelope(latest ? { ...application, name: '服务器新名称', version: 3 } : application)
+      return dataEnvelope(latest ? { ...application, name: '服务器新名称', version: '3' } : application)
     })
     const { wrapper } = await page(`/ui/applications/${application.id}/settings`)
     expect(stub.calls).toHaveLength(1)
@@ -183,7 +183,7 @@ describe('FE-P20 页面边界（同契约夹具，非真实联调）', () => {
     await wrapper.get('form').trigger('submit')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(stub.calls.filter(call => call.method === 'PUT').at(-1)?.body.version).toBe(3)
+    expect(stub.calls.filter(call => call.method === 'PUT').at(-1)?.body.version).toBe('3')
   })
   it('未知应用状态保留状态文本并禁用写操作', async () => {
     installJsonFetchStub(({ url }) => url.pathname.endsWith('/keys') || url.pathname.endsWith('/quota/adjustments') ? dataEnvelope([]) : dataEnvelope({ ...application, status: 'FROZEN' }))

@@ -88,7 +88,8 @@ export interface ApplicationDetail {
   last_called_at: string | null
   created_at: string
   updated_at: string
-  version: number
+  /** BE-P20-102：应用版本以十进制字符串传输，避免 JS Number 精度丢失。 */
+  version: string
 }
 
 export interface ApplicationKeyView {
@@ -152,7 +153,7 @@ export interface ApplicationUpdatePayload {
   owner_name: string
   environment: ApplicationEnvironment
   description: string | null
-  version: number
+  version: string
 }
 
 export interface ApplicationQuotaUpdatePayload {
@@ -164,7 +165,7 @@ export interface ApplicationQuotaUpdatePayload {
   period_type: ApplicationQuotaPolicy['period_type']
   period_start: string | null
   period_end: string | null
-  version: number
+  version: string
   reason: string
 }
 
@@ -221,7 +222,7 @@ export function updateApplication(
 
 export function changeApplicationStatus(
   id: string,
-  payload: { status: ApplicationStatus; version: number; reason: string },
+  payload: { status: ApplicationStatus; version: string; reason: string },
 ): Promise<ManagementOperationResult<ApplicationDetail>> {
   return request({ path: `/applications/${id}/status`, method: 'POST', body: payload })
 }
@@ -238,7 +239,7 @@ export function updateApplicationModels(
   payload: {
     virtual_model_ids: string[]
     constraints: ApplicationModelConstraintPayload[]
-    application_version: number
+    application_version: string
     reason: string
   },
 ): Promise<ManagementOperationResult<ApplicationDetail>> {
@@ -259,7 +260,7 @@ export function adjustApplicationQuota(
     delta: string
     reason: string
     idempotency_key: string
-    quota_version: number
+    quota_version: string
   },
 ): Promise<ManagementOperationResult<ApplicationDetail>> {
   return request({
@@ -274,7 +275,7 @@ export function resetApplicationQuotaUsage(
     reason: string
     confirmation_code: string
     idempotency_key: string
-    quota_version: number
+    quota_version: string
   },
 ): Promise<ManagementOperationResult<ApplicationDetail>> {
   return request({

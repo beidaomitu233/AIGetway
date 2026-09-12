@@ -31,9 +31,9 @@ const canCheck = computed(() => store.can(Permission.providerCheck))
 const list = useListQuery<Record<string, FilterValue>, ProviderListItem>({
   fields: {
     keyword: { default: '', url: true },
-    type: { default: [], url: true },
-    connection_status: { default: [], url: true },
-    enabled: { default: '', url: true },
+    provider_type: { default: [], url: true },
+    health: { default: [], url: true },
+    status: { default: '', url: true },
     draft_changed: { default: '', url: true },
   },
   defaultSort: 'updated_at',
@@ -50,28 +50,28 @@ const keywordInput = computed<string>({
   },
 })
 
-const typeFilter = computed<string[]>({
-  get: () => (list.state.type as string[]) || [],
-  set: (value) => list.applyFilters({ type: value }),
+const providerTypeFilter = computed<string[]>({
+  get: () => (list.state.provider_type as string[]) || [],
+  set: (value) => list.applyFilters({ provider_type: value }),
 })
 
 const typeOptions = computed(() =>
   store.adapters.map((adapter) => ({ value: adapter.provider_type, label: adapter.provider_type })),
 )
-const connectionStatusOptions = Object.entries(connectionStatusLabels).map(([value, label]) => ({
+const healthOptions = Object.entries(connectionStatusLabels).map(([value, label]) => ({
   value,
   label,
 }))
 
 const columns: TableColumn[] = [
   { key: 'name', label: '名称' },
-  { key: 'type', label: '类型' },
+  { key: 'provider_type', label: '类型' },
   { key: 'base_url', label: '服务地址' },
-  { key: 'connection_status', label: '连接状态' },
-  { key: 'provider_model_count', label: '模型数' },
-  { key: 'channel_keys', label: '渠道 Key' },
-  { key: 'last_check_at', label: '最近检测' },
-  { key: 'enabled', label: '启用' },
+  { key: 'health', label: '健康状态' },
+  { key: 'upstream_model_count', label: '模型数' },
+  { key: 'credential_count', label: '渠道 Key' },
+  { key: 'last_checked_at', label: '最近检测' },
+  { key: 'status', label: '配置状态' },
   { key: 'draft_changed', label: '变更' },
   { key: 'actions', label: '操作' },
 ]
@@ -87,9 +87,9 @@ const lifecycle = useLifecycleActions({
   },
 })
 
-function onToggleEnabled(row: ProviderListItem): void {
+function onToggleStatus(row: ProviderListItem): void {
   if (!canManage.value) return
-  if (row.enabled) {
+  if (row.status === 'ACTIVE') {
     void lifecycle.requestDisable(row.id, row.version)
   } else {
     void lifecycle.enable(row.id, row.version)
@@ -121,29 +121,29 @@ function onToggleEnabled(row: ProviderListItem): void {
         placeholder="名称或服务地址，输入 2—64 字符查询"
       >
       <AppMultiSelect
-        v-model="typeFilter"
+        v-model="providerTypeFilter"
         :options="typeOptions"
         placeholder="全部类型"
       />
       <AppMultiSelect
-        :model-value="(list.state.connection_status as string[]) || []"
-        :options="connectionStatusOptions"
-        placeholder="连接状态"
-        @update:model-value="list.applyFilters({ connection_status: $event })"
+        :model-value="(list.state.health as string[]) || []"
+        :options="healthOptions"
+        placeholder="健康状态"
+        @update:model-value="list.applyFilters({ health: $event })"
       />
       <select
         class="lai-select"
-        :value="list.state.enabled as string"
-        aria-label="启用状态"
-        @change="list.applyFilters({ enabled: ($event.target as HTMLSelectElement).value })"
+        :value="list.state.status as string"
+        aria-label="配置状态"
+        @change="list.applyFilters({ status: ($event.target as HTMLSelectElement).value })"
       >
         <option value="">
           全部
         </option>
-        <option value="true">
+        <option value="ACTIVE">
           启用
         </option>
-        <option value="false">
+        <option value="DISABLED">
           停用
         </option>
       </select>
@@ -206,19 +206,19 @@ function onToggleEnabled(row: ProviderListItem): void {
             :title="resourceHost(row.base_url)"
           >{{ resourceHost(row.base_url) }}</span>
         </template>
-        <template #connection_status="{ row }">
+        <template #health="{ row }">
           <StatusText
-            :value="row.connection_status"
+            :value="row.health"
             :labels="connectionStatusLabels"
-            placeholder="未检测"
+            placeholder="未知"
           />
         </template>
-        <template #provider_model_count="{ row }">
+        <template #upstream_model_count="{ row }">
           <RouterLink
             :to="{ name: 'model-list', query: { channel_id: row.id } }"
             class="lai-link"
           >
-            {{ row.provider_model_count }}
+            {{ row.upstream_model_count }}
           </RouterLink>
         </template>
         <template #channel_keys="{ row }">
@@ -229,11 +229,11 @@ function onToggleEnabled(row: ProviderListItem): void {
             管理 Key
           </RouterLink>
         </template>
-        <template #last_check_at="{ row }">
-          {{ formatDateTime(row.last_check_at, store.timezone, '未检测') }}
+        <template #last_checked_at="{ row }">
+          {{ formatDateTime(row.last_checked_at, store.timezone, '未检测') }}
         </template>
-        <template #enabled="{ row }">
-          {{ row.enabled ? '启用' : '停用' }}
+        <template #status="{ row }">
+          {{ row.status === 'ACTIVE' ? '启用' : row.status === 'DISABLED' ? '停用' : row.status }}
         </template>
         <template #draft_changed="{ row }">
           <RouterLink
@@ -275,9 +275,9 @@ function onToggleEnabled(row: ProviderListItem): void {
               v-if="canManage && !lifecycle.isBusy(row.id)"
               type="button"
               class="lai-btn lai-btn-text"
-              @click="onToggleEnabled(row)"
+              @click="onToggleStatus(row)"
             >
-              {{ row.enabled ? '停用' : '启用' }}
+              {{ row.status === 'ACTIVE' ? '停用' : '启用' }}
             </button>
             <button
               v-if="canManage"

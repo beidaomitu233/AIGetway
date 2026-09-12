@@ -204,5 +204,5 @@ export function checkCandidate(
 export async function fetchModelCredentialPools(modelId: string, signal?: AbortSignal): Promise<CredentialPoolOption[]> {
   const model = await fetchProviderModel(modelId, signal)
   const [channel, keys] = await Promise.all([getProvider(model.channel_id, signal), fetchCredentials(model.channel_id, { enabled: true, page_size: 100 }, signal)])
-  return [{ id: channel.id, name: channel.name, channel_id: channel.id, credential_available: keys.total, status: channel.enabled ? 'ACTIVE' : 'DISABLED' }]
+  return [{ id: channel.id, name: channel.name, channel_id: channel.id, credential_available: keys.total, status: channel.status === 'ACTIVE' ? 'ACTIVE' : 'DISABLED' }]
 }

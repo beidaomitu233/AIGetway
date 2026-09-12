@@ -2,6 +2,7 @@ import { request } from './http'
 import type { ImpactAnalysis, ManagementOperationResult, PageResult } from './contracts'
 
 export type ConnectionStatus = 'UNKNOWN' | 'AVAILABLE' | 'UNAVAILABLE'
+export type ChannelStatus = 'ACTIVE' | 'DISABLED'
 
 export interface AdapterDeclaration {
   provider_type: string
@@ -21,46 +22,52 @@ export interface AdapterDeclaration {
   }>
 }
 
+/** BE-P21-001：渠道配置状态与运行健康分列，字段使用 V2 DTO 命名。 */
 export interface ProviderListItem {
   id: string
   name: string
-  type: string
+  provider_type: string
   base_url: string
-  proxy_url: string | null
-  connection_status: ConnectionStatus | string
-  last_check_at: string | null
+  proxy: string | null
+  status: ChannelStatus | string
+  health: string
+  priority: number
+  weight: number
+  upstream_model_count: number
+  credential_count: number
+  draft_changed: boolean
+  last_checked_at: string | null
   last_check_latency_ms: number | null
   last_error_code: string | null
-  provider_model_count: number
-  credential_pool_count: number
-  enabled: boolean
-  draft_changed: boolean
   version: number
   updated_at: string
 }
 
-export interface ProviderDetail
-  extends Omit<ProviderListItem, 'provider_model_count' | 'credential_pool_count'> {
-  connect_timeout_ms: number
-  read_timeout_ms: number
-  default_headers: Record<string, string>
+export interface ChannelTimeouts {
+  connect_ms: number
+  read_ms: number
+  stream_idle_ms: number
+}
+
+export interface ProviderDetail extends Omit<ProviderListItem, 'upstream_model_count' | 'credential_count'> {
+  timeouts: ChannelTimeouts
+  headers: Record<string, string>
   created_by: string
   created_at: string
   updated_by: string
   updated_at: string
-  /** 详情页展示的最近检测记录（口径登记于 COMMUNICATION.md C-024）。 */
   recent_check_records: ProviderCheckRecord[]
 }
 
 export interface ProviderSavePayload {
   name: string
-  type: string
+  provider_type: string
   base_url: string
-  proxy_url: string | null
-  connect_timeout_ms: number
-  read_timeout_ms: number
-  default_headers: Record<string, string>
-  enabled: boolean
+  proxy: string | null
+  timeouts: ChannelTimeouts
+  headers: Record<string, string>
+  priority?: number
+  weight?: number
   version?: number
 }
 
@@ -75,17 +82,19 @@ export interface ProviderCheckCommand {
 
 export interface ProviderCheckRecord {
   id: string
-  target_type: 'PROVIDER' | 'PROVIDER_MODEL' | 'CREDENTIAL' | 'ROUTE_CANDIDATE' | string
+  target_type: 'CHANNEL' | 'PROVIDER' | 'PROVIDER_MODEL' | 'CREDENTIAL' | 'ROUTE_CANDIDATE' | string
   target_id: string
+  mode: CheckMode | string
   status: 'SUCCEEDED' | 'FAILED' | string
   started_at: string
   ended_at: string | null
   total_ms: number | null
   trace_id: string | null
-  usage: { total_tokens: number } | null
+  attempt_id: string | null
+  usage: { input_tokens: number; output_tokens: number; total_tokens: number; source: string } | null
   error_code: string | null
   error_summary: string | null
-  provider_request_id?: string | null
+  channel_request_id?: string | null
 }
 
 export function listProviders(
@@ -99,14 +108,14 @@ export function getProvider(id: string, signal?: AbortSignal): Promise<ProviderD
   return request({ path: `/channels/${id}`, signal })
 }
 
-export function createProvider(payload: ProviderSavePayload): Promise<ManagementOperationResult> {
+export function createProvider(payload: ProviderSavePayload): Promise<ManagementOperationResult<ProviderDetail>> {
   return request({ path: '/channels', method: 'POST', body: payload })
 }
 
 export function updateProvider(
   id: string,
   payload: ProviderSavePayload,
-): Promise<ManagementOperationResult> {
+): Promise<ManagementOperationResult<ProviderDetail>> {
   return request({ path: `/channels/${id}`, method: 'PUT', body: payload })
 }
 
@@ -121,7 +130,7 @@ export function checkProvider(
   return request({ path: `/channels/${id}/check`, method: 'POST', body: command })
 }
 
-export function enableProvider(id: string, version: number): Promise<ManagementOperationResult> {
+export function enableProvider(id: string, version: number): Promise<ManagementOperationResult<ProviderDetail>> {
   return request({ path: `/channels/${id}/enable`, method: 'POST', body: { version } })
 }
 
@@ -129,7 +138,7 @@ export function disableProvider(
   id: string,
   version: number,
   confirmedImpactVersion: string,
-): Promise<ManagementOperationResult> {
+): Promise<ManagementOperationResult<ProviderDetail>> {
   return request({
     path: `/channels/${id}/disable`,
     method: 'POST',
@@ -141,7 +150,7 @@ export function deleteProvider(
   id: string,
   version: number,
   confirmedImpactVersion: string,
-): Promise<ManagementOperationResult> {
+): Promise<ManagementOperationResult<ProviderDetail>> {
   return request({
     path: `/channels/${id}`,
     method: 'DELETE',

@@ -132,7 +132,7 @@ async function submitCheck(command: Parameters<typeof checkProvider>[1]): Promis
   }
 }
 
-const headerRows = computed(() => Object.entries(detail.value?.default_headers ?? {}))
+const headerRows = computed(() => Object.entries(detail.value?.headers ?? {}))
 </script>
 
 <template>
@@ -169,9 +169,9 @@ const headerRows = computed(() => Object.entries(detail.value?.default_headers ?
             v-if="canManage && !lifecycle.isBusy(detail.id)"
             type="button"
             class="lai-btn"
-            @click="detail.enabled ? lifecycle.requestDisable(detail.id, detail.version) : lifecycle.enable(detail.id, detail.version)"
+            @click="detail.status === 'ACTIVE' ? lifecycle.requestDisable(detail.id, detail.version) : lifecycle.enable(detail.id, detail.version)"
           >
-            {{ detail.enabled ? '停用' : '启用' }}
+            {{ detail.status === 'ACTIVE' ? '停用' : '启用' }}
           </button>
           <button
             v-if="canManage"
@@ -215,14 +215,14 @@ const headerRows = computed(() => Object.entries(detail.value?.default_headers ?
           <div class="lai-summary-item">
             <span class="lai-summary-label">连接状态</span>
             <StatusText
-              :value="detail.connection_status"
+              :value="detail.health"
               :labels="connectionStatusLabels"
-              placeholder="未检测"
+              placeholder="未知"
             />
           </div>
           <div class="lai-summary-item">
             <span class="lai-summary-label">最近检测时间</span>
-            {{ formatDateTime(detail.last_check_at, store.timezone, '未检测') }}
+            {{ formatDateTime(detail.last_checked_at, store.timezone, '未检测') }}
           </div>
           <div class="lai-summary-item">
             <span class="lai-summary-label">检测耗时</span>
@@ -244,22 +244,28 @@ const headerRows = computed(() => Object.entries(detail.value?.default_headers ?
             <span class="lai-summary-label">名称</span>{{ detail.name }}
           </div>
           <div class="lai-summary-item">
-            <span class="lai-summary-label">类型</span>{{ detail.type }}
+            <span class="lai-summary-label">类型</span>{{ detail.provider_type }}
           </div>
           <div class="lai-summary-item lai-summary-wide">
             <span class="lai-summary-label">服务地址</span>{{ detail.base_url }}
           </div>
           <div class="lai-summary-item lai-summary-wide">
-            <span class="lai-summary-label">代理地址</span>{{ detail.proxy_url ?? '直连' }}
+            <span class="lai-summary-label">代理地址</span>{{ detail.proxy ?? '直连' }}
           </div>
           <div class="lai-summary-item">
-            <span class="lai-summary-label">连接超时</span>{{ detail.connect_timeout_ms }} ms
+            <span class="lai-summary-label">连接超时</span>{{ detail.timeouts.connect_ms }} ms
           </div>
           <div class="lai-summary-item">
-            <span class="lai-summary-label">读取超时</span>{{ detail.read_timeout_ms }} ms
+            <span class="lai-summary-label">读取超时</span>{{ detail.timeouts.read_ms }} ms
           </div>
           <div class="lai-summary-item">
-            <span class="lai-summary-label">启用状态</span>{{ detail.enabled ? '启用' : '停用' }}
+            <span class="lai-summary-label">流式空闲超时</span>{{ detail.timeouts.stream_idle_ms }} ms
+          </div>
+          <div class="lai-summary-item">
+            <span class="lai-summary-label">优先级 / 权重</span>{{ detail.priority }} / {{ detail.weight }}
+          </div>
+          <div class="lai-summary-item">
+            <span class="lai-summary-label">配置状态</span>{{ detail.status === 'ACTIVE' ? '启用' : detail.status === 'DISABLED' ? '停用' : detail.status }}
           </div>
           <div class="lai-summary-item">
             <span class="lai-summary-label">版本</span>{{ detail.version }}

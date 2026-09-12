@@ -84,7 +84,7 @@ function applicationPayload(activeKeyCount: number) {
     last_called_at: '2026-09-11T08:00:00Z',
     created_at: '2026-09-01T08:00:00Z',
     updated_at: '2026-09-11T08:00:00Z',
-    version: 4,
+    version: '4',
   }
 }
 

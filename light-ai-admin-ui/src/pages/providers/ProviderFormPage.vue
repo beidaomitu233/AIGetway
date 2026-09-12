@@ -32,13 +32,17 @@ const loadedDetail = ref<ProviderDetail | null>(null)
 
 const form = reactive({
   name: '',
-  type: '',
+  provider_type: '',
   base_url: '',
-  proxy_url: '',
-  connect_timeout_ms: 3000,
-  read_timeout_ms: 120000,
-  default_headers: {} as Record<string, string>,
-  enabled: true,
+  proxy: '',
+  timeouts: {
+    connect_ms: 3000,
+    read_ms: 120000,
+    stream_idle_ms: 120000,
+  },
+  headers: {} as Record<string, string>,
+  priority: 10,
+  weight: 1,
 })
 const headerValid = ref(true)
 const version = ref<number | null>(null)
@@ -62,9 +66,9 @@ const adapterOptions = computed(() =>
   })),
 )
 
-function onTypeChange(type: string): void {
-  form.type = type
-  const adapter = store.adapters.find((item) => item.provider_type === type)
+function onTypeChange(providerType: string): void {
+  form.provider_type = providerType
+  const adapter = store.adapters.find((item) => item.provider_type === providerType)
   if (adapter && form.base_url === '') {
     form.base_url = adapter.default_base_url
   }
@@ -77,29 +81,38 @@ function validate(): boolean {
   if (name.length < 2 || name.length > 64) {
     errors.name = '名称长度为 2—64 字符'
   }
-  if (!isEdit.value && !adapterOptions.value.some((option) => option.value === form.type)) {
-    errors.type = '请选择 渠道 类型'
+  if (!isEdit.value && !adapterOptions.value.some((option) => option.value === form.provider_type)) {
+    errors.provider_type = '请选择渠道类型'
   }
   if (normalizeResourceUrl(form.base_url) === null) {
     errors.base_url = '必须为合法的 http(s) 绝对地址，且不含认证信息、查询参数与片段'
   }
-  if (form.proxy_url.trim() && normalizeResourceUrl(form.proxy_url) === null) {
-    errors.proxy_url = '代理必须为不含认证信息、查询参数与片段的 http(s) 地址'
+  if (form.proxy.trim() && normalizeResourceUrl(form.proxy) === null) {
+    errors.proxy = '代理必须为不含认证信息、查询参数与片段的 http(s) 地址'
   }
-  if (!headerValid.value || !headersValid(Object.entries(form.default_headers).map(([key, value]) => ({ key, value })))) {
-    errors.default_headers = '请修正请求头，禁止携带认证信息'
+  if (!headerValid.value || !headersValid(Object.entries(form.headers).map(([key, value]) => ({ key, value })))) {
+    errors.headers = '请修正请求头，禁止携带认证信息'
   }
-  if (!Number.isInteger(form.connect_timeout_ms) || form.connect_timeout_ms < 100 || form.connect_timeout_ms > 60000) {
-    errors.connect_timeout_ms = '连接超时为 100—60000 的整数'
+  if (!Number.isInteger(form.timeouts.connect_ms) || form.timeouts.connect_ms < 100 || form.timeouts.connect_ms > 60000) {
+    errors.connect_ms = '连接超时为 100—60000 的整数'
   }
   if (
-    !Number.isInteger(form.read_timeout_ms) ||
-    form.read_timeout_ms < 1000 ||
-    form.read_timeout_ms > 600000
+    !Number.isInteger(form.timeouts.read_ms) ||
+    form.timeouts.read_ms < 1000 ||
+    form.timeouts.read_ms > 600000
   ) {
-    errors.read_timeout_ms = '读取超时为 1000—600000 的整数'
-  } else if (form.read_timeout_ms < form.connect_timeout_ms) {
-    errors.read_timeout_ms = '读取超时不能小于连接超时'
+    errors.read_ms = '读取超时为 1000—600000 的整数'
+  } else if (form.timeouts.read_ms < form.timeouts.connect_ms) {
+    errors.read_ms = '读取超时不能小于连接超时'
+  }
+  if (!Number.isInteger(form.timeouts.stream_idle_ms) || form.timeouts.stream_idle_ms < 1000 || form.timeouts.stream_idle_ms > 600000) {
+    errors.stream_idle_ms = '流式空闲超时为 1000—600000 的整数'
+  }
+  if (!Number.isInteger(form.priority) || form.priority < 1 || form.priority > 100) {
+    errors.priority = '优先级为 1—100 的整数'
+  }
+  if (!Number.isInteger(form.weight) || form.weight < 1 || form.weight > 100) {
+    errors.weight = '权重为 1—100 的整数'
   }
   localErrors.value = errors
   return Object.keys(errors).length === 0
@@ -108,13 +121,13 @@ function validate(): boolean {
 function applyDetail(detail: ProviderDetail): void {
   loadedDetail.value = detail
   form.name = detail.name
-  form.type = detail.type
+  form.provider_type = detail.provider_type
   form.base_url = detail.base_url
-  form.proxy_url = detail.proxy_url ?? ''
-  form.connect_timeout_ms = detail.connect_timeout_ms
-  form.read_timeout_ms = detail.read_timeout_ms
-  form.default_headers = { ...detail.default_headers }
-  form.enabled = detail.enabled
+  form.proxy = detail.proxy ?? ''
+  form.timeouts = { ...detail.timeouts }
+  form.headers = { ...detail.headers }
+  form.priority = detail.priority
+  form.weight = detail.weight
   version.value = detail.version
   dirty.value = false
 }
@@ -154,13 +167,13 @@ async function save(): Promise<void> {
   const targetId = providerId.value
   const payload: ProviderSavePayload = {
     name: form.name.trim(),
-    type: form.type,
+    provider_type: form.provider_type,
     base_url: normalizeResourceUrl(form.base_url)!,
-    proxy_url: form.proxy_url.trim() === '' ? null : form.proxy_url.trim(),
-    connect_timeout_ms: form.connect_timeout_ms,
-    read_timeout_ms: form.read_timeout_ms,
-    default_headers: form.default_headers,
-    enabled: editing ? loadedDetail.value!.enabled : form.enabled,
+    proxy: form.proxy.trim() === '' ? null : form.proxy.trim(),
+    timeouts: { ...form.timeouts },
+    headers: { ...form.headers },
+    priority: form.priority,
+    weight: form.weight,
   }
   const outcome = await submit(async () => {
     if (editing) {
@@ -238,13 +251,13 @@ function fieldError(field: string): string | undefined {
         label="类型"
         for-id="provider-type"
         :required="!isEdit"
-        :error="fieldError('type')"
+        :error="fieldError('provider_type')"
         :hint="isEdit ? '类型创建后只读' : '必须来自当前实例已加载的 Adapter'"
       >
         <select
           id="provider-type"
           class="lai-select"
-          :value="form.type"
+          :value="form.provider_type"
           :disabled="isEdit"
           @change="onTypeChange(($event.target as HTMLSelectElement).value)"
         >
@@ -280,12 +293,12 @@ function fieldError(field: string): string | undefined {
       <FormField
         label="代理地址"
         for-id="provider-proxy"
-        :error="fieldError('proxy_url')"
+        :error="fieldError('proxy')"
         hint="空值直连"
       >
         <input
           id="provider-proxy"
-          v-model="form.proxy_url"
+          v-model="form.proxy"
           class="lai-input"
           type="url"
           @input="markDirty"
@@ -297,11 +310,11 @@ function fieldError(field: string): string | undefined {
           label="连接超时（毫秒）"
           for-id="provider-connect-timeout"
           required
-          :error="fieldError('connect_timeout_ms')"
+          :error="fieldError('connect_ms')"
         >
           <input
             id="provider-connect-timeout"
-            v-model.number="form.connect_timeout_ms"
+            v-model.number="form.timeouts.connect_ms"
             class="lai-input"
             type="number"
             min="100"
@@ -313,11 +326,11 @@ function fieldError(field: string): string | undefined {
           label="读取超时（毫秒）"
           for-id="provider-read-timeout"
           required
-          :error="fieldError('read_timeout_ms')"
+          :error="fieldError('read_ms')"
         >
           <input
             id="provider-read-timeout"
-            v-model.number="form.read_timeout_ms"
+            v-model.number="form.timeouts.read_ms"
             class="lai-input"
             type="number"
             min="1000"
@@ -325,35 +338,68 @@ function fieldError(field: string): string | undefined {
             @input="markDirty"
           >
         </FormField>
+        <FormField
+          label="流式空闲超时（毫秒）"
+          for-id="provider-stream-idle-timeout"
+          required
+          :error="fieldError('stream_idle_ms')"
+        >
+          <input
+            id="provider-stream-idle-timeout"
+            v-model.number="form.timeouts.stream_idle_ms"
+            class="lai-input"
+            type="number"
+            min="1000"
+            max="600000"
+            @input="markDirty"
+          >
+        </FormField>
+        <FormField
+          label="优先级"
+          for-id="provider-priority"
+          required
+          :error="fieldError('priority')"
+        >
+          <input
+            id="provider-priority"
+            v-model.number="form.priority"
+            class="lai-input"
+            type="number"
+            min="1"
+            max="100"
+            @input="markDirty"
+          >
+        </FormField>
+        <FormField
+          label="权重"
+          for-id="provider-weight"
+          required
+          :error="fieldError('weight')"
+        >
+          <input
+            id="provider-weight"
+            v-model.number="form.weight"
+            class="lai-input"
+            type="number"
+            min="1"
+            max="100"
+            @input="markDirty"
+          >
+        </FormField>
       </div>
 
       <FormField
-        label="默认请求头"
+        label="请求头"
         for-id="provider-headers"
-        :error="fieldError('default_headers')"
+        :error="fieldError('headers')"
         hint="禁止认证与 Cookie 类请求头；最多 20 项"
       >
         <KeyValueEditor
-          v-model="form.default_headers"
+          v-model="form.headers"
           :disabled="submitting || !canManage"
           @validity="headerValid = $event"
           @update:model-value="markDirty"
         />
-      </FormField>
-
-      <FormField
-        label="启用"
-        for-id="provider-enabled"
-        hint="修改已有渠道状态请返回详情，先核对影响；发布后影响路由"
-      >
-        <input
-          id="provider-enabled"
-          v-model="form.enabled"
-          :disabled="isEdit || submitting || !canManage"
-          type="checkbox"
-          class="lai-checkbox"
-          @change="markDirty"
-        >
       </FormField>
 
       <p

@@ -74,6 +74,11 @@ class ApplicationApiContractTest {
     void subresourcesMatchDetailAndUseSnakeCase() throws Exception {
         JsonNode detail = read(mvc.perform(asOwner(get(base()))).andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString()).path("data");
+        JsonNode list = read(mvc.perform(asOwner(get("/admin/applications"))).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).path("data").path("items").get(0);
+        assertThat(detail.path("version").isTextual()).isTrue();
+        assertThat(list.path("version").isTextual()).isTrue();
+        assertThat(list.path("version")).isEqualTo(detail.path("version"));
         JsonNode quota = read(mvc.perform(asOwner(get(base() + "/quota")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.amount_limit").value("10.5"))
                 .andReturn().getResponse().getContentAsString()).path("data");

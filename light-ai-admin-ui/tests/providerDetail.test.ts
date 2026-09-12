@@ -16,17 +16,18 @@ import {
 const detail = {
   id: 'prov-1',
   name: 'OpenAI 生产',
-  type: 'OPENAI',
+  provider_type: 'OPENAI',
   base_url: 'https://api.openai.com/v1/',
-  proxy_url: null,
-  connect_timeout_ms: 3000,
-  read_timeout_ms: 120000,
-  default_headers: { 'X-Env': 'production' },
-  connection_status: 'AVAILABLE',
-  last_check_at: '2026-09-05T02:00:00Z',
+  proxy: null,
+  timeouts: { connect_ms: 3000, read_ms: 120000, stream_idle_ms: 120000 },
+  headers: { 'X-Env': 'production' },
+  status: 'ACTIVE',
+  health: 'AVAILABLE',
+  priority: 5,
+  weight: 10,
+  last_checked_at: '2026-09-05T02:00:00Z',
   last_check_latency_ms: 430,
   last_error_code: null,
-  enabled: true,
   draft_changed: false,
   version: 3,
   created_by: 'admin',
@@ -130,7 +131,7 @@ describe('ProviderDetailPage（FE-009/FE-010）', () => {
           usage: { total_tokens: 14 },
           error_code: null,
           error_summary: null,
-          provider_request_id: 'req-001',
+          channel_request_id: 'req-001',
         })
       }
       return undefined
@@ -154,7 +155,7 @@ describe('ProviderDetailPage（FE-009/FE-010）', () => {
     expect(wrapper.text()).toContain('检测结果：')
     expect(wrapper.text()).toContain('成功')
     expect(wrapper.text()).toContain('386 ms')
-    expect(wrapper.text()).toContain('Provider Request ID：req-001')
+    expect(wrapper.text()).toContain('Channel Request ID：req-001')
     const checkCall = stub.calls.find((call) => call.url.includes('/check'))
     expect(checkCall).toBeDefined()
     expect(checkCall!.body.mode).toBe('MINIMAL_CHAT')
