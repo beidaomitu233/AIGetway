@@ -18,7 +18,10 @@ import com.lightai.client.error.LightAiException;
 import com.lightai.client.protocol.Roles;
 import com.lightai.spi.auth.AuthContext;
 import com.lightai.storage.access.JdbcAccessCredentialRepository;
+import com.lightai.runtime.ports.ConfigSnapshotPort;
 import com.lightai.storage.alias.AliasRecord;
+import com.lightai.storage.alias.CandidateRecord;
+import com.lightai.storage.alias.JdbcCandidateRepository;
 import com.lightai.storage.alias.JdbcAliasRepository;
 import com.lightai.storage.application.JdbcApplicationKeyRepository;
 import com.lightai.storage.application.JdbcApplicationRepository;
@@ -71,12 +74,19 @@ class ApplicationKeyServiceTest {
             aliases.insert(connection, new AliasRecord(
                     otherModelId, "chat-secondary", "备用模型", null,
                     "PRIORITY_WEIGHTED", true, 1L, null, null));
+            var candidates = new JdbcCandidateRepository();
+            for (UUID aliasId : List.of(allowedModelId, otherModelId)) {
+                candidates.insert(connection, new CandidateRecord(
+                        UUID.randomUUID(), aliasId, UUID.randomUUID(), UUID.randomUUID(),
+                        10, 1, true, 1L, null, null));
+            }
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
         ApplicationService applicationService = new ApplicationService(
                 dataSource, applications, aliases, audits, transactions,
-                new PageResultFactory(clock), clock, "STANDALONE_SERVER");
+                new PageResultFactory(clock), clock, "STANDALONE_SERVER",
+                () -> new ConfigSnapshotPort.ActiveSnapshot(1, List.of()));
         applicationId = UUID.fromString(applicationService.create(admin(), new ApplicationCreateCommand(
                 "service-desk", "服务台助手", "IT", "owner-1", "张三", "PROD", null,
                 "ACTIVE", null, null, "CNY", 100, 50_000L,
@@ -91,7 +101,10 @@ class ApplicationKeyServiceTest {
         var issued = service.create(owner(), applicationId,
                 new ApplicationKeyCreateCommand("生产接入", List.of("127.0.0.1"),
                         null, 60, 30_000L, List.of(allowedModelId.toString())));
-        assertThat(issued.keyValue()).startsWith("lai_");
+        assertThat(issued.secret()).startsWith("lai_");
+        assertThat(issued.keyPrefix()).isNotBlank();
+        assertThat(issued.expiresAt()).isNull();
+        assertThat(issued.status()).isEqualTo("ACTIVE");
         assertThat(service.list(owner(), applicationId)).singleElement()
                 .satisfies(key -> {
                     assertThat(key.maskedValue()).startsWith("lai_****");
@@ -105,7 +118,7 @@ class ApplicationKeyServiceTest {
                 dataSource, new JdbcAccessCredentialRepository(), new JdbcAliasRepository(),
                 tokenService, Clock.fixed(Instant.parse("2026-09-08T09:00:00Z"), ZoneOffset.UTC),
                 false, applications, keys);
-        var principal = auth.authenticate(issued.keyValue(), "127.0.0.1");
+        var principal = auth.authenticate(issued.secret(), "127.0.0.1");
         assertThat(principal.application()).isEqualTo("service-desk");
         assertThat(principal.applicationKeyId()).isEqualTo(issued.keyId());
         assertThat(principal.rpm()).isEqualTo(60);
@@ -116,7 +129,7 @@ class ApplicationKeyServiceTest {
         var disabled = service.changeStatus(owner(), applicationId, UUID.fromString(issued.keyId()),
                 new ApplicationKeyStatusCommand("DISABLED", issued.version(), "暂停接入排查"));
         assertThat(disabled.entity().status()).isEqualTo("DISABLED");
-        assertThatThrownBy(() -> auth.authenticate(issued.keyValue(), "127.0.0.1"))
+        assertThatThrownBy(() -> auth.authenticate(issued.secret(), "127.0.0.1"))
                 .isInstanceOf(LightAiException.class)
                 .extracting(error -> ((LightAiException) error).code())
                 .isEqualTo(ErrorCode.ACCESS_TOKEN_INVALID);
@@ -131,22 +144,22 @@ class ApplicationKeyServiceTest {
         var enabled = service.changeStatus(owner(), applicationId, UUID.fromString(issued.keyId()),
                 new ApplicationKeyStatusCommand("ACTIVE", disabled.version(), "排查完成恢复"));
         assertThat(enabled.entity().status()).isEqualTo("ACTIVE");
-        assertThat(auth.authenticate(issued.keyValue(), "127.0.0.1").application())
+        assertThat(auth.authenticate(issued.secret(), "127.0.0.1").application())
                 .isEqualTo("service-desk");
 
         var rotated = service.rotate(owner(), applicationId, UUID.fromString(issued.keyId()),
                 new ApplicationKeyRotateCommand(enabled.version(), "季度轮换"));
         assertThat(rotated.rotationGeneration()).isEqualTo(2);
-        assertThatThrownBy(() -> auth.authenticate(issued.keyValue(), "127.0.0.1"))
+        assertThatThrownBy(() -> auth.authenticate(issued.secret(), "127.0.0.1"))
                 .isInstanceOf(LightAiException.class)
                 .extracting(error -> ((LightAiException) error).code())
                 .isEqualTo(ErrorCode.ACCESS_TOKEN_INVALID);
-        assertThat(auth.authenticate(rotated.keyValue(), "127.0.0.1").application())
+        assertThat(auth.authenticate(rotated.secret(), "127.0.0.1").application())
                 .isEqualTo("service-desk");
 
         service.revoke(owner(), applicationId, UUID.fromString(issued.keyId()),
                 new ApplicationKeyRevokeCommand(rotated.version(), "接入下线"));
-        assertThatThrownBy(() -> auth.authenticate(rotated.keyValue(), "127.0.0.1"))
+        assertThatThrownBy(() -> auth.authenticate(rotated.secret(), "127.0.0.1"))
                 .isInstanceOf(LightAiException.class)
                 .extracting(error -> ((LightAiException) error).code())
                 .isEqualTo(ErrorCode.ACCESS_TOKEN_INVALID);
@@ -177,7 +190,7 @@ class ApplicationKeyServiceTest {
                 tokenService, Clock.fixed(Instant.parse("2026-09-08T09:00:00Z"), ZoneOffset.UTC),
                 false, applications, keys);
 
-        var principal = auth.authenticate(issued.keyValue(), "127.0.0.1");
+        var principal = auth.authenticate(issued.secret(), "127.0.0.1");
         assertThat(principal.aliasAllowed("chat-primary")).isTrue();
         assertThat(principal.aliasAllowed("chat-secondary")).isTrue();
         assertThat(service.list(owner(), applicationId)).singleElement()

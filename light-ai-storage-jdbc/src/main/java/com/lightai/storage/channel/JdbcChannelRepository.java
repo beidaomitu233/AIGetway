@@ -251,13 +251,13 @@ public class JdbcChannelRepository extends AbstractJdbcRepository {
         }
     }
 
-    /** 列表筛选：keyword 命中名称，type/enabled 精确匹配；
-     * connection_status/draft_changed 为运行与差异关联过滤。 */
-    public record ChannelFilter(String keyword, String type, Boolean enabled,
-                                String connectionStatus, Boolean draftChanged) {
+    /** 列表筛选：keyword 命中名称，provider_type/status 精确匹配；
+     * health/draft_changed 为运行与差异关联过滤。 */
+    public record ChannelFilter(String keyword, String providerType, String status,
+                                String health, Boolean draftChanged) {
 
-        public ChannelFilter(String keyword, String type, Boolean enabled) {
-            this(keyword, type, enabled, null, null);
+        public ChannelFilter(String keyword, String providerType, String status) {
+            this(keyword, providerType, status, null, null);
         }
     }
 
@@ -269,19 +269,19 @@ public class JdbcChannelRepository extends AbstractJdbcRepository {
             sql.append(" AND ").append(d.ilikeClause("c.name"));
             params.add("%" + filter.keyword().strip() + "%");
         }
-        if (filter.type() != null && !filter.type().isBlank()) {
+        if (filter.providerType() != null && !filter.providerType().isBlank()) {
             sql.append(" AND p.type = ?");
-            params.add(filter.type().strip());
+            params.add(filter.providerType().strip());
         }
-        if (filter.enabled() != null) {
+        if (filter.status() != null && !filter.status().isBlank()) {
             sql.append(" AND c.status = ?");
-            params.add(filter.enabled() ? ChannelRecord.STATUS_ACTIVE : ChannelRecord.STATUS_DISABLED);
+            params.add(filter.status().strip());
         }
-        if (filter.connectionStatus() != null && !filter.connectionStatus().isBlank()) {
+        if (filter.health() != null && !filter.health().isBlank()) {
             sql.append(" AND EXISTS (SELECT 1 FROM ").append(qualify(connection, "object_runtime_state")).append(" s")
                     .append(" WHERE s.entity_type = 'CHANNEL' AND s.entity_id = c.id")
                     .append(" AND s.connection_status = ?)");
-            params.add(filter.connectionStatus().strip());
+            params.add(filter.health().strip());
         }
         if (filter.draftChanged() != null) {
             sql.append(" AND ").append(filter.draftChanged() ? "" : "NOT ").append(

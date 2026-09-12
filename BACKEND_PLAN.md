@@ -297,6 +297,38 @@ Windows、Temurin Java 17.0.19，Maven 使用 `D:/IntelliJ IDEA 2025.2.3/plugins
 - 新增 GET /admin/applications/{id}/audit：page/page_size、action、result、from、to；响应 data.items/total/page/page_size，行含 id、operator_id、action、target_type、target_id、result、request_id、created_at、before_digest、after_digest。按 created_at desc/id desc；服务器按明确 application_id 关系限制范围，禁止靠全局关键字模糊筛选；数据无关联时返回真实可查范围并标明 legacy_partial，不拼造历史归属。审计读取权限与应用范围均须满足，依赖 DB-201 与 BE-P23 审计读取端口；端口由当前后端负责人协调，不接管别包文件。
 - 验收补充：创建前候选不泄露未授权模型；影响查询 403、版本冲突、超过 50 个 Key 截断及写入前竞态；应用审计隔离、空态、时间分页和遗留部分覆盖；上述端点实际未交付前保持对应任务未勾选。
 
+## BE-P20 接管执行记录（2026-09-12，zcode-be-0912b）
+
+经用户确认原领取（codex-be-0912）会话中断、剩余子项未实际执行，由后端执行模型 zcode-be-0912b 接管，分支 feature/backend-p20-zcode-be-0912b。本记录只登记本轮已交付子项；BE-201～BE-205 五项保持未勾选，待 DB-P20 迁移、真实环境与联调证据满足后再行验收。
+
+### 已交付子项（对齐"BE-P20 架构处理结论"）
+
+| 任务 | 本次交付 | 未满足的验收 |
+|---|---|---|
+| BE-201 | DUPLICATE_APPLICATION_CODE/409（预检与唯一约束并发冲突同映射，details.field=code）；列表新增 department 精确筛选、budget_status（NORMAL/EXHAUSTED/UNLIMITED，SQL 内联 quota LEFT JOIN 计算，含 count 同口径）；列表项补 budget_status、requests_24h、success_rate_24h（窗口内无终态请求为 null）、model_count 改为授权且存在启用路由候选的模型数；默认排序 last_called_at desc（空值排末尾）+ application.id asc 稳定序；本页 ID 集合批量聚合额度/模型/密钥/24h Trace 摘要，消除逐应用 N+1；query_started_at 与 24h 窗口 [T-24h,T) 同源；归档在应用行锁内复核 DISABLED 与 budget_reservation ACTIVE 占用，有占用返回 OBJECT_IN_USE/409（准入侧 lockAndValidateKey 已锁同一应用行，无需改准入代码） | 真实 PostgreSQL/MySQL 归档与准入并发竞争；双数据库分页/摘要回归 |
+| BE-202 | 签发/轮换结果字段切换为 secret、key_prefix、masked_value、status、issued_at、expires_at（key_value 退出）；Cache-Control: no-store 维持 | 轮换新代际（新 Key ID/摘要、复制收紧策略、replaced_by_key_id、宽限）、幂等键存储（application_key_operation）、同事务幂等重放：依赖 DB-202 迁移，未实施 |
+| BE-203 | 新增 GET /admin/applications/{id}/model-options 与 GET /admin/applications/model-options（创建前），读取活动配置快照中已发布且存在可用候选的模型，返回 data.items（virtual_model_id、code、max_output_tokens、allow_stream、snapshot_no）；能力交集口径：max_output_tokens 取全部启用候选最小值，allow_stream 全部显式支持才为 true；负责人（非 SYSTEM_ADMIN/OPERATOR）无显式可授权集合时仅返回当前已授权模型，创建前候选返回空列表；授权写入校验启用 + 存在启用路由候选（可路由口径）；负责人扩展授权默认拒绝（ACCESS_DENIED/403，附 FAILED 审计），收紧允许；约束 JSON/API 字段统一为 allow_stream，历史 stream_allowed 只读兼容，存量转换待 DB-205 | 已发布快照与库内别名/候选的双口径一致性验收；能力边界与 /v1/models、Chat 共用规则联调 |
+| BE-204 | 允许新上限低于已用+预占（PUT quota、增量调整，非负校验），保存成功后由准入额度检查拒绝新请求；GET quota 新增 tokens_remaining、amount_remaining（max(0,limit-used-reserved)，无限额 null）、admission_blocked；PUT /quota 新增必填 idempotency_key，以 dimension=POLICY 记入 quota_adjustment 变更流水（数值列空置），同键重放校验原因一致，不同载荷返回 IDEMPOTENCY_KEY_CONFLICT | period_id/policy_version/timezone/reset_at 字段（依赖 DB-203 周期快照与平台时区配置，当前恒为 null）；POST /quota/renew；周期段化 reset（期初余额/新 period）；预约调整（effective_at、202/SCHEDULED、到期扫描）：依赖 DB-203/204 迁移，未实施 |
+| BE-205 | 无新增；权限边界维持既有四角色读取回归 | 企业身份源选型（BP-001/002）待确认；成员写入方式、显式敏感授权待决策 |
+| FE-P20 补充契约 | POST /admin/applications/{id}/impact（STATUS_CHANGE/MODEL_PERMISSION_CHANGE，返回 affected_key_count/affected_key_ids（≤50）/has_more_keys/requests_24h/running_requests（ACTIVE 预占数）/blockers，VERSION 冲突 409）；应用域 64 位 Token 限额/用量/预占/剩余、请求计数、version/snapshot_no 统一十进制整数字符串 | GET /admin/applications/{id}/audit：依赖 DB-201 audit_log.application_id 迁移与 BE-P23 审计读取端口，未实施 |
+
+### 契约切换提醒（前后端同批联调）
+
+1. 密钥签发/轮换：key_value → secret，新增 key_prefix/status/issued_at/expires_at。
+2. 应用列表/详情额度：token_limit、tokens_used、tokens_reserved、version、snapshot_no、requests_24h、affected_key_count、running_requests 为十进制字符串；max_output_tokens 等有 32 位上限的字段仍为 JSON number。
+3. 模型权限与约束：stream_allowed → allow_stream（存量历史行由后端读取兼容，DB-205 迁移完成转换）。
+4. 列表默认排序由 updated_at desc 改为 last_called_at desc（空值排末尾，id asc 稳定序）。
+5. PUT /quota 新增必填 idempotency_key；重复提交同一请求返回相同结果。
+
+### 测试证据
+
+Windows、Temurin Java 17.0.19，Maven 使用 `D:/IntelliJ IDEA 2025.2.3/plugins/maven/lib/maven3/bin/mvn.cmd`。
+
+1. `mvn -B -pl light-ai-admin -am test`：212 项通过（含 ApplicationServiceTest 17 项，新增重复编码 409、降额至已用以下、PUT 幂等、budget_status/department 筛选、24h 成功率、归档占用互斥、model-options 双端点、影响预览；ApplicationApiContractTest 6 项、ApplicationKeyServiceTest 3 项按新契约更新）。
+2. `mvn -B clean verify`：全仓结果见交付说明（14 模块构建）。
+3. 未执行：真实 PostgreSQL/MySQL 唯一冲突与归档/准入竞争、真实 Redis、真实 Provider、企业身份登录、前后端首调 E2E、性能场景。
+4. 未修改数据库迁移文件及 DATABASE_PLAN 勾选；未触碰 BE-P21/P22/P23 与前端占用文件。
+
 ## BE-P21 本次执行与验收记录（2026-09-12）
 
 负责人 codex-be-0912；领取 BE-211～BE-215，领取提交 45ce9c9；runtime 与凭证 JDBC 修复范围已分别单独登记并普通推送。独立目录 .worktrees/backend-p21-codex-0912。本轮只修改后端和执行文档，无前端与数据库迁移。
@@ -318,3 +350,23 @@ Windows、Temurin Java 17.0.19，Maven 使用 `D:/IntelliJ IDEA 2025.2.3/plugins
 COMMUNICATION.md 已登记 BE-P21-001～006，均待确认。BE-211～215 均未达到整项完成标准，不勾选；仅交付以上已验证子项，整包阻塞并保留原负责人，避免其他 Agent 重复实现。后续数据库迁移与契约确认后由原负责人继续验收。
 
 集成交付：功能提交 c08d625，文档提交 36e1cbc；2304acf 保留最新架构与前端记录后合入独立本地 dev。独立集成目录再次 mvn -B verify：14 模块成功，453 项中 437 通过、16 环境跳过，0 失败/错误；git diff --check 通过。普通推送远程结果以 TASK_STATUS.md 最终记录为准。
+
+## BE-P21 接管执行记录（2026-09-12，zcode-be-0912c）
+
+负责人 zcode-be-0912c；经用户确认原领取（codex-be-0912）会话中断、剩余子项未实际执行，由本负责人接管推进。领取提交 9cdd65a，基线 origin/dev 5a11054（含 c08d625 已交付路径收口、安全与 JDBC 修复）。独立目录 .worktrees/backend-p21-zcode-be-0912c。本轮只修改后端与执行文档，无前端与数据库迁移。
+
+| 任务 | 本次交付 | 未满足验收，保持未勾选 |
+|---|---|---|
+| BE-211 | Channel DTO 按 BACKEND_PLAN BE-211 字段清单收口：请求 provider_type/base_url/proxy/timeouts{connect_ms,read_ms,stream_idle_ms}/headers/priority/weight/version（新 nested ChannelTimeouts；priority/weight 可编辑，缺省 10/1，范围 1—100）；响应 provider_type/proxy/status/health/priority/weight/upstream_model_count/credential_count；列表过滤 type/enabled/connection_status 改为 provider_type/status/health；创建默认 ACTIVE，启停仅经 enable/disable 独立命令；审计字段标签同步（status/proxy/timeouts.*/headers.count/priority/weight） | 即时状态运行广播契约、SSRF/DNS 重绑定/TLS 真实环境验收、运行影响与禁用影响真实数据验收（BE-P21-001 余项） |
+| BE-212 | Key priority 全操作可编辑（创建/更新/列表/详情，范围 1—100，缺省 10）；rate_limit_reset_at 读取修复：RuntimeStateSnapshot 增加 reset_at（BE-P22 已写入），响应不再用 last_checked_at 冒充冷却复位时间；最后可用 Key 保护：停用/删除渠道最后一个 ACTIVE Key 返回 OBJECT_IN_USE/409 | 429 冷却与真实上游联动、最后可用 Key 与共享占用互斥的运行端口验收、跨实例同步、真实 Provider 检测（BE-P21-002 余项） |
+| BE-213 | （无新增；DB-213 未交付） | 同步预览/提交、model_sync_job/item、locked_fields 依赖 DB-213 迁移；合法批量检测仍 503 |
+| BE-214 | （无新增；DB-214 未交付） | 能力交集持久化、显式收紧、应用影响依赖 DB-214/215 迁移 |
+| BE-215 | 候选 runtime_status 纳入渠道运行健康维度：渠道 object_runtime_state.connection_status=UNAVAILABLE 时候选置 UNAVAILABLE/「渠道最近检测不可用」；修复 raw SQL 表名未按方言 qualify 的缺陷（draft_change 同类隐患一并修复） | 活动快照、容量/熔断维度与发布验收依赖运行可用性端口与 DB-P21（BE-P21-005 余项） |
+
+主要文件：client/channel 下 ChannelSaveCommand（重写）、ChannelTimeouts（新增）、ChannelListItem、ChannelDetail、ChannelCredentialCreateCommand/UpdateCommand/ListItem/Detail（+priority/reset_at 语义）；storage-jdbc 下 JdbcObjectRuntimeStateRepository、JdbcRuntimeStateWriter（快照+reset_at）、JdbcChannelRepository（ChannelFilter providerType/status/health）、JdbcChannelCredentialRepository（countActiveLiveInChannel）；admin 下 ChannelService、ChannelCredentialService、RouteCandidateService；测试 ResourceApiContractTest（11→14 项）、ChannelCredentialCreateCommandTest（5→6 项）。
+
+前端影响（FE-P21 负责人后续切换，沿用 COMMUNICATION 第 8/10 节先例）：渠道字段 type→provider_type、proxy_url→proxy、connect/read_timeout_ms→timeouts 嵌套、default_headers→headers、enabled/connection_status→status/health；列表新增 priority/weight/upstream_model_count/credential_count；Key 命令与响应新增 priority；metrics 路径不变。
+
+测试环境 Windows / Java 17.0.19 / 项目 Maven 与 JUnit5、MockMvc、H2 迁移、真实 JDBC/服务/AES-GCM。全仓 mvn -B verify：14 模块 BUILD SUCCESS，471 项中 455 通过、16 环境跳过（MySQL 2、PostgreSQL 3、Redis 11，缺 LAI_IT_MYSQL_URL/LAI_IT_DB_URL/LAI_IT_REDIS_URI），0 失败/错误；git diff --check 通过。真实 MySQL/PostgreSQL/Redis、真实 Provider、企业身份、前后端 E2E 与性能未执行，H2 验证不替代真实数据库验收。
+
+BE-211～215 均未达到整项完成标准，不勾选；已交付子项随本轮提交进入远程 dev，整包状态以 TASK_STATUS.md 记录为准。

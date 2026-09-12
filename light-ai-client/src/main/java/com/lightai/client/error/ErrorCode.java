@@ -23,6 +23,7 @@ public enum ErrorCode {
     MODEL_ALIAS_NOT_FOUND(404, false, ErrorType.NOT_FOUND),
 
     OBJECT_IN_USE(409, false, ErrorType.CONFLICT),
+    DUPLICATE_APPLICATION_CODE(409, false, ErrorType.CONFLICT),
     CAPACITY_IN_USE(409, true, ErrorType.CONFLICT),
     IMPACT_ANALYSIS_EXPIRED(409, false, ErrorType.CONFLICT),
     DUPLICATE_ROUTE_CANDIDATE(409, false, ErrorType.CONFLICT),

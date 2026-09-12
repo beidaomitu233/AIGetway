@@ -23,6 +23,7 @@ import com.lightai.client.channel.ChannelCheckRecord;
 import com.lightai.client.channel.ChannelDetail;
 import com.lightai.client.channel.ChannelListItem;
 import com.lightai.client.channel.ChannelSaveCommand;
+import com.lightai.client.channel.ChannelTimeouts;
 import com.lightai.storage.check.CheckRecordRow;
 import com.lightai.storage.check.JdbcChannelCheckRecordRepository;
 import com.lightai.storage.draft.DraftChangeRepository;
@@ -51,9 +52,8 @@ import javax.sql.DataSource;
 public class ChannelService {
 
     public static final String ENTITY_TYPE = "CHANNEL";
-    private static final Set<String> SORTABLE = Set.of("name", "type", "updated_at", "created_at");
-    private static final int DEFAULT_PRIORITY = 10;
-    private static final int DEFAULT_WEIGHT = 1;
+    private static final Set<String> SORTABLE = Set.of("name", "provider_type", "updated_at", "created_at");
+    private static final Set<String> CHANNEL_STATUSES = Set.of("ACTIVE", "DISABLED");
     private static final Set<String> CONNECTION_STATUSES = Set.of("UNKNOWN", "AVAILABLE", "UNAVAILABLE");
     private static final int DETAIL_CHECK_RECORDS = 10;
 
@@ -103,8 +103,8 @@ public class ChannelService {
                 params.get("page"), params.get("page_size"), params.get("sort"),
                 SORTABLE, "updated_at desc");
         JdbcChannelRepository.ChannelFilter filter = new JdbcChannelRepository.ChannelFilter(
-                params.get("keyword"), params.get("type"), parseBoolean(params.get("enabled")),
-                validateStatus(params.get("connection_status")), parseBoolean(params.get("draft_changed")));
+                params.get("keyword"), params.get("provider_type"), parseStatus(params.get("status")),
+                validateStatus(params.get("health")), parseBoolean(params.get("draft_changed")));
 
         try (Connection connection = dataSource.getConnection()) {
             List<ChannelRecord> records = providerRepository.list(connection, filter,
@@ -159,14 +159,16 @@ public class ChannelService {
                     record.providerType(),
                     record.baseUrl(),
                     record.proxyUrl(),
+                    record.status(),
                     state == null ? "UNKNOWN" : state.connectionStatusOrDefault(),
+                    record.priority(),
+                    record.weight(),
+                    modelCounts.getOrDefault(record.id(), 0L),
+                    poolCounts.getOrDefault(record.id(), 0L),
+                    changed.contains(record.id()),
                     state == null ? null : state.lastCheckedAt(),
                     latest == null ? null : (long) latest.totalMs(),
                     state == null ? null : state.lastErrorCode(),
-                    modelCounts.getOrDefault(record.id(), 0L),
-                    poolCounts.getOrDefault(record.id(), 0L),
-                    record.enabled(),
-                    changed.contains(record.id()),
                     record.version(),
                     record.updatedAt()));
         }
@@ -183,17 +185,18 @@ public class ChannelService {
         return new ChannelDetail(
                 record.id().toString(), record.name(), record.providerType(), record.baseUrl(),
                 record.proxyUrl(),
+                new ChannelTimeouts(record.connectTimeoutMs(), record.readTimeoutMs(),
+                        record.streamIdleTimeoutMs()),
+                record.defaultHeaders(),
+                record.status(),
                 state == null ? "UNKNOWN" : state.connectionStatusOrDefault(),
+                record.priority(),
+                record.weight(),
+                draftChangeRepository.findChangedEntityIds(connection, ENTITY_TYPE,
+                        List.of(record.id())).contains(record.id()),
                 state == null ? null : state.lastCheckedAt(),
                 recent.isEmpty() ? null : (long) recent.get(0).totalMs(),
                 state == null ? null : state.lastErrorCode(),
-                record.enabled(),
-                draftChangeRepository.findChangedEntityIds(connection, ENTITY_TYPE,
-                        List.of(record.id())).contains(record.id()),
-                record.version(),
-                record.connectTimeoutMs(),
-                record.readTimeoutMs(),
-                record.defaultHeaders(),
                 updatedBy,
                 record.createdAt(),
                 updatedBy,
@@ -222,14 +225,15 @@ public class ChannelService {
                 requestId, context.authContext().userId(), sourceMode, context.sourceIpMasked(),
                 "CREATE", ENTITY_TYPE.toLowerCase(), null, 0, null,
                 connection -> {
-                    UUID providerId = providerRepository.resolveProviderId(connection, command.type())
+                    UUID providerId = providerRepository.resolveProviderId(connection, command.providerType())
                             .orElseThrow(() -> new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
-                                    "协议类型未登记：" + command.type()));
-                    ChannelRecord record = new ChannelRecord(id, providerId, command.type(), command.name(),
-                            command.baseUrl(), command.proxyUrl(), command.connectTimeoutMs(),
-                            command.readTimeoutMs(), command.readTimeoutMs(), command.defaultHeaders(),
-                            DEFAULT_PRIORITY, DEFAULT_WEIGHT,
-                            command.enabled() ? ChannelRecord.STATUS_ACTIVE : ChannelRecord.STATUS_DISABLED,
+                                    "协议类型未登记：" + command.providerType()));
+                    ChannelRecord record = new ChannelRecord(id, providerId, command.providerType(),
+                            command.name(), command.baseUrl(), command.proxy(),
+                            command.timeouts().connectMs(), command.timeouts().readMs(),
+                            command.timeouts().streamIdleMsOrDefault(), command.headers(),
+                            command.priorityOrDefault(), command.weightOrDefault(),
+                            ChannelRecord.STATUS_ACTIVE,
                             ChannelRecord.HEALTH_UNKNOWN,
                             1L, OffsetDateTime.now(), OffsetDateTime.now());
                     providerRepository.insert(connection, record);
@@ -266,12 +270,11 @@ public class ChannelService {
                             .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND,
                                     "Provider不存在或已删除"));
                     ChannelRecord updated = new ChannelRecord(current.id(), current.providerId(),
-                            current.providerType(), command.name(), command.baseUrl(), command.proxyUrl(),
-                            command.connectTimeoutMs(), command.readTimeoutMs(),
-                            current.streamIdleTimeoutMs(), command.defaultHeaders(),
-                            current.priority(), current.weight(),
-                            command.enabled() ? ChannelRecord.STATUS_ACTIVE : ChannelRecord.STATUS_DISABLED,
-                            current.health(), current.version(),
+                            current.providerType(), command.name(), command.baseUrl(), command.proxy(),
+                            command.timeouts().connectMs(), command.timeouts().readMs(),
+                            command.timeouts().streamIdleMsOrDefault(), command.headers(),
+                            command.priorityOrDefault(), command.weightOrDefault(),
+                            current.status(), current.health(), current.version(),
                             current.createdAt(), current.updatedAt());
                     ChannelRecord saved = providerRepository.update(connection, updated);
                     return new DraftEntityChange(ENTITY_TYPE.toLowerCase(), id, command.name(),
@@ -326,7 +329,8 @@ public class ChannelService {
                     ChannelRecord saved = providerRepository.setEnabled(connection, id, enabled);
                     return new DraftEntityChange(ENTITY_TYPE.toLowerCase(), id, current.name(),
                             enabled ? "ENABLE" : "DISABLE", saved.version(),
-                            List.of(FieldChange.changed("enabled", current.enabled(), enabled)));
+                            List.of(FieldChange.changed("status", current.status(),
+                                    enabled ? ChannelRecord.STATUS_ACTIVE : ChannelRecord.STATUS_DISABLED)));
                 }));
 
         try (Connection connection = dataSource.getConnection()) {
@@ -407,18 +411,18 @@ public class ChannelService {
     // ---------- 校验（BE-008） ----------
 
     private void validateCommand(ChannelSaveCommand command, UUID selfId) {
-        typeRegistry.requireRegistered(command.type());
-        for (Map.Entry<String, String> entry : command.defaultHeaders().entrySet()) {
+        typeRegistry.requireRegistered(command.providerType());
+        for (Map.Entry<String, String> entry : command.headers().entrySet()) {
             if (HeaderPolicies.isAuthHeader(entry.getKey())) {
                 throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "请求头不合法",
-                        List.of(new FieldIssue("default_headers." + entry.getKey(), "AUTH_HEADER",
+                        List.of(new FieldIssue("headers." + entry.getKey(), "AUTH_HEADER",
                                 "不允许配置认证类请求头，密钥请使用 Credential")));
             }
         }
         try (Connection connection = dataSource.getConnection()) {
             String baseUrl = targetUrlPolicy.validate(command.baseUrl(), "base_url");
-            if (command.proxyUrl() != null) {
-                targetUrlPolicy.validate(command.proxyUrl(), "proxy_url");
+            if (command.proxy() != null) {
+                targetUrlPolicy.validate(command.proxy(), "proxy");
             }
             boolean nameTaken = selfId == null
                     ? providerRepository.existsByLiveName(connection, command.name())
@@ -440,7 +444,8 @@ public class ChannelService {
         if (before == null) {
             changes.add(FieldChange.changed("name", null, command.name()));
             changes.add(FieldChange.changed("base_url", null, command.baseUrl()));
-            changes.add(FieldChange.changed("enabled", null, command.enabled()));
+            changes.add(FieldChange.changed("priority", null, command.priorityOrDefault()));
+            changes.add(FieldChange.changed("weight", null, command.weightOrDefault()));
             return List.copyOf(changes);
         }
         if (!before.name().equals(command.name())) {
@@ -449,24 +454,31 @@ public class ChannelService {
         if (!before.baseUrl().equals(command.baseUrl())) {
             changes.add(FieldChange.changed("base_url", before.baseUrl(), command.baseUrl()));
         }
-        if (before.proxyUrl() == null ^ command.proxyUrl() == null
-                || (before.proxyUrl() != null && !before.proxyUrl().equals(command.proxyUrl()))) {
-            changes.add(FieldChange.changed("proxy_url", before.proxyUrl(), command.proxyUrl()));
+        if (before.proxyUrl() == null ^ command.proxy() == null
+                || (before.proxyUrl() != null && !before.proxyUrl().equals(command.proxy()))) {
+            changes.add(FieldChange.changed("proxy", before.proxyUrl(), command.proxy()));
         }
-        if (before.connectTimeoutMs() != command.connectTimeoutMs()) {
-            changes.add(FieldChange.changed("connect_timeout_ms", before.connectTimeoutMs(),
-                    command.connectTimeoutMs()));
+        if (before.connectTimeoutMs() != command.timeouts().connectMs()) {
+            changes.add(FieldChange.changed("timeouts.connect_ms", before.connectTimeoutMs(),
+                    command.timeouts().connectMs()));
         }
-        if (before.readTimeoutMs() != command.readTimeoutMs()) {
-            changes.add(FieldChange.changed("read_timeout_ms", before.readTimeoutMs(),
-                    command.readTimeoutMs()));
+        if (before.readTimeoutMs() != command.timeouts().readMs()) {
+            changes.add(FieldChange.changed("timeouts.read_ms", before.readTimeoutMs(),
+                    command.timeouts().readMs()));
         }
-        if (!before.defaultHeaders().equals(command.defaultHeaders())) {
-            changes.add(FieldChange.changed("default_headers.headers_count",
-                    before.defaultHeaders().size(), command.defaultHeaders().size()));
+        if (before.streamIdleTimeoutMs() != command.timeouts().streamIdleMsOrDefault()) {
+            changes.add(FieldChange.changed("timeouts.stream_idle_ms", before.streamIdleTimeoutMs(),
+                    command.timeouts().streamIdleMsOrDefault()));
         }
-        if (before.enabled() != command.enabled()) {
-            changes.add(FieldChange.changed("enabled", before.enabled(), command.enabled()));
+        if (!before.defaultHeaders().equals(command.headers())) {
+            changes.add(FieldChange.changed("headers.headers_count",
+                    before.defaultHeaders().size(), command.headers().size()));
+        }
+        if (before.priority() != command.priorityOrDefault()) {
+            changes.add(FieldChange.changed("priority", before.priority(), command.priorityOrDefault()));
+        }
+        if (before.weight() != command.weightOrDefault()) {
+            changes.add(FieldChange.changed("weight", before.weight(), command.weightOrDefault()));
         }
         return List.copyOf(changes);
     }
@@ -481,8 +493,8 @@ public class ChannelService {
     private static String qualifySort(String sort) {
         String[] parts = sort.trim().split("\\s+");
         String column = switch (parts[0]) {
-            case "type" -> "p.type";
-            case "name", "created_at", "updated_at" -> "c." + parts[0];
+            case "provider_type" -> "p.type";
+            case "priority", "weight", "name", "created_at", "updated_at" -> "c." + parts[0];
             default -> "c." + parts[0];
         };
         return parts.length > 1 ? column + " " + parts[1] : column;
@@ -498,7 +510,17 @@ public class ChannelService {
         if ("false".equalsIgnoreCase(raw)) {
             return Boolean.FALSE;
         }
-        throw fieldError("enabled", "INVALID", "布尔值仅支持 true/false");
+        throw fieldError("draft_changed", "INVALID", "布尔值仅支持 true/false");
+    }
+
+    private static String parseStatus(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        if (!CHANNEL_STATUSES.contains(raw.strip())) {
+            throw fieldError("status", "INVALID", "状态仅支持 ACTIVE/DISABLED");
+        }
+        return raw.strip();
     }
 
     private static String validateStatus(String raw) {

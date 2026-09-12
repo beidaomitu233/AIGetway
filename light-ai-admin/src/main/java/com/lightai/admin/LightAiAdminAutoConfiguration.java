@@ -1003,11 +1003,12 @@ public class LightAiAdminAutoConfiguration {
                 com.lightai.storage.alias.JdbcAliasRepository aliasRepository,
                 com.lightai.admin.audit.AuditService auditService,
                 PlatformTransactionManager transactionManager,
-                Clock clock, AdminProperties properties) {
+                Clock clock, AdminProperties properties,
+                ObjectProvider<com.lightai.runtime.ports.ConfigSnapshotPort> snapshotPortProvider) {
             return new com.lightai.admin.application.ApplicationService(
                     dataSource, applicationRepository, aliasRepository, auditService,
                     transactionManager, new com.lightai.admin.query.PageResultFactory(clock),
-                    clock, properties.getRuntimeMode());
+                    clock, properties.getRuntimeMode(), snapshotPortProvider.getIfAvailable());
         }
 
         @Bean

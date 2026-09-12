@@ -18,7 +18,7 @@ import java.util.UUID;
 public final class JdbcObjectRuntimeStateRepository extends AbstractJdbcRepository {
 
     private static final String COLUMNS =
-            "connection_status, health_status, last_success_at, last_checked_at, last_error_code";
+            "connection_status, health_status, last_success_at, last_checked_at, last_error_code, reset_at";
 
     public JdbcObjectRuntimeStateRepository(String schemaName, DatabaseDialect explicitDialect) {
         super(schemaName, explicitDialect);
@@ -48,20 +48,22 @@ public final class JdbcObjectRuntimeStateRepository extends AbstractJdbcReposito
                         rs.getString("health_status"),
                         d.readOffsetDateTime(rs, "last_success_at"),
                         d.readOffsetDateTime(rs, "last_checked_at"),
-                        rs.getString("last_error_code")));
+                        rs.getString("last_error_code"),
+                        d.readOffsetDateTime(rs, "reset_at")));
             }
         } catch (SQLException e) {
             throw new IllegalStateException("运行状态读取失败：" + e.getClass().getSimpleName(), e);
         }
     }
 
-    /** 运行状态摘要（只读投影）。 */
+    /** 运行状态摘要（只读投影）。reset_at 为限流冷却复位时间（BE-224 写入）。 */
     public record RuntimeStateSnapshot(
             String connectionStatus,
             String healthStatus,
             OffsetDateTime lastSuccessAt,
             OffsetDateTime lastCheckedAt,
-            String lastErrorCode) {
+            String lastErrorCode,
+            OffsetDateTime resetAt) {
 
         public String connectionStatusOrDefault() {
             return connectionStatus == null ? "UNKNOWN" : connectionStatus;
