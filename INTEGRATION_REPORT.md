@@ -320,8 +320,8 @@ Spring Boot Starter —— 全部 SUCCESS
 
 | 项 | 状态 |
 |---|---|
-| 代码提交 | 见 COMMUNICATION.md「FS-P21」章节与本节提交清单（`fix(fullstack): FS-P21-001/002/003`、`test(fullstack):`、`docs(fullstack):`） |
-| 远程合并 | 普通推送至 `origin/dev`，推送前后 `git ls-remote` 核对（记录见 COMMUNICATION.md「FS-P21 远程交付确认」） |
+| 代码提交 | `c71edcf`（fix：FS-P21-001/002/003）、`b625b95`（test：契约与夹具回归）、`8aa625d`（docs：本节记录与任务状态） |
+| 远程合并 | 已普通推送：分支 `fix-fullstack-integration-fsp21-takeover-fsagent-0912` 创建成功；推送前远程 `dev` = `5007b2c`（本包领取提交），无并行新提交；推送后 `git ls-remote --heads origin` 回读 `refs/heads/dev = 8aa625d89c8ccf9c9e2fb16023dc3585beaa72cc`，未强推、未改写他人提交。确认记录见 COMMUNICATION.md「FS-P21 远程交付确认」 |
 | 联调通过 | FS-P21-001/002/003 在 H2 + 单机 Redis + 真实 jar + 真实页面渲染链路通过 |
 | 主任务状态 | FE-P21 / BE-P21 主任务勾选状态与负责人占用**均未改动**（保持阻塞、保留原负责人） |
 | 上线验收 | 未进行；§11.6 未验证环节不得视为生产可用 |

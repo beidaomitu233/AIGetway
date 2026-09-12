@@ -374,6 +374,14 @@
 - 真实链路 `p21-probe3`（H2 + Redis + 真实 jar @18080 + Vite @5173）：Q1～Q8 全部 HTTP 200；上游模型 `route_candidate_count` 随候选创建由 0 增至 1（详情与列表一致）；虚拟模型列表/详情下发 `request_count_24h` 且旧键 `request_count24h` 消失。
 - 真实页面（`chrome-headless-shell --dump-dom`）：模型列表「候选」列渲染 1、渠道列渲染真实渠道名；新建模型页渠道下拉渲染 `fs21-ch784871（OPENAI）`（无 `undefined`）；虚拟模型列表「24h 调用」列渲染 0。
 
+### FS-P21 远程交付确认（2026-09-12）
+
+- 本批三个提交 `c71edcf`（fix：前端渠道 V2 字段切换 + `UpstreamModelDetail` 运行态/引用计数投影 + `ModelAliasDetail` 24h 命名）、`b625b95`（test：`ResourceApiContractTest` 14→16 项、`UpstreamModelDetailTest` 适配、前端夹具切换）、`8aa625d`（docs：联调记录与任务状态）已在分支 `fix-fullstack-integration-fsp21-takeover-fsagent-0912` 完成，并以快进方式普通推送 `origin/dev`。
+- 推送前 `git ls-remote --heads origin` 回读远程 `dev` = `5007b2c`（即本包领取提交），无并行新提交；推送后回读 `refs/heads/dev = 8aa625d89c8ccf9c9e2fb16023dc3585beaa72cc`，未强推、未改写他人提交、未修改其他任务包记录。
+- 本地 `dev` 与功能分支指向同一提交；`TASK_STATUS.md` 的 FS-P21 已更新为完成。**FE-P21/BE-P21 主任务勾选状态与负责人占用均未改动**（保持阻塞、保留原负责人），本包仅关闭其登记为「本轮未覆盖」的上游模型/虚拟模型/路由跨端回显环节。
+- 网络环境记录（供后续批次参考，非仓库缺陷）：本机 HTTPS 出口为本地代理，端口在本次会话中由 `127.0.0.1:8825` 变为 `127.0.0.1:2640`；`git ls-remote`/`push` 出现间歇性 `CONNECT tunnel failed, response 502`（同一条命令多次重试后成功）。推送前建议先 `ls-remote` 确认可达，并把「返回结果为空」与「连不上」区分开——空输出不等于成功，须以 `ls-remote` 回读的 `refs/heads/dev` 哈希为准。
+- 未验收：真实上游检测写入的运行态、`upstream_model`/`virtual_model`/`route` 发布生效链路与运行态容量/熔断维度、页面点击级写操作回放、真实 PostgreSQL/MySQL/Redis 与真实 Provider；同批内部问题 FS-P21-101（应用域 `requests24h` 同类命名隐患）仍为待确认。详见 INTEGRATION_REPORT.md §11.6。
+
 
 协作提示：本轮起后端会话共享 TASK_STATUS 负责人标识时，须遵守 BE-P23-COEXIST-001 结论——同一负责人标识只允许一个在席会话；后到会话让出并将替代实现存档至 .worktrees/be-p23-alt-impl/（不入 Git）。本负责人交付未引用该存档实现。
 ## DB-P22 接管交付复核（2026-09-12，数据库执行模型 zcode-db-0912d）
