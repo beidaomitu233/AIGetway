@@ -411,7 +411,9 @@
 
 ### FS-P20 追加批交付确认（2026-09-12）
 
-- 追加批在 `fix-fullstack-integration-fs20-followup-fsagent-0912` 分支提交 `39468a7`、`91e2d7b`、`286cf73`，关闭 FS-P20-006/007 并新增 FS-P20-008。
+- 追加批在 `fix-fullstack-integration-fs20-followup-fsagent-0912` 分支提交 `39468a7`、`91e2d7b`、`286cf73`、`62c0268`，关闭 FS-P20-006/007 并新增 FS-P20-008。
+- 已普通推送远程：分支 `fix-fullstack-integration-fs20-followup-fsagent-0912` 创建成功；`dev` 以快进方式推至 `62c0268`，`git ls-remote origin refs/heads/dev` 回读为 `62c02680b90faa8f7e27dbecaf398a14a75e24e9`，未强推、未改写他人提交。推送前后均 `git ls-remote`/`fetch` 核对，远程 `dev` 无并行新提交。
+- 环境限制记录（供后续批次参考，非仓库缺陷）：本机沙箱下 `git push` 无法直接完成——HTTPS 出口经 `127.0.0.1:8825` 代理，代理放行 `git-upload-pack`（fetch，200）与 `git-receive-pack`（GitHub 返回 401 鉴权挑战，非网络阻断），但仓库全局 `~/.gitconfig` 的 `[credential] helper =` 为空值、覆盖了系统凭据管理器，git 无凭据可用。本次以一次性 `http.extraHeader` 认证头完成推送，未修改任何持久凭据或 git 全局配置。
 - 关键根因与修复：`ChannelDetail` 缺 `version` 导致渠道详情页全部写操作 400（本批新增 FS-P20-008）；应用 `version` 按 BE-P20-102 统一为十进制字符串。
 - 联调环境与证据见 INTEGRATION_REPORT.md §10；环境差异记录：本机沙箱下后端默认配置实际绑定 8800（配置声明为 8080），本批显式以 `--server.port=18080` 启动，Vite 以 `VITE_BACKEND_TARGET` 指向该端口，未启用 Mock。
 - 未验收：渠道检测的真实上游连通、上游模型/虚拟模型/路由的发布生效链路、渠道页面浏览器点击级写操作。上述未完成项不作为联调通过依据。

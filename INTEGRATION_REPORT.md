@@ -213,7 +213,7 @@ Spring Boot Starter —— 全部 SUCCESS
 
 | 项 | 状态 |
 |---|---|
-| 代码提交 | 39468a7、91e2d7b、286cf73（分支 `fix-fullstack-integration-fs20-followup-fsagent-0912`） |
-| 远程合并 | 见 COMMUNICATION.md「FS-P20 追加批交付确认」 |
+| 代码提交 | 39468a7、91e2d7b、286cf73、62c0268（分支 `fix-fullstack-integration-fs20-followup-fsagent-0912`） |
+| 远程合并 | 已普通推送：分支创建成功；`dev` 快进至 `62c0268`，`git ls-remote origin refs/heads/dev` 回读 `62c02680b90faa8f7e27dbecaf398a14a75e24e9`，未强推。推送前远程 `dev` 为 `181a68a`，无并行新提交需合并。本地 `dev` 已同步至同一提交 |
 | 联调通过 | 渠道全链路、应用域版本契约在 H2 + 单机 Redis + 真实页面渲染链路通过；页面**点击级**写操作未回放，保留为待验证 |
 | 上线验收 | 未进行 |
