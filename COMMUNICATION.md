@@ -223,3 +223,14 @@
 补充：沿用现有 ErrorCode，OBJECT_REFERENCE_INVALID 与 PROVIDER_ADAPTER_NOT_FOUND 为 HTTP 422，参数格式错误为 400，不能未确认擅改全局错误码。轮换审计使用现有配置动词 UPDATE 加敏感字段变更摘要，不新增审计枚举。凭证删除占用查询失败现拒绝操作；真实共享占用与删除互斥尚需运行端口验收。
 
 前端联调影响：本次 HTTP 路径切换为 channels/upstream-models/virtual-models 和嵌套 credentials/routes，原 providers/provider-models/model-aliases/route-candidates 不保留兼容映射；FE-P21 与应用模型选择器需由前端负责人同步。DTO 仅交付已存在且本次测试明确的字段，不宣称上述待确认 V2 字段齐备。
+
+
+## FE-P21 本次接入与交付复核（2026-09-12）
+
+已同步 BE-P21 的 c08d625：FE-P21-001～003 的旧 HTTP 路径问题已处理，原字段/业务缺口继续按 BE-P21-001～006 等待确认，不重复定义契约。前端消费 channels、嵌套 credentials、upstream-models、virtual-models 与嵌套 routes，检测传 upstream_model_id/channel_credential_id，批量传 channel_id/upstream_model_ids/channel_credential_id。Key 面板直挂渠道；路由所属渠道来自真实模型/渠道/Key 查询，不再查凭证池；零权重遵循已交付服务端规则。
+
+| 序号 | 提出方 | 问题类型 | 功能问题描述 | 优化说明 | 涉及前端文件/模块 | 涉及后端文件/模块 | 涉及数据库表 | 状态 | 处理结论 |
+| -- | --- | ---- | ------ | ---- | --------- | --------- | ------ | -- | ---- |
+| FE-P21-004 | 前端执行模型 | 页面壳适配 | 390px 浏览器中模型表单内部越界已修复，公共页面壳 documentWidth 仍为 410px | FE-P23 统一页面壳和导航窄屏验收；本包不扩展全局布局 | ModelFormPage、AppLayout | 无 | 无 | 待确认 | 1024/1366 资源桌面检查通过，不声称完整移动端验收 |
+
+本轮代码提交 def540e、b27689d、fd9014a；新增 resourceP21/resourceApiP21 两个测试文件，更新既有表单、路由、导航与契约夹具；最终 26 文件 226 项通过，类型/lint/build 通过，lint 81 项历史 warning。详细任务验收、命令、文件和浏览器边界见 FRONTEND_PLAN 的 FE-P21 交付附录。所有主任务保持未勾选；任务状态为阻塞并保留负责人。未修改后端、数据库、依赖锁文件；没有把缺失的同步/影响/运行态接口虚构为成功。最终远程合入由 TASK_STATUS 后续确认。
