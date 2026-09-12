@@ -6,7 +6,10 @@ defineProps<{ quota: ApplicationQuotaPolicy; timezone: string }>()
 </script>
 <template>
   <div class="lai-table-wrap">
-    <table class="lai-table" aria-label="额度使用明细">
+    <table
+      class="lai-table"
+      aria-label="额度使用明细"
+    >
       <thead><tr><th>维度</th><th>上限</th><th>已用</th><th>预占</th><th>剩余</th></tr></thead>
       <tbody>
         <tr><th>Token</th><td>{{ quota.token_limit ?? '不限' }}</td><td>{{ quota.tokens_used }}</td><td>{{ quota.tokens_reserved }}</td><td>{{ quota.token_limit === null ? '不限' : quota.token_limit - quota.tokens_used - quota.tokens_reserved }}</td></tr>

@@ -263,4 +263,45 @@ describe('FE-P20 页面边界（同契约夹具，非真实联调）', () => {
     expect(wrapper.text()).toContain('额度操作无权限')
     expect(dialog.get('textarea').element).toHaveProperty('value', '控制预算')
   })
-})
+
+  it('权限失效的刷新响应清除旧列表，不泄露之前的应用', async () => {
+    let denied = false
+    installJsonFetchStub(() => denied ? errorEnvelope(403, 'ACCESS_DENIED', '范围已收回') : pageEnvelope([application]))
+    const { wrapper } = await page('/ui/applications')
+    denied = true
+    await button(wrapper, '刷新').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('范围已收回')
+    expect(wrapper.text()).not.toContain(application.name)
+  })
+  it('签发中重复提交只发送一次，身份切换后丢弃迟到的密钥原文', async () => {
+    let finish: ((response: Response) => void) | undefined
+    let posts = 0
+    vi.stubGlobal('fetch', vi.fn((input: string, init: RequestInit) => {
+      if (init.method === 'POST') { posts++; return new Promise<Response>(resolve => { finish = resolve }) }
+      return Promise.resolve(json({ data: input.endsWith('/keys') || input.endsWith('/quota/adjustments') ? [] : application }))
+    }))
+    const { wrapper, store } = await page(`/ui/applications/${application.id}`)
+    await button(wrapper, '签发密钥').trigger('click')
+    const form = wrapper.get('form[aria-label="签发应用密钥"]')
+    await form.get('input').setValue('待签发密钥')
+    await form.trigger('submit')
+    await form.trigger('submit')
+    expect(posts).toBe(1)
+    store.$patch({ userId: 'new-user', permissions: [Permission.applicationView] })
+    await flushPromises()
+    finish!(json({ data: { key_value: 'late-fixture-secret', application_id: application.id, key_id: 'key-late' } }))
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('late-fixture-secret')
+    expect(wrapper.find('#application-secret-title').exists()).toBe(false)
+  })
+  it('创建表单切换身份清除上一身份输入', async () => {
+    baseStub()
+    const { wrapper, store } = await page('/ui/applications/new')
+    await fillCreate(wrapper)
+    store.$patch({ userId: 'next-user', displayName: '下一用户' })
+    await flushPromises()
+    expect(wrapper.get('input[name="name"]').element).toHaveProperty('value', '')
+    expect(wrapper.get('input[name="owner_id"]').element).toHaveProperty('value', 'next-user')
+    expect(wrapper.get('input[name="amount_limit"]').element).toHaveProperty('value', '')
+  })})
