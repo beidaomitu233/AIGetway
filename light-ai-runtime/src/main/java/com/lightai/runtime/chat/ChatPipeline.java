@@ -890,7 +890,7 @@ public class ChatPipeline {
             return null;
         }
         List<FieldIssue> issues = new ArrayList<>();
-        if (Boolean.FALSE.equals(constraint.streamAllowed()) && request.stream()) {
+        if (Boolean.FALSE.equals(constraint.allowStream()) && request.stream()) {
             issues.add(new FieldIssue("stream", "APPLICATION_LIMIT",
                     "应用未允许该模型使用流式调用"));
         }

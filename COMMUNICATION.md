@@ -256,6 +256,31 @@
 
 2026-09-12：origin/dev eb2843a 已包含实现 fc0e955 与文档 eaa32e3，TASK_STATUS 于 24a19e4 登记 FE-P22 为阻塞并保留负责人；测试计数修正 d709a6b 经本地 dev 合入后以 b4a344c 普通推送，fetch 回读确认。合并后文件树在独立 worktree 复跑门禁：typecheck 通过、28 文件/244 项测试通过、0 失败/0 跳过；lint 0 error/37 warning（仅未修改的审计页历史格式）；build 通过；git diff --check 通过。1280 宽度浏览器冒烟检查总览页应用排行与用量页新筛选/输入输出 Token 卡片，无额外横向溢出。FE-P22 保持阻塞并保留 zcode-0912 负责人，未解除占用；FE-221～225 未勾选，等待 FE-P22-001～005 与 BE-P22/BE-P23 契约及真实联调。未推送功能分支，未强推，未修改其他负责人记录。
 
+## BE-P20 接管交付与契约切换（2026-09-12，后端执行模型 zcode-be-0912b）
+
+经用户确认原领取（codex-be-0912）会话中断、剩余子项未实际执行，由本负责人接管 BE-P20 并交付无迁移依赖子项；领取记录见 TASK_STATUS（5a11054）。本轮详情见 BACKEND_PLAN「BE-P20 接管执行记录」。以下为需其他负责人跟进的契约与阻塞事项。
+
+### 契约变更（需前端在同批联调切换）
+
+| 序号 | 变更 | 影响接口/字段 | 说明 |
+| -- | --- | ---- | ---- |
+| BE-P20-101 | 密钥结果字段切换 | POST /admin/applications/{id}/keys、/keys/{keyId}/rotate：data 由 key_value 改为 secret，新增 key_prefix/status/issued_at/expires_at | 轮换仍为原位换发；新代际/宽限/幂等待 DB-202 迁移，届时同一响应再补 old_key_id/grace_expires_at |
+| BE-P20-102 | 64 位数值十进制字符串 | 应用域 token_limit/tokens_used/tokens_reserved/tokens_remaining/amount_remaining、requests_24h、version/snapshot_no、affected_key_count/running_requests | 有 32 位上限的字段（max_output_tokens、rpm、page 等）仍为 JSON number；金额维持 decimal 字符串 |
+| BE-P20-103 | stream_allowed → allow_stream | GET models、PUT models constraints、约束 JSON 键名 | 后端读取兼容历史 stream_allowed；存量转换由 DB-205 迁移执行 |
+| BE-P20-104 | 列表默认排序变更 | GET /admin/applications 默认 sort 由 updated_at desc 改为 last_called_at desc | 空值排末尾，application.id asc 稳定序；sort 白名单不变 |
+| BE-P20-105 | PUT /quota 新增必填 idempotency_key | PUT /admin/applications/{id}/quota | 幂等以 quota_adjustment dimension=POLICY 行实现；DB-204 的 application_quota_operation 表就绪后由后端评估是否迁移实现 |
+| BE-P20-106 | 新增端点 | GET /admin/applications/model-options（创建前，需 application.manage）；GET /admin/applications/{id}/model-options（需 application-model.manage）；POST /admin/applications/{id}/impact | 创建前候选对非可信身份返回空列表；impact 为预览不是写入许可 |
+
+### 阻塞与待确认事项
+
+| 编号 | 提出方 | 问题描述 | 涉及任务/模块 | 影响与建议 | 待确认方 | 状态 | 处理结论 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| BE-P20-107 | 后端执行模型/zcode-be-0912b | BE-202 轮换新代际、宽限与幂等需要 application_key 新增列与 application_key_operation 表 | BE-202、DB-202 | DB-P20 交付迁移后由后端接续实现；前端暂按原位换发联调 | DB-P20（zcode-0912） | 待确认 | 依赖 DB-202 迁移合并后开工 |
+| BE-P20-108 | 后端执行模型/zcode-be-0912b | BE-204 period_id/policy_version/timezone/reset_at、renew、周期段 reset、预约调整需要周期快照与操作表 | BE-204、DB-203/204 | GET quota 相关字段当前恒为 null，不冒称周期快照已存在；平台时区配置未建前禁止猜测默认时区 | DB-P20（zcode-0912）、BP-004 决策 | 待确认 | 迁移与时区配置就绪后接续 |
+| BE-P20-109 | 后端执行模型/zcode-be-0912b | GET /admin/applications/{id}/audit 需要 audit_log.application_id（DB-201）与 BE-P23 审计读取端口 | BE-205、DB-201、BE-P23 | 审计域由 BE-P23（zcode-be-0912）负责，端口协调后由后端补齐应用审计端点 | DB-P20、BE-P23 | 待确认 | 不接管 BE-P23 文件 |
+| BE-P20-110 | 后端执行模型/zcode-be-0912b | 拒绝类审计 result 取值仅 SUCCEEDED/FAILED，PRD 语义要求 DENIED | BE-205、审计域 | result=DENIED 涉及审计枚举与查询契约（BE-P23 占用），本轮以 FAILED+ACCESS_DENIED 记录，不私改枚举 | BE-P23 | 待确认 | 与 BE-P23 协调后统一 |
+| BE-P20-111 | 后端执行模型/zcode-be-0912b | 真实 PostgreSQL/MySQL 唯一冲突、归档/准入竞争、双并发轮换、幂等重放等仅能在真实环境验收 | BE-201～204 | 本轮 16 项跳过均为缺 LAI_IT_MYSQL_URL/LAI_IT_DB_URL/LAI_IT_REDIS_URI 的环境用例 | 用户/验收环境 | 待确认 | 环境就绪后执行并补验收记录 |
+
 ## BE-P21 接管交付复核（2026-09-12，后端执行模型 zcode-be-0912c）
 
 经用户确认原领取（codex-be-0912）会话中断、剩余子项未实际执行，由 zcode-be-0912c 接管推进（领取 9cdd65a，基线 5a11054）。本轮以 BACKEND_PLAN BE-211～215 字段清单为已确认技术契约执行（沿用第 8 节「按 BACKEND_PLAN 同号小节执行」先例），交付可无迁移完成的子项；依赖 DB-P21 迁移与运行端口的子项保持未验收。

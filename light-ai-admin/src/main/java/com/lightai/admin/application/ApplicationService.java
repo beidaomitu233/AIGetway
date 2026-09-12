@@ -12,6 +12,9 @@ import com.lightai.client.application.ApplicationMemberView;
 import com.lightai.client.application.ApplicationModelConstraint;
 import com.lightai.client.application.ApplicationModelPermissionView;
 import com.lightai.client.application.ApplicationModelsUpdateCommand;
+import com.lightai.client.application.ApplicationImpactCommand;
+import com.lightai.client.application.ApplicationImpactView;
+import com.lightai.client.application.ApplicationModelOptionView;
 import com.lightai.client.application.ApplicationQuotaAdjustmentCommand;
 import com.lightai.client.application.ApplicationQuotaAdjustmentView;
 import com.lightai.client.application.ApplicationQuotaPolicyView;
@@ -33,6 +36,7 @@ import com.lightai.storage.application.ApplicationQuotaRecord;
 import com.lightai.storage.application.ApplicationRecord;
 import com.lightai.storage.application.JdbcApplicationRepository;
 import com.lightai.storage.application.QuotaAdjustmentRecord;
+import com.lightai.runtime.ports.ConfigSnapshotPort;
 import com.lightai.storage.audit.AuditRecord;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -58,6 +62,10 @@ public final class ApplicationService {
 
     private static final Set<String> SORTABLE = Set.of(
             "name", "code", "status", "environment", "owner_name", "updated_at", "last_called_at");
+    private static final String DEFAULT_SORT = "last_called_at desc";
+    private static final Set<String> BUDGET_STATUSES = Set.of("NORMAL", "EXHAUSTED", "UNLIMITED");
+    private static final Set<String> IMPACT_ACTIONS = Set.of("STATUS_CHANGE", "MODEL_PERMISSION_CHANGE");
+    private static final int IMPACT_KEY_LIMIT = 50;
     private static final Set<String> STATUSES = Set.of("ACTIVE", "DISABLED", "ARCHIVED");
     private static final Set<String> CREATE_STATUSES = Set.of("ACTIVE", "DISABLED");
     private static final Set<String> ENVIRONMENTS = Set.of("DEV", "TEST", "STAGING", "PROD");
@@ -75,11 +83,13 @@ public final class ApplicationService {
     private final PageResultFactory pageResultFactory;
     private final Clock clock;
     private final String sourceMode;
+    private final ConfigSnapshotPort snapshotPort;
 
     public ApplicationService(DataSource dataSource, JdbcApplicationRepository repository,
                               JdbcAliasRepository aliasRepository, AuditService auditService,
                               PlatformTransactionManager transactionManager,
-                              PageResultFactory pageResultFactory, Clock clock, String sourceMode) {
+                              PageResultFactory pageResultFactory, Clock clock, String sourceMode,
+                              ConfigSnapshotPort snapshotPort) {
         this.dataSource = dataSource;
         this.repository = repository;
         this.aliasRepository = aliasRepository;
@@ -88,32 +98,99 @@ public final class ApplicationService {
         this.pageResultFactory = pageResultFactory;
         this.clock = clock;
         this.sourceMode = sourceMode;
+        this.snapshotPort = snapshotPort;
     }
 
     public PageResult<ApplicationListItem> list(RequestContext context, Map<String, String> params) {
         RequestPermissions.require(context, Permissions.APPLICATION_VIEW);
         ListQuerySupport.ListQuery query = ListQuerySupport.parse(
                 params.get("page"), params.get("page_size"), params.get("sort"),
-                SORTABLE, "updated_at desc");
+                SORTABLE, DEFAULT_SORT);
         String status = optionalEnum(params.get("status"), STATUSES, "status");
         String environment = optionalEnum(params.get("environment"), ENVIRONMENTS, "environment");
+        String budgetStatus = optionalEnum(params.get("budget_status"), BUDGET_STATUSES, "budget_status");
+        OffsetDateTime queryStartedAt = OffsetDateTime.now(clock);
         try (Connection connection = dataSource.getConnection()) {
             List<String> scope = effectiveScope(connection, context);
             JdbcApplicationRepository.Filter filter = new JdbcApplicationRepository.Filter(
                     trimToNull(params.get("keyword")), status, environment,
-                    trimToNull(params.get("owner_id")), scope);
+                    trimToNull(params.get("owner_id")), trimToNull(params.get("department")),
+                    budgetStatus, scope);
             List<ApplicationRecord> records = repository.list(
                     connection, filter, query.sort(), query.limit(), query.offset());
-            List<ApplicationListItem> items = new ArrayList<>(records.size());
-            for (ApplicationRecord record : records) {
-                items.add(toListItem(connection, record));
-            }
-            return pageResultFactory.create(items, repository.count(connection, filter), query, null);
+            List<ApplicationListItem> items =
+                    toListItems(connection, records, queryStartedAt);
+            return pageResultFactory.create(items, repository.count(connection, filter),
+                    query, null, queryStartedAt);
         } catch (LightAiException e) {
             throw e;
         } catch (Exception e) {
             throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用列表当前无法读取");
         }
+    }
+
+    /**
+     * BE-P20-001：先分页取应用，再按本页 ID 集合批量读取额度、模型、密钥与 24h 运行摘要，
+     * 禁止逐应用查询；聚合失败返回明确错误，不填成功零值。
+     */
+    private List<ApplicationListItem> toListItems(Connection connection, List<ApplicationRecord> records,
+                                                  OffsetDateTime queryStartedAt) {
+        if (records.isEmpty()) return List.of();
+        List<UUID> ids = records.stream().map(ApplicationRecord::id).toList();
+        List<String> codes = records.stream().map(ApplicationRecord::code).toList();
+        Map<UUID, ApplicationQuotaRecord> quotas = repository.findQuotas(connection, ids);
+        Map<UUID, Long> modelCounts = repository.countRoutableEnabledModels(connection, ids);
+        Map<UUID, Long> activeKeys = repository.countActiveKeysBatch(connection, ids);
+        JdbcApplicationRepository.TraceSummary window = null;
+        Map<String, JdbcApplicationRepository.TraceSummary> summaries =
+                repository.summarize24h(connection, codes,
+                        queryStartedAt.minusHours(24), queryStartedAt);
+        List<ApplicationListItem> items = new ArrayList<>(records.size());
+        for (ApplicationRecord record : records) {
+            ApplicationQuotaRecord quota = quotas.get(record.id());
+            JdbcApplicationRepository.TraceSummary summary = summaries.get(record.code());
+            long tokensUsed = quota == null ? 0L : quota.tokensUsed();
+            long tokensReserved = quota == null ? 0L : quota.tokensReserved();
+            BigDecimal amountUsed = quota == null ? BigDecimal.ZERO : quota.amountUsed();
+            BigDecimal amountReserved = quota == null ? BigDecimal.ZERO : quota.amountReserved();
+            String requests24h = summary == null ? "0" : String.valueOf(summary.requests());
+            String successRate24h = summary == null || summary.terminal() == 0 ? null
+                    : BigDecimal.valueOf(summary.succeeded())
+                    .divide(BigDecimal.valueOf(summary.terminal()), 4, RoundingMode.HALF_UP)
+                    .toPlainString();
+            items.add(new ApplicationListItem(
+                    record.id().toString(), record.code(), record.name(), record.department(),
+                    record.ownerId(), record.ownerName(), record.environment(), record.status(),
+                    modelCounts.getOrDefault(record.id(), 0L),
+                    activeKeys.getOrDefault(record.id(), 0L),
+                    quota == null || quota.tokenLimit() == null
+                            ? null : String.valueOf(quota.tokenLimit()),
+                    String.valueOf(tokensUsed), String.valueOf(tokensReserved),
+                    quota == null ? null : decimalText(quota.amountLimit()),
+                    decimalText(amountUsed), decimalText(amountReserved),
+                    quota == null ? null : quota.currency(),
+                    quota == null ? null : quota.rpm(), quota == null ? null : quota.tpm(),
+                    budgetStatus(quota), requests24h, successRate24h,
+                    record.lastCalledAt(), record.updatedAt(), String.valueOf(record.version())));
+        }
+        return items;
+    }
+
+    /**
+     * BE-P20-001 预算口径：任一有限维度 used+reserved>=limit 为 EXHAUSTED；
+     * 两个维度都无限制为 UNLIMITED；其余 NORMAL。
+     */
+    private static String budgetStatus(ApplicationQuotaRecord quota) {
+        if (quota == null) return "UNLIMITED";
+        boolean tokenLimited = quota.tokenLimit() != null;
+        boolean amountLimited = quota.amountLimit() != null;
+        boolean tokenExhausted = tokenLimited
+                && quota.tokensUsed() + quota.tokensReserved() >= quota.tokenLimit();
+        boolean amountExhausted = amountLimited
+                && quota.amountUsed().add(quota.amountReserved())
+                .compareTo(quota.amountLimit()) >= 0;
+        if (!tokenLimited && !amountLimited) return "UNLIMITED";
+        return tokenExhausted || amountExhausted ? "EXHAUSTED" : "NORMAL";
     }
 
     public ApplicationDetail detail(RequestContext context, UUID id) {
@@ -167,8 +244,7 @@ public final class ApplicationService {
             transaction.executeWithoutResult(status -> {
                 Connection connection = DataSourceUtils.getConnection(dataSource);
                 if (repository.existsByCode(connection, value.code())) {
-                    throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
-                            "应用编码已存在", "code");
+                    throw duplicateCode();
                 }
                 validateModels(connection, value.virtualModelIds());
                 ApplicationRecord record = new ApplicationRecord(
@@ -205,9 +281,16 @@ public final class ApplicationService {
                     false, null, context.requestId());
         } catch (LightAiException e) {
             throw e;
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // 唯一约束并发冲突（BE-P20-001）：与预检查映射同一业务错误码
+            throw duplicateCode();
         } catch (Exception e) {
             throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用创建失败");
         }
+    }
+
+    private static LightAiException duplicateCode() {
+        return new LightAiException(ErrorCode.DUPLICATE_APPLICATION_CODE, "应用编码已存在", "code");
     }
 
     public ManagementOperationResult<ApplicationDetail> update(
@@ -271,9 +354,17 @@ public final class ApplicationService {
                 if ("ARCHIVED".equals(current.status())) {
                     throw new LightAiException(ErrorCode.CONFIG_FIELD_IMMUTABLE, "归档应用是终态");
                 }
-                if ("ARCHIVED".equals(target) && !"DISABLED".equals(current.status())) {
-                    throw new LightAiException(ErrorCode.CONFIG_FIELD_IMMUTABLE,
-                            "应用必须先停用才能归档");
+                if ("ARCHIVED".equals(target)) {
+                    if (!"DISABLED".equals(current.status())) {
+                        throw new LightAiException(ErrorCode.CONFIG_FIELD_IMMUTABLE,
+                                "应用必须先停用才能归档");
+                    }
+                    // BE-P20-001：归档在应用行锁内复核占用；准入侧 lockAndValidateKey 同锁串行化
+                    repository.lockById(connection, id);
+                    if (repository.countActiveReservations(connection, id) > 0) {
+                        throw new LightAiException(ErrorCode.OBJECT_IN_USE,
+                                "应用存在未终态的预占请求，完成排空前不能归档");
+                    }
                 }
                 repository.updateStatus(connection, id, target, command.version());
                 auditService.recordSuccess(connection, AuditRecord.succeeded(
@@ -309,6 +400,11 @@ public final class ApplicationService {
                 ApplicationQuotaRecord current = repository.findQuota(connection, id)
                         .orElseThrow(() -> new LightAiException(
                                 ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用缺少额度策略"));
+                var previous = repository.findAdjustment(connection, id, value.idempotencyKey());
+                if (previous.isPresent()) {
+                    requireSamePolicy(previous.get(), value);
+                    return;
+                }
                 if (current.version() != value.version()) {
                     throw versionConflict(context, current.version());
                 }
@@ -319,6 +415,10 @@ public final class ApplicationService {
                         current.tokensUsed(), current.tokensReserved(), current.amountUsed(),
                         current.amountReserved(), current.version(), current.createdAt(), current.updatedAt());
                 repository.updateQuota(connection, requested, value.version());
+                // BE-P20-004：PUT 与调整、重置一样追加变更流水（dimension=POLICY，数值列空置）
+                repository.insertAdjustment(connection, new QuotaAdjustmentRecord(
+                        UUID.randomUUID(), id, "POLICY", null, null, null, value.reason(),
+                        OffsetDateTime.now(clock), operatorId(context), value.idempotencyKey(), null));
                 auditService.recordSuccess(connection, AuditRecord.succeeded(
                         UUID.randomUUID(), context.requestId(), operatorId(context),
                         "APPLICATION_QUOTA_UPDATE", "APPLICATION", id.toString(),
@@ -326,7 +426,8 @@ public final class ApplicationService {
                         sourceMode, context.sourceIpMasked()));
             });
             ApplicationDetail entity = detail(context, id);
-            return new ManagementOperationResult<>(id.toString(), entity.quota().version(), entity,
+            return new ManagementOperationResult<>(id.toString(),
+                    Long.parseLong(entity.quota().version()), entity,
                     false, null, context.requestId());
         } catch (JdbcApplicationRepository.OptimisticLockException e) {
             throw new LightAiException(ErrorCode.CONFIG_VERSION_CONFLICT,
@@ -354,6 +455,22 @@ public final class ApplicationService {
                 validateModels(connection, value.virtualModelIds());
                 List<ApplicationModelPermissionRecord> current =
                         repository.listModelPermissions(connection, id);
+                // BE-P20-003：应用负责人无显式可授权集合时只能收紧已有授权，新增授权默认拒绝
+                if (!isTrustedIdentity(context)) {
+                    Set<UUID> currentlyEnabled = current.stream()
+                            .filter(ApplicationModelPermissionRecord::enabled)
+                            .map(ApplicationModelPermissionRecord::virtualModelId)
+                            .collect(java.util.stream.Collectors.toSet());
+                    if (!currentlyEnabled.containsAll(value.virtualModelIds())) {
+                        auditService.recordFailure(AuditRecord.failed(
+                                UUID.randomUUID(), context.requestId(), operatorId(context),
+                                "APPLICATION_MODEL_PERMISSION_UPDATE", "APPLICATION", id.toString(),
+                                ErrorCode.ACCESS_DENIED.name(), "扩展模型授权需要可信身份显式授权",
+                                sourceMode, context.sourceIpMasked()));
+                        throw new LightAiException(ErrorCode.ACCESS_DENIED,
+                                "当前身份只能收紧已有模型授权，扩展授权需要管理员操作");
+                    }
+                }
                 Set<UUID> target = Set.copyOf(value.virtualModelIds());
                 Set<UUID> known = new LinkedHashSet<>();
                 boolean changed = false;
@@ -453,6 +570,182 @@ public final class ApplicationService {
         }
     }
 
+    /**
+     * BE-P20-003：应用授权候选目录。仅返回活动快照中已发布且存在可用候选的模型；
+     * 可信身份返回全部候选，应用负责人无显式可授权集合时仅返回当前已授权模型（只能收紧）。
+     */
+    public ApplicationModelOptionView.Options modelOptions(RequestContext context, UUID id) {
+        RequestPermissions.require(context, Permissions.APPLICATION_MODEL_MANAGE);
+        try (Connection connection = dataSource.getConnection()) {
+            ApplicationRecord application = load(connection, id);
+            requireScope(connection, context, application.code());
+            Set<UUID> authorizable = null;
+            if (!isTrustedIdentity(context)) {
+                authorizable = repository.listModelPermissions(connection, id).stream()
+                        .filter(ApplicationModelPermissionRecord::enabled)
+                        .map(ApplicationModelPermissionRecord::virtualModelId)
+                        .collect(java.util.stream.Collectors.toSet());
+            }
+            return optionsFromSnapshot(authorizable);
+        } catch (LightAiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用授权候选当前无法读取");
+        }
+    }
+
+    /** 创建前候选（FE-P20 补充契约）：需要创建权限；非可信身份无显式集合，返回空列表。 */
+    public ApplicationModelOptionView.Options modelOptionsForCreate(RequestContext context) {
+        RequestPermissions.require(context, Permissions.APPLICATION_MANAGE);
+        return isTrustedIdentity(context)
+                ? optionsFromSnapshot(null)
+                : new ApplicationModelOptionView.Options(List.of());
+    }
+
+    private ApplicationModelOptionView.Options optionsFromSnapshot(Set<UUID> authorizable) {
+        if (snapshotPort == null) {
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "活动配置快照当前无法读取");
+        }
+        ConfigSnapshotPort.ActiveSnapshot snapshot;
+        try {
+            snapshot = snapshotPort.active();
+        } catch (LightAiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "活动配置快照当前无法读取");
+        }
+        if (snapshot == null) {
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "暂无活动配置快照");
+        }
+        String snapshotNo = String.valueOf(snapshot.snapshotNo());
+        List<ApplicationModelOptionView> items = new ArrayList<>();
+        for (ConfigSnapshotPort.AliasView alias : snapshot.aliases()) {
+            if (!alias.enabled() || alias.enabledCandidates().isEmpty()) continue;
+            UUID modelId = parseUuidOrNull(alias.aliasId());
+            if (modelId == null) continue;
+            if (authorizable != null && !authorizable.contains(modelId)) continue;
+            items.add(new ApplicationModelOptionView(
+                    alias.aliasId(), alias.alias(),
+                    intersectionMaxOutput(alias.enabledCandidates()),
+                    intersectionAllowStream(alias.enabledCandidates()),
+                    snapshotNo));
+        }
+        items.sort(java.util.Comparator.comparing(ApplicationModelOptionView::code));
+        return new ApplicationModelOptionView.Options(List.copyOf(items));
+    }
+
+    /** 能力交集（BE-P20-003）：取全部启用候选的上限最小值，不因个别候选无上限而放宽。 */
+    private static Integer intersectionMaxOutput(List<ConfigSnapshotPort.CandidateView> candidates) {
+        return candidates.stream()
+                .map(ConfigSnapshotPort.CandidateView::maxOutputTokens)
+                .filter(java.util.Objects::nonNull)
+                .min(Long::compare)
+                .map(Long::intValue)
+                .orElse(null);
+    }
+
+    /** 流式能力：任一候选显式不支持则为 false；全部显式支持才为 true；未知为 null。 */
+    private static Boolean intersectionAllowStream(List<ConfigSnapshotPort.CandidateView> candidates) {
+        boolean allTrue = !candidates.isEmpty();
+        for (ConfigSnapshotPort.CandidateView candidate : candidates) {
+            Boolean support = candidate.supportStream();
+            if (Boolean.FALSE.equals(support)) return false;
+            if (!Boolean.TRUE.equals(support)) allTrue = false;
+        }
+        return allTrue;
+    }
+
+    /**
+     * FE-P20 补充契约：变更影响预览。预览不是写入许可，最终命令仍重验版本、范围与占用；
+     * 受影响密钥最多返回 50 个，超出以 has_more_keys 标记。
+     */
+    public ApplicationImpactView impact(RequestContext context, UUID id,
+                                        ApplicationImpactCommand command) {
+        if (command == null) throw invalid("body", "请求体必填");
+        String action = command.action() == null ? "" : command.action().trim().toUpperCase();
+        if (!IMPACT_ACTIONS.contains(action)) {
+            throw invalid("action", "action 仅支持 STATUS_CHANGE 或 MODEL_PERMISSION_CHANGE");
+        }
+        if (command.version() < 1) throw invalid("version", "version 必须是正整数");
+        RequestPermissions.require(context, "STATUS_CHANGE".equals(action)
+                ? Permissions.APPLICATION_MANAGE : Permissions.APPLICATION_MODEL_MANAGE);
+        String targetStatus = null;
+        List<UUID> removedModels = new ArrayList<>();
+        if ("STATUS_CHANGE".equals(action)) {
+            targetStatus = optionalEnum(command.targetStatus(), STATUSES, "target_status");
+            if (targetStatus == null) throw invalid("target_status", "目标状态必填");
+        } else {
+            if (command.removedModelIds() == null || command.removedModelIds().isEmpty()) {
+                throw invalid("removed_model_ids", "removed_model_ids 必填");
+            }
+            for (String raw : command.removedModelIds()) {
+                try {
+                    removedModels.add(UUID.fromString(raw == null ? "" : raw.trim()));
+                } catch (Exception e) {
+                    throw invalid("removed_model_ids", "包含非法虚拟模型 ID");
+                }
+            }
+        }
+        OffsetDateTime queryStartedAt = OffsetDateTime.now(clock);
+        try (Connection connection = dataSource.getConnection()) {
+            ApplicationRecord application = load(connection, id);
+            requireScope(connection, context, application.code());
+            if (application.version() != command.version()) {
+                throw versionConflict(context, application.version());
+            }
+            int limit = IMPACT_KEY_LIMIT + 1;
+            List<UUID> affected = "STATUS_CHANGE".equals(action)
+                    ? repository.listActiveKeyIds(connection, id, limit)
+                    : repository.listAffectedKeyIdsForModelRemoval(connection, id, removedModels, limit);
+            boolean hasMore = affected.size() > IMPACT_KEY_LIMIT;
+            List<UUID> keyIds = hasMore ? affected.subList(0, IMPACT_KEY_LIMIT) : affected;
+            long running = repository.countActiveReservations(connection, id);
+            var summary = repository.summarize24h(connection, List.of(application.code()),
+                    queryStartedAt.minusHours(24), queryStartedAt).get(application.code());
+            List<ApplicationImpactView.Blocker> blockers = new ArrayList<>();
+            if ("STATUS_CHANGE".equals(action) && "ARCHIVED".equals(targetStatus) && running > 0) {
+                blockers.add(new ApplicationImpactView.Blocker(ErrorCode.OBJECT_IN_USE.name(),
+                        "应用存在未终态的预占请求，完成排空前不能归档"));
+            }
+            return new ApplicationImpactView(
+                    id.toString(), String.valueOf(application.version()), activeSnapshotNoOrNull(),
+                    queryStartedAt,
+                    String.valueOf(hasMore ? IMPACT_KEY_LIMIT : affected.size()),
+                    keyIds.stream().map(UUID::toString).toList(),
+                    hasMore,
+                    summary == null ? "0" : String.valueOf(summary.requests()),
+                    String.valueOf(running),
+                    List.copyOf(blockers));
+        } catch (LightAiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用影响预览当前无法读取");
+        }
+    }
+
+    private String activeSnapshotNoOrNull() {
+        if (snapshotPort == null) return null;
+        try {
+            ConfigSnapshotPort.ActiveSnapshot snapshot = snapshotPort.active();
+            return snapshot == null ? null : String.valueOf(snapshot.snapshotNo());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static UUID parseUuidOrNull(String raw) {
+        try {
+            return UUID.fromString(raw);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static boolean isTrustedIdentity(RequestContext context) {
+        List<String> roles = context.authContext().roles();
+        return roles.contains(Roles.SYSTEM_ADMIN) || roles.contains(Roles.OPERATOR);
+    }
+
     public ManagementOperationResult<ApplicationDetail> adjustQuota(
             RequestContext context, UUID id, ApplicationQuotaAdjustmentCommand command) {
         RequestPermissions.require(context, Permissions.APPLICATION_QUOTA_MANAGE);
@@ -495,7 +788,8 @@ public final class ApplicationService {
                         sourceMode, context.sourceIpMasked()));
             });
             ApplicationDetail entity = detail(context, id);
-            return new ManagementOperationResult<>(id.toString(), entity.quota().version(), entity,
+            return new ManagementOperationResult<>(id.toString(),
+                    Long.parseLong(entity.quota().version()), entity,
                     false, null, context.requestId());
         } catch (JdbcApplicationRepository.OptimisticLockException e) {
             throw new LightAiException(ErrorCode.CONFIG_VERSION_CONFLICT,
@@ -551,7 +845,8 @@ public final class ApplicationService {
                         sourceMode, context.sourceIpMasked()));
             });
             ApplicationDetail entity = detail(context, id);
-            return new ManagementOperationResult<>(id.toString(), entity.quota().version(), entity,
+            return new ManagementOperationResult<>(id.toString(),
+                    Long.parseLong(entity.quota().version()), entity,
                     false, null, context.requestId());
         } catch (JdbcApplicationRepository.OptimisticLockException e) {
             throw new LightAiException(ErrorCode.CONFIG_VERSION_CONFLICT,
@@ -561,22 +856,6 @@ public final class ApplicationService {
         } catch (Exception e) {
             throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用用量重置失败");
         }
-    }
-
-    private ApplicationListItem toListItem(Connection connection, ApplicationRecord record) {
-        ApplicationQuotaRecord quota = repository.findQuota(connection, record.id()).orElse(null);
-        return new ApplicationListItem(
-                record.id().toString(), record.code(), record.name(), record.department(),
-                record.ownerId(), record.ownerName(), record.environment(), record.status(),
-                repository.countEnabledModels(connection, record.id()),
-                repository.countActiveKeys(connection, record.id()),
-                quota == null ? null : quota.tokenLimit(), quota == null ? 0 : quota.tokensUsed(),
-                quota == null ? 0 : quota.tokensReserved(),
-                quota == null ? null : decimalText(quota.amountLimit()),
-                quota == null ? "0" : decimalText(quota.amountUsed()),
-                quota == null ? "0" : decimalText(quota.amountReserved()),
-                quota == null ? null : quota.currency(), quota == null ? null : quota.rpm(),
-                quota == null ? null : quota.tpm(), record.lastCalledAt(), record.updatedAt(), record.version());
     }
 
     private ApplicationDetail toDetail(Connection connection, ApplicationRecord record) {
@@ -591,12 +870,33 @@ public final class ApplicationService {
                 record.lastCalledAt(), record.createdAt(), record.updatedAt(), record.version());
     }
 
+    /**
+     * BE-P20-004：tokens_remaining/amount_remaining = max(0, limit-used-reserved)，无限额为 null；
+     * admission_blocked 表示任一有限维度已达上限，新准入将被拒绝。
+     * period_id/policy_version/timezone/reset_at 依赖 DB-203 迁移与平台时区配置，当前为 null。
+     */
     private ApplicationQuotaPolicyView toQuotaView(ApplicationQuotaRecord quota) {
+        String tokensRemaining = quota.tokenLimit() == null ? null
+                : String.valueOf(Math.max(0,
+                        quota.tokenLimit() - quota.tokensUsed() - quota.tokensReserved()));
+        String amountRemaining = quota.amountLimit() == null ? null
+                : decimalText(quota.amountLimit().subtract(quota.amountUsed())
+                .subtract(quota.amountReserved()).max(BigDecimal.ZERO));
+        boolean tokenBlocked = quota.tokenLimit() != null
+                && quota.tokensUsed() + quota.tokensReserved() >= quota.tokenLimit();
+        boolean amountBlocked = quota.amountLimit() != null
+                && quota.amountUsed().add(quota.amountReserved())
+                .compareTo(quota.amountLimit()) >= 0;
         return new ApplicationQuotaPolicyView(
-                quota.id().toString(), quota.tokenLimit(), quota.tokensUsed(), quota.tokensReserved(),
+                quota.id().toString(),
+                quota.tokenLimit() == null ? null : String.valueOf(quota.tokenLimit()),
+                String.valueOf(quota.tokensUsed()), String.valueOf(quota.tokensReserved()),
                 decimalText(quota.amountLimit()), decimalText(quota.amountUsed()),
                 decimalText(quota.amountReserved()), quota.currency(), quota.rpm(), quota.tpm(),
-                quota.periodType(), quota.periodStart(), quota.periodEnd(), quota.version());
+                quota.periodType(), quota.periodStart(), quota.periodEnd(),
+                null, null, null, null,
+                tokensRemaining, amountRemaining, tokenBlocked || amountBlocked,
+                String.valueOf(quota.version()));
     }
 
     private ApplicationModelPermissionView toModelView(ApplicationModelPermissionRecord model) {
@@ -605,7 +905,7 @@ public final class ApplicationService {
         return new ApplicationModelPermissionView(
                 model.id().toString(), model.virtualModelId().toString(),
                 model.virtualModelCode(), model.enabled(),
-                constraint.maxOutputTokens(), constraint.streamAllowed(), model.version());
+                constraint.maxOutputTokens(), constraint.allowStream(), model.version());
     }
 
     private ApplicationQuotaAdjustmentView toAdjustmentView(QuotaAdjustmentRecord record) {
@@ -621,12 +921,16 @@ public final class ApplicationService {
                 .orElseThrow(() -> new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "应用不存在"));
     }
 
+    /** BE-P20-003：授权目标必须启用且存在启用的路由候选（可路由），与 model-options 同一口径。 */
     private void validateModels(Connection connection, List<UUID> ids) {
         for (UUID id : ids) {
             var model = aliasRepository.findLiveById(connection, id)
                     .orElseThrow(() -> invalid("virtual_model_ids", "虚拟模型不存在: " + id));
             if (!model.enabled()) {
                 throw invalid("virtual_model_ids", "虚拟模型未启用: " + model.alias());
+            }
+            if (!repository.existsEnabledCandidate(connection, id)) {
+                throw invalid("virtual_model_ids", "虚拟模型没有可用路由候选: " + model.alias());
             }
         }
     }
@@ -640,8 +944,8 @@ public final class ApplicationService {
     private ValidatedQuota validateQuota(ApplicationQuotaUpdateCommand command) {
         if (command == null) throw invalid("body", "请求体必填");
         List<FieldIssue> issues = new ArrayList<>();
-        Long tokenLimit = positive(command.tokenLimit(), "token_limit", issues);
-        BigDecimal amountLimit = amount(command.amountLimit(), issues);
+        Long tokenLimit = nonNegative(command.tokenLimit(), "token_limit", issues);
+        BigDecimal amountLimit = nonNegativeAmount(command.amountLimit(), issues);
         String currency = enumPattern(command.currency(), CURRENCY, "currency", issues);
         Integer rpm = positive(command.rpm(), "rpm", issues);
         Long tpm = positive(command.tpm(), "tpm", issues);
@@ -650,6 +954,7 @@ public final class ApplicationService {
             issues.add(new FieldIssue("version", "INVALID", "version 必须是正整数"));
         }
         String reason = reason(command.reason(), issues);
+        String idempotencyKey = validateIdempotencyKey(command.idempotencyKey(), issues);
         if ("CUSTOM".equals(periodType) && (command.periodStart() == null
                 || command.periodEnd() == null
                 || !command.periodStart().isBefore(command.periodEnd()))) {
@@ -658,7 +963,8 @@ public final class ApplicationService {
         if (!issues.isEmpty()) throw new LightAiException(
                 ErrorCode.FIELD_VALIDATION_FAILED, "应用额度配置不合法", issues);
         return new ValidatedQuota(tokenLimit, amountLimit, currency, rpm, tpm,
-                periodType, command.periodStart(), command.periodEnd(), command.version(), reason);
+                periodType, command.periodStart(), command.periodEnd(), command.version(),
+                reason, idempotencyKey);
     }
 
     private ValidatedModels validateModelsCommand(ApplicationModelsUpdateCommand command) {
@@ -726,7 +1032,7 @@ public final class ApplicationService {
         ApplicationModelConstraint next = target == null
                 ? new ApplicationModelConstraint(null, null, null) : target;
         return Objects.equals(stored.maxOutputTokens(), next.maxOutputTokens())
-                && Objects.equals(stored.streamAllowed(), next.streamAllowed());
+                && Objects.equals(stored.allowStream(), next.allowStream());
     }
 
     private static String constraintText(UUID modelId, String constraintsJson) {
@@ -735,7 +1041,7 @@ public final class ApplicationService {
             return modelId + "=unlimited";
         }
         return modelId + "=max_output_tokens:" + constraint.maxOutputTokens()
-                + ",stream_allowed:" + constraint.streamAllowed();
+                + ",allow_stream:" + constraint.allowStream();
     }
 
     private ValidatedAdjustment validateAdjustment(ApplicationQuotaAdjustmentCommand command) {
@@ -808,18 +1114,11 @@ public final class ApplicationService {
                 : current.amountLimit();
     }
 
+    /** BE-P20-004：调整后上限允许低于已用+预占（含 0），仅拒绝负值。 */
     private static void validateAdjustedLimit(
             ApplicationQuotaRecord current, String dimension, BigDecimal after) {
-        if (after.signum() <= 0) {
-            throw invalid("delta", "调整后上限必须大于 0");
-        }
-        if ("TOKEN_LIMIT".equals(dimension)) {
-            long committed = current.tokensUsed() + current.tokensReserved();
-            if (after.longValueExact() < committed) {
-                throw invalid("delta", "调整后 Token 额度不能低于已用与预占之和");
-            }
-        } else if (after.compareTo(current.amountUsed().add(current.amountReserved())) < 0) {
-            throw invalid("delta", "调整后金额预算不能低于已用与预占之和");
+        if (after.signum() < 0) {
+            throw invalid("delta", "调整后上限不能为负");
         }
     }
 
@@ -835,6 +1134,16 @@ public final class ApplicationService {
                 current.periodStart(), current.periodEnd(), current.tokensUsed(),
                 current.tokensReserved(), current.amountUsed(), current.amountReserved(),
                 current.version(), current.createdAt(), current.updatedAt());
+    }
+
+    /** BE-P20-004：同幂等键重放校验；POLICY 流水数值列空置，仅比对原因文本。 */
+    private static void requireSamePolicy(
+            QuotaAdjustmentRecord previous, ValidatedQuota requested) {
+        if (!"POLICY".equals(previous.dimension())
+                || !previous.reason().equals(requested.reason())) {
+            throw new LightAiException(ErrorCode.IDEMPOTENCY_KEY_CONFLICT,
+                    "幂等键已用于不同的额度操作");
+        }
     }
 
     private static void requireSameAdjustment(
@@ -865,16 +1174,12 @@ public final class ApplicationService {
         }
     }
 
+    /**
+     * BE-P20-004：允许新上限低于已用+预占（保存成功并立即阻止新准入，历史消耗不回滚）；
+     * 已有消费时仍禁止改写币种与周期。
+     */
     private void validateQuotaTransition(ApplicationQuotaRecord current, ValidatedQuota requested) {
-        long committedTokens = current.tokensUsed() + current.tokensReserved();
-        if (requested.tokenLimit() != null && requested.tokenLimit() < committedTokens) {
-            throw invalid("token_limit", "Token 额度不能低于已用与预占之和");
-        }
         BigDecimal committedAmount = current.amountUsed().add(current.amountReserved());
-        if (requested.amountLimit() != null
-                && requested.amountLimit().compareTo(committedAmount) < 0) {
-            throw invalid("amount_limit", "金额预算不能低于已用与预占之和");
-        }
         if (committedAmount.signum() > 0
                 && !current.currency().equals(requested.currency())) {
             throw invalid("currency", "本周期已有金额用量，不能变更币种");
@@ -1075,6 +1380,24 @@ public final class ApplicationService {
         return value;
     }
 
+    /** BE-P20-004：允许把上限降到 0（低于已用+预占），保存成功并阻止新准入。 */
+    private static Long nonNegative(Long value, String field, List<FieldIssue> issues) {
+        if (value != null && value < 0) issues.add(new FieldIssue(field, "INVALID", field + " 必须不小于 0"));
+        return value;
+    }
+
+    private static BigDecimal nonNegativeAmount(String raw, List<FieldIssue> issues) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            BigDecimal value = new BigDecimal(raw.trim()).setScale(8, RoundingMode.UNNECESSARY);
+            if (value.signum() < 0) throw new ArithmeticException();
+            return value;
+        } catch (Exception e) {
+            issues.add(new FieldIssue("amount_limit", "INVALID", "金额上限必须不小于 0 且最多 8 位小数"));
+            return null;
+        }
+    }
+
     private static BigDecimal amount(String raw, List<FieldIssue> issues) {
         if (raw == null || raw.isBlank()) return null;
         try {
@@ -1128,7 +1451,7 @@ public final class ApplicationService {
     private record ValidatedQuota(
             Long tokenLimit, BigDecimal amountLimit, String currency, Integer rpm, Long tpm,
             String periodType, OffsetDateTime periodStart, OffsetDateTime periodEnd,
-            long version, String reason) {
+            long version, String reason, String idempotencyKey) {
     }
 
     private record ValidatedModels(

@@ -4,6 +4,9 @@ import com.lightai.admin.web.CommandBodies;
 import com.lightai.admin.web.ManagementResponses;
 import com.lightai.admin.web.RequestContext;
 import com.lightai.client.application.ApplicationCreateCommand;
+import com.lightai.client.application.ApplicationImpactCommand;
+import com.lightai.client.application.ApplicationImpactView;
+import com.lightai.client.application.ApplicationModelOptionView;
 import com.lightai.client.application.ApplicationModelsUpdateCommand;
 import com.lightai.client.application.ApplicationQuotaAdjustmentCommand;
 import com.lightai.client.application.ApplicationQuotaResetCommand;
@@ -117,6 +120,27 @@ public final class ApplicationController {
                                                HttpServletRequest request) {
         ApplicationStatusCommand command = CommandBodies.parse(body, ApplicationStatusCommand.class);
         return json(ManagementResponses.ok(service.changeStatus(context(request), parseId(id), command)));
+    }
+
+    /** 授权候选目录（BE-P20-003）：编辑授权表单使用，仅含已发布且可路由的模型。 */
+    @GetMapping("/admin/applications/{id}/model-options")
+    public ResponseEntity<String> modelOptions(@PathVariable String id, HttpServletRequest request) {
+        return json(ManagementResponses.ok(service.modelOptions(context(request), parseId(id))));
+    }
+
+    /** 创建前候选（FE-P20 补充契约）：尚无应用 ID，按操作者可授权范围裁剪。 */
+    @GetMapping("/admin/applications/model-options")
+    public ResponseEntity<String> modelOptionsForCreate(HttpServletRequest request) {
+        return json(ManagementResponses.ok(service.modelOptionsForCreate(context(request))));
+    }
+
+    /** 变更影响预览（FE-P20 补充契约）：预览不是写入许可。 */
+    @PostMapping("/admin/applications/{id}/impact")
+    public ResponseEntity<String> impact(@PathVariable String id,
+                                         @RequestBody(required = false) String body,
+                                         HttpServletRequest request) {
+        ApplicationImpactCommand command = CommandBodies.parse(body, ApplicationImpactCommand.class);
+        return json(ManagementResponses.ok(service.impact(context(request), parseId(id), command)));
     }
 
     /** 应用成员只读列表（PRD 9.2.7）；成员维护方式属待确认事项，本期不提供写接口。 */
