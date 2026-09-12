@@ -43,7 +43,8 @@
 
 已执行：
 
-- `npm run typecheck`：通过。\r\n- `npm run lint`：0 errors，37 条既有格式 warning；本次新增应用列表 warning 已清除。
+- `npm run typecheck`：通过。
+- `npm run lint`：0 errors，37 条既有格式 warning；本次新增应用列表 warning 已清除。
 - `npm test -- --run`：28 个文件、248 项通过；保留既有 Vue Router/RouterLink 测试警告，无失败项。
 - `npm run build`：通过。
 - 应用域定向测试：`tests/applicationP20.test.ts` 与 `tests/applicationPages.test.ts` 共 43 项通过。
