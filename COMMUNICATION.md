@@ -646,3 +646,9 @@ UI-R312 未修改详情 API、页签 URL、状态转换或权限规则。
 | UI-ANT-343-001 | P1 | 最终集成审查需要确认所有页面已脱离原生 `.lai-card` 容器，并保持既有接口、权限和状态契约。 | `light-ai-admin-ui/src/pages/**`；业务 API 契约不变 | 完成共享状态、表格、表单、详情、指标和低频页面的 Ant Design Card/Tag/Progress 迁移；未修改后端 API、权限枚举或数据库结构。 | `rg` 未发现页面中的原生 `.lai-card` 容器；`npm run typecheck`、`npm run lint -- --quiet`、全量回归 33 个测试文件/255 项、`npm run build` 均通过；mock 浏览器已覆盖总览/渠道、折叠导航与 768px 窄屏。真实后端逐页视觉验收和远程推送仍未执行。 | 代码审查与修复模型/codex-ui-final-review-0913 | 已验证 |
 | UI-ANT-343-002 | P1 | 真实浏览器检查发现总览异常项使用不存在的 `pool-detail` 路由，后端实际返回 `CHANNEL_CREDENTIAL`；点击或渲染该项会产生 Vue Router 错误。 | `light-ai-admin-ui/src/pages/overview/OverviewPage.vue`、`src/api/overview.ts`、`src/app/router.ts`；后端 OverviewExceptionItem 契约保持不变 | 对齐 `CHANNEL_CREDENTIAL` 枚举；凭证仅展示名称快照并隐藏失效的详情链接，保留熔断、候选和 Trace 的有效钻取。 | `overviewUsage.test.ts` 15 项通过；mock 浏览器总览/渠道页面导航和 768px 窄屏检查通过；补充蓝色 favicon 后控制台无错误；`npm run lint -- --quiet` 通过。 | 代码审查与修复模型/codex-ui-final-review-0913 | 已验证 |
 | UI-ANT-343-003 | P2 | 最终集成需要覆盖所有主要路由的真实浏览器加载，单页截图不足以发现懒加载组件或路由切换运行时异常。 | `light-ai-admin-ui/src/app/router.ts` 及全部管理页 | 使用 Playwright CLI 在隔离 mock 服务中依次打开列表、新建、编辑、详情、配置、观测和状态页，捕获 `pageerror` 与非资源加载控制台错误。 | 41 条主要管理路由均加载到预期页面标题，无 page error 或非资源控制台错误；API 404 仅来自 mock 未提供的后端接口，已与前端运行时错误区分。真实后端逐页视觉仍待环境。 | 代码审查与修复模型/codex-ui-final-review-0913 | 已验证 |
+
+## UI-ANT-344 Ant Table 列表余项清理（2026-09-13，codex-ui-cleanup-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-344-001 | P1 | 全路由运行时扫描后发现虚拟模型与上游模型目录仍使用原生 `<table>`、`<select>` 和操作按钮，和“从零使用 Ant Design”要求不一致。 | `light-ai-admin-ui/src/pages/aliases/AliasListPage.vue`、`src/pages/models/ModelListPage.vue`；列表、筛选、批量检测和生命周期 API 契约不变 | 用 Ant `Table/Input/Select/Tag/Button/Space` 重写两页的筛选区、结果表和批量操作；上游模型选择改用 `rowSelection`，保留 URL 筛选、分页、权限、批量检测、启停、删除和状态文案。 | `npm run typecheck` 通过；`aliasPages.test.ts` 6 项通过；全路由 mock 浏览器扫描无 page error；列表不再包含原生 `<table>`。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证 |
