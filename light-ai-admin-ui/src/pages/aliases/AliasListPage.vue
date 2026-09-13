@@ -4,7 +4,8 @@ import PageState from '@/components/PageState.vue'
 import ListPager from '@/components/ListPager.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { computed } from 'vue'
-import { Card } from 'ant-design-vue'
+import { Button, Card, Input, Select, Space, Table, Tag } from 'ant-design-vue'
+import type { ColumnsType } from 'ant-design-vue/es/table'
 import { useBootstrapStore } from '@/stores/bootstrap'
 import { Permission } from '@/app/permissions'
 import { useListQuery, type FilterValue } from '@/composables/useListQuery'
@@ -71,6 +72,32 @@ const runtimeOptions = [
   { value: 'UNAVAILABLE', label: '无可用候选' },
 ]
 
+const enabledOptions = [
+  { value: '', label: '全部启停' },
+  { value: 'true', label: '已启用' },
+  { value: 'false', label: '已停用' },
+]
+
+const supportStreamOptions = [
+  { value: '', label: '全部流式' },
+  { value: 'true', label: '支持流式' },
+  { value: 'false', label: '不支持流式' },
+]
+
+const tableColumns: ColumnsType<ModelAliasListItem> = [
+  { key: 'alias', title: 'alias', width: 180 },
+  { key: 'display_name', title: '展示名称', width: 150 },
+  { key: 'route_strategy', title: '路由策略', width: 150 },
+  { key: 'candidate_count', title: '候选', width: 80 },
+  { key: 'runtime', title: '可用性', width: 150 },
+  { key: 'stream', title: '流式', width: 90 },
+  { key: 'request_count_24h', title: '24h 调用', width: 110 },
+  { key: 'enabled', title: '启停', width: 90 },
+  { key: 'draft_changed', title: '待发布', width: 90 },
+  { key: 'updated_at', title: '更新时间', width: 170 },
+  { key: 'actions', title: '操作', fixed: 'right' as const, width: 220 },
+]
+
 const aliasName = (row: ModelAliasListItem) => row.alias
 </script>
 
@@ -86,65 +113,39 @@ const aliasName = (row: ModelAliasListItem) => row.alias
       >
         <RouterLink
           to="/ui/models/virtual/new"
-          class="lai-btn lai-btn-primary"
+          class="application-create-link"
         >
-          新建 虚拟模型
+          <Button type="primary">新建虚拟模型</Button>
         </RouterLink>
       </div>
     </div>
 
     <Card :bordered="false" class="alias-filter-card">
     <div class="lai-filter-bar">
-      <input
-        class="lai-input lai-filter-input"
-        type="text"
+      <Input
+        class="lai-filter-input"
         placeholder="alias、名称或描述"
-        :value="query.keyword"
-        @change="applyFilters({ keyword: ($event.target as HTMLInputElement).value })"
-      >
-      <select
-        class="lai-input lai-filter-select"
+        :value="String(query.keyword ?? '')"
+        @change="($event) => applyFilters({ keyword: ($event.target as HTMLInputElement).value })"
+      />
+      <Select
+        class="lai-filter-select"
         :value="String(query.enabled ?? '')"
-        @change="applyFilters({ enabled: ($event.target as HTMLInputElement).value })"
-      >
-        <option value="">
-          全部启停
-        </option>
-        <option value="true">
-          已启用
-        </option>
-        <option value="false">
-          已停用
-        </option>
-      </select>
-      <select
-        class="lai-input lai-filter-select"
+        :options="enabledOptions"
+        @change="(value) => applyFilters({ enabled: String(value ?? '') })"
+      />
+      <Select
+        class="lai-filter-select"
         :value="String(query.runtimeAvailability ?? '')"
-        @change="applyFilters({ runtimeAvailability: ($event.target as HTMLInputElement).value })"
-      >
-        <option
-          v-for="item in runtimeOptions"
-          :key="item.value"
-          :value="item.value"
-        >
-          {{ item.label }}
-        </option>
-      </select>
-      <select
-        class="lai-input lai-filter-select"
+        :options="runtimeOptions"
+        @change="(value) => applyFilters({ runtimeAvailability: String(value ?? '') })"
+      />
+      <Select
+        class="lai-filter-select"
         :value="String(query.supportStream ?? '')"
-        @change="applyFilters({ supportStream: ($event.target as HTMLInputElement).value })"
-      >
-        <option value="">
-          全部流式
-        </option>
-        <option value="true">
-          支持流式
-        </option>
-        <option value="false">
-          不支持流式
-        </option>
-      </select>
+        :options="supportStreamOptions"
+        @change="(value) => applyFilters({ supportStream: String(value ?? '') })"
+      />
       <span
         v-if="refreshing"
         class="lai-refreshing"
@@ -176,87 +177,36 @@ const aliasName = (row: ModelAliasListItem) => row.alias
         {{ actionText() }}
       </p>
       <Card :bordered="false" class="alias-table-card">
-      <div class="lai-table-wrap">
-        <table class="lai-table">
-          <thead>
-            <tr>
-              <th>alias</th>
-              <th>展示名称</th>
-              <th>路由策略</th>
-              <th>候选</th>
-              <th>可用性</th>
-              <th>流式</th>
-              <th>24h 调用</th>
-              <th>启停</th>
-              <th>待发布</th>
-              <th>更新时间</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in items"
-              :key="row.id"
-            >
-              <td>
-                <RouterLink
-                  :to="`/ui/models/virtual/${row.id}`"
-                  class="lai-link lai-cell-mono"
-                >
-                  {{ row.alias }}
-                </RouterLink>
-              </td>
-              <td>{{ row.display_name }}</td>
-              <td>{{ row.route_strategy }}</td>
-              <td>
-                <RouterLink
-                  :to="`/ui/models/virtual/${row.id}`"
-                  class="lai-link"
-                >
-                  {{ row.candidate_count }}
-                </RouterLink>
-              </td>
-              <td>{{ runtimeText(row) }}</td>
-              <td>{{ streamText(row) }}</td>
-              <td>{{ row.request_count_24h }}</td>
-              <td>{{ row.enabled ? '启用' : '停用' }}</td>
-              <td>{{ row.draft_changed ? '待发布' : '' }}</td>
-              <td>{{ row.updated_at }}</td>
-              <td class="lai-cell-actions">
-                <RouterLink
-                  :to="`/ui/models/virtual/${row.id}`"
-                  class="lai-btn lai-btn-text"
-                >
-                  查看
-                </RouterLink>
-                <RouterLink
-                  v-if="canManage"
-                  :to="`/ui/models/virtual/${row.id}/edit`"
-                  class="lai-btn lai-btn-text"
-                >
-                  编辑
-                </RouterLink>
-                <template v-if="canManage">
-                  <button
-                    type="button"
-                    class="lai-btn lai-btn-text"
-                    @click="openToggle(row)"
-                  >
-                    {{ row.enabled ? '停用' : '启用' }}
-                  </button>
-                  <button
-                    type="button"
-                    class="lai-btn lai-btn-text"
-                    @click="openDelete(row)"
-                  >
-                    删除
-                  </button>
-                </template>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+        <Table
+          :columns="tableColumns"
+          :data-source="items"
+          :row-key="(row: ModelAliasListItem) => row.id"
+          :pagination="false"
+          :loading="refreshing"
+          :scroll="{ x: 1400 }"
+          size="middle"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'alias'">
+              <RouterLink :to="`/ui/models/virtual/${record.id}`" class="lai-link lai-cell-mono">{{ record.alias }}</RouterLink>
+            </template>
+            <template v-else-if="column.key === 'candidate_count'">
+              <RouterLink :to="`/ui/models/virtual/${record.id}`" class="lai-link">{{ record.candidate_count }}</RouterLink>
+            </template>
+            <template v-else-if="column.key === 'runtime'">{{ runtimeText(record as ModelAliasListItem) }}</template>
+            <template v-else-if="column.key === 'stream'">{{ streamText(record as ModelAliasListItem) }}</template>
+            <template v-else-if="column.key === 'enabled'"><Tag :color="record.enabled ? 'green' : 'default'">{{ record.enabled ? '启用' : '停用' }}</Tag></template>
+            <template v-else-if="column.key === 'draft_changed'"><Tag v-if="record.draft_changed" color="orange">待发布</Tag><span v-else>—</span></template>
+            <template v-else-if="column.key === 'actions'">
+              <Space size="small">
+                <RouterLink :to="`/ui/models/virtual/${record.id}`">查看</RouterLink>
+                <RouterLink v-if="canManage" :to="`/ui/models/virtual/${record.id}/edit`">编辑</RouterLink>
+                <Button v-if="canManage" type="link" size="small" @click="openToggle(record as ModelAliasListItem)">{{ record.enabled ? '停用' : '启用' }}</Button>
+                <Button v-if="canManage" type="link" danger size="small" @click="openDelete(record as ModelAliasListItem)">删除</Button>
+              </Space>
+            </template>
+          </template>
+        </Table>
       </Card>
       <ListPager
         :page="page"
