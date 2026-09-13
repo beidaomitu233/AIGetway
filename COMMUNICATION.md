@@ -480,3 +480,11 @@
 | UI-ANT-302-001 | P1 | 旧 `AppLayout` 使用自研 aside/topbar/nav DOM 和样式，无法提供统一的侧栏折叠、面包屑、导航选中态和响应式布局。 | `light-ai-admin-ui/src/layout/AppLayout.vue`、`tests/layout.test.ts`、`tests/setup.ts` | 从零改用 Ant Design `Layout/Sider/Menu/Header/Breadcrumb/Avatar/Badge`，按现有 `navSections` 和 `store.can` 过滤权限；保留所有既有路径、运行模式、快照、待发布计数及用户显示，新增蓝色半平面导航视觉和窄屏适配。 | typecheck 通过；布局回归 6 项通过；lint 0 error（新增壳层仅产生格式 warning，既有审计页面 warning 保持）。 | codex-ui-shell-0913 | 待复验 |
 
 UI-R302 未修改 API、权限判定和路由表；UI-R303 可基于该壳层继续实现共享页面模板。
+
+## UI-R303 Ant Design 页面框架与状态反馈（2026-09-13，codex-ui-page-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-303-001 | P1 | 旧页面状态由自研 skeleton/empty/error/banner DOM 表达，无法统一呈现 Ant Design 反馈、请求 ID、409 冲突和可组合页面结构。 | `light-ai-admin-ui/src/ui/page/**`、`src/components/PageState.vue`、`VersionConflictBanner.vue`、`tests/antPageState.test.ts` | 新增 `PageHeader`、`PageCard`、`PageSection`、`AsyncState`、`RequestError`、`ConflictAlert`；以 Ant `Skeleton/Empty/Alert/Button` 重写现有组件适配层，保留旧 props、事件和错误契约，409 显示服务端版本并提供显式重载。 | typecheck 通过；页面状态与冲突回归 3 项、壳层 6 项通过；lint 0 error（既有格式 warning 保持）。 | codex-ui-page-0913 | 待复验 |
+
+UI-R303 不改变业务请求、路由或权限逻辑；后续页面包可逐步替换旧 `.lai-*` 页面结构。
