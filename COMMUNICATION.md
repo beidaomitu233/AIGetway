@@ -564,3 +564,8 @@ UI-R312 未修改详情 API、页签 URL、状态转换或权限规则。
 | 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | UI-ANT-320-001 | P1 | 渠道列表的筛选区与数据表区使用扁平原生容器，主操作和数据边界不清晰；进入“渠道”列表即可复现。 | `light-ai-admin-ui/src/pages/providers/ProviderListPage.vue`；`listProviders`、生命周期 API 契约不变 | 使用 Ant Design `Card` 分隔筛选与结果工作区，使用 Ant `Button` 统一新建入口；保留原生筛选控件、权限显隐、生命周期确认和 URL 查询状态。 | `npm run typecheck` 通过；`providerPages.test.ts`、`providerDetail.test.ts` 共 14 项通过。 | 代码审查与修复模型/codex-ui-provider-list-0913 | 待复验 |
+## UI-R321 Ant Design 供应商渠道表单（2026-09-13，codex-ui-provider-form-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-321-001 | P1 | 渠道新建/编辑表单缺少统一的卡片边界，超时、代理、请求头和优先级配置堆叠在页面背景中，保存区层级弱；进入渠道新建或编辑页即可复现。 | `light-ai-admin-ui/src/pages/providers/ProviderFormPage.vue`；渠道创建、更新及版本冲突 API 契约不变 | 使用 Ant Design `Card` 承载表单并统一蓝色半平面边界；保留原生字段选择器以兼容既有校验、冲突提示和提交按钮 DOM 契约。 | `npm run typecheck` 通过；`providerPages.test.ts` 8 项通过。 | 代码审查与修复模型/codex-ui-provider-form-0913 | 待复验 |
