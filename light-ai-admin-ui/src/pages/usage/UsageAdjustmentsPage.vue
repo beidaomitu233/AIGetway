@@ -3,6 +3,7 @@
 // 按应用查看额度调整与用量重置流水；应用范围由服务端按身份裁剪。
 // 金额为十进制字符串，直接展示不做浮点运算。
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { Card } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import { useBootstrapStore } from '@/stores/bootstrap'
@@ -185,7 +186,7 @@ const applicationOptions = computed(() =>
         </select>
       </div>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           调整与重置记录
         </h2>
@@ -254,7 +255,7 @@ const applicationOptions = computed(() =>
             </table>
           </div>
         </template>
-      </div>
+      </Card>
     </template>
   </section>
 </template>
