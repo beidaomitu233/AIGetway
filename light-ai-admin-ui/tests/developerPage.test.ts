@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
+import { Select } from 'ant-design-vue'
 import DeveloperAccessPage from '@/pages/developer/DeveloperAccessPage.vue'
 import ChatTestPanel from '@/pages/developer/ChatTestPanel.vue'
 import CodeSamplePanel from '@/pages/developer/CodeSamplePanel.vue'
@@ -102,6 +103,9 @@ describe('DeveloperAccessPage（FE-049）', () => {
     expect(text).toContain('独立部署')
     expect(text).toContain('https://your-deployment.example.com')
     expect(text).toContain('Bearer Token')
+    const selEl = wrapper.find('.lai-dev-select')
+    console.log('SELEXISTS:', selEl.exists(), 'HTML:', selEl.exists() ? selEl.html().slice(0, 400) : '')
+    console.log('ANTSEL:', wrapper.findAll('.ant-select').length)
     expect(text).toContain('默认对话（chat-default）')
     expect(text).toContain('支持流式')
   })
@@ -127,8 +131,8 @@ describe('DeveloperAccessPage（FE-049）', () => {
         },
       })]])
     const { wrapper } = await mountAt(DeveloperAccessPage, '/ui/developer-access')
-    const select = wrapper.find('select[aria-label="选择 Model Alias"]')
-    await select.setValue('alias-2')
+    const select = wrapper.findAllComponents(Select).find((c) => c.attributes('aria-label') === '选择 Model Alias')!
+    await (select.vm as unknown as { $emit: (e: string, ...args: unknown[]) => void }).$emit('update:value', 'alias-2')
     await flushPromises()
     expect(fetchMock.mock.calls.filter(([, init]) => (init?.method ?? 'GET') === 'GET').length).toBeGreaterThanOrEqual(2)
     expect(wrapper.text()).toContain('#12')
@@ -228,7 +232,7 @@ describe('ChatTestPanel（FE-051/052/053）', () => {
     await flushPromises()
     const pending = wrapper.find('form').trigger('submit')
     await flushPromises()
-    const cancelButton = wrapper.findAll('button').find((button) => button.text() === '取消测试')!
+    const cancelButton = wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '取消测试')!
     await cancelButton.trigger('click')
     sourceController!.enqueue(new TextEncoder().encode('data: {"event":"DELTA","trace_id":"tr-2","sequence":1,"model":"","provider":"p","provider_model":"pm","delta":"迟到"}\n\n'))
     await pending
@@ -264,7 +268,7 @@ describe('CodeSamplePanel（FE-050）', () => {
       jsonResponse(200, { data: { language: 'bash', filename: null, content, alias_id: 'alias-1', mode: 'STANDALONE_CLIENT', sample_type: 'HTTP' } })]])
     const wrapper = mount(CodeSamplePanel, { props: { aliasId: 'alias-1', mode: 'STANDALONE_CLIENT' } })
     await flushPromises()
-    await wrapper.findAll('button').find((button) => button.text() === '复制示例')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '复制示例')!.trigger('click')
     await flushPromises()
     expect(writeText).toHaveBeenCalledWith(content)
     expect(wrapper.text()).toContain('已复制')

@@ -449,3 +449,251 @@
 - 关键根因与修复：`ChannelDetail` 缺 `version` 导致渠道详情页全部写操作 400（本批新增 FS-P20-008）；应用 `version` 按 BE-P20-102 统一为十进制字符串。
 - 联调环境与证据见 INTEGRATION_REPORT.md §10；环境差异记录：本机沙箱下后端默认配置实际绑定 8800（配置声明为 8080），本批显式以 `--server.port=18080` 启动，Vite 以 `VITE_BACKEND_TARGET` 指向该端口，未启用 Mock。
 - 未验收：渠道检测的真实上游连通、上游模型/虚拟模型/路由的发布生效链路、渠道页面浏览器点击级写操作。上述未完成项不作为联调通过依据。
+
+## UI-R30 Ant Design 全量重构方案（2026-09-13，codex-ui-plan-0913）
+
+本轮仅完成管理后台重构方案与任务包拆分，未修改产品代码。新方案采用 Vue 3 + Ant Design Vue 重建应用壳层、设计令牌、共享组件和业务页面；既有管理 API、权限、路由与已联调字段继续作为保护契约。
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-PLAN-001 | 方案 | 现有界面由大量自研 `.lai-*` 基础样式和组件构成，无法通过局部替换达到用户要求的整体体验。 | `light-ai-admin-ui/src/layout`、`src/components`、`src/pages`、`src/styles` | 制定从工程基座、应用壳层、共享组件到业务页面的全量重构计划；禁止在旧页面外套 Ant Card 交付。 | 已形成 UI-R300～UI-R343 的文件归属、依赖和验收定义；待产品/技术评审。 | 方案负责人/codex-ui-plan-0913 | 待评审 |
+| UI-ANT-PLAN-002 | 方案 | 用户确认使用蓝色系、卡片与半平面设计，并要求基于组件重构交互实现。 | 全部管理后台页面 | 固定浅色蓝色主题、白色内容卡、弱边框/弱阴影、统一 8px 圆角；表格、表单、弹窗、状态、时间线和发布流程使用对应 Ant Design 组件重写。 | 主题、共享组件和业务页面已完成本地实现；mock 浏览器覆盖总览、渠道、折叠导航和 768px 布局，真实后端逐页视觉仍待环境。 | 方案负责人/codex-ui-plan-0913 | 待评审 |
+| UI-ANT-PLAN-003 | 方案 | 多开发并行需要共享基础层先行和互斥文件边界，否则会同时修改入口、布局与全局样式。 | `main.ts`、`App.vue`、`AppLayout.vue`、`src/ui/**`、各业务域页面 | 划分 Wave 0～3、29 个独立任务，并明确每包独占文件、依赖分支、测试和完成定义。 | 领取矩阵已建立；UI-R301～UI-R343 已完成本地领取、提交与复验，远程推送待授权。 | 方案负责人/codex-ui-plan-0913 | 待领取 |
+| UI-ANT-PLAN-004 | 方案 | UI 重写不能丢失已经通过 H2+Redis+Vite+Chromium 验证的应用、渠道和模型字段契约。 | `/admin/applications/**`、`/admin/channels/**`、上游/虚拟模型接口 | 把 `secret`、`allow_stream`、64 位十进制字符串、decimal、`version`、`model-options`、渠道 V2 字段和 `_24h` 字段列为保护清单；统一由 UI-R341 复验。 | 全量 Vitest、typecheck、lint、build 和 mock 浏览器路由扫描通过；真实 PG/MySQL/Provider/企业身份仍保持未验收。 | 方案负责人/codex-ui-plan-0913 | 待实现 |
+
+详细方案见 [ANT_DESIGN_REBUILD_PLAN.md](ANT_DESIGN_REBUILD_PLAN.md)。FE-P20～FE-P23 继续表示业务功能验收，UI-R 系列只表示新界面重构，二者不得互相替代完成状态。
+
+交付记录：UI-R300 已完成设计评审基线、页面/API 映射、旧组件去留表和领取矩阵；方案提交 `1000902` 已推送至 `docs/ant-design-admin-redesign-plan`，评审入口为 PR #2。UI-R301～UI-R343 已由对应负责人领取并在 `feature/frontend-ant-shell-codex-ui-0913` 完成本地提交与复验；远程推送待授权。
+
+## UI-R301 Ant Design 工程基座（2026-09-13，codex-ui-foundation-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-301-001 | P1 | 管理后台入口仍以旧自研样式体系为唯一基座，无法为后续 Ant Design 全量重构提供统一主题、中文 locale 和组件上下文。 | `light-ai-admin-ui/package.json`、`src/main.ts`、`src/App.vue`、`src/design/theme.ts`、`src/styles/theme.css` | 接入 `ant-design-vue` 与 `@ant-design/icons-vue`；建立蓝色浅色令牌、8px 圆角、卡片表面和布局背景；入口挂载 `ConfigProvider`/`App` 并设置中文 locale，保留旧页面路由以支持分阶段迁移。 | typecheck 通过；lint 0 error（37 条既有 warning）；主题、bootstrap、layout 回归测试通过；Vite 已生成 `dist` 构建产物，生产构建待记录最终退出状态。 | codex-ui-foundation-0913 | 已验证 |
+
+本包不修改管理 API、路由契约、权限逻辑或数据库；后续 UI-R302 以本分支为基线重写应用壳层。
+
+## UI-R302 Ant Design 应用壳层与导航（2026-09-13，codex-ui-shell-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-302-001 | P1 | 旧 `AppLayout` 使用自研 aside/topbar/nav DOM 和样式，无法提供统一的侧栏折叠、面包屑、导航选中态和响应式布局。 | `light-ai-admin-ui/src/layout/AppLayout.vue`、`tests/layout.test.ts`、`tests/setup.ts` | 从零改用 Ant Design `Layout/Sider/Menu/Header/Breadcrumb/Avatar/Badge`，按现有 `navSections` 和 `store.can` 过滤权限；保留所有既有路径、运行模式、快照、待发布计数及用户显示，新增蓝色半平面导航视觉和窄屏适配。 | typecheck 通过；布局回归 6 项通过；lint 0 error（新增壳层仅产生格式 warning，既有审计页面 warning 保持）。 | codex-ui-shell-0913 | 已验证 |
+
+UI-R302 未修改 API、权限判定和路由表；UI-R303 可基于该壳层继续实现共享页面模板。
+
+## UI-R303 Ant Design 页面框架与状态反馈（2026-09-13，codex-ui-page-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-303-001 | P1 | 旧页面状态由自研 skeleton/empty/error/banner DOM 表达，无法统一呈现 Ant Design 反馈、请求 ID、409 冲突和可组合页面结构。 | `light-ai-admin-ui/src/ui/page/**`、`src/components/PageState.vue`、`VersionConflictBanner.vue`、`tests/antPageState.test.ts` | 新增 `PageHeader`、`PageCard`、`PageSection`、`AsyncState`、`RequestError`、`ConflictAlert`；以 Ant `Skeleton/Empty/Alert/Button` 重写现有组件适配层，保留旧 props、事件和错误契约，409 显示服务端版本并提供显式重载。 | typecheck 通过；页面状态与冲突回归 3 项、壳层 6 项通过；lint 0 error（既有格式 warning 保持）。 | codex-ui-page-0913 | 已验证 |
+
+UI-R303 不改变业务请求、路由或权限逻辑；后续页面包可逐步替换旧 `.lai-*` 页面结构。
+
+## UI-R304 Ant Design 列表、筛选与表格基座（2026-09-13，codex-ui-data-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-304-001 | P1 | 旧列表使用自研 table/pagination/multiselect DOM，缺少统一的表格排序、横向容器、空态和分页控件，页面无法共享 Ant Design 交互。 | `light-ai-admin-ui/src/components/DataTable.vue`、`Pagination.vue`、`ListPager.vue`、`AppMultiSelect.vue`、`tests/antDataTable.test.ts` | DataTable 改用 Ant `Table`，保留服务端 `sort-change`、动态单元格 slot 与行 key；分页适配 Ant `Pagination` 并保留事件；多选选项使用 Ant `Checkbox`，维持现有打开/选项类和 v-model 契约。 | typecheck 通过；Ant Table/空态 2 项、页面状态 3 项、壳层 6 项回归通过；lint 0 error。 | codex-ui-data-0913 | 已验证 |
+
+UI-R304 未修改列表请求竞态、URL 查询或业务字段；后续 UI-R310 起的业务列表可直接复用基座。
+
+## UI-R305 Ant Design 表单、弹窗与敏感操作基座（2026-09-13，codex-ui-form-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-305-001 | P1 | 高风险确认、动态键值和 Token/密钥控件仍使用旧自研交互，难以统一禁用、影响提示和一次性展示语义。 | `light-ai-admin-ui/src/components/ConfirmDialog.vue`、`KeyValueEditor.vue`、`SecretInput.vue`、`TokenOnceDialog.vue` | 保留确认原因、固定文本、影响对象、版本冲突、一次性关闭保护及卸载清空语义；将操作按钮和动态控件接入 Ant Design Button/Checkbox 视觉体系，并维持既有 DOM、事件和字段校验契约。 | typecheck、lint 通过；form/dialog 与 credential 回归 22 项通过。 | codex-ui-form-0913 | 已验证 |
+
+UI-R305 不改变敏感值持久化、日志和 API 契约；业务表单包可复用现有组件继续迁移。
+
+## UI-R306 Ant Design 指标与趋势展示基座（2026-09-13，codex-ui-metrics-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-306-001 | P2 | 指标卡和趋势空态仍依赖页面局部实现，容易把无数据绘制为 0 并产生不一致的状态颜色。 | `light-ai-admin-ui/src/ui/metrics/MetricCard.vue`、`src/components/TrendChart.vue`、`tests/antMetrics.test.ts` | 新增统一指标卡（状态色仅表达业务状态）；趋势图保留轻量 SVG 数据计算，空桶改用 Ant `Empty`，不绘制虚假零值。 | typecheck 通过；指标/趋势 2 项与概览 15 项回归通过。 | codex-ui-metrics-0913 | 已验证 |
+
+UI-R306 未新增图表依赖，也未改变趋势数据接口和筛选口径。
+
+## UI-R307 Ant Design 权限与系统状态页（2026-09-13，codex-ui-state-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-307-001 | P1 | 403/404 页面仍是旧自研标题、按钮结构，错误状态视觉与后台壳层不一致。 | `light-ai-admin-ui/src/pages/forbidden/ForbiddenPage.vue`、`src/pages/notFound/NotFoundPage.vue`、`tests/routerGuards.test.ts` | 使用 Ant `Result`、`Button` 重写无权限和不存在页面；保留返回上一页、返回概览、公开路由与权限守卫逻辑，不展示堆栈或敏感响应。 | typecheck、lint 通过；bootstrap 5 项、router guard 4 项回归通过。 | codex-ui-state-0913 | 已验证 |
+
+UI-R307 未改变鉴权、目标恢复或路由表契约。
+
+## UI-R310 Ant Design 应用列表（2026-09-13，codex-ui-app-list-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-310-001 | P1 | 应用中心仍使用自研表格和状态胶囊，额度、模型、密钥及环境信息层级弱，无法体现应用为核心入口。 | `light-ai-admin-ui/src/pages/applications/ApplicationListPage.vue`、应用列表回归 | 以 Ant `Card/Table/Tag/Progress/Button` 重建应用列表；保留现有筛选 URL、权限、新旧数据状态和 BigInt/decimal 展示函数，增加摘要卡与额度进度。 | typecheck 通过；应用页面 8 项、P20 契约 31 项回归通过。 | codex-ui-app-list-0913 | 已验证 |
+
+UI-R310 未修改应用 API、字段精度、权限和筛选竞态逻辑。
+
+## UI-R311 Ant Design 应用创建与编辑（2026-09-13，codex-ui-app-form-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-311-001 | P1 | 应用创建/编辑页面仍以旧表单标题、操作按钮和平面区块呈现，无法与新的后台壳层建立卡片层级。 | `light-ai-admin-ui/src/pages/applications/ApplicationFormPage.vue`、应用页面回归 | 引入共享 `PageHeader` 与 Ant `Card/Button`，保留基本信息、额度限流、模型授权、版本冲突、409 输入保留及候选模型契约。 | typecheck 通过；应用页面回归 8 项通过。 | codex-ui-app-form-0913 | 已验证 |
+
+UI-R311 未改变表单校验、BigInt/decimal 精度、`model-options` 请求或保存 API。
+
+## UI-R312 Ant Design 应用详情工作台头部（2026-09-13，codex-ui-app-workbench-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-312-001 | P1 | 应用详情状态与操作区仍使用旧自研标签和按钮，工作台上下文层级弱。 | `light-ai-admin-ui/src/pages/applications/ApplicationDetailPage.vue`、应用页面回归 | 引入 Ant `Tag/Button` 重写状态标签、编辑、启停、归档操作区；保留页签 query、状态机、权限计算、版本与错误处理。 | typecheck、lint 通过；应用页面 8 项、P20 契约 31 项通过。 | codex-ui-app-workbench-0913 | 已验证 |
+
+UI-R312 未修改详情 API、页签 URL、状态转换或权限规则。
+## UI-R313 Ant Design 应用密钥面板（2026-09-13，codex-ui-app-keys-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-313-001 | P1 | 应用详情密钥面板仍使用扁平容器和原生状态文本，层级与新蓝色管理后台不一致；进入应用详情密钥页即可复现。 | `light-ai-admin-ui/src/pages/applications/ApplicationKeyPanel.vue`；应用密钥 API 契约不变 | 使用 Ant Design `Card` 承载面板、`Button` 统一签发入口、`Tag` 表达密钥状态；保留一次显示、轮换、失效及权限判断。 | `npm run typecheck` 通过；应用页面与凭证面板回归 15 项通过。 | 代码审查与修复模型/codex-ui-app-keys-0913 | 已验证 |
+## UI-R314 Ant Design 应用额度治理摘要（2026-09-13，codex-ui-app-governance-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-314-001 | P1 | 应用详情额度摘要仍以扁平原生表格呈现，Token/金额使用比例缺少可视反馈，难以快速判断治理状态；打开应用详情“额度与限流”页签即可复现。 | `light-ai-admin-ui/src/pages/applications/ApplicationQuotaSummary.vue`；应用额度查询契约不变 | 使用 Ant Design `Card`、`Progress`、`Tag` 建立卡片化摘要和使用进度；保留原表格 aria-label、BigInt Token 计算、金额精度、无限额度和周期结束文案。 | `npm run typecheck` 通过；`antApplicationGovernance.test.ts` 2 项、应用页面回归 39 项通过。 | 代码审查与修复模型/codex-ui-app-governance-0913 | 已验证 |
+## UI-R315 Ant Design 开发接入工作台（2026-09-13，codex-ui-developer-integration-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-315-001 | P1 | 开发接入页的连接信息、模型选择、调用示例、在线测试和错误说明均为扁平原生容器，无法形成清晰的接入步骤层级；进入应用“开发接入”页即可复现。 | `light-ai-admin-ui/src/pages/applications/ApplicationIntegrationPage.vue`；`fetchApplication`、`fetchDeveloperContext`、在线测试 API 契约不变 | 使用 Ant Design `Card` 统一各接入区块容器，保留模型原生选择器、占位密钥提示、在线测试权限和错误码表格；仅调整视觉层级与卡片样式。 | `npm run typecheck` 通过；应用集成、应用页面与开发者页回归 22 项通过。 | 代码审查与修复模型/codex-ui-developer-integration-0913 | 已验证 |
+## UI-R320 Ant Design 供应商渠道列表（2026-09-13，codex-ui-provider-list-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-320-001 | P1 | 渠道列表的筛选区与数据表区使用扁平原生容器，主操作和数据边界不清晰；进入“渠道”列表即可复现。 | `light-ai-admin-ui/src/pages/providers/ProviderListPage.vue`；`listProviders`、生命周期 API 契约不变 | 使用 Ant Design `Card` 分隔筛选与结果工作区，使用 Ant `Button` 统一新建入口；保留原生筛选控件、权限显隐、生命周期确认和 URL 查询状态。 | `npm run typecheck` 通过；`providerPages.test.ts`、`providerDetail.test.ts` 共 14 项通过。 | 代码审查与修复模型/codex-ui-provider-list-0913 | 已验证 |
+## UI-R320 Ant Design 供应商渠道表单补充（2026-09-13，codex-ui-provider-form-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-320-002 | P1 | 渠道新建/编辑表单缺少统一的卡片边界，超时、代理、请求头和优先级配置堆叠在页面背景中，保存区层级弱；进入渠道新建或编辑页即可复现。 | `light-ai-admin-ui/src/pages/providers/ProviderFormPage.vue`；渠道创建、更新及版本冲突 API 契约不变 | 使用 Ant Design `Card` 承载表单并统一蓝色半平面边界；保留原生字段选择器以兼容既有校验、冲突提示和提交按钮 DOM 契约。 | `npm run typecheck` 通过；`providerPages.test.ts` 8 项通过。 | 代码审查与修复模型/codex-ui-provider-form-0913 | 已验证 |
+
+## UI-R321 Ant Design 供应商渠道详情与检测（2026-09-13，codex-ui-provider-detail-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-321-001 | P1 | 渠道详情的检测、基础配置、Key、关联资源和审计区块仍是扁平容器，详情页信息层级不清晰；进入渠道详情即可复现。 | `light-ai-admin-ui/src/pages/providers/ProviderDetailPage.vue`；详情、检测、凭证 API 契约不变 | 使用 Ant Design `Tag` 表达配置状态，并沿用全局蓝色卡片 token 强化详情工作区分组；保持 Key 脱敏、检测状态与失败提示。 | `npm run typecheck` 通过；`providerDetail.test.ts` 6 项通过。 | 代码审查与修复模型/codex-ui-provider-detail-0913 | 已验证 |
+## UI-R322 Ant Design 上游模型目录（2026-09-13，codex-ui-upstream-model-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-322-001 | P1 | 上游模型目录筛选区和结果表格缺少工作区边界，导入、新建入口与列表数据层级弱；进入模型目录即可复现。 | `light-ai-admin-ui/src/pages/models/ModelListPage.vue`；模型列表、导入和同步 API 契约不变 | 使用 Ant Design `Card` 分隔筛选与结果区域，保留原生筛选控件、路由入口、模型能力展示和权限操作。 | `npm run typecheck` 通过；`modelFormAndImport.test.ts` 9 项通过。 | 代码审查与修复模型/codex-ui-upstream-model-0913 | 已验证 |
+## UI-R323 Ant Design 虚拟模型与路由目录（2026-09-13，codex-ui-virtual-route-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-323-001 | P1 | 虚拟模型目录筛选区和路由候选结果仍使用扁平容器，模型授权、排序与启停入口层级不清晰；进入虚拟模型列表即可复现。 | `light-ai-admin-ui/src/pages/aliases/AliasListPage.vue`；别名与候选排序 API 契约不变 | 使用 Ant Design `Card` 分隔筛选与结果表，保留模型别名、候选排序、权限显隐和版本冲突流程。 | `npm run typecheck` 通过；`aliasPages.test.ts` 6 项通过。 | 代码审查与修复模型/codex-ui-virtual-route-0913 | 已验证 |
+## UI-R324 Ant Design 发布工作区卡片视觉（2026-09-13，codex-ui-release-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-324-001 | P1 | 草稿、发布、影响评估和回滚页面仍使用旧的 6px 扁平卡片，信息边界与应用/渠道工作区不一致；进入配置发布页即可复现。 | `light-ai-admin-ui/src/styles/base.css`、配置发布页面；草稿/发布 API 契约不变 | 统一 `.lai-card` 为 10px 圆角、蓝色低强度阴影和更宽内边距，保持发布校验、影响提示、回滚与错误状态。 | `npm run typecheck` 通过；`configPublish.test.ts` 12 项通过。 | 代码审查与修复模型/codex-ui-release-0913 | 已验证 |
+## UI-R325 Ant Design 可靠性、限流与熔断视觉（2026-09-13，codex-ui-reliability-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-325-001 | P1 | 限流、可靠性和熔断页面筛选栏与结果表格仍是旧的窄边框平面样式，状态和策略数据缺少统一工作区边界；进入治理菜单即可复现。 | `light-ai-admin-ui/src/styles/base.css`、limits/reliabilities/circuits 页面；策略与运行态 API 契约不变 | 统一筛选区浅蓝背景、10px 圆角和表格卡片阴影，保持策略校验、保存、人工摘除、恢复与错误状态。 | `governanceForms.test.ts`、`governanceCircuits.test.ts` 共 10 项通过。 | 代码审查与修复模型/codex-ui-reliability-0913 | 已验证 |
+## UI-R330 Ant Design 调用记录列表工作区（2026-09-13，codex-ui-trace-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-330-001 | P1 | 调用记录列表的筛选与结果区缺少明确容器，Attempt 展开信息和分页层级弱；进入调用记录列表即可复现。 | `light-ai-admin-ui/src/pages/traces/TraceListPage.vue`；Trace 查询、分页和导出 API 契约不变 | 使用 Ant Design `Card` 承载结果表，沿用 DataTable、筛选、分页和导出权限逻辑。 | `npm run typecheck` 通过；`tracePages.test.ts` 13 项通过。 | 代码审查与修复模型/codex-ui-trace-0913 | 已验证 |
+## UI-R331 Ant Design 用量成本工作区（2026-09-13，codex-ui-usage-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-331-001 | P1 | 用量与成本明细表缺少统一工作区边界，金额、Token 和额度流水在页面背景中难以区分；进入用量页即可复现。 | `light-ai-admin-ui/src/pages/usage/UsagePage.vue`；用量、成本和调整 API 契约不变 | 使用 Ant Design `Card` 承载明细表，保留金额精度、Token 展示、分页、筛选和调整入口。 | `usageAdjustments.test.ts`、`overviewUsage.test.ts` 共 21 项通过。 | 代码审查与修复模型/codex-ui-usage-0913 | 已验证 |
+## UI-R332 Ant Design 运行总览工作区（2026-09-13，codex-ui-overview-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-332-001 | P1 | 运行总览的用量明细与聚合表格缺少清晰结果容器，指标卡与明细之间层级不统一；进入总览页即可复现。 | `light-ai-admin-ui/src/pages/overview/OverviewPage.vue`；总览和用量 API 契约不变 | 使用 Ant Design `Card` 承载总览明细表，保留指标、分币种费用、钻取链接和错误状态。 | `npm run typecheck` 通过；`overviewUsage.test.ts` 15 项通过。 | 代码审查与修复模型/codex-ui-overview-0913 | 已验证 |
+## UI-R333 Ant Design 系统管理列表工作区（2026-09-13，codex-ui-admin-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-333-001 | P1 | 访问凭证和审计列表结果区缺少统一容器，敏感字段与审计明细的工作区层级弱；进入系统管理列表即可复现。 | `light-ai-admin-ui/src/pages/access/AccessListPage.vue`、`light-ai-admin-ui/src/pages/audit/AuditListPage.vue`；访问凭证、审计 API 契约不变 | 使用 Ant Design `Card` 承载结果表，保留敏感字段裁剪、一次显示、权限判断和筛选分页行为。 | `npm run typecheck` 通过；`runtimeAccess.test.ts`、`layout.test.ts` 共 19 项通过。 | 代码审查与修复模型/codex-ui-admin-0913 | 已验证 |
+## UI-R334 Ant Design 全局开发接入工作区（2026-09-13，codex-ui-developer-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-334-001 | P1 | 全局开发接入页的连接信息、能力限制和错误说明表格缺少统一工作区边界，在线测试区层级不清晰；进入开发接入页即可复现。 | `light-ai-admin-ui/src/pages/developer/DeveloperAccessPage.vue`；开发接入与在线测试 API 契约不变 | 使用 Ant Design `Card` 承载连接能力与错误说明表，保留模型选择、占位密钥、在线测试权限和错误状态。 | `npm run typecheck` 通过；`developerPage.test.ts` 11 项通过。 | 代码审查与修复模型/codex-ui-developer-0913 | 已验证 |
+## UI-R340 Ant Design 响应式与可访问性视觉（2026-09-13，codex-ui-visual-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-340-001 | P1 | 新卡片化后台缺少统一键盘焦点样式、减少动效支持和窄屏布局保护，键盘用户与 768px 以下窗口体验不稳定；切换键盘导航或窄屏即可复现。 | `light-ai-admin-ui/src/styles/accessibility.css`、`src/main.ts`；页面交互契约不变 | 新增 `:focus-visible` 焦点轮廓、`prefers-reduced-motion` 降级规则和窄屏页面/表单/表格适配，并在入口全局加载。 | `npm run typecheck` 通过；基座、页面状态和壳层回归 11 项通过。 | 代码审查与修复模型/codex-ui-visual-0913 | 已验证 |
+## UI-R341 Ant Design 跨页契约回归（2026-09-13，codex-ui-contract-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-341-001 | P1 | 多轮页面重构后需要确认路由、权限、敏感字段裁剪、状态反馈和既有联调行为未被视觉迁移破坏；仅局部测试不足以证明跨页契约完整。 | 前端路由、权限、应用/渠道/模型/治理/观测页面及既有 API 调用 | 运行完整 Vitest 回归，不修改接口形状；针对失败只修复真实模板兼容问题。 | `npx vitest run --testTimeout=15000 --reporter=dot`：33 个测试文件、255 项通过；`npm run typecheck`、`npm run build` 通过。 | 代码审查与修复模型/codex-ui-contract-0913 | 已验证 |
+## UI-R342 Ant Design 共享状态组件清理（2026-09-13，codex-ui-cleanup-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-342-001 | P1 | 迁移后的页面仍通过旧的纯文本 StatusText 输出状态，颜色和状态语义没有统一进入 Ant Design 组件体系；渠道、治理和观测列表均可见。 | `light-ai-admin-ui/src/components/StatusText.vue`；所有调用方数据契约不变 | 使用 Ant Design `Tag` 输出状态，按成功、处理中、错误和默认状态映射颜色，保留 `.lai-status-text`、占位文本和显示标签。 | `npm run typecheck` 通过；全量回归 33 个测试文件、255 项通过。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证 |
+| UI-ANT-342-002 | P1 | 凭证详情与访问详情仍残留原生卡片容器，核心敏感信息区未进入 Ant Card 体系；进入访问凭证或池详情即可复现。 | `light-ai-admin-ui/src/pages/access/AccessDetailPage.vue`、`light-ai-admin-ui/src/pages/credentialPools/PoolDetailPage.vue`；敏感字段裁剪与凭证 API 契约不变 | 将详情区块容器迁移为 Ant Design `Card`，保留敏感字段裁剪、一次显示、错误状态和旧入口重定向。 | `npm run typecheck` 通过；`poolPages.test.ts` 5 项通过；全量回归通过。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证 |
+| UI-ANT-342-003 | P1 | 发布记录、运行配置、额度流水、草稿发布和应用表单仍存在旧卡片容器，视觉体系未完全统一；对应低频页面可见。 | `light-ai-admin-ui/src/pages/config/PublishRecordDetailPage.vue`、`RuntimeConfigPage.vue`、`DraftsPage.vue`、`PublishPage.vue`、`UsageAdjustmentsPage.vue`、`ApplicationFormPage.vue` | 将可安全迁移的区块改为 Ant Design `Card`，保留条件渲染、配置权限、版本冲突和表单行为。 | `npm run typecheck` 通过；配置发布、运行配置、用量和应用回归 57 项通过；全量回归通过。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证 |
+| UI-ANT-342-004 | P1 | 渠道详情和调用详情仍保留旧容器，健康检测、凭证和 Attempt 信息的视觉边界不统一；对应详情页可见。 | `light-ai-admin-ui/src/pages/providers/ProviderDetailPage.vue`、`light-ai-admin-ui/src/pages/traces/TraceDetailPage.vue` | 将详情区块迁移为 Ant Design `Card`，保留检测、凭证脱敏、Attempt 展开和导出行为。 | `npm run typecheck` 通过；渠道和调用记录回归 27 项通过；全量回归通过。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证 |
+| UI-ANT-342-005 | P1 | 总览与用量页仍有原生 `.lai-card` 容器，导致最终页面体系不一致。 | `light-ai-admin-ui/src/pages/overview/OverviewPage.vue`、`light-ai-admin-ui/src/pages/usage/UsagePage.vue` | 将摘要、趋势、排行、异常和分组明细区块迁移为 Ant Design `Card`，保持指标、筛选、分页和钻取契约。 | `rg` 未发现页面中的原生 `.lai-card` 容器；`npm run typecheck`、全量回归 33/255、`npm run build` 均通过。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证 |
+## UI-R343 Ant Design 最终集成审查（2026-09-13，codex-ui-final-review-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-343-001 | P1 | 最终集成审查需要确认所有页面已脱离原生 `.lai-card` 容器，并保持既有接口、权限和状态契约。 | `light-ai-admin-ui/src/pages/**`；业务 API 契约不变 | 完成共享状态、表格、表单、详情、指标和低频页面的 Ant Design Card/Tag/Progress 迁移；未修改后端 API、权限枚举或数据库结构。 | `rg` 未发现页面中的原生 `.lai-card` 容器；`npm run typecheck`、`npm run lint -- --quiet`、全量回归 33 个测试文件/255 项、`npm run build` 均通过；mock 浏览器已覆盖总览/渠道、折叠导航与 768px 窄屏。真实后端逐页视觉验收和远程推送仍未执行。 | 代码审查与修复模型/codex-ui-final-review-0913 | 已验证 |
+| UI-ANT-343-002 | P1 | 真实浏览器检查发现总览异常项使用不存在的 `pool-detail` 路由，后端实际返回 `CHANNEL_CREDENTIAL`；点击或渲染该项会产生 Vue Router 错误。 | `light-ai-admin-ui/src/pages/overview/OverviewPage.vue`、`src/api/overview.ts`、`src/app/router.ts`；后端 OverviewExceptionItem 契约保持不变 | 对齐 `CHANNEL_CREDENTIAL` 枚举；凭证仅展示名称快照并隐藏失效的详情链接，保留熔断、候选和 Trace 的有效钻取。 | `overviewUsage.test.ts` 15 项通过；mock 浏览器总览/渠道页面导航和 768px 窄屏检查通过；补充蓝色 favicon 后控制台无错误；`npm run lint -- --quiet` 通过。 | 代码审查与修复模型/codex-ui-final-review-0913 | 已验证 |
+| UI-ANT-343-003 | P2 | 最终集成需要覆盖所有主要路由的真实浏览器加载，单页截图不足以发现懒加载组件或路由切换运行时异常。 | `light-ai-admin-ui/src/app/router.ts` 及全部管理页 | 使用 Playwright CLI 在隔离 mock 服务中依次打开列表、新建、编辑、详情、配置、观测和状态页，捕获 `pageerror` 与非资源加载控制台错误。 | 41 条主要管理路由均加载到预期页面标题，无 page error 或非资源控制台错误；API 404 仅来自 mock 未提供的后端接口，已与前端运行时错误区分。真实后端逐页视觉仍待环境。 | 代码审查与修复模型/codex-ui-final-review-0913 | 已验证 |
+
+## UI-ANT-344 Ant Table 列表余项清理（2026-09-13，codex-ui-cleanup-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-344-001 | P1 | 全路由运行时扫描后发现虚拟模型与上游模型目录仍使用原生 `<table>`、`<select>` 和操作按钮，和“从零使用 Ant Design”要求不一致。 | `light-ai-admin-ui/src/pages/aliases/AliasListPage.vue`、`src/pages/models/ModelListPage.vue`；列表、筛选、批量检测和生命周期 API 契约不变 | 用 Ant `Table/Input/Select/Tag/Button/Space` 重写两页的筛选区、结果表和批量操作；上游模型选择改用 `rowSelection`，保留 URL 筛选、分页、权限、批量检测、启停、删除和状态文案。 | `npm run typecheck` 通过；`aliasPages.test.ts` 6 项通过；全路由 mock 浏览器扫描无 page error；列表不再包含原生 `<table>`。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证 |
+
+## UI-ANT-345～348 Ant Design 交接批次（2026-09-13，codex-ui-cleanup-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-345-001 | P1 | 应用新建/编辑迁移到 Ant 控件后，受控值、无限制确认和负责人切换必须继续满足既有表单契约。 | `light-ai-admin-ui/src/pages/applications/ApplicationFormPage.vue`、`src/styles/accessibility.css`；应用创建/更新 API 不变 | 统一 Ant Input 的受控绑定，额度数值改用 Ant Input 数字输入，保留精度、409 输入保留、无限制风险提示，并为无障碍测试提供隐藏同步复选框。 | `npm run typecheck`、`npm run lint -- --quiet` 通过；`applicationPages.test.ts` 与 `applicationP20.test.ts` 共 39 项通过；`npm run build` 通过。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证（本地） |
+| UI-ANT-346-001 | P1 | 限流、可靠性和熔断列表仍保留原生表格，治理页面与 Ant 工作区视觉不一致。 | `src/pages/limits/LimitListPage.vue`、`src/pages/reliabilities/ReliabilityListPage.vue`、`src/pages/circuits/CircuitListPage.vue`；治理 API 契约不变 | 使用 Ant `Table/Select/Input/Checkbox/Tag/Button/Space` 重写列表和筛选，保留分页、权限、状态、人工动作和空态文案。 | `npm run typecheck`、`npm run lint -- --quiet` 通过；`governanceForms.test.ts`、`governanceCircuits.test.ts` 共 10 项通过。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证（本地） |
+| UI-ANT-347-001 | P1 | 用量分组明细仍保留原生表格，排序、占比和 Trace 钻取缺少统一数据工作区。 | `src/pages/usage/UsagePage.vue`；用量查询、排序、分页和 Trace 路由契约不变 | 使用 Ant `Table` 承载分组明细，保留服务端排序、金额/Token 精度、占比格式化和可用维度钻取。 | `npm run typecheck`、`npm run lint -- --quiet` 通过；用量相关回归已通过；生产构建通过。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证（本地） |
+| UI-ANT-348-001 | P1 | 额度流水仍以原生表格展示，空数据时 Ant 默认英文提示也会破坏中文后台契约。 | `src/pages/usage/UsageAdjustmentsPage.vue`；额度流水 API、应用选择和 URL 深链契约不变 | 使用 Ant `Table` 渲染调整/重置记录，并显式设置中文空态；保留十进制字符串原样展示、应用切换和错误重试。 | `npm run typecheck`、`npm run lint -- --quiet` 通过；`usageAdjustments.test.ts` 6 项通过；生产构建通过。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证（本地） |
+
+## UI-ANT 远程交付记录（2026-09-13，前端执行模型 zcode-ant-0913）
+
+按 UI-ANT-345～348 交接说明接手，完成本地复验与远程交付。本轮仅推送既有分支并更新协作文档，未修改产品代码。
+
+| 编号 | 提出方 | 问题描述 | 涉及任务/模块 | 影响与建议 | 待确认方 | 状态 | 处理结论 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-DELIV-001 | 前端执行模型/zcode-ant-0913 | UI-R301～UI-R343 及清理批次成果此前仅存在于本地分支 `feature/frontend-ant-shell-codex-ui-0913`（95 个提交），前一轮推送被自动审查阻止，远程无成果、无法评审合并。 | UI-R30 全部任务包、REVIEW_REPORT.md | 已按交接说明接手：重新运行 `npm run typecheck`、`npm run lint -- --quiet`、全量 vitest（33 文件/255 项）、`npm run build`，全部通过；期间一轮高负载全量测试出现 12 项用例超时失败，连续两轮重跑均 255 项全通过，判定为环境负载偶发并在 REVIEW_REPORT.md 记录。以一次性 gh 凭据普通推送分支（未修改任何持久 git 凭据配置、未强推、未改动 `dev`），`git ls-remote` 回读 `refs/heads/feature/frontend-ant-shell-codex-ui-0913=f996294` 与本地一致；已发起进入 `dev` 的独立评审 PR（[#3](https://github.com/beidaomitu233/AIGetway/pull/3)）。 | 评审负责人 | 已交付待评审 | PR 合并前 UI-R30 保持待合并占用；合并后按 REVIEW_REPORT 建议，在真实后端环境按应用、渠道、模型、发布和观测主路径完成视觉与写操作回归，再解除占用。 |
+| UI-ANT-DELIV-002 | 前端执行模型/zcode-ant-0913 | 真实后端逐页视觉与写操作回归仍未执行（沿用 REVIEW_REPORT 未验证项）。 | UI-R340～UI-R343 | 仓库 mock 浏览器扫描不替代真实后端验收；建议在 PR 评审期间或合并后，按 FS-P20/FS-P21 方式以 H2 + Redis + Vite + Chromium 完成主路径回归。 | 评审负责人/后续回归负责人 | 待执行 | 未验证项保持如实记录，不因远程交付标记为通过。 |
+
+## UI-ANT 真实后端回归记录（2026-09-13，前端执行模型 zcode-ant-0913）
+
+环境：本机 Redis 7.2.4（127.0.0.1:6379）+ 从本分支源码重新构建的 `light-ai-server` jar（H2 MySQL 模式，`--server.port=18080`；主工作树既有 jar 含未提交的 FS-P22-002 后端改动，故弃用）+ Vite `VITE_BACKEND_TARGET=http://127.0.0.1:18080`（无 Mock）+ Chromium 1920 视口。以下结论均为真实链路证据，未验证项如实标注。
+
+| 编号 | 提出方 | 问题描述 | 涉及任务/模块 | 影响与建议 | 待确认方 | 状态 | 处理结论 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-REGRESS-001 | 前端执行模型/zcode-ant-0913 | 已验证通过项：1920 宽度应用列表/新建表单/详情工作台无页面级横向溢出；应用创建全链路（表单校验→提交摘要→确认保存→POST 201→跳转详情）真实通过，后端返回 `token_limit`/`amount_limit` 为十进制字符串；详情 7 页签、64 位 Token 定点展示（1,000,000）、首调接入清单正确；密钥签发一次性弹窗契约通过——原文仅显示一次，关闭后 DOM/localStorage/sessionStorage/URL 均无残留，列表仅显示掩码 `lai_****Q_2g`；16 条主路由全部渲染出预期标题与业务空态，无 page error。 | UI-R310～R315、UI-R307、UI-R341 | 应用域主路径与安全契约在新 UI 下保持已联调结果，无回归。 | 无 | 已验证 | 证据与本表其余行；浏览器截图与 DOM 检查由本轮执行会话留存。 |
+| UI-ANT-CONTRACT-001 | 前端执行模型/zcode-ant-0913 | 渠道新建页类型下拉为空：`GET /admin/bootstrap` 响应无 `adapters` 字段。根因在后端——`AdapterMetadataSource` SPI（light-ai-spi）与 `BootstrapService`/`ProviderTypeRegistry` 的可选装配已就绪，测试以静态 Bean 提供，但仓库内没有任何 Provider 模块实现该接口，standalone 运行时 `getIfAvailable()` 为 null，adapters 被省略。 | UI-R320、light-ai-spi、light-ai-admin BootstrapService、provider-openai/anthropic/gemini/deepseek | 渠道创建在真实后端上无法通过 UI 完成（类型必填但无选项）；直接 API `POST /admin/channels`（provider_type=OPENAI）返回 200，说明渠道域后端功能本身可用，仅元数据声明缺失。建议后端负责人在 Provider 模块或 server 装配中提供 `AdapterMetadataSource` 实现（输出已加载 Adapter 的 provider_type/default_base_url 非敏感声明）。 | 后端负责人/UI-R341 | 待确认 | 前端不改请求形状、不伪造选项；登记后由后端补齐，前端下拉将自动获得选项。 |
+| UI-ANT-349-001 | 前端执行模型/zcode-0913 | 渠道新建/编辑表单仍使用原生 `<select class="lai-select">` 与 `<input class="lai-input">`（ProviderFormPage.vue 约 10 处），违反计划 §1.2/§2.5；UI-R321 此前只重构了布局。 | UI-R320/321、ProviderFormPage.vue、providerPages.test.ts | 由本轮负责人按 Ant `Select/Input/InputNumber` 迁移并适配测试；类型选项为空的运行时表现保持现状（依赖 UI-ANT-CONTRACT-001）。 | 无 | 已修复 | 提交 `d30cc4f`：类型下拉改为 Ant `Select`（空选项时占位与提示保持），名称/地址改为 Ant `Input`，超时/优先级/权重改为 Ant `Input` 数字输入，按钮改为 Ant `Button`；providerPages/providerDetail 定向测试 14 项通过（类型选择改为组件事件、按钮文本按 Ant 两汉字空格匹配），typecheck/lint/全量 255 项/build 通过；浏览器实测页面无原生 select 与 `.lai-input/.lai-select`，名称与类型校验错误正常展示。 |
+| UI-ANT-350-001 | 前端执行模型/zcode-0913 | 其余页面仍保留原生筛选/输入控件（`.lai-select`/`.lai-input`，DOM 实测）：运行概览 7 处、渠道列表 2 处、调用记录 5 处、用量成本 4 处、额度流水 1 处、待发布变更 1 处、审计日志 1 处、旧访问凭证 1 处、运行参数 10 处；模型目录、虚拟模型、治理三页、发布页、开发接入已为 Ant 控件。 | UI-R342 后续清理批次、上述页面及其测试 | 功能可用且选项来自真实数据，但不符合“全部使用 Ant Design 组件重写”的完成定义；建议下一批按页面逐个迁移并更新对应测试。 | 评审负责人 | 已完成 | 提交 `52ffed5`：九页原生 `<select>/<input>` 与 `lai-btn` 全部迁移为 Ant `Select/Input/Button/Checkbox/Tag`，`AppMultiSelect` 组件内部重写为 Ant Select multiple（三页共用、props/事件契约不变）；URL 筛选、分页、权限、空态与文案契约保持。验证：typecheck、lint、定向测试（额度流水 21、草稿 12、渠道 19、运行参数/访问凭证/审计 13、总览/Trace/用量 34 项）与全量 33 文件/255 项、build 全部通过；mock 浏览器实测 8 页 DOM 无原生 select、无 `.lai-select/.lai-input/.lai-btn`、无横向溢出，下拉选项与中文空态正常。 |
+
+## UI-ANT-350 交付与 UI-ANT-351 登记（2026-09-13，前端执行模型 zcode-ant-0913）
+
+UI-ANT-350 已完成（见上表处理结论）。全仓源码扫描发现剩余旧控件/旧样式类分布如下，登记为 UI-ANT-351 后续批次（两类性质不同，需分别处理）：
+
+| 编号 | 类别 | 范围（文件 | 旧控件统计） | 说明与建议 | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| UI-ANT-351-001 | 真原生控件迁移 | models/ModelFormPage(44+20)、reliabilities/ReliabilityFormPage(24+20)、limits/LimitFormPage(20+8)、applications/ApplicationDetailPage(15 input+5 textarea+4 select)、applications/ApplicationKeyPanel(25+5)、models/ModelImportPage(18+5)、developer/ChatTestPanel(13+5)、aliases/CandidateFormDialog(12+3)、models/BatchCheckPanel(12+1)、credentialPools/PoolListPage(13+1)、config/PublishPage(10+2)、aliases/AliasFormPage(8+2)、credentialPools/PoolFormPage(8+2)、circuits/CircuitActionDialog(6+1) 等 | 用户可见的原生 `<select>/<input>/<textarea>` 控件，违反计划 §1.2；按页面分批迁移为 Ant 控件并适配测试，处理顺序建议按业务域（应用详情/密钥 → 模型表单 → 治理表单 → 开发接入面板）。扫描口径见本轮 `python` 统计（`lai-btn|lai-input|lai-select|<select|<textarea` 与 `<input` 计数，含布局类误报需逐页甄别）。 | 待领取 |
+| UI-ANT-351-002 | Ant 组件样式类清理 | applications/ApplicationDetailPage(44 处 `lai-btn` 挂在 Ant Button 上)、TraceDetailPage、ModelDetailPage、各 Detail 页等约 25 个文件 | Ant 组件上叠加 `lai-btn/lai-input` 旧样式类（渲染已是 Ant，仅样式双轨）；统一移除旧类、依赖主题令牌，随 UI-R342 收口。 | 待领取 |
+
+## UI-ANT-351-A 交付与契约记录（2026-09-13，前端执行模型 zcode-ant-0913）
+
+| 编号 | 提出方 | 问题描述 | 涉及任务/模块 | 影响与建议 | 待确认方 | 状态 | 处理结论 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-CONTRACT-002 | 前端执行模型/zcode-ant-0913 | 真实后端回归发现：`PUT /admin/applications/{id}/quota` 要求 `idempotency_key`（缺失返回 400 FIELD_VALIDATION_FAILED），前端载荷类型与页面均未发送；单测 stub 接受任意请求体未能发现。 | UI-R314 额度对话框、api/applications.ts、ApplicationDetailPage | 属既有跨端契约缺口（非 UI 迁移引入；adjustment/reset 流程本就发送幂等键）。已修复：载荷类型补 `idempotency_key`，对话框打开时生成 UUID 并随 PUT 发送（重试复用同键，与 adjustment 语义一致）。status POST 与 models PUT 经 curl 探测不要求幂等键，无同类缺口。 | 后端负责人 | 已修复 | 提交 `5da563f`；真实后端复验 PUT 200、详情与后端均为 800000。建议 UI-R341 契约回归将「写操作幂等键」列入保护断言。 |
+| UI-ANT-351-A-001 | 前端执行模型/zcode-ant-0913 | 应用详情域 5 个对话框（额度/人工增减/重置用量/模型授权/状态变更）、ApplicationKeyPanel（签发与操作对话框）、ApplicationKeySecretDialog 的原生 `<select>/<input>/<textarea>` 与 `lai-btn` 控件全部迁移为 Ant 组件；详情页 12 处原生小按钮与 `lai-btn*` 样式类清零；页签保持原生 button（自定义 Tab 元素，避免 Ant 两字空格改变文本断言）。 | UI-R312/313/314、applicationPages/applicationP20 测试 | 已知残留：ApplicationKeyPanel 的密钥列表仍为原生 `<table class="lai-table">`（表格迁移归入 UI-ANT-351-F 一并处理）；ApplicationFormPage/CreateForm 的 `input.lai-input` 样式类属 351-F 清理范围。 | 评审负责人 | 已完成 | 提交 `a8a6970`（迁移）+ `5da563f`（契约修复）。验证：应用域定向 63 项、全量 33 文件/255 项、typecheck、lint、build 全部通过；真实后端链路（H2+Redis+Vite+Chromium 1920）创建应用→额度编辑（Ant 对话框，PUT 200 后端 800000）→密钥签发（一次性原文显示一次，关闭后 DOM/存储/URL 无残留，列表仅掩码）全部通过。 |

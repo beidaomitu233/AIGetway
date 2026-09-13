@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button, Checkbox, Input, Select } from 'ant-design-vue'
 // 可靠性策略新建/编辑表单（FE-021，附录 4.3.2.2）。
 // Alias 创建后只读；首 Token 超时必须小于总超时；fallback 关闭时 max_fallbacks 强制 0；
 // 失败率界面百分比 1.00—100.00，提交转换为 0.01—1 小数（接口 0—1）。
@@ -53,6 +54,7 @@ const dirty = ref(false)
 const { submitting, conflictError, errorText, submit: doSubmit } = useFormSubmit()
 
 const aliasOptions = ref<{ id: string; label: string }[]>([])
+const aliasSelectOptions = computed(() => aliasOptions.value.map((item) => ({ value: item.id, label: item.label })))
 const aliasLoading = ref(false)
 
 function intField(value: string, min: number, max: number): boolean {
@@ -246,12 +248,7 @@ onMounted(async () => {
             required
             :error="nameInvalid ? '长度为 2—64 字符，全局唯一' : ''"
           >
-            <input
-              v-model="form.name"
-              class="lai-input"
-              type="text"
-              maxlength="64"
-            >
+            <Input v-model:value="form.name" type="text" :maxlength="64" />
           </FormField>
           <FormField
             label="Model Alias"
@@ -259,25 +256,12 @@ onMounted(async () => {
             :hint="aliasLoading ? '加载中…' : isEdit ? '创建后不可修改；同一 Alias 最多一份启用策略' : ''"
             :error="aliasInvalid ? '请选择 Alias' : ''"
           >
-            <select
-              v-model="form.alias_id"
-              class="lai-input lai-select"
+            <Select
+              v-model:value="form.alias_id"
               :disabled="isEdit || aliasLoading"
-            >
-              <option
-                value=""
-                disabled
-              >
-                请选择 Alias
-              </option>
-              <option
-                v-for="item in aliasOptions"
-                :key="item.id"
-                :value="item.id"
-              >
-                {{ item.label }}
-              </option>
-            </select>
+              placeholder="请选择 Alias"
+              :options="aliasSelectOptions"
+            />
           </FormField>
         </div>
       </fieldset>
@@ -292,12 +276,7 @@ onMounted(async () => {
             required
             :error="connectInvalid ? '范围为 100—60000' : ''"
           >
-            <input
-              v-model="form.connect_timeout_ms"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.connect_timeout_ms" type="text" inputmode="numeric" />
           </FormField>
           <FormField
             label="首 Token 超时（1000—300000ms）"
@@ -305,12 +284,7 @@ onMounted(async () => {
             :error="firstTokenInvalid ? '范围为 1000—300000' : firstTokenRelationInvalid ? '必须小于总超时' : ''"
             hint="只影响流式请求"
           >
-            <input
-              v-model="form.first_token_timeout_ms"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.first_token_timeout_ms" type="text" inputmode="numeric" />
           </FormField>
           <FormField
             label="总超时（1000—600000ms）"
@@ -318,12 +292,7 @@ onMounted(async () => {
             :error="totalInvalid ? '范围为 1000—600000' : ''"
             hint="覆盖排队、退避和全部 Attempt"
           >
-            <input
-              v-model="form.total_timeout_ms"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.total_timeout_ms" type="text" inputmode="numeric" />
           </FormField>
         </div>
       </fieldset>
@@ -338,94 +307,51 @@ onMounted(async () => {
             required
             :error="retriesInvalid ? '范围为 0—5' : ''"
           >
-            <input
-              v-model="form.max_retries"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.max_retries" type="text" inputmode="numeric" />
           </FormField>
           <FormField
             label="最大换密钥（0—10）"
             required
             :error="failoversInvalid ? '范围为 0—10' : ''"
           >
-            <input
-              v-model="form.max_credential_failovers"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.max_credential_failovers" type="text" inputmode="numeric" />
           </FormField>
           <FormField
             label="初始退避（0—10000ms）"
             required
             :error="backoffInvalid ? '范围为 0—10000' : ''"
           >
-            <input
-              v-model="form.initial_backoff_ms"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.initial_backoff_ms" type="text" inputmode="numeric" />
           </FormField>
           <FormField
             label="退避倍数（1.00—5.00）"
             required
             :error="multiplierInvalid ? '范围为 1.00—5.00' : ''"
           >
-            <input
-              v-model="form.backoff_multiplier"
-              class="lai-input"
-              type="text"
-              inputmode="decimal"
-            >
+            <Input v-model:value="form.backoff_multiplier" type="text" inputmode="decimal" />
           </FormField>
           <FormField
             label="抖动比例（0—100%）"
             required
             :error="jitterInvalid ? '范围为 0—100' : ''"
           >
-            <input
-              v-model="form.jitter_percent"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.jitter_percent" type="text" inputmode="numeric" />
           </FormField>
           <FormField
             label="最大 Retry-After（0—60000ms）"
             :error="retryAfterInvalid ? '范围为 0—60000' : ''"
           >
-            <input
-              v-model="form.max_retry_after_ms"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-              :disabled="!form.respect_retry_after"
-            >
+            <Input v-model:value="form.max_retry_after_ms" type="text" inputmode="numeric" :disabled="!form.respect_retry_after" />
           </FormField>
         </div>
-        <label class="lai-switch">
-          <input
-            v-model="form.respect_retry_after"
-            type="checkbox"
-          >
-          尊重 Provider Retry-After
-        </label>
+        <Checkbox v-model:checked="form.respect_retry_after">尊重 Provider Retry-After</Checkbox>
       </fieldset>
 
       <fieldset class="lai-fieldset">
         <legend class="lai-legend">
           Fallback
         </legend>
-        <label class="lai-switch">
-          <input
-            v-model="form.fallback_enabled"
-            type="checkbox"
-          >
-          允许切换候选
-        </label>
+        <Checkbox v-model:checked="form.fallback_enabled">允许切换候选</Checkbox>
         <div
           v-if="form.fallback_enabled"
           class="lai-form-grid"
@@ -435,12 +361,7 @@ onMounted(async () => {
             required
             :error="fallbacksInvalid ? '范围为 0—10' : ''"
           >
-            <input
-              v-model="form.max_fallbacks"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.max_fallbacks" type="text" inputmode="numeric" />
           </FormField>
         </div>
       </fieldset>
@@ -455,83 +376,47 @@ onMounted(async () => {
             required
             :error="circuitWindowInvalid ? '范围为 10—600' : ''"
           >
-            <input
-              v-model="form.circuit_window_seconds"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.circuit_window_seconds" type="text" inputmode="numeric" />
           </FormField>
           <FormField
             label="最小请求数（1—10000）"
             required
             :error="circuitMinInvalid ? '范围为 1—10000' : ''"
           >
-            <input
-              v-model="form.circuit_min_requests"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.circuit_min_requests" type="text" inputmode="numeric" />
           </FormField>
           <FormField
             label="失败率阈值（1.00—100.00%）"
             required
             :error="circuitRateInvalid ? '范围为 1.00—100.00' : ''"
           >
-            <input
-              v-model="form.circuit_failure_rate_percent"
-              class="lai-input"
-              type="text"
-              inputmode="decimal"
-            >
+            <Input v-model:value="form.circuit_failure_rate_percent" type="text" inputmode="decimal" />
           </FormField>
           <FormField
             label="OPEN 时长（1—3600s）"
             required
             :error="circuitOpenInvalid ? '范围为 1—3600' : ''"
           >
-            <input
-              v-model="form.circuit_open_seconds"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.circuit_open_seconds" type="text" inputmode="numeric" />
           </FormField>
           <FormField
             label="半开探测数（1—100）"
             required
             :error="probesInvalid ? '范围为 1—100' : ''"
           >
-            <input
-              v-model="form.circuit_half_open_probes"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.circuit_half_open_probes" type="text" inputmode="numeric" />
           </FormField>
           <FormField
             label="半开成功数（≤探测数）"
             required
             :error="successesInvalid ? '不能大于探测数' : ''"
           >
-            <input
-              v-model="form.circuit_half_open_successes"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.circuit_half_open_successes" type="text" inputmode="numeric" />
           </FormField>
         </div>
       </fieldset>
 
-      <label class="lai-switch">
-        <input
-          v-model="form.enabled"
-          type="checkbox"
-        >
-        启用（停用后 Alias 使用系统默认策略）
-      </label>
+      <Checkbox v-model:checked="form.enabled">启用（停用后 Alias 使用系统默认策略）</Checkbox>
 
       <p
         v-if="conflictError"
@@ -549,21 +434,19 @@ onMounted(async () => {
       </p>
 
       <div class="lai-form-actions">
-        <button
-          type="button"
-          class="lai-btn"
+        <Button
           :disabled="submitting"
           @click="router.back()"
         >
           取消
-        </button>
-        <button
-          type="submit"
-          class="lai-btn lai-btn-primary"
+        </Button>
+        <Button
+          type="primary"
           :disabled="submitting || formInvalid"
+          html-type="submit"
         >
           {{ submitting ? '保存中…' : '保存' }}
-        </button>
+        </Button>
       </div>
     </form>
   </section>

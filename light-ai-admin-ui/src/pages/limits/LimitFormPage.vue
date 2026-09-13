@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button, Checkbox, Input, Select } from 'ant-design-vue'
 // 限流策略新建/编辑表单（FE-019，附录 4.3.1.2）。
 // scope 创建后只读；REJECT 不提交队列字段；启用要求至少一个限额；空值保留 null。
 import { computed, onMounted, reactive, ref } from 'vue'
@@ -43,6 +44,7 @@ const dirty = ref(false)
 const { submitting, conflictError, errorText, submit: doSubmit } = useFormSubmit()
 
 const scopeOptions = ref<ScopeOption[]>([])
+const scopeSelectOptions = computed(() => scopeOptions.value.map((item) => ({ value: item.id, label: item.label })))
 const scopeLoading = ref(false)
 const scopeError = ref('')
 
@@ -188,12 +190,7 @@ onMounted(async () => {
         required
         :error="nameInvalid ? '长度为 2—64 字符，全局唯一' : ''"
       >
-        <input
-          v-model="form.name"
-          class="lai-input"
-          type="text"
-          maxlength="64"
-        >
+        <Input v-model:value="form.name" type="text" :maxlength="64" />
       </FormField>
 
       <div class="lai-form-grid">
@@ -202,22 +199,7 @@ onMounted(async () => {
           required
           :hint="isEdit ? '创建后不可修改' : ''"
         >
-          <select
-            v-model="form.scope_type"
-            class="lai-input lai-select"
-            :disabled="isEdit"
-            @change="onScopeTypeChange"
-          >
-            <option value="MODEL_ALIAS">
-              模型别名
-            </option>
-            <option value="PROVIDER_MODEL">
-              模型
-            </option>
-            <option value="CREDENTIAL">
-              凭证
-            </option>
-          </select>
+          <Select v-model:value="form.scope_type" :disabled="isEdit" @change="onScopeTypeChange" :options="[{ value: 'MODEL_ALIAS', label: '模型别名', disabled: false }, { value: 'PROVIDER_MODEL', label: '模型', disabled: false }, { value: 'CREDENTIAL', label: '凭证', disabled: false }]" />
         </FormField>
         <FormField
           label="作用对象"
@@ -225,25 +207,12 @@ onMounted(async () => {
           :hint="scopeLoading ? '加载中…' : isEdit ? '创建后不可修改' : ''"
           :error="scopeInvalid ? '请选择作用对象' : scopeError"
         >
-          <select
-            v-model="form.scope_id"
-            class="lai-input lai-select"
+          <Select
+            v-model:value="form.scope_id"
             :disabled="isEdit || scopeLoading"
-          >
-            <option
-              value=""
-              disabled
-            >
-              请选择作用对象
-            </option>
-            <option
-              v-for="item in scopeOptions"
-              :key="item.id"
-              :value="item.id"
-            >
-              {{ item.label }}
-            </option>
-          </select>
+            placeholder="请选择作用对象"
+            :options="scopeSelectOptions"
+          />
         </FormField>
       </div>
 
@@ -253,39 +222,21 @@ onMounted(async () => {
           :error="rpmInvalid ? '空或 1—1000000000 的正整数' : ''"
           hint="空为不限制"
         >
-          <input
-            v-model="form.rpm_limit"
-            class="lai-input"
-            type="text"
-            inputmode="numeric"
-            placeholder="不限制"
-          >
+          <Input v-model:value="form.rpm_limit" type="text" inputmode="numeric" placeholder="不限制" />
         </FormField>
         <FormField
           label="TPM 上限"
           :error="tpmInvalid ? '空或正整数' : ''"
           hint="空为不限制"
         >
-          <input
-            v-model="form.tpm_limit"
-            class="lai-input"
-            type="text"
-            inputmode="numeric"
-            placeholder="不限制"
-          >
+          <Input v-model:value="form.tpm_limit" type="text" inputmode="numeric" placeholder="不限制" />
         </FormField>
         <FormField
           label="并发上限"
           :error="concurrentInvalid ? '空或 1—100000' : ''"
           hint="空为不限制"
         >
-          <input
-            v-model="form.concurrent_limit"
-            class="lai-input"
-            type="text"
-            inputmode="numeric"
-            placeholder="不限制"
-          >
+          <Input v-model:value="form.concurrent_limit" type="text" inputmode="numeric" placeholder="不限制" />
         </FormField>
       </div>
 
@@ -294,17 +245,7 @@ onMounted(async () => {
           label="溢出策略"
           required
         >
-          <select
-            v-model="form.overflow_strategy"
-            class="lai-input lai-select"
-          >
-            <option value="REJECT">
-              直接拒绝
-            </option>
-            <option value="QUEUE">
-              进入排队
-            </option>
-          </select>
+          <Select v-model:value="form.overflow_strategy" :options="[{ value: 'REJECT', label: '直接拒绝', disabled: false }, { value: 'QUEUE', label: '进入排队', disabled: false }]" />
         </FormField>
         <template v-if="form.overflow_strategy === 'QUEUE'">
           <FormField
@@ -312,24 +253,14 @@ onMounted(async () => {
             required
             :error="queueTimeoutInvalid ? '范围为 1—60000' : ''"
           >
-            <input
-              v-model="form.queue_timeout_ms"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.queue_timeout_ms" type="text" inputmode="numeric" />
           </FormField>
           <FormField
             label="队列长度上限（1—100000）"
             required
             :error="queueMaxInvalid ? '范围为 1—100000' : ''"
           >
-            <input
-              v-model="form.queue_max_size"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.queue_max_size" type="text" inputmode="numeric" />
           </FormField>
         </template>
         <FormField label="窗口宽度">
@@ -342,13 +273,7 @@ onMounted(async () => {
         </FormField>
       </div>
 
-      <label class="lai-switch">
-        <input
-          v-model="form.enabled"
-          type="checkbox"
-        >
-        启用（要求至少设置一个上限）
-      </label>
+      <Checkbox v-model:checked="form.enabled">启用（要求至少设置一个上限）</Checkbox>
       <p
         v-if="enableBlocked"
         class="lai-form-message-error"
@@ -372,21 +297,19 @@ onMounted(async () => {
       </p>
 
       <div class="lai-form-actions">
-        <button
-          type="button"
-          class="lai-btn"
+        <Button
           :disabled="submitting"
           @click="router.back()"
         >
           取消
-        </button>
-        <button
-          type="submit"
-          class="lai-btn lai-btn-primary"
+        </Button>
+        <Button
+          type="primary"
           :disabled="submitting || formInvalid || enableBlocked"
+          html-type="submit"
         >
           {{ submitting ? '保存中…' : '保存' }}
-        </button>
+        </Button>
       </div>
     </form>
   </section>

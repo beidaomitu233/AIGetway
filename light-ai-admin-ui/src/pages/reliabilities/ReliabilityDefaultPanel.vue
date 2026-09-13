@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button } from 'ant-design-vue'
 // 系统默认可靠性策略只读面板（FE-021，附录 4.3.2.3 查看默认策略）。
 import { ref, shallowRef, watch } from 'vue'
 import PageState from '@/components/PageState.vue'
@@ -101,13 +102,11 @@ function row(label: string, value: string | number): { label: string; value: str
         </dl>
 
         <div class="lai-dialog-actions">
-          <button
-            type="button"
-            class="lai-btn"
+          <Button
             @click="close"
           >
             关闭
-          </button>
+          </Button>
         </div>
       </div>
     </div>

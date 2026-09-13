@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { Card } from 'ant-design-vue'
 import { useRoute } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import { useBootstrapStore } from '@/stores/bootstrap'
@@ -73,7 +74,7 @@ const ipText = computed(() =>
       @retry="load"
     />
     <template v-else-if="detail">
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           基础信息
         </h2>
@@ -125,9 +126,9 @@ const ipText = computed(() =>
             {{ ip }}
           </li>
         </ul>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           最近 Trace（10 条）
         </h2>
@@ -168,9 +169,9 @@ const ipText = computed(() =>
         >
           最近 24 小时无调用
         </p>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           最近审计摘要
         </h2>
@@ -202,7 +203,7 @@ const ipText = computed(() =>
         >
           暂无审计记录
         </p>
-      </div>
+      </Card>
     </template>
   </section>
 </template>

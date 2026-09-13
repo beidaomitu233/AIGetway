@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { Button, Card, Input, Select } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import DataTable, { type TableColumn } from '@/components/DataTable.vue'
@@ -228,14 +229,13 @@ onMounted(() => {
       <h1 class="lai-page-title">
         访问凭证
       </h1>
-      <button
+      <Button
         v-if="canManage && isStandalone"
-        type="button"
-        class="lai-btn lai-btn-primary"
+        type="primary"
         @click="openCreate"
       >
         创建访问凭证
-      </button>
+      </Button>
     </div>
 
     <PageState
@@ -245,37 +245,29 @@ onMounted(() => {
     />
     <template v-else>
       <div class="lai-filter-bar">
-        <input
-          class="lai-input lai-filter-keyword"
+        <Input
+          class="lai-filter-input"
           type="text"
           placeholder="名称或应用"
-          :value="list.state.keyword as string"
+          :value="(list.state.keyword as string)"
           @change="list.applyFilters({ keyword: ($event.target as HTMLInputElement).value.trim() })"
-        >
-        <input
-          class="lai-input lai-filter-keyword"
+        />
+        <Input
+          class="lai-filter-input"
           type="text"
           placeholder="应用标识"
-          :value="list.state.application as string"
+          :value="(list.state.application as string)"
           @change="list.applyFilters({ application: ($event.target as HTMLInputElement).value.trim() })"
-        >
-        <select
-          class="lai-select"
-          :value="list.state.status as string"
+        />
+        <Select
+          class="lai-filter-select"
+          :value="(list.state.status as string) === '' ? undefined : (list.state.status as string)"
           aria-label="状态"
-          @change="list.applyFilters({ status: ($event.target as HTMLSelectElement).value })"
-        >
-          <option value="">
-            全部状态
-          </option>
-          <option
-            v-for="option in statusOptions"
-            :key="option.value"
-            :value="option.value"
-          >
-            {{ option.label }}
-          </option>
-        </select>
+          :options="statusOptions"
+          placeholder="全部状态"
+          allow-clear
+          @change="(value) => list.applyFilters({ status: String(value ?? '') })"
+        />
       </div>
 
       <p
@@ -297,6 +289,7 @@ onMounted(() => {
         @retry="list.refresh()"
       />
       <template v-else>
+        <Card :bordered="false" class="access-table-card">
         <DataTable
           :columns="columns"
           :rows="list.items.value"
@@ -329,65 +322,61 @@ onMounted(() => {
             {{ expiryText(row) }}
           </template>
           <template #trace_count_24h="{ row }">
-            <button
-              type="button"
-              class="lai-btn lai-btn-text"
+            <Button
+              type="link"
               @click="goToTraces(row)"
             >
               {{ row.trace_count_24h }}
-            </button>
+            </Button>
           </template>
           <template #actions="{ row }">
             <span class="lai-row-actions">
               <RouterLink
                 :to="{ name: 'access-detail', params: { id: row.id } }"
-                class="lai-btn lai-btn-text"
+                class="lai-link"
               >
                 查看
               </RouterLink>
-              <button
+              <Button
                 v-if="canManage"
-                type="button"
-                class="lai-btn lai-btn-text"
+                type="link"
                 @click="openEdit(row)"
               >
                 编辑
-              </button>
-              <button
+              </Button>
+              <Button
                 v-if="canManage"
-                type="button"
-                class="lai-btn lai-btn-text"
+                type="link"
                 @click="requestRotate(row)"
               >
                 轮换
-              </button>
-              <button
+              </Button>
+              <Button
                 v-if="canManage && row.status === 'ACTIVE'"
-                type="button"
-                class="lai-btn lai-btn-text"
+                type="link"
                 @click="requestDisable(row)"
               >
                 停用
-              </button>
-              <button
+              </Button>
+              <Button
                 v-if="canManage && row.status === 'DISABLED'"
-                type="button"
-                class="lai-btn lai-btn-text"
+                type="link"
                 @click="enableRow(row)"
               >
                 启用
-              </button>
-              <button
+              </Button>
+              <Button
                 v-if="canManage"
-                type="button"
-                class="lai-btn lai-btn-text lai-row-danger"
+                type="link"
+                danger
                 @click="requestDelete(row)"
               >
                 删除
-              </button>
+              </Button>
             </span>
           </template>
         </DataTable>
+        </Card>
         <ListPager
           :page="list.page.value"
           :page-size="list.pageSize.value"
@@ -457,3 +446,8 @@ onMounted(() => {
     </template>
   </section>
 </template>
+
+<style scoped>
+.access-table-card { border: 1px solid var(--lai-border); box-shadow: 0 8px 24px rgba(37, 99, 235, .05); }
+.access-table-card :deep(.ant-card-body) { padding: 0; }
+</style>

@@ -85,13 +85,18 @@ describe('FE-215 候选选项竞态', () => {
     const first = new Promise<CredentialPoolOption[]>((resolve) => { finishFirst = resolve })
     const loadPools = vi.fn().mockReturnValueOnce(first).mockResolvedValueOnce([{ id: 'pool-b', name: '渠道 B', channel_id: 'b', credential_available: 1, status: 'ACTIVE' }])
     const wrapper = mount(CandidateFormDialog, { props: { open: true, aliasId: 'v', candidate: null, modelGroups: [{ providerName: '测试', models: ['a', 'b'].map((id) => ({ id, label: id, supportStream: true, contextWindow: 100 })) }], loadPools }, global: { stubs: { Teleport: true } } })
-    await wrapper.find('#lai-candidate-model').setValue('a')
-    await wrapper.find('#lai-candidate-model').setValue('b')
+    const emitValue = (owner: { vm: unknown }, value: string) =>
+      (owner.vm as unknown as { $emit: (e: string, ...args: unknown[]) => void }).$emit('update:value', value)
+    const modelSelect = wrapper.findAllComponents(Select).find((c) => JSON.stringify(c.props('options')).includes("'a'"))!
+    await emitValue(modelSelect, 'a')
+    await emitValue(modelSelect, 'b')
     await flushPromises()
     finishFirst([{ id: 'pool-a', name: '渠道 A', channel_id: 'a', credential_available: 1, status: 'ACTIVE' }])
     await flushPromises()
-    expect(wrapper.find('#lai-candidate-pool').text()).toContain('渠道 B')
-    expect(wrapper.find('#lai-candidate-pool').text()).not.toContain('渠道 A')
+    const poolSelect = wrapper.findAllComponents(Select).find((c) => c.props('placeholder') === '请选择所属渠道')!
+    const poolLabels = ((poolSelect.props('options') ?? []) as Array<{ label: string }>).map((o) => o.label).join()
+    expect(poolLabels).toContain('渠道 B')
+    expect(poolLabels).not.toContain('渠道 A')
     wrapper.unmount()
   })
 })

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { Button, Checkbox, Input, Select } from 'ant-design-vue'
 import PageState from '@/components/PageState.vue'
 import VersionConflictBanner from '@/components/VersionConflictBanner.vue'
 import { useFormSubmit } from '@/composables/useFormSubmit'
@@ -107,6 +108,21 @@ function validate(): boolean {
   return Object.keys(errors).length === 0
 }
 
+/** 打开时重置：避免卸载前后写表单值触发 Ant Input 内部 nextTick 访问已卸载节点。 */
+function resetForm(): void {
+  form.name = ''
+  form.application = ''
+  form.allowed_alias_ids = []
+  form.ip_allowlist = []
+  form.expires_at = ''
+  form.enabled = true
+  localErrors.value = {}
+}
+
+watch(() => props.open, (open) => {
+  if (open) resetForm()
+})
+
 async function save(): Promise<void> {
   if (!validate()) return
   const payload: AccessCredentialSavePayload = {
@@ -117,7 +133,7 @@ async function save(): Promise<void> {
     expires_at: form.expires_at === '' ? null : new Date(form.expires_at).toISOString(),
     enabled: form.enabled,
   }
-  const outcome = await submit(async () => {
+  await submit(async () => {
     if (props.accessId === null) {
       const result = await createAccessCredential(payload)
       emit('update:open', false)
@@ -128,14 +144,6 @@ async function save(): Promise<void> {
       emit('saved')
     }
   })
-  if (outcome.ok) {
-    form.name = ''
-    form.application = ''
-    form.allowed_alias_ids = []
-    form.ip_allowlist = []
-    form.expires_at = ''
-    form.enabled = true
-  }
 }
 
 function cancel(): void {
@@ -187,13 +195,11 @@ const dialogTitle = computed(() => (props.accessId === null ? '创建访问凭�
               class="lai-form-label"
               for="ac-name"
             >名称</label>
-            <input
+            <Input
               id="ac-name"
-              v-model="form.name"
-              class="lai-input"
-              type="text"
-              maxlength="64"
-            >
+              v-model:value="form.name"
+              :maxlength="64"
+            />
             <p
               v-if="fieldError('name')"
               class="lai-form-message-error"
@@ -207,13 +213,11 @@ const dialogTitle = computed(() => (props.accessId === null ? '创建访问凭�
               class="lai-form-label"
               for="ac-app"
             >应用标识</label>
-            <input
+            <Input
               id="ac-app"
-              v-model="form.application"
-              class="lai-input"
-              type="text"
-              maxlength="64"
-            >
+              v-model:value="form.application"
+              :maxlength="64"
+            />
             <p
               v-if="fieldError('application')"
               class="lai-form-message-error"
@@ -224,39 +228,28 @@ const dialogTitle = computed(() => (props.accessId === null ? '创建访问凭�
 
           <div class="lai-form-field">
             <span class="lai-form-label">允许的 Alias（空数组允许全部已发布 Alias）</span>
-            <select
-              v-model="form.allowed_alias_ids"
-              class="lai-select"
-              multiple
+            <Select
+              v-model:value="form.allowed_alias_ids"
+              class="lai-filter-select"
+              mode="multiple"
               aria-label="允许 Alias"
-            >
-              <option
-                v-for="option in aliasOptions"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
+              placeholder="全部已发布 Alias"
+              :options="aliasOptions"
+            />
           </div>
 
           <div class="lai-form-field">
             <span class="lai-form-label">IP 白名单（空数组不限制；最多 100 项）</span>
             <div class="lai-kv-row">
-              <input
-                v-model="form.newIp"
-                class="lai-input lai-filter-keyword"
-                type="text"
+              <Input
+                v-model:value="form.newIp"
+                class="lai-filter-input"
                 placeholder="IPv4、IPv6 或 CIDR"
                 @keydown.enter.prevent="addIp"
-              >
-              <button
-                type="button"
-                class="lai-btn"
-                @click="addIp"
-              >
+              />
+              <Button @click="addIp">
                 添加
-              </button>
+              </Button>
             </div>
             <ul class="lai-related-list">
               <li
@@ -264,13 +257,12 @@ const dialogTitle = computed(() => (props.accessId === null ? '创建访问凭�
                 :key="ip"
               >
                 {{ ip }}
-                <button
-                  type="button"
-                  class="lai-btn lai-btn-text"
+                <Button
+                  type="link"
                   @click="removeIp(index)"
                 >
                   移除
-                </button>
+                </Button>
               </li>
             </ul>
             <p
@@ -286,12 +278,11 @@ const dialogTitle = computed(() => (props.accessId === null ? '创建访问凭�
               class="lai-form-label"
               for="ac-exp"
             >有效期至（留空长期有效）</label>
-            <input
+            <Input
               id="ac-exp"
-              v-model="form.expires_at"
-              class="lai-input"
+              v-model:value="form.expires_at"
               type="datetime-local"
-            >
+            />
             <p
               v-if="fieldError('expires_at')"
               class="lai-form-message-error"
@@ -308,12 +299,10 @@ const dialogTitle = computed(() => (props.accessId === null ? '创建访问凭�
               class="lai-form-label"
               for="ac-enabled"
             >创建后立即启用</label>
-            <input
+            <Checkbox
               id="ac-enabled"
-              v-model="form.enabled"
-              type="checkbox"
-              class="lai-checkbox"
-            >
+              v-model:checked="form.enabled"
+            />
           </div>
 
           <p
@@ -325,22 +314,19 @@ const dialogTitle = computed(() => (props.accessId === null ? '创建访问凭�
           </p>
 
           <div class="lai-dialog-actions">
-            <button
-              type="button"
-              class="lai-btn"
+            <Button
               :disabled="submitting"
               @click="cancel"
             >
               取消
-            </button>
-            <button
-              type="button"
-              class="lai-btn lai-btn-primary"
+            </Button>
+            <Button
+              type="primary"
               :disabled="submitting || conflictError !== null"
               @click="save"
             >
               {{ submitting ? '保存中…' : props.accessId === null ? '创建并签发 Token' : '保存' }}
-            </button>
+            </Button>
           </div>
         </template>
       </div>

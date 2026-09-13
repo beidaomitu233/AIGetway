@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button, Input } from 'ant-design-vue'
 // 虚拟模型 详情与候选路由页（FE-018，附录 4.2.8）。
 // 候选按 priority 升序展示；优先级调整显式保存、任一版本冲突整批不变；
 // 探测选择池内一个可用凭证；运行摘要 30 秒刷新，页面离开停止。
@@ -309,17 +310,16 @@ watch(aliasId, () => {
       >
         <RouterLink
           :to="`/ui/models/virtual/${aliasId}/edit`"
-          class="lai-btn"
+          class="lai-link"
         >
           编辑
         </RouterLink>
-        <button
-          type="button"
-          class="lai-btn lai-btn-primary"
+        <Button
+          type="primary"
           @click="openCreate"
         >
           新增候选
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -381,14 +381,13 @@ watch(aliasId, () => {
               v-if="reorderMessage"
               class="lai-reorder-message"
             >{{ reorderMessage }}</span>
-            <button
-              type="button"
-              class="lai-btn lai-btn-primary"
+            <Button
+              type="primary"
               :disabled="!reorderDirty || reorderSaving"
               @click="submitReorder"
             >
               {{ reorderSaving ? '保存中…' : '保存排序' }}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -425,16 +424,16 @@ watch(aliasId, () => {
                 :key="row.id"
               >
                 <td>
-                  <input
+                  <Input
                     v-if="canManage"
-                    class="lai-input lai-priority-input"
+                    class="lai-priority-input"
                     type="number"
                     min="1"
                     max="100"
                     :value="editedPriority(row)"
                     :aria-label="`调整 ${row.upstream_model_name} 优先级`"
                     @change="onPriorityInput(row, Number(($event.target as HTMLInputElement).value))"
-                  >
+                  />
                   <template v-else>
                     {{ row.priority }}
                   </template>
@@ -460,39 +459,35 @@ watch(aliasId, () => {
                   v-if="canManage || canCheck"
                   class="lai-cell-actions"
                 >
-                  <button
+                  <Button
                     v-if="canManage"
-                    type="button"
-                    class="lai-btn lai-btn-text"
+                    type="link"
                     @click="openEdit(row)"
                   >
                     编辑
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     v-if="canCheck"
-                    type="button"
-                    class="lai-btn lai-btn-text"
+                    type="link"
                     @click="openProbe(row)"
                   >
                     探测
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     v-if="canManage"
-                    type="button"
-                    class="lai-btn lai-btn-text"
+                    type="link"
                     :disabled="busyId === row.id"
                     @click="toggleCandidate(row)"
                   >
                     {{ row.enabled ? '停用' : '启用' }}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     v-if="canManage"
-                    type="button"
-                    class="lai-btn lai-btn-text"
+                    type="link"
                     @click="deleteTarget = row; deleteOpen = true"
                   >
                     删除
-                  </button>
+                  </Button>
                 </td>
               </tr>
             </tbody>

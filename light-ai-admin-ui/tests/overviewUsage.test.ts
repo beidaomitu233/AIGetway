@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { flushPromises, mount } from '@vue/test-utils'
+import { Select } from 'ant-design-vue'
 import { routes } from '@/app/router'
 import { useBootstrapStore } from '@/stores/bootstrap'
 import { bootstrapFixtures } from '../mocks/fixtures/bootstrap'
@@ -164,6 +165,19 @@ describe('OverviewPage（FE-031~033）', () => {
               model_name: 'gpt-4o',
               alias_name: 'chat-default',
             },
+            {
+              item_type: 'CHANNEL_CREDENTIAL',
+              object_id: 'cred-3',
+              object_name: 'OpenAI 主 Key',
+              status: 'INVALID',
+              error_code: 'CREDENTIAL_UNAVAILABLE',
+              error_summary: '凭证不可用',
+              occurrence_count: 1,
+              latest_at: '2026-09-05T09:50:00Z',
+              provider_name: 'OpenAI 生产',
+              model_name: null,
+              alias_name: null,
+            },
           ],
           data_updated_at: '2026-09-05T10:00:00Z',
         })
@@ -200,6 +214,8 @@ describe('OverviewPage（FE-031~033）', () => {
     expect(text).toContain('OPEN 熔断 1')
     expect(text).toContain('gpt-4o + sk-****a1b2')
     expect(text).toContain('PROVIDER_SERVER_ERROR')
+    expect(text).toContain('OpenAI 主 Key')
+    expect(wrapper.find('a[href*="credential-pools"]').exists()).toBe(false)
 
     const chip = wrapper.findAll('button').find((button) => button.text() === 'OPEN 熔断 1')
     await chip!.trigger('click')
@@ -258,8 +274,9 @@ describe('OverviewPage（FE-031~033）', () => {
     const { wrapper, router } = await mountPage('/ui/overview?range=24h', 'SYSTEM_ADMIN')
     const summaryCall = stub.calls.find((call) => call.url.includes('/admin/overview/summary'))
     expect(summaryCall!.url).toContain('granularity=HOUR')
-    const appSelect = wrapper.findAll('select').find((select) => select.attributes('aria-label') === '应用')
-    await appSelect!.setValue('app-demo')
+    const appSelect = wrapper.findAllComponents(Select).find((component) => component.attributes('aria-label') === '应用')
+    expect(appSelect).toBeDefined()
+    ;(appSelect!.vm as unknown as { $emit: (event: string, ...args: unknown[]) => void }).$emit('change', 'app-demo')
     await flushPromises()
     expect(router.currentRoute.value.query.application).toBe('app-demo')
     expect(router.currentRoute.value.query.range).toBe('24h')
@@ -506,8 +523,9 @@ describe('UsagePage（FE-034~036）', () => {
   it('分组维度按角色过滤：只读不可见凭证维度', async () => {
     stub = installJsonFetchStub(handler())
     const { wrapper } = await mountPage('/ui/usage', 'VIEWER')
-    const groupSelect = wrapper.findAll('select').find((select) => select.attributes('aria-label') === '分组维度')
-    const optionTexts = groupSelect!.findAll('option').map((option) => option.text())
+    const groupSelect = wrapper.findAllComponents(Select).find((component) => component.attributes('aria-label') === '分组维度')
+    expect(groupSelect).toBeDefined()
+    const optionTexts = ((groupSelect!.props('options') ?? []) as Array<{ label: string }>).map((option) => option.label)
     expect(optionTexts).not.toContain('凭证')
     expect(optionTexts).not.toContain('凭证池')
   })

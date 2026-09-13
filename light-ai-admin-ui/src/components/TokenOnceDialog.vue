@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { Button } from 'ant-design-vue'
 
 /**
  * Token 一次性展示弹窗（附录 4.5.4.3）：
@@ -41,17 +42,8 @@ function close(): void {
 
 <template>
   <Teleport to="body">
-    <div
-      v-if="open"
-      class="lai-dialog-overlay"
-      @keydown.esc.prevent
-    >
-      <div
-        class="lai-dialog"
-        role="dialog"
-        aria-modal="true"
-        :aria-label="title"
-      >
+    <div v-if="open" class="lai-dialog-overlay" @keydown.esc.prevent>
+      <div class="lai-dialog" role="dialog" aria-modal="true" :aria-label="title">
         <h2 class="lai-dialog-title">
           {{ title }}
         </h2>
@@ -60,13 +52,9 @@ function close(): void {
         </p>
         <div class="lai-token-box">
           <code class="lai-token-value">{{ tokenValue }}</code>
-          <button
-            type="button"
-            class="lai-btn lai-btn-text"
-            @click="emit('copied')"
-          >
+          <Button html-type="button" class="lai-btn lai-btn-text" @click="emit('copied')">
             {{ copyState || '复制' }}
-          </button>
+          </Button>
         </div>
         <p class="lai-related-meta">
           签发时间：{{ issuedAt ?? '—' }} · 代次：{{ rotationGeneration }}
@@ -77,17 +65,17 @@ function close(): void {
             type="checkbox"
             class="lai-checkbox"
           >
-          我已将 Token 保存在安全位置
+            我已将 Token 保存在安全位置
         </label>
         <div class="lai-dialog-actions">
-          <button
-            type="button"
+          <Button
+            html-type="button"
             class="lai-btn lai-btn-primary"
             :disabled="!canClose"
             @click="close"
           >
             已安全保存，关闭
-          </button>
+          </Button>
         </div>
       </div>
     </div>

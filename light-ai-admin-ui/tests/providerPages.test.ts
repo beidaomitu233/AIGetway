@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { flushPromises, mount } from '@vue/test-utils'
+import { Select } from 'ant-design-vue'
+import AppMultiSelect from '@/components/AppMultiSelect.vue'
 import { routes } from '@/app/router'
 import { useBootstrapStore } from '@/stores/bootstrap'
 import { bootstrapFixtures } from '../mocks/fixtures/bootstrap'
@@ -79,14 +81,12 @@ describe('ProviderListPage（FE-007）', () => {
 
     const keyword = wrapper.find('input[type="text"]')
     await keyword.setValue('openai')
-    const statusTrigger = wrapper
-      .findAll('.lai-multiselect-trigger')
-      .find((button) => button.text().includes('健康状态'))
-    await statusTrigger!.trigger('click')
-    const availableOption = wrapper
-      .findAll('.lai-multiselect-option')
-      .find((option) => option.text() === '可用')
-    await availableOption!.trigger('click')
+    const healthSelect = wrapper
+      .findAllComponents(AppMultiSelect)
+      .find((component) => component.props('placeholder') === '健康状态')
+    expect(healthSelect).toBeDefined()
+    ;(healthSelect!.vm as unknown as { $emit: (event: string, ...args: unknown[]) => void })
+      .$emit('update:modelValue', ['AVAILABLE'])
     await flushPromises()
     await flushPromises()
     const listCall = stub.calls.filter((call) => call.url.includes('/admin/channels?')).at(-1)
@@ -201,7 +201,10 @@ describe('ProviderFormPage（FE-008）', () => {
     bootStub()
     const { wrapper, router } = await mountPage('/ui/channels/new', 'SYSTEM_ADMIN')
     await wrapper.find('#provider-name').setValue('合法名称')
-    await wrapper.find('#provider-type').setValue('OPENAI')
+    const typeSelect = wrapper.findComponent(Select)
+    expect(typeSelect.exists()).toBe(true)
+    ;(typeSelect.vm as unknown as { $emit: (event: string, ...args: unknown[]) => void }).$emit('update:value', 'OPENAI')
+    await flushPromises()
     await wrapper.find('#provider-base-url').setValue('https://api.example.com/v1/')
     await wrapper.find('form').trigger('submit')
     await vi.waitFor(() => {
@@ -222,8 +225,9 @@ describe('ProviderFormPage（FE-008）', () => {
     expect(wrapper.text()).toContain('配置已被其他管理员修改，当前编辑内容已保留')
     expect(wrapper.text()).toContain('服务端最新版本：7')
     expect((wrapper.find('#provider-name').element as HTMLInputElement).value).toBe('本地新名称')
-    // 冲突后保存按钮禁用，避免覆盖最新版本
-    const saveButton = wrapper.findAll('button').find((button) => button.text() === '保存')
+    // 冲突后保存按钮禁用，避免覆盖最新版本；Ant Button 会在两个汉字间插入空格
+    const saveButton = wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '保存')
+    expect(saveButton).toBeDefined()
     expect(saveButton!.attributes('disabled')).toBeDefined()
   })
 })

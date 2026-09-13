@@ -2,6 +2,9 @@
 // 上游模型 列表页（FE-015，附录 4.2.5.1）：筛选同步 URL，行内启停删除带影响确认，
 // 勾选 1—20 个同 渠道 模型发起批量检测（FE-016）。
 import { computed, ref, shallowRef } from 'vue'
+import { Button, Card, Input, Select, Space, Table, Tag } from 'ant-design-vue'
+import type { ColumnsType } from 'ant-design-vue/es/table'
+import type { TableRowSelection } from 'ant-design-vue/es/table/interface'
 import PageState from '@/components/PageState.vue'
 import ListPager from '@/components/ListPager.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -66,11 +69,6 @@ const selected = ref<ProviderModelListItem[]>([])
 const selectedSameProvider = computed(
   () => new Set(selected.value.map((item) => item.channel_id)).size <= 1,
 )
-function onToggleSelect(row: ProviderModelListItem, checked: boolean): void {
-  selected.value = checked
-    ? [...selected.value, row]
-    : selected.value.filter((item) => item.id !== row.id)
-}
 function clearSelection(): void {
   selected.value = []
 }
@@ -98,6 +96,44 @@ const connectionOptions = [
   { value: 'AVAILABLE', label: connectionStatusLabel('AVAILABLE') },
   { value: 'UNAVAILABLE', label: connectionStatusLabel('UNAVAILABLE') },
 ]
+
+const supportStreamOptions = [
+  { value: '', label: '全部流式' },
+  { value: 'true', label: '支持流式' },
+  { value: 'false', label: '不支持流式' },
+]
+
+const enabledOptions = [
+  { value: '', label: '全部启停' },
+  { value: 'true', label: '已启用' },
+  { value: 'false', label: '已停用' },
+]
+
+const tableColumns: ColumnsType<ProviderModelListItem> = [
+  { key: 'model', title: '模型', width: 220 },
+  { key: 'channel', title: '渠道', width: 160 },
+  { key: 'context', title: '上下文', width: 110 },
+  { key: 'max_output', title: '最大输出', width: 110 },
+  { key: 'stream', title: '流式', width: 90 },
+  { key: 'price', title: '价格（输入/输出）', width: 190 },
+  { key: 'connection', title: '连接状态', width: 150 },
+  { key: 'candidate', title: '候选', width: 80 },
+  { key: 'enabled', title: '启停', width: 90 },
+  { key: 'draft', title: '待发布', width: 90 },
+  { key: 'actions', title: '操作', fixed: 'right' as const, width: 220 },
+]
+
+function onSelectionChange(_keys: Array<string | number>, rows: ProviderModelListItem[]): void {
+  selected.value = rows
+}
+
+const rowSelection = computed<TableRowSelection<ProviderModelListItem> | undefined>(() => {
+  if (!canCheck.value) return undefined
+  return {
+    selectedRowKeys: selected.value.map((row) => row.id),
+    onChange: onSelectionChange,
+  }
+})
 </script>
 
 <template>
@@ -112,75 +148,51 @@ const connectionOptions = [
       >
         <RouterLink
           to="/ui/models/upstream/import"
-          class="lai-btn"
+          class="application-create-link"
         >
-          导入模型
+          <Button>导入模型</Button>
         </RouterLink>
         <RouterLink
           to="/ui/models/upstream/new"
-          class="lai-btn lai-btn-primary"
+          class="application-create-link"
         >
-          新建模型
+          <Button type="primary">新建模型</Button>
         </RouterLink>
       </div>
     </div>
 
+    <Card :bordered="false" class="model-filter-card">
     <div class="lai-filter-bar">
-      <input
-        class="lai-input lai-filter-input"
-        type="text"
+      <Input
+        class="lai-filter-input"
         placeholder="名称或模型标识"
-        :value="query.keyword"
-        @change="applyFilters({ keyword: ($event.target as HTMLInputElement).value })"
-      >
-      <select
-        class="lai-input lai-filter-select"
+        :value="String(query.keyword ?? '')"
+        @change="($event) => applyFilters({ keyword: ($event.target as HTMLInputElement).value })"
+      />
+      <Select
+        class="lai-filter-select"
         :value="String(query.connectionStatus ?? '')"
-        @change="applyFilters({ connectionStatus: ($event.target as HTMLInputElement).value })"
-      >
-        <option
-          v-for="item in connectionOptions"
-          :key="item.value"
-          :value="item.value"
-        >
-          {{ item.label }}
-        </option>
-      </select>
-      <select
-        class="lai-input lai-filter-select"
+        :options="connectionOptions"
+        @change="(value) => applyFilters({ connectionStatus: String(value ?? '') })"
+      />
+      <Select
+        class="lai-filter-select"
         :value="String(query.supportStream ?? '')"
-        @change="applyFilters({ supportStream: ($event.target as HTMLInputElement).value })"
-      >
-        <option value="">
-          全部流式
-        </option>
-        <option value="true">
-          支持流式
-        </option>
-        <option value="false">
-          不支持流式
-        </option>
-      </select>
-      <select
-        class="lai-input lai-filter-select"
+        :options="supportStreamOptions"
+        @change="(value) => applyFilters({ supportStream: String(value ?? '') })"
+      />
+      <Select
+        class="lai-filter-select"
         :value="String(query.enabled ?? '')"
-        @change="applyFilters({ enabled: ($event.target as HTMLInputElement).value })"
-      >
-        <option value="">
-          全部启停
-        </option>
-        <option value="true">
-          已启用
-        </option>
-        <option value="false">
-          已停用
-        </option>
-      </select>
+        :options="enabledOptions"
+        @change="(value) => applyFilters({ enabled: String(value ?? '') })"
+      />
       <span
         v-if="refreshing"
         class="lai-refreshing"
       >刷新中…</span>
     </div>
+    </Card>
 
     <div
       v-if="canCheck && selected.length > 0"
@@ -191,21 +203,19 @@ const connectionOptions = [
         <template v-if="!selectedSameProvider">（必须为同一 渠道）</template>
         <template v-else-if="selected.length > 20">（最多 20 个）</template>
       </span>
-      <button
+      <Button
         v-if="selectedSameProvider && selected.length <= 20"
-        type="button"
-        class="lai-btn"
+        type="primary"
         @click="openBatchCheck"
       >
         批量检测
-      </button>
-      <button
-        type="button"
-        class="lai-btn lai-btn-text"
+      </Button>
+      <Button
+        type="link"
         @click="clearSelection"
       >
         清除选择
-      </button>
+      </Button>
     </div>
 
     <PageState
@@ -231,102 +241,40 @@ const connectionOptions = [
       >
         {{ actionText() }}
       </p>
-      <div class="lai-table-wrap">
-        <table class="lai-table">
-          <thead>
-            <tr>
-              <th
-                v-if="canCheck"
-                class="lai-col-check"
-              >
-                <span class="lai-visually-hidden">选择</span>
-              </th>
-              <th>模型</th>
-              <th>渠道</th>
-              <th>上下文</th>
-              <th>最大输出</th>
-              <th>流式</th>
-              <th>价格（输入/输出）</th>
-              <th>连接状态</th>
-              <th>候选</th>
-              <th>启停</th>
-              <th>待发布</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in items"
-              :key="row.id"
-            >
-              <td v-if="canCheck">
-                <input
-                  type="checkbox"
-                  :checked="selected.some((item) => item.id === row.id)"
-                  :aria-label="`选择 ${row.display_name}`"
-                  @change="onToggleSelect(row, ($event.target as HTMLInputElement).checked)"
-                >
-              </td>
-              <td>
-                <RouterLink
-                  :to="`/ui/models/upstream/${row.id}`"
-                  class="lai-link"
-                >
-                  {{ row.display_name }}
-                </RouterLink>
-                <span class="lai-cell-mono lai-cell-sub">{{ row.model_id }}</span>
-              </td>
-              <td>{{ row.channel_name }}</td>
-              <td>{{ row.context_window?.toLocaleString('zh-CN') ?? '待补充' }}</td>
-              <td>{{ row.max_output_tokens?.toLocaleString('zh-CN') ?? '待补充' }}</td>
-              <td>{{ row.support_stream == null ? '待补充' : row.support_stream ? '支持' : '不支持' }}</td>
-              <td>
-                <span class="lai-cell-mono">{{ row.input_price }} / {{ row.output_price }}</span>
-                <span class="lai-cell-sub">每 {{ row.price_unit }} tokens · {{ row.currency }}</span>
-              </td>
-              <td>
-                {{ connectionStatusLabel(row.connection_status) }}
-                <span class="lai-cell-sub">{{ row.last_check_at ?? '未检测' }}</span>
-              </td>
-              <td>{{ row.route_candidate_count }}</td>
-              <td>{{ row.enabled ? '启用' : '停用' }}</td>
-              <td>{{ row.draft_changed ? '待发布' : '' }}</td>
-              <td class="lai-cell-actions">
-                <RouterLink
-                  :to="`/ui/models/upstream/${row.id}`"
-                  class="lai-btn lai-btn-text"
-                >
-                  查看
-                </RouterLink>
-                <RouterLink
-                  v-if="canManage"
-                  :to="`/ui/models/upstream/${row.id}/edit`"
-                  class="lai-btn lai-btn-text"
-                >
-                  编辑
-                </RouterLink>
-                <button
-                  v-if="canManage"
-                  type="button"
-                  class="lai-btn lai-btn-text"
-                  :disabled="busyId === row.id"
-                  @click="openToggle(row)"
-                >
-                  {{ row.enabled ? '停用' : '启用' }}
-                </button>
-                <button
-                  v-if="canManage"
-                  type="button"
-                  class="lai-btn lai-btn-text"
-                  @click="openDelete(row)"
-                >
-                  删除
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <Card :bordered="false" class="model-table-card">
+        <Table
+          :columns="tableColumns"
+          :data-source="items"
+          :row-key="(row: ProviderModelListItem) => row.id"
+          :row-selection="rowSelection"
+          :pagination="false"
+          :loading="refreshing"
+          :scroll="{ x: 1500 }"
+          size="middle"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'model'">
+              <RouterLink :to="`/ui/models/upstream/${record.id}`" class="lai-link">{{ record.display_name }}</RouterLink>
+              <span class="lai-cell-mono lai-cell-sub">{{ record.model_id }}</span>
+            </template>
+            <template v-else-if="column.key === 'context'">{{ record.context_window?.toLocaleString('zh-CN') ?? '待补充' }}</template>
+            <template v-else-if="column.key === 'max_output'">{{ record.max_output_tokens?.toLocaleString('zh-CN') ?? '待补充' }}</template>
+            <template v-else-if="column.key === 'stream'">{{ record.support_stream == null ? '待补充' : record.support_stream ? '支持' : '不支持' }}</template>
+            <template v-else-if="column.key === 'price'"><span class="lai-cell-mono">{{ record.input_price }} / {{ record.output_price }}</span><span class="lai-cell-sub">每 {{ record.price_unit }} tokens · {{ record.currency }}</span></template>
+            <template v-else-if="column.key === 'connection'"><Tag :color="record.connection_status === 'AVAILABLE' ? 'green' : record.connection_status === 'UNAVAILABLE' ? 'red' : 'default'">{{ connectionStatusLabel(record.connection_status) }}</Tag><span class="lai-cell-sub">{{ record.last_check_at ?? '未检测' }}</span></template>
+            <template v-else-if="column.key === 'enabled'"><Tag :color="record.enabled ? 'green' : 'default'">{{ record.enabled ? '启用' : '停用' }}</Tag></template>
+            <template v-else-if="column.key === 'draft'"><Tag v-if="record.draft_changed" color="orange">待发布</Tag><span v-else>—</span></template>
+            <template v-else-if="column.key === 'actions'">
+              <Space size="small">
+                <RouterLink :to="`/ui/models/upstream/${record.id}`">查看</RouterLink>
+                <RouterLink v-if="canManage" :to="`/ui/models/upstream/${record.id}/edit`">编辑</RouterLink>
+                <Button v-if="canManage" type="link" size="small" :loading="busyId === record.id" @click="openToggle(record as ProviderModelListItem)">{{ record.enabled ? '停用' : '启用' }}</Button>
+                <Button v-if="canManage" type="link" danger size="small" @click="openDelete(record as ProviderModelListItem)">删除</Button>
+              </Space>
+            </template>
+          </template>
+        </Table>
+      </Card>
       <ListPager
         :page="page"
         :page-size="pageSize"
@@ -378,6 +326,10 @@ const connectionOptions = [
 </template>
 
 <style scoped>
+.model-filter-card,
+.model-table-card { margin-bottom: 16px; border: 1px solid var(--lai-border); box-shadow: 0 8px 24px rgba(37, 99, 235, .05); }
+.model-filter-card :deep(.ant-card-body) { padding: 14px 16px; }
+.model-table-card :deep(.ant-card-body) { padding: 0; }
 .lai-page-header {
   display: flex;
   align-items: center;

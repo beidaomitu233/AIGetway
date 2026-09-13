@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import DataTable, { type TableColumn } from '@/components/DataTable.vue'
 import Pagination from '@/components/Pagination.vue'
+import { Button, Input, Select } from 'ant-design-vue'
 import StatusText from '@/components/StatusText.vue'
 import AppMultiSelect from '@/components/AppMultiSelect.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -107,23 +108,17 @@ function onToggleEnabled(row: CredentialPoolListItem): void {
       <h1 class="lai-page-title">
         凭证池
       </h1>
-      <button
+      <Button
         v-if="canManage"
-        type="button"
-        class="lai-btn lai-btn-primary"
+        type="primary"
         @click="router.push({ name: 'pool-new' })"
       >
         新建凭证池
-      </button>
+      </Button>
     </div>
 
     <div class="lai-filter-bar">
-      <input
-        v-model="keywordInput"
-        class="lai-input lai-filter-keyword"
-        type="text"
-        placeholder="凭证池名称，输入 2 字符以上查询"
-      >
+      <Input v-model:value="keywordInput" class="lai-filter-keyword" type="text" placeholder="凭证池名称，输入 2 字符以上查询" />
       <AppMultiSelect
         v-model="providerFilter"
         :options="providerOptions"
@@ -135,22 +130,18 @@ function onToggleEnabled(row: CredentialPoolListItem): void {
         placeholder="状态"
         @update:model-value="list.applyFilters({ status: $event })"
       />
-      <select
-        class="lai-select"
-        :value="list.state.enabled as string"
+      <Select
+        class="lai-filter-select"
+        :value="(list.state.enabled as string) === '' ? undefined : (list.state.enabled as string)"
         aria-label="启用状态"
-        @change="list.applyFilters({ enabled: ($event.target as HTMLSelectElement).value })"
-      >
-        <option value="">
-          全部
-        </option>
-        <option value="true">
-          启用
-        </option>
-        <option value="false">
-          停用
-        </option>
-      </select>
+        :options="[
+          { value: 'true', label: '启用' },
+          { value: 'false', label: '停用' },
+        ]"
+        placeholder="全部"
+        allow-clear
+        @change="(value: unknown) => list.applyFilters({ enabled: String(value ?? '') })"
+      />
     </div>
 
     <p
@@ -221,34 +212,32 @@ function onToggleEnabled(row: CredentialPoolListItem): void {
           <span class="lai-row-actions">
             <RouterLink
               :to="{ name: 'pool-detail', params: { id: row.id } }"
-              class="lai-btn lai-btn-text"
+              class="lai-link"
             >
               查看
             </RouterLink>
-            <button
+            <Button
               v-if="canManage"
-              type="button"
-              class="lai-btn lai-btn-text"
+              type="link"
               @click="router.push({ name: 'pool-edit', params: { id: row.id } })"
             >
               编辑
-            </button>
-            <button
+            </Button>
+            <Button
               v-if="canManage && !lifecycle.isBusy(row.id)"
-              type="button"
-              class="lai-btn lai-btn-text"
+              type="link"
               @click="onToggleEnabled(row)"
             >
               {{ row.enabled ? '停用' : '启用' }}
-            </button>
-            <button
+            </Button>
+            <Button
               v-if="canManage"
-              type="button"
-              class="lai-btn lai-btn-text lai-row-danger"
+              type="link"
+              danger
               @click="lifecycle.requestDelete(row.id, row.version)"
             >
               删除
-            </button>
+            </Button>
           </span>
         </template>
       </DataTable>

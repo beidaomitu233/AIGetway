@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { Button } from 'ant-design-vue'
 const props = defineProps<{ value: string }>()
 defineEmits<{ close: [] }>()
 const copied = ref(false)
@@ -38,21 +39,18 @@ async function copy(): Promise<void> {
         {{ copyError }}
       </p>
       <div class="lai-dialog-actions">
-        <button
-          type="button"
-          class="lai-btn"
+        <Button
           :disabled="copying"
           @click="copy"
         >
           {{ copied ? '已复制' : '复制密钥' }}
-        </button>
-        <button
-          type="button"
-          class="lai-btn lai-btn-primary"
+        </Button>
+        <Button
+          type="primary"
           @click="$emit('close')"
         >
           我已保存
-        </button>
+        </Button>
       </div>
     </div>
   </div>

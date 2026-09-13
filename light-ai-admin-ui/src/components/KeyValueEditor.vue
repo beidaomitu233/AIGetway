@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { Button } from 'ant-design-vue'
 import { headerRowError, headersValid, type HeaderRow } from '@/utils/resourceValidation'
 const props = withDefaults(defineProps<{ modelValue: Record<string, string>; disabled?: boolean }>(), { disabled: false })
 const emit = defineEmits<{ 'update:modelValue': [value: Record<string, string>]; validity: [valid: boolean] }>()
@@ -62,14 +63,14 @@ function rowError(row: HeaderRow): string { return headerRowError(row, rows.valu
         placeholder="值"
         @input="onValueChange(index, ($event.target as HTMLInputElement).value)"
       >
-      <button
-        type="button"
+      <Button
+        html-type="button"
         class="lai-btn lai-btn-text"
         :disabled="props.disabled"
         @click="removeRow(index)"
       >
         移除
-      </button>
+      </Button>
       <span
         v-if="rowError(row)"
         class="lai-form-message-error lai-kv-error"
@@ -83,13 +84,13 @@ function rowError(row: HeaderRow): string { return headerRowError(row, rows.valu
     >
       请求头最多 20 项
     </p>
-    <button
-      type="button"
+    <Button
+      html-type="button"
       class="lai-btn"
       :disabled="props.disabled || atLimit"
       @click="addRow"
     >
       添加请求头
-    </button>
+    </Button>
   </div>
 </template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { Button, Card, Input, Select } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -62,6 +63,20 @@ const ENTITY_ORDER = [
   'reliability_policy',
   'runtime_config',
 ]
+
+const entityTypeOptions = computed(() =>
+  Object.entries(entityTypeLabels).map(([value, label]) => ({ value, label })),
+)
+
+function onKeywordChange(event: Event): void {
+  filters.keyword = (event.target as HTMLInputElement).value
+  applyFilters()
+}
+
+function onEntityTypeChange(value: unknown): void {
+  filters.entity_type = Array.isArray(value) ? value.map((item) => String(item)) : []
+  applyFilters()
+}
 
 const entityTypeLabels: Record<string, string> = {
   provider: 'Provider',
@@ -283,22 +298,19 @@ const summaryChipActive = (type: ChangeType | ''): boolean =>
         待发布变更
       </h1>
       <div class="lai-row-actions">
-        <button
+        <Button
           v-if="canManage && (summary?.total_count ?? 0) > 0 && !isPublishing"
-          type="button"
-          class="lai-btn"
           @click="revertAllOpen = true"
         >
           全部撤销
-        </button>
-        <button
+        </Button>
+        <Button
           v-if="canManage && (summary?.total_count ?? 0) > 0 && !isPublishing"
-          type="button"
-          class="lai-btn lai-btn-primary"
+          type="primary"
           @click="router.push({ name: 'publish' })"
         >
           校验并发布
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -313,7 +325,7 @@ const summaryChipActive = (type: ChangeType | ''): boolean =>
       @retry="loadAll"
     />
     <template v-else-if="draftState && summary">
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           草稿状态
         </h2>
@@ -338,48 +350,39 @@ const summaryChipActive = (type: ChangeType | ''): boolean =>
             <span class="lai-summary-label">最近修改</span>{{ formatDateTime(draftState.last_modified_at, store.timezone) }}
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           变更摘要
         </h2>
         <div class="lai-filter-bar">
-          <button
+          <Button
             v-for="chip in summaryCountChips()"
             :key="chip.key"
-            type="button"
-            class="lai-btn"
-            :class="{ 'lai-btn-primary': summaryChipActive(chip.type) }"
+            :type="summaryChipActive(chip.type) ? 'primary' : 'default'"
             @click="applyChangeType(chip.type)"
           >
             {{ chip.label }}
-          </button>
+          </Button>
         </div>
 
         <div class="lai-filter-bar">
-          <input
-            v-model="filters.keyword"
-            class="lai-input lai-filter-keyword"
+          <Input
+            class="lai-filter-input"
             type="text"
             placeholder="对象名称或 ID"
-            @change="applyFilters"
-          >
-          <select
-            v-model="filters.entity_type"
-            class="lai-select"
-            multiple
-            aria-label="实体类型"
-            @change="applyFilters"
-          >
-            <option
-              v-for="(label, type) in entityTypeLabels"
-              :key="type"
-              :value="type"
-            >
-              {{ label }}
-            </option>
-          </select>
+            :value="filters.keyword"
+            @change="onKeywordChange"
+          />
+          <Select
+            v-model:value="filters.entity_type"
+            class="lai-filter-select"
+            mode="multiple"
+            placeholder="全部类型"
+            :options="entityTypeOptions"
+            @change="onEntityTypeChange"
+          />
         </div>
 
         <p
@@ -435,23 +438,21 @@ const summaryChipActive = (type: ChangeType | ''): boolean =>
                   {{ change.modified_by_name }} · {{ formatDateTime(change.modified_at, store.timezone) }}
                 </span>
                 <span class="lai-row-actions">
-                  <button
-                    type="button"
-                    class="lai-btn lai-btn-text"
+                  <Button
+                    type="link"
                     @click="toggleExpand(change.id)"
                   >
                     {{ expandedIds.has(change.id) ? '收起差异' : '查看差异' }}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     v-if="canManage && !isPublishing"
-                    type="button"
-                    class="lai-btn lai-btn-text"
+                    type="link"
                     :disabled="!change.revertable"
                     :title="change.revertable ? '' : `撤销被阻塞：${change.revert_blockers.join('；')}`"
                     @click="requestRevert(change)"
                   >
                     撤销
-                  </button>
+                  </Button>
                 </span>
               </div>
               <p
@@ -525,7 +526,7 @@ const summaryChipActive = (type: ChangeType | ''): boolean =>
             @update:page-size="applyPageSize"
           />
         </template>
-      </div>
+      </Card>
     </template>
 
     <ConfirmDialog

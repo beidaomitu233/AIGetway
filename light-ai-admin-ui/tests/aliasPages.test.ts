@@ -107,7 +107,7 @@ describe('AliasFormPage（FE-017）', () => {
     await wrapper.find('input[maxlength="64"]:not([disabled]) + * , form input[type="text"]')
     const inputs = wrapper.findAll('form input[type="text"]')
     await inputs[1]!.setValue('默认对话')
-    const saveButton = wrapper.findAll('button').find((button) => button.text() === '保存')!
+    const saveButton = wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '保存')!
     expect((saveButton.element as HTMLButtonElement).disabled).toBe(true)
     expect(wrapper.text()).toContain('2—64 字符，仅字母、数字、点、短横线、下划线')
   })
@@ -127,7 +127,7 @@ describe('AliasDetailPage 候选重排（FE-018）', () => {
     const { wrapper } = await mountAt('/ui/models/virtual/alias-1')
     const priorityInput = wrapper.find('input[type="number"]')
     await priorityInput.setValue('15')
-    const saveButton = wrapper.findAll('button').find((button) => button.text() === '保存排序')!
+    const saveButton = wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '保存排序')!
     expect((saveButton.element as HTMLButtonElement).disabled).toBe(false)
     await saveButton.trigger('click')
     await flushPromises()
@@ -144,7 +144,7 @@ describe('FE-214/215 路由操作边界', () => {
     const fetchMock = stubFetch(detailRoutes)
     const { wrapper } = await mountAt('/ui/models/virtual/alias-1')
     await wrapper.find('input[type="number"]').setValue('0')
-    await wrapper.findAll('button').find((button) => button.text() === '保存排序')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '保存排序')!.trigger('click')
     expect(wrapper.text()).toContain('优先级必须为 1—100 的整数')
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false)
     wrapper.unmount()
@@ -155,7 +155,7 @@ describe('FE-214/215 路由操作边界', () => {
     useBootstrapStore().$patch({ permissions: [] })
     await flushPromises()
     expect(wrapper.find('input[type="number"]').exists()).toBe(false)
-    expect(wrapper.findAll('button').some((button) => button.text() === '编辑')).toBe(false)
+    expect(wrapper.findAll('button').some((button) => button.text().replace(/\s/g, '') === '编辑')).toBe(false)
     wrapper.unmount()
   })
   it('虚拟模型只读用户不能触发表单写入', async () => {

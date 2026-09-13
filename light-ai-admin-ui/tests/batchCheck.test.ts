@@ -77,7 +77,7 @@ describe('BatchCheckPanel（FE-016）', () => {
 
     const wrapper = mountPanel()
     await wrapper.find('select').setValue('cred-1')
-    await wrapper.findAll('button').find((button) => button.text() === '开始检测')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '开始检测')!.trigger('click')
     await vi.advanceTimersByTimeAsync(0)
     await flushPromises()
     expect(wrapper.text()).toContain('0 / 2')
@@ -122,17 +122,17 @@ describe('BatchCheckPanel（FE-016）', () => {
 
     const wrapper = mountPanel()
     await wrapper.find('select').setValue('cred-1')
-    await wrapper.findAll('button').find((button) => button.text() === '开始检测')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '开始检测')!.trigger('click')
     await vi.advanceTimersByTimeAsync(0)
     await flushPromises()
-    await wrapper.findAll('button').find((button) => button.text() === '取消任务')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '取消任务')!.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('已取消')
   })
 
   it('未选凭证时禁止开始', () => {
     const wrapper = mountPanel()
-    const startButton = wrapper.findAll('button').find((button) => button.text() === '开始检测')!
+    const startButton = wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '开始检测')!
     expect((startButton.element as HTMLButtonElement).disabled).toBe(true)
   })
 })

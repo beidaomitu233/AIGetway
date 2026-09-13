@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { Card, Tag } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import StatusText from '@/components/StatusText.vue'
@@ -204,7 +205,7 @@ const headerRows = computed(() => Object.entries(detail.value?.headers ?? {}))
       @retry="load"
     />
     <template v-else-if="detail">
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           最近检测
         </h2>
@@ -233,9 +234,9 @@ const headerRows = computed(() => Object.entries(detail.value?.headers ?? {}))
             {{ detail.last_error_code ?? '—' }}
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           基础配置
         </h2>
@@ -265,7 +266,7 @@ const headerRows = computed(() => Object.entries(detail.value?.headers ?? {}))
             <span class="lai-summary-label">优先级 / 权重</span>{{ detail.priority }} / {{ detail.weight }}
           </div>
           <div class="lai-summary-item">
-            <span class="lai-summary-label">配置状态</span>{{ detail.status === 'ACTIVE' ? '启用' : detail.status === 'DISABLED' ? '停用' : detail.status }}
+            <span class="lai-summary-label">配置状态</span><Tag :color="detail.status === 'ACTIVE' ? 'green' : detail.status === 'DISABLED' ? 'orange' : 'default'">{{ detail.status === 'ACTIVE' ? '启用' : detail.status === 'DISABLED' ? '停用' : detail.status }}</Tag>
           </div>
           <div class="lai-summary-item">
             <span class="lai-summary-label">版本</span>{{ detail.version }}
@@ -284,9 +285,9 @@ const headerRows = computed(() => Object.entries(detail.value?.headers ?? {}))
             </li>
           </ul>
         </template>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           渠道 Key
         </h2>
@@ -304,9 +305,9 @@ const headerRows = computed(() => Object.entries(detail.value?.headers ?? {}))
         >
           无渠道 Key 查看权限
         </p>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           关联模型
         </h2>
@@ -341,9 +342,9 @@ const headerRows = computed(() => Object.entries(detail.value?.headers ?? {}))
         >
           查看全部模型
         </RouterLink>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           检测记录
         </h2>
@@ -389,9 +390,9 @@ const headerRows = computed(() => Object.entries(detail.value?.headers ?? {}))
         >
           未检测
         </p>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           审计信息
         </h2>
@@ -409,7 +410,7 @@ const headerRows = computed(() => Object.entries(detail.value?.headers ?? {}))
             <span class="lai-summary-label">更新时间</span>{{ formatDateTime(detail.updated_at, store.timezone) }}
           </div>
         </div>
-      </div>
+      </Card>
     </template>
 
     <ConfirmDialog

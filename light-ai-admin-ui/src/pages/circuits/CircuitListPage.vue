@@ -2,6 +2,8 @@
 // 熔断状态列表（FE-023，附录 4.3.3.1）：OPEN/HALF_OPEN 排序靠前（服务端默认排序），
 // 凭证列仅管理员/运维展示（响应不含 credential_id 时显示“受限凭证”）。
 import { useRouter } from 'vue-router'
+import { Button, Card, Checkbox, Select, Space, Table, Tag } from 'ant-design-vue'
+import type { ColumnsType } from 'ant-design-vue/es/table'
 import PageState from '@/components/PageState.vue'
 import ListPager from '@/components/ListPager.vue'
 import { useBootstrapStore } from '@/stores/bootstrap'
@@ -45,10 +47,6 @@ function rateText(row: CircuitStateListItem): string {
   return `${(rate * 100).toFixed(2)}%`
 }
 
-function stateClass(row: CircuitStateListItem): string {
-  return row.state === 'OPEN' ? 'lai-state-open' : row.state === 'HALF_OPEN' ? 'lai-state-half' : 'lai-state-closed'
-}
-
 function credentialText(row: CircuitStateListItem): string {
   if (!canSeeCredential) return '受限凭证'
   return row.credential_name ? `${row.credential_name}（${row.credential_masked_value ?? ''}）` : '—'
@@ -64,6 +62,24 @@ const stateOptions = [
   { value: 'HALF_OPEN', label: circuitStateLabel('HALF_OPEN') },
   { value: 'CLOSED', label: circuitStateLabel('CLOSED') },
 ]
+const sourceOptions = [
+  { value: '', label: '全部来源' },
+  { value: 'AUTO', label: openSourceLabel('AUTO') },
+  { value: 'MANUAL', label: openSourceLabel('MANUAL') },
+]
+const tableColumns: ColumnsType<CircuitStateListItem> = [
+  { key: 'provider', title: 'Provider', width: 150 },
+  { key: 'model', title: '模型', width: 180 },
+  { key: 'credential', title: 'Credential', width: 200 },
+  { key: 'state', title: '状态', width: 160 },
+  { key: 'source', title: '来源', width: 100 },
+  { key: 'sample', title: '窗口样本', width: 130 },
+  { key: 'failure', title: '失败率', width: 100 },
+  { key: 'opened', title: '打开时间', width: 170 },
+  { key: 'probe', title: '下次探测', width: 170 },
+  { key: 'error', title: '最近错误', width: 130 },
+  { key: 'actions', title: '操作', fixed: 'right' as const, width: 170 },
+]
 </script>
 
 <template>
@@ -75,42 +91,25 @@ const stateOptions = [
     </div>
 
     <div class="lai-filter-bar">
-      <select
-        class="lai-input lai-filter-select"
+      <Select
+        class="lai-filter-select"
         :value="String(query.state ?? '')"
-        @change="applyFilters({ state: ($event.target as HTMLInputElement).value })"
-      >
-        <option
-          v-for="item in stateOptions"
-          :key="item.value"
-          :value="item.value"
-        >
-          {{ item.label }}
-        </option>
-      </select>
-      <select
-        class="lai-input lai-filter-select"
+        :options="stateOptions"
+        @change="(value) => applyFilters({ state: String(value ?? '') })"
+      />
+      <Select
+        class="lai-filter-select"
         :value="String(query.openSource ?? '')"
-        @change="applyFilters({ openSource: ($event.target as HTMLInputElement).value })"
+        :options="sourceOptions"
+        @change="(value) => applyFilters({ openSource: String(value ?? '') })"
+      />
+      <Checkbox
+        :checked="query.hasRecentFailure === 'true'"
+        class="lai-switch"
+        @change="({ target }) => applyFilters({ hasRecentFailure: target.checked ? 'true' : '' })"
       >
-        <option value="">
-          全部来源
-        </option>
-        <option value="AUTO">
-          {{ openSourceLabel('AUTO') }}
-        </option>
-        <option value="MANUAL">
-          {{ openSourceLabel('MANUAL') }}
-        </option>
-      </select>
-      <label class="lai-switch">
-        <input
-          type="checkbox"
-          :checked="query.hasRecentFailure === 'true'"
-          @change="applyFilters({ hasRecentFailure: ($event.target as HTMLInputElement).checked ? 'true' : '' })"
-        >
         仅显示当前窗口有失败
-      </label>
+      </Checkbox>
       <span
         v-if="refreshing"
         class="lai-refreshing"
@@ -133,88 +132,23 @@ const stateOptions = [
       message="没有匹配的熔断记录"
     />
     <template v-else>
-      <div class="lai-table-wrap">
-        <table class="lai-table">
-          <thead>
-            <tr>
-              <th>Provider</th>
-              <th>模型</th>
-              <th>Credential</th>
-              <th>状态</th>
-              <th>来源</th>
-              <th>窗口样本</th>
-              <th>失败率</th>
-              <th>打开时间</th>
-              <th>下次探测</th>
-              <th>最近错误</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in items"
-              :key="row.id"
-            >
-              <td>{{ row.provider_name }}</td>
-              <td>
-                <RouterLink
-                  :to="`/ui/models/upstream/${row.provider_model_id}`"
-                  class="lai-link"
-                >
-                  {{ row.provider_model_name }}
-                </RouterLink>
-              </td>
-              <td class="lai-cell-mono">
-                {{ credentialText(row) }}
-              </td>
-              <td>
-                <span :class="stateClass(row)">{{ circuitStateLabel(row.state) }}</span>
-                <span
-                  v-if="row.state === 'HALF_OPEN'"
-                  class="lai-cell-sub"
-                >探测中 {{ row.half_open_in_flight }}（成功 {{ row.half_open_success_count }}）</span>
-              </td>
-              <td>{{ row.open_source ? openSourceLabel(row.open_source) : '' }}</td>
-              <td>{{ row.sample_count }}（失败 {{ row.failure_count }}）</td>
-              <td>
-                {{ rateText(row) }}
-                <span
-                  v-if="row.sample_count < 1"
-                  class="lai-cell-sub"
-                >样本不足</span>
-              </td>
-              <td>{{ row.opened_at ?? '' }}</td>
-              <td>{{ row.next_probe_at ?? '' }}</td>
-              <td>
-                <button
-                  v-if="row.last_error_code"
-                  type="button"
-                  class="lai-btn lai-btn-text lai-cell-mono"
-                  @click="goTraces(row)"
-                >
-                  {{ row.last_error_code }}
-                </button>
-                <span v-else>—</span>
-              </td>
-              <td class="lai-cell-actions">
-                <RouterLink
-                  :to="`/ui/circuits/${row.id}`"
-                  class="lai-btn lai-btn-text"
-                >
-                  查看详情
-                </RouterLink>
-                <RouterLink
-                  v-if="canOperate"
-                  :to="`/ui/circuits/${row.id}`"
-                  class="lai-btn lai-btn-text"
-                >
-                  操作
-                </RouterLink>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <Card :bordered="false" class="circuit-table-card">
+        <Table :columns="tableColumns" :data-source="items" :row-key="(row: CircuitStateListItem) => row.id" :pagination="false" :loading="refreshing" :scroll="{ x: 1500 }" size="middle">
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'provider'">{{ record.provider_name }}</template>
+            <template v-else-if="column.key === 'model'"><RouterLink :to="`/ui/models/upstream/${record.provider_model_id}`" class="lai-link">{{ record.provider_model_name }}</RouterLink></template>
+            <template v-else-if="column.key === 'credential'"><span class="lai-cell-mono">{{ credentialText(record as CircuitStateListItem) }}</span></template>
+            <template v-else-if="column.key === 'state'"><Tag :color="record.state === 'OPEN' ? 'red' : record.state === 'HALF_OPEN' ? 'orange' : 'green'">{{ circuitStateLabel(record.state) }}</Tag><span v-if="record.state === 'HALF_OPEN'" class="lai-cell-sub">探测中 {{ record.half_open_in_flight }}（成功 {{ record.half_open_success_count }}）</span></template>
+            <template v-else-if="column.key === 'source'">{{ record.open_source ? openSourceLabel(record.open_source) : '—' }}</template>
+            <template v-else-if="column.key === 'sample'">{{ record.sample_count }}（失败 {{ record.failure_count }}）</template>
+            <template v-else-if="column.key === 'failure'">{{ rateText(record as CircuitStateListItem) }}<span v-if="record.sample_count < 1" class="lai-cell-sub">样本不足</span></template>
+            <template v-else-if="column.key === 'opened'">{{ record.opened_at ?? '—' }}</template>
+            <template v-else-if="column.key === 'probe'">{{ record.next_probe_at ?? '—' }}</template>
+            <template v-else-if="column.key === 'error'"><Button v-if="record.last_error_code" type="link" size="small" class="lai-cell-mono" @click="goTraces(record as CircuitStateListItem)">{{ record.last_error_code }}</Button><span v-else>—</span></template>
+            <template v-else-if="column.key === 'actions'"><Space size="small"><RouterLink :to="`/ui/circuits/${record.id}`">查看详情</RouterLink><RouterLink v-if="canOperate" :to="`/ui/circuits/${record.id}`">操作</RouterLink></Space></template>
+          </template>
+        </Table>
+      </Card>
       <ListPager
         :page="page"
         :page-size="pageSize"

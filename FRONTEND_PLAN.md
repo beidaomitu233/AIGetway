@@ -1,10 +1,12 @@
 # 轻享 AI V2.0 前端执行计划
 
+> 2026-09-13 新增管理后台 Ant Design 全量重构要求。设计方向、保护契约、共享基础层、业务域任务包、并行依赖和统一完成定义见 [ANT_DESIGN_REBUILD_PLAN.md](ANT_DESIGN_REBUILD_PLAN.md)。FE-P20～FE-P23 继续表示业务功能与契约验收，UI-R300～UI-R343 表示新界面重构；完成 UI 重构不能替代尚未通过的真实环境和业务验收。
+
 ## 1. 执行边界
 
 开发基线统一为 origin/dev。FE-P20 已由 codex-0912 领取，不得重复领取；当前占用以 TASK_STATUS.md 为准。CONTRACT-V2-001 的响应包装与 GET 子资源已部分交付，剩余字段见本文 FE-P20 阻塞依赖处理及 COMMUNICATION.md 第 8 节。原负责人可推进页面、状态及同契约夹具测试，真实联调须等待对应后端契约收口，不以模拟结果勾选完成。
 
-任务包从 P20 编号，用于避免与既有提交记录中的编号冲突。技术栈沿用 Vue 3、TypeScript、Vue Router、Pinia、Vite、fetch/AbortController、Vitest/Vue Test Utils；首期只交付集中式浅色管理后台，目标桌面宽度 1024—1920，重点验收 1280 与 1920。
+任务包从 P20 编号，用于避免与既有提交记录中的编号冲突。业务状态、路由、API、权限和数据精度继续沿用 Vue 3、TypeScript、Vue Router、Pinia、Vite、fetch/AbortController、Vitest/Vue Test Utils；视图层按 `ANT_DESIGN_REBUILD_PLAN.md` 从零改用 Ant Design Vue。首期只交付集中式浅色管理后台，目标桌面宽度 1024—1920，重点验收 1280 与 1920。
 
 ## 2. 路由、状态和调用规则
 

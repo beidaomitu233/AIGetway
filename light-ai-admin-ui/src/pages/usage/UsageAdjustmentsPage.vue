@@ -3,6 +3,8 @@
 // 按应用查看额度调整与用量重置流水；应用范围由服务端按身份裁剪。
 // 金额为十进制字符串，直接展示不做浮点运算。
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { Button, Card, Select, Table } from 'ant-design-vue'
+import type { ColumnsType } from 'ant-design-vue/es/table'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import { useBootstrapStore } from '@/stores/bootstrap'
@@ -94,8 +96,9 @@ function selectApplication(applicationId: string): void {
   void loadAdjustments(applicationId)
 }
 
-function onApplicationChange(event: Event): void {
-  selectApplication((event.target as HTMLSelectElement).value)
+function onApplicationChange(value: unknown): void {
+  const applicationId = Array.isArray(value) ? String(value[0] ?? '') : String(value ?? '')
+  if (applicationId !== '') selectApplication(applicationId)
 }
 
 function retryAdjustments(): void {
@@ -128,11 +131,26 @@ const selectedApplication = computed(
 
 const applicationOptions = computed(() =>
   applications.value.map((item) => ({
-    id: item.id,
+    value: item.id,
     label: `${item.name}（${item.code}）`,
     disabled: item.status === 'ARCHIVED',
   })),
 )
+
+const adjustmentColumns: ColumnsType<ApplicationQuotaAdjustment> = [
+  { title: '生效时间', key: 'effective_at' },
+  { title: '维度', key: 'dimension' },
+  { title: '调整前', key: 'before_value' },
+  { title: '变化', key: 'delta_value' },
+  { title: '调整后', key: 'after_value' },
+  { title: '原因', key: 'reason' },
+  { title: '操作人', key: 'operator_id' },
+  { title: '创建时间', key: 'created_at' },
+]
+
+function adjustmentValue(record: Record<string, unknown>, key: unknown): unknown {
+  return typeof key === 'string' ? record[key] : ''
+}
 </script>
 
 <template>
@@ -143,10 +161,9 @@ const applicationOptions = computed(() =>
       </h1>
       <div class="lai-row-actions">
         <RouterLink
-          class="lai-btn"
           :to="{ name: 'usage' }"
         >
-          返回用量与成本
+          <Button>返回用量与成本</Button>
         </RouterLink>
       </div>
     </div>
@@ -168,24 +185,16 @@ const applicationOptions = computed(() =>
     />
     <template v-else>
       <div class="lai-filter-bar">
-        <select
-          class="lai-select"
+        <Select
+          class="lai-filter-select"
           aria-label="选择应用"
-          :value="selectedApplicationId"
+          :value="selectedApplicationId === '' ? undefined : selectedApplicationId"
+          :options="applicationOptions"
           @change="onApplicationChange"
-        >
-          <option
-            v-for="option in applicationOptions"
-            :key="option.id"
-            :value="option.id"
-            :disabled="option.disabled"
-          >
-            {{ option.label }}
-          </option>
-        </select>
+        />
       </div>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           调整与重置记录
         </h2>
@@ -207,54 +216,25 @@ const applicationOptions = computed(() =>
         />
         <template v-else>
           <div class="lai-table-wrap">
-            <table class="lai-table">
-              <thead>
-                <tr>
-                  <th>生效时间</th>
-                  <th>维度</th>
-                  <th>调整前</th>
-                  <th>变化</th>
-                  <th>调整后</th>
-                  <th>原因</th>
-                  <th>操作人</th>
-                  <th>创建时间</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="item in adjustments"
-                  :key="item.id"
-                >
-                  <td>{{ formatDateTime(item.effective_at, store.timezone) }}</td>
-                  <td>{{ dimensionLabels[item.dimension] ?? item.dimension }}</td>
-                  <td class="lai-mono">
-                    {{ item.before_value }}
-                  </td>
-                  <td class="lai-mono">
-                    {{ item.delta_value }}
-                  </td>
-                  <td class="lai-mono">
-                    {{ item.after_value }}
-                  </td>
-                  <td>{{ item.reason }}</td>
-                  <td class="lai-mono">
-                    {{ item.operator_id }}
-                  </td>
-                  <td>{{ formatDateTime(item.created_at, store.timezone) }}</td>
-                </tr>
-                <tr v-if="adjustments.length === 0">
-                  <td
-                    colspan="8"
-                    class="lai-table-empty"
-                  >
-                    暂无额度调整或重置记录
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <Table
+              :data-source="adjustments"
+              :columns="adjustmentColumns"
+              row-key="id"
+              :pagination="false"
+              :locale="{ emptyText: '暂无额度调整或重置记录' }"
+              size="middle"
+            >
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'effective_at'">{{ formatDateTime(record.effective_at, store.timezone) }}</template>
+                <template v-else-if="column.key === 'dimension'">{{ dimensionLabels[record.dimension] ?? record.dimension }}</template>
+                <template v-else-if="['before_value', 'delta_value', 'after_value', 'operator_id'].includes(String(column.key))"><span class="lai-mono">{{ adjustmentValue(record, column.key) }}</span></template>
+                <template v-else-if="column.key === 'created_at'">{{ formatDateTime(record.created_at, store.timezone) }}</template>
+                <template v-else>{{ adjustmentValue(record, column.key) }}</template>
+              </template>
+            </Table>
           </div>
         </template>
-      </div>
+      </Card>
     </template>
   </section>
 </template>

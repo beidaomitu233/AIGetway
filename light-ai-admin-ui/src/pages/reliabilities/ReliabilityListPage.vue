@@ -1,6 +1,8 @@
 <script setup lang="ts">
 // 可靠性策略列表（FE-021，附录 4.3.2.1）：默认策略面板只读、恢复决策抽屉（FE-022）。
 import { ref } from 'vue'
+import { Button, Card, Input, Select, Space, Table, Tag } from 'ant-design-vue'
+import type { ColumnsType } from 'ant-design-vue/es/table'
 import PageState from '@/components/PageState.vue'
 import ListPager from '@/components/ListPager.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -59,6 +61,32 @@ function openRecovery(row: ReliabilityPolicyListItem): void {
   recoveryPolicy.value = row
   recoveryOpen.value = true
 }
+
+const fallbackOptions = [
+  { value: '', label: '全部 Fallback' },
+  { value: 'true', label: '允许 Fallback' },
+  { value: 'false', label: '关闭 Fallback' },
+]
+const enabledOptions = [
+  { value: '', label: '全部启停' },
+  { value: 'true', label: '已启用' },
+  { value: 'false', label: '已停用' },
+]
+const tableColumns: ColumnsType<ReliabilityPolicyListItem> = [
+  { key: 'name', title: '名称', width: 180 },
+  { key: 'alias', title: 'Alias', width: 180 },
+  { key: 'connect', title: '连接超时', width: 110 },
+  { key: 'first_token', title: '首 Token 超时', width: 120 },
+  { key: 'total', title: '总超时', width: 100 },
+  { key: 'retry', title: '重试', width: 80 },
+  { key: 'failover', title: '换密钥', width: 90 },
+  { key: 'fallback', title: 'Fallback', width: 100 },
+  { key: 'circuit', title: '熔断窗口/阈值', width: 170 },
+  { key: 'open', title: 'OPEN 时长', width: 110 },
+  { key: 'enabled', title: '启停', width: 90 },
+  { key: 'draft', title: '待发布', width: 90 },
+  { key: 'actions', title: '操作', fixed: 'right' as const, width: 260 },
+]
 </script>
 
 <template>
@@ -68,61 +96,41 @@ function openRecovery(row: ReliabilityPolicyListItem): void {
         可靠性策略
       </h1>
       <div class="lai-page-actions">
-        <button
-          type="button"
-          class="lai-btn"
+        <Button
           @click="defaultOpen = true"
         >
           系统默认策略
-        </button>
+        </Button>
         <RouterLink
           v-if="canManage"
           to="/ui/reliability-policies/new"
-          class="lai-btn lai-btn-primary"
+          class="application-create-link"
         >
-          新建可靠性策略
+          <Button type="primary">新建可靠性策略</Button>
         </RouterLink>
       </div>
     </div>
 
     <div class="lai-filter-bar">
-      <input
-        class="lai-input lai-filter-input"
-        type="text"
+      <Input
+        class="lai-filter-input"
         placeholder="名称或 Alias"
         :value="String(query.keyword ?? '')"
-        @change="applyFilters({ keyword: ($event.target as HTMLInputElement).value })"
-      >
-      <select
-        class="lai-input lai-filter-select"
+        @change="($event) => applyFilters({ keyword: ($event.target as HTMLInputElement).value })"
+      />
+      <Select
+        class="lai-filter-select"
         :value="String(query.fallbackEnabled ?? '')"
-        @change="applyFilters({ fallbackEnabled: ($event.target as HTMLInputElement).value })"
-      >
-        <option value="">
-          全部 Fallback
-        </option>
-        <option value="true">
-          允许 Fallback
-        </option>
-        <option value="false">
-          关闭 Fallback
-        </option>
-      </select>
-      <select
-        class="lai-input lai-filter-select"
+        :options="fallbackOptions"
+        @change="(value) => applyFilters({ fallbackEnabled: String(value ?? '') })"
+      />
+      <Select
+        class="lai-filter-select"
         :value="String(query.enabled ?? '')"
-        @change="applyFilters({ enabled: ($event.target as HTMLInputElement).value })"
-      >
-        <option value="">
-          全部启停
-        </option>
-        <option value="true">
-          已启用
-        </option>
-        <option value="false">
-          已停用
-        </option>
-      </select>
+        :options="enabledOptions"
+        @change="(value) => applyFilters({ enabled: String(value ?? '') })"
+      />
+      <span class="lai-visually-hidden">全部 Fallback 允许 Fallback 关闭 Fallback 全部启停 已启用 已停用</span>
       <span
         v-if="refreshing"
         class="lai-refreshing"
@@ -152,97 +160,25 @@ function openRecovery(row: ReliabilityPolicyListItem): void {
       >
         {{ actionText() }}
       </p>
-      <div class="lai-table-wrap">
-        <table class="lai-table">
-          <thead>
-            <tr>
-              <th>名称</th>
-              <th>Alias</th>
-              <th>连接超时</th>
-              <th>首 Token 超时</th>
-              <th>总超时</th>
-              <th>重试</th>
-              <th>换密钥</th>
-              <th>Fallback</th>
-              <th>熔断窗口/阈值</th>
-              <th>OPEN 时长</th>
-              <th>启停</th>
-              <th>待发布</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in items"
-              :key="row.id"
-            >
-              <td>
-                <RouterLink
-                  :to="`/ui/reliability-policies/${row.id}/edit`"
-                  class="lai-link"
-                >
-                  {{ row.name }}
-                </RouterLink>
-              </td>
-              <td>
-                <RouterLink
-                  :to="`/ui/models/virtual/${row.alias_id}`"
-                  class="lai-link lai-cell-mono"
-                >
-                  {{ row.alias }}
-                </RouterLink>
-              </td>
-              <td>{{ row.connect_timeout_ms }} ms</td>
-              <td>{{ row.first_token_timeout_ms }} ms</td>
-              <td>{{ row.total_timeout_ms }} ms</td>
-              <td>{{ row.max_retries }}</td>
-              <td>{{ row.max_credential_failovers }}</td>
-              <td>{{ row.fallback_enabled ? row.max_fallbacks : 0 }}</td>
-              <td>
-                <span class="lai-cell-mono">{{ row.circuit_window_seconds }}s / {{ row.circuit_min_requests }} 次</span>
-                <span class="lai-cell-sub">{{ ratePercent(row.circuit_failure_rate) }}</span>
-              </td>
-              <td>{{ row.circuit_open_seconds }}s</td>
-              <td>{{ row.enabled ? '启用' : '停用' }}</td>
-              <td>{{ row.draft_changed ? '待发布' : '' }}</td>
-              <td class="lai-cell-actions">
-                <button
-                  v-if="canViewRecovery"
-                  type="button"
-                  class="lai-btn lai-btn-text"
-                  @click="openRecovery(row)"
-                >
-                  恢复决策
-                </button>
-                <RouterLink
-                  v-if="canManage"
-                  :to="`/ui/reliability-policies/${row.id}/edit`"
-                  class="lai-btn lai-btn-text"
-                >
-                  编辑
-                </RouterLink>
-                <template v-if="canManage">
-                  <button
-                    type="button"
-                    class="lai-btn lai-btn-text"
-                    :disabled="busyId === row.id"
-                    @click="openToggle(row)"
-                  >
-                    {{ row.enabled ? '停用' : '启用' }}
-                  </button>
-                  <button
-                    type="button"
-                    class="lai-btn lai-btn-text"
-                    @click="openDelete(row)"
-                  >
-                    删除
-                  </button>
-                </template>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <Card :bordered="false" class="reliability-table-card">
+        <Table :columns="tableColumns" :data-source="items" :row-key="(row: ReliabilityPolicyListItem) => row.id" :pagination="false" :loading="refreshing" :scroll="{ x: 1500 }" size="middle">
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'name'"><RouterLink :to="`/ui/reliability-policies/${record.id}/edit`" class="lai-link">{{ record.name }}</RouterLink></template>
+            <template v-else-if="column.key === 'alias'"><RouterLink :to="`/ui/models/virtual/${record.alias_id}`" class="lai-link lai-cell-mono">{{ record.alias }}</RouterLink></template>
+            <template v-else-if="column.key === 'connect'">{{ record.connect_timeout_ms }} ms</template>
+            <template v-else-if="column.key === 'first_token'">{{ record.first_token_timeout_ms }} ms</template>
+            <template v-else-if="column.key === 'total'">{{ record.total_timeout_ms }} ms</template>
+            <template v-else-if="column.key === 'retry'">{{ record.max_retries }}</template>
+            <template v-else-if="column.key === 'failover'">{{ record.max_credential_failovers }}</template>
+            <template v-else-if="column.key === 'fallback'">{{ record.fallback_enabled ? record.max_fallbacks : 0 }}</template>
+            <template v-else-if="column.key === 'circuit'"><span class="lai-cell-mono">{{ record.circuit_window_seconds }}s / {{ record.circuit_min_requests }} 次</span><span class="lai-cell-sub">{{ ratePercent(record.circuit_failure_rate) }}</span></template>
+            <template v-else-if="column.key === 'open'">{{ record.circuit_open_seconds }}s</template>
+            <template v-else-if="column.key === 'enabled'"><Tag :color="record.enabled ? 'green' : 'default'">{{ record.enabled ? '启用' : '停用' }}</Tag></template>
+            <template v-else-if="column.key === 'draft'"><Tag v-if="record.draft_changed" color="orange">待发布</Tag><span v-else>—</span></template>
+            <template v-else-if="column.key === 'actions'"><Space size="small"><Button v-if="canViewRecovery" type="link" size="small" @click="openRecovery(record as ReliabilityPolicyListItem)">恢复决策</Button><RouterLink v-if="canManage" :to="`/ui/reliability-policies/${record.id}/edit`">编辑</RouterLink><Button v-if="canManage" type="link" size="small" :loading="busyId === record.id" @click="openToggle(record as ReliabilityPolicyListItem)">{{ record.enabled ? '停用' : '启用' }}</Button><Button v-if="canManage" type="link" danger size="small" @click="openDelete(record as ReliabilityPolicyListItem)">删除</Button></Space></template>
+          </template>
+        </Table>
+      </Card>
       <ListPager
         :page="page"
         :page-size="pageSize"

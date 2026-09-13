@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { Button, Card, Input, Select } from 'ant-design-vue'
 import PageState from '@/components/PageState.vue'
 import DataTable, { type TableColumn } from '@/components/DataTable.vue'
 import ListPager from '@/components/ListPager.vue'
@@ -45,6 +46,11 @@ const sortOptions = [
   { value: 'total_ms', label: '总耗时' },
   { value: 'total_tokens', label: '总 Token' },
   { value: 'total_cost', label: '总费用' },
+]
+
+const sortSelectOptions = [
+  ...sortOptions.map((option) => ({ value: `-${option.value}`, label: `${option.label}（倒序）` })),
+  ...sortOptions.map((option) => ({ value: option.value, label: `${option.label}（正序）` })),
 ]
 
 const list = useListQuery<Record<string, FilterValue>, TraceListItem>({
@@ -216,23 +222,19 @@ defineExpose({ filterByError, list })
           v-if="copyState"
           class="lai-related-meta"
         >{{ copyState }}</span>
-        <button
+        <Button
           v-if="canExport"
-          type="button"
-          class="lai-btn"
           :disabled="exportState === 'running'"
           @click="onExport"
         >
           {{ exportState === 'running' ? '导出中…' : '导出 CSV' }}
-        </button>
-        <button
+        </Button>
+        <Button
           v-if="exportState === 'running'"
-          type="button"
-          class="lai-btn"
           @click="cancelExport"
         >
           取消导出
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -245,38 +247,38 @@ defineExpose({ filterByError, list })
     </p>
 
     <div class="lai-filter-bar">
-      <input
-        class="lai-input lai-filter-keyword"
+      <Input
+        class="lai-filter-input"
         type="text"
         placeholder="Trace ID 精确查询（1—128 字符）"
-        maxlength="128"
+        :maxlength="128"
         :value="list.state.trace_id as string"
         @change="list.applyFilters({ trace_id: ($event.target as HTMLInputElement).value.trim() })"
-      >
-      <input
-        class="lai-input lai-filter-keyword"
+      />
+      <Input
+        class="lai-filter-input"
         type="text"
         placeholder="应用"
         :disabled="preciseMode"
         :value="list.state.application as string"
         @change="list.applyFilters({ application: ($event.target as HTMLInputElement).value.trim() })"
-      >
-      <input
-        class="lai-input lai-filter-keyword"
+      />
+      <Input
+        class="lai-filter-input"
         type="text"
         placeholder="Alias ID"
         :disabled="preciseMode"
         :value="list.state.alias_id as string"
         @change="list.applyFilters({ alias_id: ($event.target as HTMLInputElement).value.trim() })"
-      >
-      <input
-        class="lai-input lai-filter-keyword"
+      />
+      <Input
+        class="lai-filter-input"
         type="text"
         placeholder="Provider ID"
         :disabled="preciseMode"
         :value="list.state.provider_id as string"
         @change="list.applyFilters({ provider_id: ($event.target as HTMLInputElement).value.trim() })"
-      >
+      />
       <AppMultiSelect
         :model-value="basicStatusFilter"
         :options="statusOptions"
@@ -284,45 +286,27 @@ defineExpose({ filterByError, list })
         :disabled="preciseMode"
         @update:model-value="list.applyFilters({ status: $event })"
       />
-      <select
-        class="lai-select"
-        :value="list.state.requested_stream as string"
+      <Select
+        class="lai-filter-select"
+        :value="(list.state.requested_stream as string) === '' ? undefined : (list.state.requested_stream as string)"
         aria-label="调用方式"
         :disabled="preciseMode"
-        @change="list.applyFilters({ requested_stream: ($event.target as HTMLSelectElement).value })"
-      >
-        <option value="">
-          全部方式
-        </option>
-        <option value="true">
-          流式
-        </option>
-        <option value="false">
-          同步
-        </option>
-      </select>
-      <select
-        class="lai-select"
+        :options="[
+          { value: 'true', label: '流式' },
+          { value: 'false', label: '同步' },
+        ]"
+        placeholder="全部方式"
+        allow-clear
+        @change="(value: unknown) => list.applyFilters({ requested_stream: String(value ?? '') })"
+      />
+      <Select
+        class="lai-filter-select"
         :value="list.sort.value"
         aria-label="排序"
         :disabled="preciseMode"
-        @change="list.applySort(($event.target as HTMLSelectElement).value)"
-      >
-        <option
-          v-for="option in sortOptions"
-          :key="option.value"
-          :value="`-${option.value}`"
-        >
-          {{ option.label }}（倒序）
-        </option>
-        <option
-          v-for="option in sortOptions"
-          :key="`asc-${option.value}`"
-          :value="option.value"
-        >
-          {{ option.label }}（正序）
-        </option>
-      </select>
+        :options="sortSelectOptions"
+        @change="(value: unknown) => list.applySort(String(value ?? ''))"
+      />
     </div>
 
     <details
@@ -337,85 +321,71 @@ defineExpose({ filterByError, list })
           placeholder="来源模式"
           @update:model-value="list.applyFilters({ source_mode: $event })"
         />
-        <input
-          class="lai-input lai-filter-keyword"
+        <Input
+          class="lai-filter-input"
           type="text"
           placeholder="错误码"
           :value="list.state.error_code as string"
           @change="list.applyFilters({ error_code: ($event.target as HTMLInputElement).value.trim() })"
-        >
-        <select
-          class="lai-select"
-          :value="list.state.usage_source as string"
+        />
+        <Select
+          class="lai-filter-select"
+          :value="(list.state.usage_source as string) === '' ? undefined : (list.state.usage_source as string)"
           aria-label="Usage 来源"
-          @change="list.applyFilters({ usage_source: ($event.target as HTMLSelectElement).value })"
-        >
-          <option value="">
-            全部来源
-          </option>
-          <option
-            v-for="option in usageSourceOptions"
-            :key="option.value"
-            :value="option.value"
-          >
-            {{ option.label }}
-          </option>
-        </select>
-        <select
-          class="lai-select"
-          :value="list.state.has_retry as string"
+          :options="usageSourceOptions"
+          placeholder="全部来源"
+          allow-clear
+          @change="(value: unknown) => list.applyFilters({ usage_source: String(value ?? '') })"
+        />
+        <Select
+          class="lai-filter-select"
+          :value="(list.state.has_retry as string) === '' ? undefined : (list.state.has_retry as string)"
           aria-label="存在重试"
-          @change="list.applyFilters({ has_retry: ($event.target as HTMLSelectElement).value })"
-        >
-          <option value="">
-            重试不限
-          </option>
-          <option value="true">
-            有重试
-          </option>
-          <option value="false">
-            无重试
-          </option>
-        </select>
-        <input
-          class="lai-input lai-filter-number"
+          :options="[
+            { value: 'true', label: '有重试' },
+            { value: 'false', label: '无重试' },
+          ]"
+          placeholder="重试不限"
+          allow-clear
+          @change="(value: unknown) => list.applyFilters({ has_retry: String(value ?? '') })"
+        />
+        <Input
+          class="lai-filter-number"
           type="number"
           min="0"
           max="600000"
           placeholder="最小耗时 ms"
           :value="list.state.min_total_ms as string"
           @change="list.applyFilters({ min_total_ms: ($event.target as HTMLInputElement).value })"
-        >
-        <input
-          class="lai-input lai-filter-number"
+        />
+        <Input
+          class="lai-filter-number"
           type="number"
           min="0"
           max="600000"
           placeholder="最大耗时 ms"
           :value="list.state.max_total_ms as string"
           @change="list.applyFilters({ max_total_ms: ($event.target as HTMLInputElement).value })"
-        >
-        <select
-          class="lai-select"
-          :value="list.state.anomalous_running as string"
+        />
+        <Select
+          class="lai-filter-select"
+          :value="(list.state.anomalous_running as string) === '' ? undefined : (list.state.anomalous_running as string)"
           aria-label="运行异常"
-          @change="list.applyFilters({ anomalous_running: ($event.target as HTMLSelectElement).value })"
-        >
-          <option value="">
-            异常不限
-          </option>
-          <option value="true">
-            仅运行异常
-          </option>
-        </select>
-        <input
+          :options="[
+            { value: 'true', label: '仅运行异常' },
+          ]"
+          placeholder="异常不限"
+          allow-clear
+          @change="(value: unknown) => list.applyFilters({ anomalous_running: String(value ?? '') })"
+        />
+        <Input
           v-if="canUseSensitiveFilters"
-          class="lai-input lai-filter-keyword"
+          class="lai-filter-input"
           type="text"
           placeholder="来源 IP（敏感，仅本页生效）"
           :value="list.state.client_ip as string"
           @change="list.applyFilters({ client_ip: ($event.target as HTMLInputElement).value.trim() })"
-        >
+        />
       </div>
     </details>
 
@@ -437,6 +407,7 @@ defineExpose({ filterByError, list })
       @retry="list.refresh()"
     />
     <template v-else>
+      <Card :bordered="false" class="trace-table-card">
       <DataTable
         :columns="columns"
         :rows="list.items.value"
@@ -455,13 +426,12 @@ defineExpose({ filterByError, list })
           >
             {{ row.trace_id.slice(0, 18) }}{{ row.trace_id.length > 18 ? '…' : '' }}
           </RouterLink>
-          <button
-            type="button"
-            class="lai-btn lai-btn-text"
+          <Button
+            type="link"
             @click="copyText(row.trace_id)"
           >
             复制
-          </button>
+          </Button>
         </template>
         <template #source_mode="{ row }">
           {{ sourceModeLabels[row.source_mode] ?? row.source_mode }}
@@ -552,14 +522,13 @@ defineExpose({ filterByError, list })
           </template>
         </template>
         <template #error_code="{ row }">
-          <button
+          <Button
             v-if="row.error_code"
-            type="button"
-            class="lai-btn lai-btn-text"
+            type="link"
             @click="onModelError(row)"
           >
             {{ row.error_code }}
-          </button>
+          </Button>
           <template v-else>
             —
           </template>
@@ -568,13 +537,14 @@ defineExpose({ filterByError, list })
           <span class="lai-row-actions">
             <RouterLink
               :to="{ name: 'trace-detail', params: { traceId: row.trace_id } }"
-              class="lai-btn lai-btn-text"
+              class="lai-link"
             >
               详情
             </RouterLink>
           </span>
         </template>
       </DataTable>
+      </Card>
       <ListPager
         v-if="!preciseMode"
         :page="list.page.value"
@@ -586,3 +556,8 @@ defineExpose({ filterByError, list })
     </template>
   </section>
 </template>
+
+<style scoped>
+.trace-table-card { margin-top: 16px; border: 1px solid var(--lai-border); box-shadow: 0 8px 24px rgba(37, 99, 235, .05); }
+.trace-table-card :deep(.ant-card-body) { padding: 0; }
+</style>

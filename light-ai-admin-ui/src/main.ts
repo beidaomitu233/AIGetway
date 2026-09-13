@@ -4,8 +4,11 @@ import App from './App.vue'
 import { createAppRouter } from './app/router'
 import { setupRouterGuards } from './app/routerGuards'
 import { initRuntimeConfig } from './app/runtimeConfig'
+import 'ant-design-vue/dist/reset.css'
 import './styles/reset.css'
 import './styles/base.css'
+import './styles/theme.css'
+import './styles/accessibility.css'
 
 initRuntimeConfig()
 

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { flushPromises, mount } from '@vue/test-utils'
+import { Select } from 'ant-design-vue'
 import { routes } from '@/app/router'
 import { useBootstrapStore } from '@/stores/bootstrap'
 import { bootstrapFixtures } from '../mocks/fixtures/bootstrap'
@@ -150,8 +151,9 @@ describe('RuntimeConfigPage（FE-043/044）', () => {
   it('时区锁定只读，各区块字段展示', async () => {
     stub = installJsonFetchStub(handler())
     const { wrapper } = await mountPage('/ui/runtime-config', 'SYSTEM_ADMIN')
-    const timezone = wrapper.find('input[value="Asia/Shanghai"]')
+    const timezone = wrapper.find('#rt-timezone')
     expect(timezone.exists()).toBe(true)
+    expect((timezone.element as HTMLInputElement).value).toBe('Asia/Shanghai')
     expect(timezone.attributes('readonly')).toBeDefined()
     const text = wrapper.text()
     expect(text).toContain('活动快照')
@@ -291,7 +293,9 @@ describe('AccessListPage（FE-045~047）', () => {
     const { wrapper } = await mountPage('/ui/access-credentials', 'SYSTEM_ADMIN')
     await wrapper.findAll('button').find((button) => button.text() === '创建访问凭证')!.trigger('click')
     await wrapper.find('#ac-name').setValue('新服务 Token')
+    await flushPromises()
     await wrapper.find('#ac-app').setValue('app-new')
+    await flushPromises()
     await wrapper
       .findAll('button')
       .find((button) => button.text() === '创建并签发 Token')!.trigger('click')
@@ -442,8 +446,9 @@ describe('AuditListPage（FE-048）', () => {
   it('失败记录筛选进入查询参数', async () => {
     stub = installJsonFetchStub(handler())
     const { wrapper } = await mountPage('/ui/audit-logs', 'SYSTEM_ADMIN')
-    const resultSelect = wrapper.findAll('select').find((select) => select.attributes('aria-label') === '结果')
-    await resultSelect!.setValue('FAILED')
+    const resultSelect = wrapper.findAllComponents(Select).find((component) => component.attributes('aria-label') === '结果')
+    expect(resultSelect).toBeDefined()
+    ;(resultSelect!.vm as unknown as { $emit: (event: string, ...args: unknown[]) => void }).$emit('change', 'FAILED')
     await flushPromises()
     const listCall = stub.calls.filter((call) => call.url.includes('/admin/audit-logs?')).at(-1)!
     expect(listCall.url).toContain('result=FAILED')

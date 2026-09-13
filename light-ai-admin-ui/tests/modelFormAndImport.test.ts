@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
+import { Select } from 'ant-design-vue'
 import ModelFormPage from '@/pages/models/ModelFormPage.vue'
 import ModelImportPage from '@/pages/models/ModelImportPage.vue'
 
@@ -69,7 +70,8 @@ describe('ModelFormPage（FE-015）', () => {
   it('上下文不大于最大输出时禁止保存并提示', async () => {
     stubFetch(providerRoutes)
     const { wrapper } = await mountForm()
-    await wrapper.find('select').setValue('prov-1')
+    const channelSelect = wrapper.findAllComponents(Select).find((c) => c.props('placeholder') === '请选择 渠道')!
+    await (channelSelect.vm as unknown as { $emit: (e: string, ...args: unknown[]) => void }).$emit('update:value', 'prov-1')
     await wrapper.find('input[maxlength="64"]').setValue('GPT-4o')
     const monoInputs = wrapper.findAll('input[spellcheck="false"]')
     await monoInputs[0]!.setValue('gpt-4o')
@@ -78,7 +80,7 @@ describe('ModelFormPage（FE-015）', () => {
     await windows[0]!.setValue('100')
     await windows[1]!.setValue('100')
     await flushPromises()
-    const saveButton = wrapper.findAll('button').find((button) => button.text() === '保存')!
+    const saveButton = wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '保存')!
     expect((saveButton.element as HTMLButtonElement).disabled).toBe(true)
     expect(wrapper.text()).toContain('需为正整数且小于上下文窗口')
   })
@@ -86,7 +88,8 @@ describe('ModelFormPage（FE-015）', () => {
   it('能力不完整时启用被阻止', async () => {
     stubFetch(providerRoutes)
     const { wrapper } = await mountForm()
-    await wrapper.find('select').setValue('prov-1')
+    const channelSelect = wrapper.findAllComponents(Select).find((c) => c.props('placeholder') === '请选择 渠道')!
+    await (channelSelect.vm as unknown as { $emit: (e: string, ...args: unknown[]) => void }).$emit('update:value', 'prov-1')
     await wrapper.find('input[maxlength="64"]').setValue('GPT-4o')
     expect(wrapper.text()).toContain('启用模型必须补齐 Tokenizer、上下文窗口和最大输出')
   })
@@ -97,7 +100,8 @@ describe('ModelFormPage（FE-015）', () => {
       [/\/admin\/upstream-models$/, (_url, method) => (method === 'POST' ? opOk() : jsonResponse(200, { data: { items: [], total: 0, page: 1, page_size: 20, sort: '', query_started_at: '', data_updated_at: '' } }))],
     ])
     const { wrapper } = await mountForm()
-    await wrapper.find('select').setValue('prov-1')
+    const channelSelect = wrapper.findAllComponents(Select).find((c) => c.props('placeholder') === '请选择 渠道')!
+    await (channelSelect.vm as unknown as { $emit: (e: string, ...args: unknown[]) => void }).$emit('update:value', 'prov-1')
     await wrapper.find('input[maxlength="64"]').setValue('GPT-4o')
     const mono = wrapper.findAll('input[spellcheck="false"]')
     await mono[0]!.setValue('gpt-4o')
@@ -108,7 +112,9 @@ describe('ModelFormPage（FE-015）', () => {
     const prices = wrapper.findAll('input[inputmode="decimal"]')
     await prices[0]!.setValue('2.50000000')
     await prices[1]!.setValue('0.00000000')
-    for (const select of wrapper.findAll('select[aria-label]')) await select.setValue('false')
+    for (const sel of wrapper.findAllComponents(Select).filter((c) => c.attributes('aria-label'))) {
+      await (sel.vm as unknown as { $emit: (e: string, ...args: unknown[]) => void }).$emit('update:value', 'false')
+    }
     await flushPromises()
     await wrapper.find('form').trigger('submit')
     await flushPromises()
@@ -172,13 +178,16 @@ describe('ModelImportPage（FE-016）', () => {
     stubFetch([...importRoutes, ...extraRoutes])
     const wrapper = mount(ModelImportPage)
     await flushPromises()
-    await wrapper.find('select').setValue('prov-1')
+    const channelSelect = wrapper.findAllComponents(Select).find((c) => c.props('placeholder') === '请选择 渠道')!
+    await (channelSelect.vm as unknown as { $emit: (e: string, ...args: unknown[]) => void }).$emit('update:value', 'prov-1')
     await flushPromises()
-    const selects = wrapper.findAll('select')
-    await selects[1]!.setValue('PROVIDER_API')
-    await selects[2]!.setValue('cred-1')
+    const srcSelect = wrapper.findAllComponents(Select).find((c) => JSON.stringify(c.props('options')).includes('PROVIDER_API'))!
+    await (srcSelect.vm as unknown as { $emit: (e: string, ...args: unknown[]) => void }).$emit('update:value', 'PROVIDER_API')
     await flushPromises()
-    await wrapper.findAll('button').find((button) => button.text() === '获取模型列表')!.trigger('click')
+    const credSelect = wrapper.findAllComponents(Select).find((c) => c.props('placeholder') === '请选择凭证')!
+    await (credSelect.vm as unknown as { $emit: (e: string, ...args: unknown[]) => void }).$emit('update:value', 'cred-1')
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '获取模型列表')!.trigger('click')
     await flushPromises()
     return wrapper
   }
@@ -220,7 +229,8 @@ describe('FE-213 未知能力与权限', () => {
   it('禁用草稿保留未知能力和空价格，不伪造支持或免费', async () => {
     const fetchMock = stubFetch([...providerRoutes, [/\/admin\/upstream-models$/, () => opOk()]])
     const { wrapper } = await mountForm()
-    await wrapper.find('select').setValue('prov-1')
+    const channelSelect = wrapper.findAllComponents(Select).find((c) => c.props('placeholder') === '请选择 渠道')!
+    await (channelSelect.vm as unknown as { $emit: (e: string, ...args: unknown[]) => void }).$emit('update:value', 'prov-1')
     await wrapper.find('input[maxlength="64"]').setValue('待配置模型')
     await wrapper.find('input[spellcheck="false"]').setValue('pending-model')
     await wrapper.find('input[type="checkbox"]').setValue(false)

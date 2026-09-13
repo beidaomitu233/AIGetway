@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Button, Card, Input, Select } from 'ant-design-vue'
 import { resourceHost } from '@/utils/resourceValidation'
 import { useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
@@ -103,23 +104,23 @@ function onToggleStatus(row: ProviderListItem): void {
       <h1 class="lai-page-title">
         渠道
       </h1>
-      <button
+      <Button
         v-if="canManage"
-        type="button"
-        class="lai-btn lai-btn-primary"
+        type="primary"
+        html-type="button"
         @click="router.push({ name: 'provider-new' })"
       >
         新建 渠道
-      </button>
+      </Button>
     </div>
 
-    <div class="lai-filter-bar">
-      <input
-        v-model="keywordInput"
-        class="lai-input lai-filter-keyword"
+    <Card :bordered="false" class="provider-filter-card">
+      <Input
+        v-model:value="keywordInput"
+        class="lai-filter-input"
         type="text"
         placeholder="名称或服务地址，输入 2—64 字符查询"
-      >
+      />
       <AppMultiSelect
         v-model="providerTypeFilter"
         :options="typeOptions"
@@ -131,39 +132,31 @@ function onToggleStatus(row: ProviderListItem): void {
         placeholder="健康状态"
         @update:model-value="list.applyFilters({ health: $event })"
       />
-      <select
-        class="lai-select"
-        :value="list.state.status as string"
+      <Select
+        class="lai-filter-select"
+        :value="(list.state.status as string) === '' ? undefined : (list.state.status as string)"
         aria-label="配置状态"
-        @change="list.applyFilters({ status: ($event.target as HTMLSelectElement).value })"
-      >
-        <option value="">
-          全部
-        </option>
-        <option value="ACTIVE">
-          启用
-        </option>
-        <option value="DISABLED">
-          停用
-        </option>
-      </select>
-      <select
-        class="lai-select"
-        :value="list.state.draft_changed as string"
+        :options="[
+          { value: 'ACTIVE', label: '启用' },
+          { value: 'DISABLED', label: '停用' },
+        ]"
+        placeholder="全部"
+        allow-clear
+        @change="(value) => list.applyFilters({ status: String(value ?? '') })"
+      />
+      <Select
+        class="lai-filter-select"
+        :value="(list.state.draft_changed as string) === '' ? undefined : (list.state.draft_changed as string)"
         aria-label="变更状态"
-        @change="list.applyFilters({ draft_changed: ($event.target as HTMLSelectElement).value })"
-      >
-        <option value="">
-          全部
-        </option>
-        <option value="true">
-          存在未发布变更
-        </option>
-        <option value="false">
-          已发布一致
-        </option>
-      </select>
-    </div>
+        :options="[
+          { value: 'true', label: '存在未发布变更' },
+          { value: 'false', label: '已发布一致' },
+        ]"
+        placeholder="全部"
+        allow-clear
+        @change="(value) => list.applyFilters({ draft_changed: String(value ?? '') })"
+      />
+    </Card>
 
     <p
       v-if="lifecycle.actionError"
@@ -184,6 +177,7 @@ function onToggleStatus(row: ProviderListItem): void {
       @retry="list.refresh()"
     />
     <template v-else>
+      <Card :bordered="false" class="provider-table-card">
       <DataTable
         :columns="columns"
         :rows="list.items.value"
@@ -251,45 +245,43 @@ function onToggleStatus(row: ProviderListItem): void {
           <span class="lai-row-actions">
             <RouterLink
               :to="{ name: 'provider-detail', params: { id: row.id } }"
-              class="lai-btn lai-btn-text"
+              class="lai-link"
             >
               查看
             </RouterLink>
-            <button
+            <Button
               v-if="canManage"
-              type="button"
-              class="lai-btn lai-btn-text"
+              type="link"
               @click="router.push({ name: 'provider-edit', params: { id: row.id } })"
             >
               编辑
-            </button>
-            <button
+            </Button>
+            <Button
               v-if="canCheck"
-              type="button"
-              class="lai-btn lai-btn-text"
+              type="link"
               @click="router.push({ name: 'provider-detail', params: { id: row.id }, query: { check: '1' } })"
             >
               检测
-            </button>
-            <button
+            </Button>
+            <Button
               v-if="canManage && !lifecycle.isBusy(row.id)"
-              type="button"
-              class="lai-btn lai-btn-text"
+              type="link"
               @click="onToggleStatus(row)"
             >
               {{ row.status === 'ACTIVE' ? '停用' : '启用' }}
-            </button>
-            <button
+            </Button>
+            <Button
               v-if="canManage"
-              type="button"
-              class="lai-btn lai-btn-text lai-row-danger"
+              type="link"
+              danger
               @click="lifecycle.requestDelete(row.id, row.version)"
             >
               删除
-            </button>
+            </Button>
           </span>
         </template>
       </DataTable>
+      </Card>
       <Pagination
         :page="list.page.value"
         :page-size="list.pageSize.value"
@@ -313,3 +305,10 @@ function onToggleStatus(row: ProviderListItem): void {
     />
   </section>
 </template>
+
+<style scoped>
+.provider-filter-card,
+.provider-table-card { margin-bottom: 16px; border: 1px solid var(--lai-border); box-shadow: 0 8px 24px rgba(37, 99, 235, .05); }
+.provider-filter-card :deep(.ant-card-body) { padding: 14px 16px; }
+.provider-table-card :deep(.ant-card-body) { padding: 0; }
+</style>

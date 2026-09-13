@@ -9,11 +9,49 @@
 3. 占用登记只改本表；完成/阻塞记录写 COMMUNICATION.md。若依赖仅影响部分任务，登记对应任务并继续无冲突项。
 4. 前端负责页面/API 消费和组件测试；后端负责 API/DTO/服务和接口测试；数据库负责版本迁移/索引。后端需要迁移时先协调 DB 包，不交叉改同一迁移。
 5. 功能开发在各自分支；验证、自检、勾选 Plan、提交并审查合入 dev 后释放占用。不会自动向其他任务派发消息。
+6. UI-R300 由 `codex-ui-plan-0913` 领取并执行；其余 UI-R301～UI-R343 按 `ANT_DESIGN_REBUILD_PLAN.md` 的依赖波次领取。
+7. UI-R301 由 `codex-ui-foundation-0913` 领取并执行，分支 `feature/frontend-ant-foundation-codex-ui-0913`；范围为 `light-ai-admin-ui` 的 Ant Design Vue 依赖、主题令牌、入口 ConfigProvider 与主题回归测试。
+8. UI-R302 由 `codex-ui-shell-0913` 领取并执行，分支 `feature/frontend-ant-shell-codex-ui-0913`；范围为 `light-ai-admin-ui/src/layout/AppLayout.vue` 与布局回归测试支持，保留权限过滤、路由跳转、运行模式、快照和待发布计数契约。
+9. UI-R303 由 `codex-ui-page-0913` 领取并执行，沿用当前工作分支；范围为 `src/ui/page/**`、`PageState.vue`、`VersionConflictBanner.vue` 与页面状态回归测试。
+10. UI-R304 由 `codex-ui-data-0913` 领取并执行，沿用当前工作分支；范围为 `DataTable.vue`、`Pagination.vue`、`ListPager.vue`、`AppMultiSelect.vue` 与 Ant Table 回归测试。
+11. UI-R305 由 `codex-ui-form-0913` 领取并执行，沿用当前工作分支；范围为表单字段、动态键值、确认弹窗、密钥输入和一次性 Token 控件。
+12. UI-R306 由 `codex-ui-metrics-0913` 领取并执行，沿用当前工作分支；范围为指标卡、趋势图空态和指标回归测试。
+13. UI-R307 由 `codex-ui-state-0913` 领取并执行，沿用当前工作分支；范围为 403/404 状态页及路由守卫回归验证。
+14. UI-R310 由 `codex-ui-app-list-0913` 领取并执行，沿用当前工作分支；范围为应用列表页面、展示映射和应用列表回归。
+15. UI-R311 由 `codex-ui-app-form-0913` 领取并执行，沿用当前工作分支；范围为应用创建/编辑页面的页面头、卡片布局和操作控件，保持候选、精度、409 契约。
+16. UI-R312 由 `codex-ui-app-workbench-0913` 领取并执行，沿用当前工作分支；范围为应用详情工作台头部、状态标签与操作区，保持页签 URL 和权限逻辑。
+17. UI-R313 由 `codex-ui-app-keys-0913` 领取并执行，沿用当前工作分支；范围为应用密钥面板卡片化、状态标签和签发入口，保持一次显示、轮换失效与权限契约。
+18. UI-R314 由 `codex-ui-app-governance-0913` 领取并执行，沿用当前工作分支；范围为应用额度摘要的卡片化、进度表达和治理状态反馈，保持额度计算与调整契约。
+19. UI-R315 由 `codex-ui-developer-integration-0913` 领取并执行，沿用当前工作分支；范围为开发接入连接信息、模型选择、示例、在线测试和错误说明卡片化，保持真实联调契约。
+20. UI-R320 由 `codex-ui-provider-list-0913` 领取并执行，沿用当前工作分支；范围为供应商渠道列表、新建与编辑表单卡片化，保持渠道权限、生命周期、校验、冲突和 URL 筛选契约。
+21. UI-R321 由 `codex-ui-provider-detail-0913` 领取并执行，沿用当前工作分支；范围为供应商渠道详情、Key 与检测区块重构，保持敏感字段裁剪和检测契约。
+22. UI-R322 由 `codex-ui-upstream-model-0913` 领取并执行，沿用当前工作分支；范围为上游模型目录筛选、导入入口与结果表格卡片化，保持同步、导入和权限契约。
+23. UI-R323 由 `codex-ui-virtual-route-0913` 领取并执行，沿用当前工作分支；范围为虚拟模型目录筛选、路由候选入口与结果表格卡片化，保持候选排序、启停和权限契约。
+24. UI-R324 由 `codex-ui-release-0913` 领取并执行，沿用当前工作分支；范围为草稿、发布、影响评估和回滚工作区的统一卡片视觉，保持发布校验与回滚契约。
+25. UI-R325 由 `codex-ui-reliability-0913` 领取并执行，沿用当前工作分支；范围为限流、可靠性和熔断页面的共享筛选/表格视觉，保持策略保存、人工摘除和恢复契约。
+26. UI-R330 由 `codex-ui-trace-0913` 领取并执行，沿用当前工作分支；范围为调用记录列表结果工作区卡片化，保持筛选、分页、Attempt 展开和导出权限契约。
+27. UI-R331 由 `codex-ui-usage-0913` 领取并执行，沿用当前工作分支；范围为用量、成本和额度流水结果表卡片化，保持金额精度、分页和调整契约。
+28. UI-R332 由 `codex-ui-overview-0913` 领取并执行，沿用当前工作分支；范围为运行总览明细结果区卡片化，保持指标、钻取和用量聚合契约。
+29. UI-R333 由 `codex-ui-admin-0913` 领取并执行，沿用当前工作分支；范围为访问凭证与审计列表结果工作区卡片化，保持敏感字段裁剪和权限契约。
+30. UI-R334 由 `codex-ui-developer-0913` 领取并执行，沿用当前工作分支；范围为全局开发接入连接信息、模型能力和错误说明结果区卡片化，保持在线测试权限和调用契约。
+31. UI-R340 由 `codex-ui-visual-0913` 领取并执行，沿用当前工作分支；范围为全局响应式、键盘焦点、减少动效和常见桌面宽度适配，保持页面交互契约。
+32. UI-R341 由 `codex-ui-contract-0913` 领取并执行，沿用当前工作分支；范围为跨页路由、权限、敏感字段、状态反馈和联调契约回归，保持既有接口行为。
+33. UI-R342 由 `codex-ui-cleanup-0913` 领取并执行，沿用当前工作分支；范围为共享状态组件清理和 Ant Tag 迁移，保持状态标签文本、占位和权限逻辑契约。
+34. UI-R343 由 `codex-ui-final-review-0913` 领取并执行，沿用当前工作分支；范围为最终集成审查、构建、全量回归和远程交付检查，按未完成的旧页面迁移项给出后续安排。
+35. UI-ANT-345～UI-ANT-348 为 UI-R343 后续清理批次，由 `codex-ui-cleanup-0913` 在 `feature/frontend-ant-shell-codex-ui-0913` 完成并记录；范围为应用表单受控绑定、治理列表、用量分组表和额度流水表，均已完成本地验证。2026-09-13 前端执行模型 zcode-ant-0913 接手完成本地复验并普通推送该分支至远程（回读 f996294），发起进入 `dev` 的评审 PR（[#3](https://github.com/beidaomitu233/AIGetway/pull/3)）；剩余事项为 PR 合并与真实后端复验。
+36. UI-ANT-349（渠道表单 Ant 控件迁移）由 `zcode-ant-0913` 于 2026-09-13 在同一分支完成（提交 `d30cc4f`），定向 14 项测试、typecheck、lint、全量 255 项测试、build 与浏览器实测通过；UI-ANT-350（概览/渠道列表/Trace/用量/额度流水/草稿/审计/访问凭证/运行参数共 9 页原生筛选与输入控件迁移）与 UI-ANT-CONTRACT-001（后端 AdapterMetadataSource 无实现导致 bootstrap 缺 adapters、渠道类型下拉为空）已登记 COMMUNICATION，待后续批次领取。
+37. UI-ANT-350 由 `zcode-ant-0913` 于 2026-09-13 领取并执行，沿用 `feature/frontend-ant-shell-codex-ui-0913` 分支；范围为上述 9 页的原生筛选/输入/按钮控件迁移为 Ant `Select/Input/Button` 及对应测试适配，保持 URL 筛选、分页、权限、空态和文案契约不变；UI-ANT-CONTRACT-001 由后端负责人另行处理，不在本批范围。已完成（提交 `52ffed5`）：九页原生控件清零，`AppMultiSelect` 内部重写为 Ant Select multiple；typecheck、lint、全量 33 文件/255 项测试、build 及 mock 浏览器 8 页实测全部通过；剩余长尾登记 UI-ANT-351（见 COMMUNICATION）。
+38. UI-ANT-351（剩余表单/详情/对话框原生控件迁移 + Ant 组件旧样式类清理，文件清单见 COMMUNICATION）与 UI-ANT-CONTRACT-001（后端 adapters 元数据）均待领取；建议按业务域分批执行。UI-ANT-351 由 `zcode-ant-0913` 于 2026-09-13 领取，沿用 `feature/frontend-ant-shell-codex-ui-0913` 分支，按业务域分子批交付：351-A 应用详情域（ApplicationDetailPage、ApplicationKeyPanel、ApplicationKeySecretDialog）→ 351-B 模型域（ModelFormPage、ModelImportPage、BatchCheckPanel）→ 351-C 治理域（LimitFormPage、ReliabilityFormPage、CircuitActionDialog、PoolFormPage/ListPage）→ 351-D 开发接入（ChatTestPanel、CodeSamplePanel、DeveloperAccessPage）→ 351-E 别名域（AliasFormPage、CandidateFormDialog）与 PublishPage → 351-F Ant 组件旧样式类清理；每子批独立提交并过全量门禁，契约（一次性密钥、64 位/decimal、version、权限）不变。351-A 已完成（`a8a6970` + `5da563f`）：应用详情域对话框/KeyPanel/SecretDialog 原生控件清零，应用域测试 63 项与全量 255 项、typecheck、lint、build 通过；真实后端回归发现并修复 quota PUT 缺失幂等键契约（UI-ANT-CONTRACT-002），密钥一次性契约与额度写入在 H2+Redis 真实链路复验通过。KeyPanel 原生表格与 ApplicationFormPage 旧样式类归入 351-F。
 
 ## 任务包
 
 | 任务包 | 编号 | 负责人/分支 | 修改范围 | 状态 | 依赖与入口 |
 |---|---|---|---|---|---|
+| UI-R30 | UI-R300～UI-R343 | 方案负责人 codex-ui-plan-0913 / docs/ant-design-admin-redesign-plan；UI-R301 codex-ui-foundation-0913 / feature/frontend-ant-foundation-codex-ui-0913；UI-R302 codex-ui-shell-0913 / feature/frontend-ant-shell-codex-ui-0913；UI-R303 codex-ui-page-0913；UI-R304 codex-ui-data-0913；UI-R305 codex-ui-form-0913；UI-R306 codex-ui-metrics-0913；UI-R307 codex-ui-state-0913；UI-R310 codex-ui-app-list-0913；UI-R311 codex-ui-app-form-0913；UI-R312 codex-ui-app-workbench-0913；UI-R313 codex-ui-app-keys-0913；UI-R314 codex-ui-app-governance-0913；UI-R315 codex-ui-developer-integration-0913；UI-R320 codex-ui-provider-list-0913；UI-R321 codex-ui-provider-detail-0913；UI-R322 codex-ui-upstream-model-0913；UI-R323 codex-ui-virtual-route-0913；UI-R324 codex-ui-release-0913；UI-R325 codex-ui-reliability-0913；UI-R330 codex-ui-trace-0913；UI-R331 codex-ui-usage-0913；UI-R332 codex-ui-overview-0913；UI-R333 codex-ui-admin-0913；UI-R334 codex-ui-developer-0913；UI-R340 codex-ui-visual-0913；UI-R341 codex-ui-contract-0913；UI-R342 codex-ui-cleanup-0913；UI-R343 codex-ui-final-review-0913 | ANT_DESIGN_REBUILD_PLAN.md、FRONTEND_PLAN.md、COMMUNICATION.md、TASK_STATUS.md、REVIEW_REPORT.md；UI-R301～R307 基础层、UI-R310 应用列表、UI-R311 应用表单、UI-R312 应用详情工作台、UI-R313 应用密钥面板、UI-R314 应用额度治理摘要、UI-R315 开发接入工作台、UI-R320 供应商渠道列表与表单、UI-R321 供应商渠道详情与检测、UI-R322 上游模型目录、UI-R323 虚拟模型与路由目录、UI-R324 发布工作区、UI-R325 可靠性/限流/熔断、UI-R330 调用记录工作区、UI-R331 用量成本工作区、UI-R332 运行总览、UI-R333 系统管理列表、UI-R334 全局开发接入、UI-R340 响应式与可访问性、UI-R341 跨页契约回归、UI-R342 共享状态组件清理、UI-R343 最终集成审查 | 待合并 | UI-R301～UI-R343 已完成本地验证并提交；浏览器 mock 检查 41 条主要管理路由、总览和渠道主路径、折叠导航及 768px 布局通过；`rg` 未发现页面中的原生 `.lai-card` 容器；上游模型与虚拟模型列表已迁移为 Ant Table；`npm run lint -- --quiet`、`npm run typecheck`、全量回归 33 个测试文件/255 项、`npm run build` 均通过。2026-09-13 前端执行模型 zcode-ant-0913 接手复验（typecheck、lint、255 项测试、build 再次通过，另记录一次高负载下的偶发测试超时重跑通过），并以普通推送将分支交付远程（`git ls-remote` 回读 `refs/heads/feature/frontend-ant-shell-codex-ui-0913=f996294`），评审 PR #3（https://github.com/beidaomitu233/AIGetway/pull/3）已发起进入 `dev`；PR 合并与真实后端复验通过前保持占用不解除。 |
+| UI-ANT-345 | UI-ANT-345-001 | 代码审查与修复模型/codex-ui-cleanup-0913 / feature/frontend-ant-shell-codex-ui-0913 | ApplicationFormPage Ant 控件受控绑定与表单回归 | 已完成（本地） | 依赖 UI-R301～UI-R305；后续同事负责远程交付与真实后端视觉复验 |
+| UI-ANT-346 | UI-ANT-346-001 | 代码审查与修复模型/codex-ui-cleanup-0913 / feature/frontend-ant-shell-codex-ui-0913 | limits/reliabilities/circuits Ant Table 列表迁移 | 已完成（本地） | 依赖 UI-R304；后续同事负责远程交付与真实后端视觉复验 |
+| UI-ANT-347 | UI-ANT-347-001 | 代码审查与修复模型/codex-ui-cleanup-0913 / feature/frontend-ant-shell-codex-ui-0913 | Usage 分组明细 Ant Table 迁移 | 已完成（本地） | 依赖 UI-R304/UI-R306；后续同事负责远程交付与真实后端视觉复验 |
+| UI-ANT-348 | UI-ANT-348-001 | 代码审查与修复模型/codex-ui-cleanup-0913 / feature/frontend-ant-shell-codex-ui-0913 | 额度流水 Ant Table 迁移与中文空态 | 已完成（本地） | 依赖 UI-R304；后续同事负责远程交付与真实后端视觉复验 |
 | FE-P20 | FE-201～FE-205 | 前端执行模型 codex-0912 / feature/frontend-p20-codex-0912 | 应用页面/API/测试；FRONTEND_PLAN.md、COMMUNICATION.md；暂停后续写入 | 阻塞 | 2026-09-12：418218d、ef8a972 前端子项及 56347c7 文档已合入远程 dev（5b0b55d）；typecheck/build 通过，199 测试通过，lint 0 error/81 历史 warning。FE-P20-001～004/BE-P20-001～005 待契约与真实联调；五项未勾选，保留负责人，未解除占用 |
 | FE-P21 | FE-211～FE-215 | 前端执行模型 codex-0912 / feature/frontend-p21-codex-0912 | light-ai-admin-ui 渠道、上游模型、虚拟模型与路由及相关 API/组件/导航/测试；FRONTEND_PLAN.md、COMMUNICATION.md | 阻塞 | 2026-09-12：def540e/b27689d/fd9014a 已完成契约接入与前端回归，226 项通过；等待 BE-P21-001～006 和真实联调，五项未勾选；8e96984 已合入远程 dev 并普通推送成功，保留负责人、未解除占用 |
 | FE-P22 | FE-221～FE-225 | 前端执行模型 zcode-0912 / feature/frontend-p22-zcode-0912 | light-ai-admin-ui 调用记录、用量成本、配置发布、开发接入与总览页面及其 API、相关组件、测试；FRONTEND_PLAN.md、COMMUNICATION.md | 阻塞 | 2026-09-12：fc0e955 实现与 eaa32e3 文档已随 eb2843a 合入远程 dev；过渡端点加固完成，28 文件 244 测试、typecheck/lint/build 通过；V2 路径/字段差异登记 COMMUNICATION FE-P22-001～005；五项未勾选，保留负责人，未解除占用，待 BE-P22/P23 契约与真实联调 |
@@ -32,3 +70,5 @@
 | RV-P21 | RV-211～RV-216 | 未领取 | 验收记录；无产品代码占用 | 待依赖 | 待相应 FE/BE/DB 交付；先准备验收场景 |
 | RV-P22 | RV-221～RV-226 | 未领取 | 验收记录；无产品代码占用 | 待依赖 | 待相应 FE/BE/DB 交付；先准备验收场景 |
 | RV-P23 | RV-231～RV-236 | 未领取 | 验收记录；无产品代码占用 | 待依赖 | 待相应 FE/BE/DB 交付；先准备验收场景 |
+
+

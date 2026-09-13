@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from 'vue'
+import { Button } from 'ant-design-vue'
 
 defineOptions({ inheritAttrs: false })
 
@@ -45,12 +46,12 @@ onUnmounted(() => {
       spellcheck="false"
       @input="onInput"
     >
-    <button
-      type="button"
+    <Button
+      html-type="button"
       class="lai-btn lai-btn-text"
       @click="visible = !visible"
     >
       {{ visible ? '隐藏' : '显示' }}
-    </button>
+    </Button>
   </div>
 </template>

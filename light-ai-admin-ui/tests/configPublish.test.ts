@@ -170,7 +170,7 @@ describe('DraftsPage（FE-037/038）', () => {
     expect(text).toContain('模型别名（1）')
     expect(text).toContain('Gemini 测试')
     // 展开停用项后可见关联对象
-    const diffButtons = wrapper.findAll('button').filter((button) => button.text() === '查看差异')
+    const diffButtons = wrapper.findAll('button').filter((button) => button.text().replace(/\s/g, '') === '查看差异')
     await diffButtons[2]!.trigger('click')
     expect(wrapper.text()).toContain('候选 5')
   })
@@ -179,7 +179,7 @@ describe('DraftsPage（FE-037/038）', () => {
     stub = installJsonFetchStub(handler())
     const { wrapper } = await mountPage('/ui/config/drafts', 'SYSTEM_ADMIN')
     // 展开第二项（UPDATE，含敏感字段）
-    const allDiffButtons = wrapper.findAll('button').filter((button) => button.text() === '查看差异')
+    const allDiffButtons = wrapper.findAll('button').filter((button) => button.text().replace(/\s/g, '') === '查看差异')
     await allDiffButtons[1]!.trigger('click')
     const text = wrapper.text()
     expect(text).toContain('敏感字段已变更')
@@ -193,7 +193,7 @@ describe('DraftsPage（FE-037/038）', () => {
     const text = wrapper.text()
     expect(text).toContain('不可撤销：route_candidate:cand-5')
     const item = wrapper.findAll('.lai-draft-item').at(-1)!
-    const revertButton = item.findAll('button').find((button) => button.text() === '撤销')
+    const revertButton = item.findAll('button').find((button) => button.text().replace(/\s/g, '') === '撤销')
     expect(revertButton!.attributes('disabled')).toBeDefined()
   })
 
@@ -212,10 +212,10 @@ describe('DraftsPage（FE-037/038）', () => {
     })
     const { wrapper } = await mountPage('/ui/config/drafts', 'SYSTEM_ADMIN')
     const firstItem = wrapper.findAll('.lai-draft-item')[0]!
-    await firstItem.findAll('button').find((button) => button.text() === '撤销')!.trigger('click')
+    await firstItem.findAll('button').find((button) => button.text().replace(/\s/g, '') === '撤销')!.trigger('click')
     expect(wrapper.find('.lai-dialog').exists()).toBe(true)
     await wrapper.find('#lai-dialog-reason').setValue('误操作')
-    const confirmButton = wrapper.findAll('button').find((button) => button.text() === '确认')
+    const confirmButton = wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '确认')
     await confirmButton!.trigger('click')
     await flushPromises()
     await flushPromises()
@@ -226,13 +226,13 @@ describe('DraftsPage（FE-037/038）', () => {
   it('全部撤销要求固定确认文本 REVERT ALL', async () => {
     stub = installJsonFetchStub(handler())
     const { wrapper } = await mountPage('/ui/config/drafts', 'SYSTEM_ADMIN')
-    await wrapper.findAll('button').find((button) => button.text() === '全部撤销')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '全部撤销')!.trigger('click')
     const buttons = wrapper.findAll('button')
-    const confirmButton = buttons.filter((button) => button.text() === '确认').at(-1)!
+    const confirmButton = buttons.filter((button) => button.text().replace(/\s/g, '') === '确认').at(-1)!
     expect((confirmButton.element as HTMLButtonElement).disabled).toBe(true)
     await wrapper.find('#lai-dialog-confirm-text').setValue('REVERT ALL')
     await wrapper.find('#lai-dialog-reason').setValue('整批重来')
-    const confirmButton2 = wrapper.findAll('button').filter((button) => button.text() === '确认').at(-1)!
+    const confirmButton2 = wrapper.findAll('button').filter((button) => button.text().replace(/\s/g, '') === '确认').at(-1)!
     expect((confirmButton2.element as HTMLButtonElement).disabled).toBe(false)
   })
 
@@ -241,15 +241,15 @@ describe('DraftsPage（FE-037/038）', () => {
     const { wrapper } = await mountPage('/ui/config/drafts', 'SYSTEM_ADMIN')
     const text = wrapper.text()
     expect(text).toContain('发布进行中')
-    expect(wrapper.findAll('button').some((button) => button.text() === '全部撤销')).toBe(false)
-    expect(wrapper.findAll('button').some((button) => button.text() === '校验并发布')).toBe(false)
+    expect(wrapper.findAll('button').some((button) => button.text().replace(/\s/g, '') === '全部撤销')).toBe(false)
+    expect(wrapper.findAll('button').some((button) => button.text().replace(/\s/g, '') === '校验并发布')).toBe(false)
   })
 
   it('只读角色不显示撤销与发布操作', async () => {
     stub = installJsonFetchStub(handler())
     const { wrapper } = await mountPage('/ui/config/drafts', 'VIEWER')
-    expect(wrapper.findAll('button').some((button) => button.text() === '全部撤销')).toBe(false)
-    expect(wrapper.findAll('button').filter((button) => button.text() === '撤销').length).toBe(0)
+    expect(wrapper.findAll('button').some((button) => button.text().replace(/\s/g, '') === '全部撤销')).toBe(false)
+    expect(wrapper.findAll('button').filter((button) => button.text().replace(/\s/g, '') === '撤销').length).toBe(0)
   })
 })
 
@@ -389,28 +389,28 @@ describe('PublishPage（FE-039~041）', () => {
   it('ERROR 校验问题阻止进入确认步骤', async () => {
     stub = installJsonFetchStub(handler({ validation: 'failed' }))
     const { wrapper } = await mountPage('/ui/config/publish', 'SYSTEM_ADMIN')
-    await wrapper.findAll('button').find((button) => button.text() === '开始校验')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '开始校验')!.trigger('click')
     await flushPromises()
     const text = wrapper.text()
     expect(text).toContain('ALIAS_NO_AVAILABLE_CANDIDATE')
     expect(text).toContain('ERROR')
-    expect(wrapper.findAll('button').some((button) => button.text() === '提交发布')).toBe(false)
+    expect(wrapper.findAll('button').some((button) => button.text().replace(/\s/g, '') === '提交发布')).toBe(false)
   })
 
   it('完整流程：校验通过 → 勾选警告 → 提交发布 → 进度展示', async () => {
     stub = installJsonFetchStub(handler())
     const { wrapper } = await mountPage('/ui/config/publish', 'SYSTEM_ADMIN')
-    await wrapper.findAll('button').find((button) => button.text() === '开始校验')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '开始校验')!.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('第 2 步')
     // 未勾选警告时提交禁用
-    const submit = wrapper.findAll('button').find((button) => button.text() === '提交发布')!
+    const submit = wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '提交发布')!
     expect((submit.element as HTMLButtonElement).disabled).toBe(true)
     // 勾选警告
     await wrapper.find('input[type="checkbox"]').setValue(true)
     expect((submit.element as HTMLButtonElement).disabled).toBe(true)
     // 填写发布说明后可提交
-    await wrapper.find('#publish-note').setValue('首次发布')
+await wrapper.find('#publish-note').setValue('首次发布')
     expect((submit.element as HTMLButtonElement).disabled).toBe(false)
     await submit.trigger('click')
     await flushPromises()
@@ -423,7 +423,7 @@ describe('PublishPage（FE-039~041）', () => {
   it('校验过期提示重新校验', async () => {
     stub = installJsonFetchStub(handler({ validation: 'expired' }))
     const { wrapper } = await mountPage('/ui/config/publish', 'SYSTEM_ADMIN')
-    await wrapper.findAll('button').find((button) => button.text() === '开始校验')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '开始校验')!.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('校验已过期')
   })
@@ -482,11 +482,11 @@ describe('PublishPage（FE-039~041）', () => {
       return baseHandler({ url, method, body })
     })
     const { wrapper } = await mountPage('/ui/config/publish', 'SYSTEM_ADMIN')
-    await wrapper.findAll('button').find((button) => button.text() === '开始校验')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '开始校验')!.trigger('click')
     await flushPromises()
     await wrapper.find('input[type="checkbox"]').setValue(true)
     await wrapper.find('#publish-note').setValue('首次发布')
-    await wrapper.findAll('button').find((button) => button.text() === '提交发布')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '提交发布')!.trigger('click')
     await flushPromises()
     await flushPromises()
     expect(wrapper.text()).toContain('第 3 步')
@@ -508,7 +508,7 @@ describe('PublishPage（FE-039~041）', () => {
   it('只读角色不显示校验按钮', async () => {
     stub = installJsonFetchStub(handler())
     const { wrapper } = await mountPage('/ui/config/publish', 'VIEWER')
-    expect(wrapper.findAll('button').some((button) => button.text() === '开始校验')).toBe(false)
+    expect(wrapper.findAll('button').some((button) => button.text().replace(/\s/g, '') === '开始校验')).toBe(false)
     expect(wrapper.text()).toContain('发布历史')
   })
 })

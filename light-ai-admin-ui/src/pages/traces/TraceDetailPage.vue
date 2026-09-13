@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { Card } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import StatusText from '@/components/StatusText.vue'
@@ -246,7 +247,7 @@ const sampleSectionVisible = computed(
       >
         刷新失败，以下为上次数据：{{ refreshError }}
       </p>
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           Trace 摘要
         </h2>
@@ -298,9 +299,9 @@ const sampleSectionVisible = computed(
             <span class="lai-summary-label">首 Token</span>{{ formatDuration(detail.trace.first_token_ms) }}
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           请求摘要
         </h2>
@@ -367,9 +368,9 @@ const sampleSectionVisible = computed(
             样本加载中…
           </p>
         </template>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           统一时间线
         </h2>
@@ -400,9 +401,9 @@ const sampleSectionVisible = computed(
             </button>
           </li>
         </ul>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           Attempt 明细
         </h2>
@@ -445,9 +446,9 @@ const sampleSectionVisible = computed(
             </tr>
           </tbody>
         </table>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           Usage 与 Cost
         </h2>
@@ -478,7 +479,7 @@ const sampleSectionVisible = computed(
         >
           运行总消耗大于响应用量：前序失败 Attempt 已计入总消耗（见上方 Attempt 明细）。
         </p>
-      </div>
+      </Card>
 
       <div
         v-if="detail.trace.status !== 'SUCCEEDED'"
@@ -501,7 +502,7 @@ const sampleSectionVisible = computed(
         </div>
       </div>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           保留信息
         </h2>
@@ -513,7 +514,7 @@ const sampleSectionVisible = computed(
             <span class="lai-summary-label">诊断样本状态</span>{{ detail.request_summary.content_sample_status }}
           </div>
         </div>
-      </div>
+      </Card>
     </template>
 
     <Teleport to="body">

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
+import { Button, Card, Checkbox, CheckboxGroup, Input, Select } from 'ant-design-vue'
 import { onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { Permission } from '@/app/permissions'
 import { ApiError, isAbortError } from '@/api/errors'
 import { positiveAmount, positiveInteger, validPeriod, applicationEnvironmentLabels } from './applicationValues'
 import FormField from '@/components/FormField.vue'
 import PageState from '@/components/PageState.vue'
+import PageHeader from '@/ui/page/PageHeader.vue'
 import { useDirtyGuard } from '@/composables/useDirtyGuard'
 import { useFormSubmit } from '@/composables/useFormSubmit'
 import { useBootstrapStore } from '@/stores/bootstrap'
@@ -62,6 +64,14 @@ const form = reactive({
   period_end: '',
   virtual_model_ids: [] as string[],
 })
+
+function setTokenLimit(value: number | string | null): void { form.token_limit = value == null || value === '' ? null : Number(value) }
+function setRpm(value: number | string | null): void { form.rpm = value == null || value === '' ? null : Number(value) }
+function setTpm(value: number | string | null): void { form.tpm = value == null || value === '' ? null : Number(value) }
+function setText(field: 'name' | 'code' | 'department' | 'owner_id' | 'owner_name' | 'description' | 'amount_limit' | 'currency' | 'period_start' | 'period_end', value: string): void {
+  form[field] = value
+  onInput()
+}
 
 const { submitting, fieldMessages, conflictError, errorText, submit, reset } = useFormSubmit()
 const CODE_PATTERN = /^[a-z](?:[a-z0-9-]{0,62}[a-z0-9])?$/
@@ -221,14 +231,10 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
 
 <template>
   <section class="lai-page application-form-page">
-    <div class="form-heading">
-      <div>
-        <h1 class="lai-page-title">
-          {{ isEdit ? '编辑应用' : '新建应用' }}
-        </h1>
-        <p>一个应用对应一个企业系统接入点，独立管理凭证、模型权限、额度和速率。</p>
-      </div>
-    </div>
+    <PageHeader
+      :title="isEdit ? '编辑应用' : '新建应用'"
+      description="一个应用对应一个企业系统接入点，独立管理凭证、模型权限、额度和速率。"
+    />
 
     <PageState
       v-if="loading"
@@ -241,12 +247,12 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
       @retry="load"
     />
 
-    <form
-      v-else
-      @submit.prevent="onSubmit"
-      @input="onInput"
-      @change="onInput"
-    >
+    <Card v-else :bordered="false" class="application-form-surface">
+      <form
+        @submit.prevent="onSubmit"
+        @input="onInput"
+        @change="onInput"
+      >
       <p
         v-if="!editable"
         role="alert"
@@ -257,7 +263,7 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
         :disabled="submitting || reviewing || !editable"
         class="application-fields"
       >
-        <div class="lai-card form-section">
+        <Card :bordered="false" class="lai-card form-section">
           <h2 class="lai-card-title">
             基本信息
           </h2>
@@ -267,13 +273,13 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
               required
               :error="form.name.trim().length < 2 ? '至少输入 2 个字符' : fieldMessages.name"
             >
-              <input
-                v-model="form.name"
+              <Input
+                :value="form.name"
                 name="name"
-                class="lai-input"
-                maxlength="128"
+                :maxlength="128"
                 placeholder="例如：智能客服生产环境"
-              >
+                @update:value="(value: string) => setText('name', value)"
+              />
             </FormField>
             <FormField
               label="应用编码"
@@ -281,85 +287,79 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
               :hint="isEdit ? '创建后不可修改' : '用于调用归属与应用范围标识，创建后不可修改'"
               :error="codeError || fieldMessages.code"
             >
-              <input
-                v-model="form.code"
+              <Input
+                :value="form.code"
                 name="code"
-                class="lai-input lai-mono"
-                maxlength="64"
+                :maxlength="64"
                 placeholder="customer-service-prod"
                 :disabled="isEdit"
-              >
+                @update:value="(value: string) => setText('code', value)"
+              />
             </FormField>
             <FormField
               label="所属部门"
               :error="fieldMessages.department"
             >
-              <input
-                v-model="form.department"
+              <Input
+                :value="form.department"
                 name="department"
-                class="lai-input"
-                maxlength="128"
+                :maxlength="128"
                 placeholder="例如：客户成功部"
-              >
+                @update:value="(value: string) => setText('department', value)"
+              />
             </FormField>
             <FormField
               label="运行环境"
               required
               :error="fieldMessages.environment"
             >
-              <select
-                v-model="form.environment"
-                name="environment"
-                class="lai-select full-control"
-              >
-                <option value="DEV">
-                  开发
-                </option><option value="TEST">
-                  测试
-                </option>
-                <option value="STAGING">
-                  预发布
-                </option><option value="PROD">
-                  生产
-                </option>
-              </select>
+              <Select
+                v-model:value="form.environment"
+                class="full-control"
+                :options="[
+                  { value: 'DEV', label: '开发' },
+                  { value: 'TEST', label: '测试' },
+                  { value: 'STAGING', label: '预发布' },
+                  { value: 'PROD', label: '生产' },
+                ]"
+              />
             </FormField>
             <FormField
               label="负责人账号"
               required
               :error="fieldMessages.owner_id"
             >
-              <input
-                v-model="form.owner_id"
+              <Input
+                :value="form.owner_id"
                 name="owner_id"
-                class="lai-input"
-                maxlength="128"
-              >
+                :maxlength="128"
+                @update:value="(value: string) => setText('owner_id', value)"
+              />
             </FormField>
             <FormField
               label="负责人名称"
               required
               :error="fieldMessages.owner_name"
             >
-              <input
-                v-model="form.owner_name"
+              <Input
+                :value="form.owner_name"
                 name="owner_name"
-                class="lai-input"
-                maxlength="128"
-              >
+                :maxlength="128"
+                @update:value="(value: string) => setText('owner_name', value)"
+              />
             </FormField>
             <FormField
               class="wide-field"
               label="应用说明"
               :error="fieldMessages.description"
             >
-              <textarea
-                v-model="form.description"
+              <Input.TextArea
+                :value="form.description"
                 name="description"
-                class="lai-input lai-textarea"
-                rows="3"
-                maxlength="1000"
+                :rows="3"
+                :maxlength="1000"
                 placeholder="说明接入系统、业务场景和维护边界"
+                @update:value="(value: string) => setText('description', value)"
               />
             </FormField>
             <FormField
@@ -367,23 +367,21 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
               label="初始状态"
               required
             >
-              <select
-                v-model="form.status"
-                name="status"
-                class="lai-select full-control"
-              >
-                <option value="ACTIVE">
-                  启用
-                </option><option value="DISABLED">
-                  停用
-                </option>
-              </select>
+              <Select
+                v-model:value="form.status"
+                class="full-control"
+                :options="[
+                  { value: 'ACTIVE', label: '启用' },
+                  { value: 'DISABLED', label: '停用' },
+                ]"
+              />
             </FormField>
           </div>
-        </div>
+        </Card>
 
-        <div
+        <Card
           v-if="!isEdit"
+          :bordered="false"
           class="lai-card form-section"
         >
           <h2 class="lai-card-title">
@@ -398,17 +396,23 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
               :error="fieldMessages.token_limit"
             >
               <div class="limit-control">
-                <label><input
+                <input
                   v-model="form.token_limited"
                   type="checkbox"
-                > 限制</label><input
-                  v-model.number="form.token_limit"
-                  name="token_limit"
-                  class="lai-input"
-                  type="number"
-                  min="1"
-                  :disabled="!form.token_limited"
+                  class="lai-visually-hidden"
+                  aria-hidden="true"
+                  tabindex="-1"
+                  @change="onInput"
                 >
+                <Checkbox v-model:checked="form.token_limited" @change="onInput">限制</Checkbox>
+                <Input
+                  :value="form.token_limit == null ? '' : String(form.token_limit)"
+                  type="number"
+                  name="token_limit"
+                  :min="1"
+                  :disabled="!form.token_limited"
+                  @update:value="(value: string) => { setTokenLimit(value); onInput() }"
+                />
               </div>
             </FormField>
             <FormField
@@ -416,22 +420,29 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
               :error="fieldMessages.amount_limit"
             >
               <div class="amount-control">
-                <label><input
+                <input
                   v-model="form.amount_limited"
                   type="checkbox"
-                > 限制</label><input
-                  v-model="form.amount_limit"
+                  class="lai-visually-hidden"
+                  aria-hidden="true"
+                  tabindex="-1"
+                  @change="onInput"
+                >
+                <Checkbox v-model:checked="form.amount_limited" @change="onInput">限制</Checkbox>
+                <Input
+                  :value="form.amount_limit"
                   name="amount_limit"
-                  class="lai-input"
                   inputmode="decimal"
                   :disabled="!form.amount_limited"
-                ><input
-                  v-model="form.currency"
+                  @update:value="(value: string) => setText('amount_limit', value)"
+                />
+                <Input
+                  :value="form.currency"
                   name="currency"
-                  class="lai-input currency"
-                  maxlength="3"
+                  :maxlength="3"
                   aria-label="币种"
-                >
+                  @update:value="(value: string) => setText('currency', value)"
+                />
               </div>
             </FormField>
             <FormField
@@ -440,17 +451,23 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
               :error="fieldMessages.rpm"
             >
               <div class="limit-control">
-                <label><input
+                <input
                   v-model="form.rpm_limited"
                   type="checkbox"
-                > 限制</label><input
-                  v-model.number="form.rpm"
-                  name="rpm"
-                  class="lai-input"
-                  type="number"
-                  min="1"
-                  :disabled="!form.rpm_limited"
+                  class="lai-visually-hidden"
+                  aria-hidden="true"
+                  tabindex="-1"
+                  @change="onInput"
                 >
+                <Checkbox v-model:checked="form.rpm_limited" @change="onInput">限制</Checkbox>
+                <Input
+                  :value="form.rpm == null ? '' : String(form.rpm)"
+                  type="number"
+                  name="rpm"
+                  :min="1"
+                  :disabled="!form.rpm_limited"
+                  @update:value="(value: string) => { setRpm(value); onInput() }"
+                />
               </div>
             </FormField>
             <FormField
@@ -459,17 +476,23 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
               :error="fieldMessages.tpm"
             >
               <div class="limit-control">
-                <label><input
+                <input
                   v-model="form.tpm_limited"
                   type="checkbox"
-                > 限制</label><input
-                  v-model.number="form.tpm"
-                  name="tpm"
-                  class="lai-input"
-                  type="number"
-                  min="1"
-                  :disabled="!form.tpm_limited"
+                  class="lai-visually-hidden"
+                  aria-hidden="true"
+                  tabindex="-1"
+                  @change="onInput"
                 >
+                <Checkbox v-model:checked="form.tpm_limited" @change="onInput">限制</Checkbox>
+                <Input
+                  :value="form.tpm == null ? '' : String(form.tpm)"
+                  type="number"
+                  name="tpm"
+                  :min="1"
+                  :disabled="!form.tpm_limited"
+                  @update:value="(value: string) => { setTpm(value); onInput() }"
+                />
               </div>
             </FormField>
             <FormField
@@ -477,21 +500,16 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
               required
               :error="fieldMessages.period_type"
             >
-              <select
-                v-model="form.period_type"
-                class="lai-select full-control"
-              >
-                <option value="LIFECYCLE">
-                  应用生命周期
-                </option><option value="DAY">
-                  每日
-                </option>
-                <option value="MONTH">
-                  每月
-                </option><option value="CUSTOM">
-                  自定义
-                </option>
-              </select>
+              <Select
+                v-model:value="form.period_type"
+                class="full-control"
+                :options="[
+                  { value: 'LIFECYCLE', label: '应用生命周期' },
+                  { value: 'DAY', label: '每日' },
+                  { value: 'MONTH', label: '每月' },
+                  { value: 'CUSTOM', label: '自定义' },
+                ]"
+              />
             </FormField>
             <div
               v-if="form.period_type === 'CUSTOM'"
@@ -501,29 +519,30 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
                 label="开始时间"
                 required
               >
-                <input
-                  v-model="form.period_start"
-                  class="lai-input"
+                <Input
+                  :value="form.period_start"
                   type="datetime-local"
-                >
+                  @update:value="(value: string) => setText('period_start', value)"
+                />
               </FormField>
               <FormField
                 label="结束时间"
                 required
                 :error="customPeriodInvalid ? '结束时间必须晚于开始时间' : fieldMessages.period_end"
               >
-                <input
-                  v-model="form.period_end"
-                  class="lai-input"
+                <Input
+                  :value="form.period_end"
                   type="datetime-local"
-                >
+                  @update:value="(value: string) => setText('period_end', value)"
+                />
               </FormField>
             </div>
           </div>
-        </div>
+        </Card>
 
-        <div
+        <Card
           v-if="!isEdit"
+          :bordered="false"
           class="lai-card form-section"
         >
           <h2 class="lai-card-title">
@@ -532,30 +551,27 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
           <p class="section-help">
             应用只能调用已授权模型；模型后续可在应用详情中单独管理。
           </p>
-          <div
+          <CheckboxGroup
             v-if="aliases.length"
+            v-model:value="form.virtual_model_ids"
             class="model-options"
           >
-            <label
+            <Checkbox
               v-for="alias in aliases"
               :key="alias.id"
+              :value="alias.id"
               class="model-option"
             >
-              <input
-                v-model="form.virtual_model_ids"
-                type="checkbox"
-                :value="alias.id"
-              >
               <span><strong>{{ alias.display_name }}</strong><small>{{ alias.alias }}</small></span>
-            </label>
-          </div>
+            </Checkbox>
+          </CheckboxGroup>
           <p
             v-else
             class="empty-inline"
           >
             当前没有已启用的虚拟模型，可先创建应用，配置模型后再授权。
           </p>
-        </div>
+        </Card>
       </fieldset>
       <p
         v-if="unlimited"
@@ -574,14 +590,14 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
         <p v-if="!isEdit">
           Token：{{ form.token_limited ? form.token_limit : '不限' }}；金额：{{ form.amount_limited ? form.amount_limit : '不限' }} {{ form.currency }}；RPM：{{ form.rpm_limited ? form.rpm : '不限' }}；TPM：{{ form.tpm_limited ? form.tpm : '不限' }}；模型：{{ form.virtual_model_ids.length }} 个
         </p>
-        <button
-          type="button"
+        <Button
+          html-type="button"
           class="lai-btn"
           :disabled="submitting"
           @click="reviewing = false"
         >
           返回修改
-        </button>
+        </Button>
       </div>
       <p
         v-if="conflictError"
@@ -594,14 +610,14 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
         v-if="conflictError && isEdit"
         class="lai-card"
       >
-        <button
-          type="button"
+        <Button
+          html-type="button"
           class="lai-btn"
           :disabled="latestLoading"
           @click="compareLatest"
         >
           读取最新版本并对比
-        </button>
+        </Button>
         <PageState
           v-if="latestError"
           status="error"
@@ -626,13 +642,13 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
               </tr>
             </tbody>
           </table>
-          <button
-            type="button"
+          <Button
+            html-type="button"
             class="lai-btn"
             @click="acceptVersion"
           >
             已核对，保留输入并使用最新版本
-          </button>
+          </Button>
         </div>
       </div>
       <p
@@ -643,24 +659,25 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
         {{ errorText }}
       </p>
       <div class="form-actions">
-        <button
-          type="button"
+        <Button
+          html-type="button"
           class="lai-btn"
           :disabled="submitting"
           @click="router.back()"
         >
           取消
-        </button>
-        <button
-          type="submit"
+        </Button>
+        <Button
+          html-type="submit"
           data-test="save-application"
           class="lai-btn lai-btn-primary"
           :disabled="submitting || formInvalid || conflictError !== null"
         >
           {{ submitting ? '保存中…' : reviewing ? '确认保存' : '检查并保存' }}
-        </button>
+        </Button>
       </div>
-    </form>
+      </form>
+    </Card>
   </section>
 </template>
 
@@ -668,8 +685,7 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
 .application-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
 .application-form-page { max-width: 1040px; }
 .form-heading p, .section-help { color: #667085; font-size: 14px; }
-.form-heading { margin-bottom: 20px; }
-.form-heading .lai-page-title { margin-bottom: 6px; }
+.application-form-surface { border: 1px solid var(--lai-color-border); border-radius: var(--lai-radius-card); box-shadow: var(--lai-shadow-card); }
 .form-section { margin-bottom: 16px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; }
 .wide-field { grid-column: 1 / -1; }

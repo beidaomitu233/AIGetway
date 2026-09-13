@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { Card } from 'ant-design-vue'
 import { useRoute } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import StatusText from '@/components/StatusText.vue'
@@ -99,7 +100,7 @@ onMounted(load)
       @retry="load"
     />
     <template v-else-if="record">
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           发布信息
         </h2>
@@ -135,9 +136,9 @@ onMounted(load)
             <span class="lai-mono">{{ record.content_checksum }}</span>
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           实例结果
         </h2>
@@ -201,7 +202,7 @@ onMounted(load)
         >
           当前角色不展示在线实例清单。
         </p>
-      </div>
+      </Card>
     </template>
   </section>
 </template>
