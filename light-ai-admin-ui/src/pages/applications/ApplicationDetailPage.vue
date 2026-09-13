@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
+import { Button, Tag } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ApiError, isAbortError } from '@/api/errors'
 import { amountUsage, decimalUnits, decimalText, positiveAmount, positiveInteger, validPeriod, integerUnits, integerText, tokenUsageText, positiveIntegerText, toSafeInteger, applicationStatusLabels as statusLabel, applicationEnvironmentLabels as environmentLabel } from './applicationValues'
@@ -584,10 +585,9 @@ onScopeDispose(clearContext)
             <h1 class="lai-page-title">
               {{ detail.name }}
             </h1>
-            <span
-              class="status"
-              :class="`status-${detail.status.toLowerCase()}`"
-            >{{ statusLabel[detail.status] || detail.status }}</span>
+            <Tag :color="detail.status === 'ACTIVE' ? 'green' : detail.status === 'DISABLED' ? 'orange' : 'default'">
+              {{ statusLabel[detail.status] || detail.status }}
+            </Tag>
           </div>
           <p><span class="lai-cell-mono">{{ detail.code }}</span> · {{ environmentLabel[detail.environment] || detail.environment }} · {{ detail.owner_name }}</p>
         </div>
@@ -598,34 +598,31 @@ onScopeDispose(clearContext)
           <RouterLink
             v-if="detail.status !== 'ARCHIVED'"
             :to="`/ui/applications/${detail.id}/settings`"
-            class="lai-btn"
+            class="lai-action-link"
           >
-            编辑
+            <Button class="lai-btn">编辑</Button>
           </RouterLink>
-          <button
+          <Button
             v-if="detail.status === 'ACTIVE'"
             class="lai-btn"
-            type="button"
             @click="openStatusDialog('DISABLED')"
           >
             停用
-          </button>
-          <button
+          </Button>
+          <Button
             v-else-if="detail.status === 'DISABLED'"
             class="lai-btn lai-btn-primary"
-            type="button"
             @click="openStatusDialog('ACTIVE')"
           >
             启用
-          </button>
-          <button
+          </Button>
+          <Button
             v-if="detail.status === 'DISABLED'"
             class="lai-btn"
-            type="button"
             @click="openStatusDialog('ARCHIVED')"
           >
             归档
-          </button>
+          </Button>
         </div>
       </div>
 
