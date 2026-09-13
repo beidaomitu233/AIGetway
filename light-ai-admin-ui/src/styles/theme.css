@@ -1,0 +1,47 @@
+:root {
+  --lai-color-primary: #2563eb;
+  --lai-color-primary-hover: #1d4ed8;
+  --lai-color-bg-layout: #f4f7fb;
+  --lai-color-surface: #ffffff;
+  --lai-color-text: #172033;
+  --lai-color-text-secondary: #667085;
+  --lai-color-border: #e4eaf2;
+  --lai-color-success: #16a34a;
+  --lai-color-warning: #d97706;
+  --lai-color-error: #dc2626;
+  --lai-radius-sm: 6px;
+  --lai-radius-md: 8px;
+  --lai-shadow-surface: 0 1px 2px rgb(16 24 40 / 4%);
+  --lai-content-gap: 24px;
+}
+
+.light-ai-ui {
+  min-height: 100vh;
+  color: var(--lai-color-text);
+  background: var(--lai-color-bg-layout);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei',
+    'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Keep the legacy pages usable during the staged migration. New pages must use
+   Ant Design tokens and components instead of adding more `.lai-*` rules. */
+.light-ai-ui .ant-app {
+  min-height: 100vh;
+  background: transparent;
+}
+
+.light-ai-ui .ant-btn,
+.light-ai-ui .ant-input,
+.light-ai-ui .ant-input-number,
+.light-ai-ui .ant-select-selector,
+.light-ai-ui .ant-picker,
+.light-ai-ui .ant-checkbox-wrapper,
+.light-ai-ui .ant-radio-wrapper {
+  font-family: inherit;
+}
+
+.light-ai-ui .ant-btn {
+  margin: 0;
+}
