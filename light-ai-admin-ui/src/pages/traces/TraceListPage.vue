@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { Card } from 'ant-design-vue'
 import PageState from '@/components/PageState.vue'
 import DataTable, { type TableColumn } from '@/components/DataTable.vue'
 import ListPager from '@/components/ListPager.vue'
@@ -437,6 +438,7 @@ defineExpose({ filterByError, list })
       @retry="list.refresh()"
     />
     <template v-else>
+      <Card :bordered="false" class="trace-table-card">
       <DataTable
         :columns="columns"
         :rows="list.items.value"
@@ -575,6 +577,7 @@ defineExpose({ filterByError, list })
           </span>
         </template>
       </DataTable>
+      </Card>
       <ListPager
         v-if="!preciseMode"
         :page="list.page.value"
@@ -586,3 +589,8 @@ defineExpose({ filterByError, list })
     </template>
   </section>
 </template>
+
+<style scoped>
+.trace-table-card { margin-top: 16px; border: 1px solid var(--lai-border); box-shadow: 0 8px 24px rgba(37, 99, 235, .05); }
+.trace-table-card :deep(.ant-card-body) { padding: 0; }
+</style>
