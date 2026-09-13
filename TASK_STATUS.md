@@ -18,12 +18,13 @@
 12. UI-R306 由 `codex-ui-metrics-0913` 领取并执行，沿用当前工作分支；范围为指标卡、趋势图空态和指标回归测试。
 13. UI-R307 由 `codex-ui-state-0913` 领取并执行，沿用当前工作分支；范围为 403/404 状态页及路由守卫回归验证。
 14. UI-R310 由 `codex-ui-app-list-0913` 领取并执行，沿用当前工作分支；范围为应用列表页面、展示映射和应用列表回归。
+15. UI-R311 由 `codex-ui-app-form-0913` 领取并执行，沿用当前工作分支；范围为应用创建/编辑页面的页面头、卡片布局和操作控件，保持候选、精度、409 契约。
 
 ## 任务包
 
 | 任务包 | 编号 | 负责人/分支 | 修改范围 | 状态 | 依赖与入口 |
 |---|---|---|---|---|---|
-| UI-R30 | UI-R300～UI-R343 | 方案负责人 codex-ui-plan-0913 / docs/ant-design-admin-redesign-plan；UI-R301 codex-ui-foundation-0913 / feature/frontend-ant-foundation-codex-ui-0913；UI-R302 codex-ui-shell-0913 / feature/frontend-ant-shell-codex-ui-0913；UI-R303 codex-ui-page-0913；UI-R304 codex-ui-data-0913；UI-R305 codex-ui-form-0913；UI-R306 codex-ui-metrics-0913；UI-R307 codex-ui-state-0913；UI-R310 codex-ui-app-list-0913 | ANT_DESIGN_REBUILD_PLAN.md、FRONTEND_PLAN.md、COMMUNICATION.md、TASK_STATUS.md；UI-R301～R307 基础层改造，UI-R310 修改应用列表页面和回归测试 | 进行中 | UI-R301～UI-R307 已完成本地验证并提交；UI-R310 已领取并完成应用列表卡片摘要、Ant Table、状态标签与额度进度展示，应用域回归通过，待提交复验。后续 UI-R311～UI-R343 仍按依赖波次领取。 |
+| UI-R30 | UI-R300～UI-R343 | 方案负责人 codex-ui-plan-0913 / docs/ant-design-admin-redesign-plan；UI-R301 codex-ui-foundation-0913 / feature/frontend-ant-foundation-codex-ui-0913；UI-R302 codex-ui-shell-0913 / feature/frontend-ant-shell-codex-ui-0913；UI-R303 codex-ui-page-0913；UI-R304 codex-ui-data-0913；UI-R305 codex-ui-form-0913；UI-R306 codex-ui-metrics-0913；UI-R307 codex-ui-state-0913；UI-R310 codex-ui-app-list-0913；UI-R311 codex-ui-app-form-0913 | ANT_DESIGN_REBUILD_PLAN.md、FRONTEND_PLAN.md、COMMUNICATION.md、TASK_STATUS.md；UI-R301～R307 基础层、UI-R310 应用列表、UI-R311 应用表单 | 进行中 | UI-R301～UI-R310 已完成本地验证并提交；UI-R311 已领取并完成应用表单页面头、卡片表面和 Ant 操作按钮迁移，应用创建/编辑回归通过，待提交复验。后续 UI-R312～UI-R343 仍按依赖波次领取。 |
 | FE-P20 | FE-201～FE-205 | 前端执行模型 codex-0912 / feature/frontend-p20-codex-0912 | 应用页面/API/测试；FRONTEND_PLAN.md、COMMUNICATION.md；暂停后续写入 | 阻塞 | 2026-09-12：418218d、ef8a972 前端子项及 56347c7 文档已合入远程 dev（5b0b55d）；typecheck/build 通过，199 测试通过，lint 0 error/81 历史 warning。FE-P20-001～004/BE-P20-001～005 待契约与真实联调；五项未勾选，保留负责人，未解除占用 |
 | FE-P21 | FE-211～FE-215 | 前端执行模型 codex-0912 / feature/frontend-p21-codex-0912 | light-ai-admin-ui 渠道、上游模型、虚拟模型与路由及相关 API/组件/导航/测试；FRONTEND_PLAN.md、COMMUNICATION.md | 阻塞 | 2026-09-12：def540e/b27689d/fd9014a 已完成契约接入与前端回归，226 项通过；等待 BE-P21-001～006 和真实联调，五项未勾选；8e96984 已合入远程 dev 并普通推送成功，保留负责人、未解除占用 |
 | FE-P22 | FE-221～FE-225 | 前端执行模型 zcode-0912 / feature/frontend-p22-zcode-0912 | light-ai-admin-ui 调用记录、用量成本、配置发布、开发接入与总览页面及其 API、相关组件、测试；FRONTEND_PLAN.md、COMMUNICATION.md | 阻塞 | 2026-09-12：fc0e955 实现与 eaa32e3 文档已随 eb2843a 合入远程 dev；过渡端点加固完成，28 文件 244 测试、typecheck/lint/build 通过；V2 路径/字段差异登记 COMMUNICATION FE-P22-001～005；五项未勾选，保留负责人，未解除占用，待 BE-P22/P23 契约与真实联调 |

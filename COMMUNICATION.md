@@ -528,3 +528,11 @@ UI-R307 未改变鉴权、目标恢复或路由表契约。
 | UI-ANT-310-001 | P1 | 应用中心仍使用自研表格和状态胶囊，额度、模型、密钥及环境信息层级弱，无法体现应用为核心入口。 | `light-ai-admin-ui/src/pages/applications/ApplicationListPage.vue`、应用列表回归 | 以 Ant `Card/Table/Tag/Progress/Button` 重建应用列表；保留现有筛选 URL、权限、新旧数据状态和 BigInt/decimal 展示函数，增加摘要卡与额度进度。 | typecheck 通过；应用页面 8 项、P20 契约 31 项回归通过。 | codex-ui-app-list-0913 | 待复验 |
 
 UI-R310 未修改应用 API、字段精度、权限和筛选竞态逻辑。
+
+## UI-R311 Ant Design 应用创建与编辑（2026-09-13，codex-ui-app-form-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-311-001 | P1 | 应用创建/编辑页面仍以旧表单标题、操作按钮和平面区块呈现，无法与新的后台壳层建立卡片层级。 | `light-ai-admin-ui/src/pages/applications/ApplicationFormPage.vue`、应用页面回归 | 引入共享 `PageHeader` 与 Ant `Card/Button`，保留基本信息、额度限流、模型授权、版本冲突、409 输入保留及候选模型契约。 | typecheck 通过；应用页面回归 8 项通过。 | codex-ui-app-form-0913 | 待复验 |
+
+UI-R311 未改变表单校验、BigInt/decimal 精度、`model-options` 请求或保存 API。
