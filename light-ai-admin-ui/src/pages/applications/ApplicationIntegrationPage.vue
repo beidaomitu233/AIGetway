@@ -2,6 +2,7 @@
 // 应用内开发接入页（PRD 9.2.9）：从应用详情进入，只展示当前应用已授权模型、
 // 统一 Base URL、认证方式、应用当前限制、示例与在线测试；示例密钥使用占位符。
 import { computed, onMounted, ref, shallowRef } from 'vue'
+import { Card } from 'ant-design-vue'
 import { useRoute } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import CodeSamplePanel from '@/pages/developer/CodeSamplePanel.vue'
@@ -145,7 +146,7 @@ const errorRows = [
       @retry="load"
     />
     <template v-else>
-      <div class="lai-detail-card">
+      <Card :bordered="false" class="lai-detail-card">
         <h2 class="lai-section-title">
           连接信息
         </h2>
@@ -168,7 +169,7 @@ const errorRows = [
         <p class="lai-note">
           业务系统只持有应用密钥，上游供应商 Key 不下发。示例中的密钥位置固定为占位符，请勿把真实密钥写入代码仓库或浏览器存储。
         </p>
-      </div>
+      </Card>
 
       <p
         v-if="detail.active_key_count === 0"
@@ -185,7 +186,7 @@ const errorRows = [
         message="该应用尚未授权任何可调用的虚拟模型，请先在“可用模型”页签完成授权"
       />
       <template v-else>
-        <div class="lai-detail-card">
+        <Card :bordered="false" class="lai-detail-card">
           <h2 class="lai-section-title">
             模型选择
           </h2>
@@ -211,9 +212,9 @@ const errorRows = [
             <dt>上下文 / 最大输出</dt>
             <dd>{{ selectedAlias.context_window?.toLocaleString('zh-CN') ?? '—' }} / {{ selectedAlias.max_output_tokens?.toLocaleString('zh-CN') ?? '—' }}</dd>
           </dl>
-        </div>
+        </Card>
 
-        <div class="lai-detail-card">
+        <Card :bordered="false" class="lai-detail-card">
           <h2 class="lai-section-title">
             调用示例
           </h2>
@@ -221,9 +222,9 @@ const errorRows = [
             :alias-id="selectedAliasId"
             :mode="accessMode"
           />
-        </div>
+        </Card>
 
-        <div class="lai-detail-card">
+        <Card :bordered="false" class="lai-detail-card">
           <h2 class="lai-section-title">
             在线测试
           </h2>
@@ -234,10 +235,10 @@ const errorRows = [
             :alias="selectedAlias"
             :can-test="canTest"
           />
-        </div>
+        </Card>
       </template>
 
-      <div class="lai-detail-card">
+      <Card :bordered="false" class="lai-detail-card">
         <h2 class="lai-section-title">
           错误处理
         </h2>
@@ -262,7 +263,7 @@ const errorRows = [
         <p class="lai-note">
           错误响应统一为 error 对象，包含 code、message、request_id、retryable；不返回密钥、认证头或上游凭证。
         </p>
-      </div>
+      </Card>
     </template>
   </section>
 </template>
@@ -270,7 +271,8 @@ const errorRows = [
 <style scoped>
 .integration-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .integration-header p { margin: 4px 0 0; color: #667085; }
-.lai-detail-card { padding: 16px; margin-bottom: 12px; background: #fff; border: 1px solid #e6eaf0; border-radius: 6px; }
+.lai-detail-card { padding: 0; margin-bottom: 12px; background: #fff; border: 1px solid var(--lai-border); border-radius: 10px; box-shadow: 0 8px 24px rgba(37, 99, 235, .05); }
+.lai-detail-card :deep(.ant-card-body) { padding: 18px; }
 .lai-section-title { margin: 0 0 12px; font-size: 15px; font-weight: 500; color: #172033; }
 .lai-dl { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 6px 12px; margin: 0; font-size: 13px; }
 .lai-dl dt { color: #667085; }
