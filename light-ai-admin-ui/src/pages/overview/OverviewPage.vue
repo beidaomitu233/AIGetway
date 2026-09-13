@@ -578,7 +578,7 @@ const itemTypeLabels: Record<string, string> = {
         </select>
       </div>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           运行摘要
         </h2>
@@ -712,9 +712,9 @@ const itemTypeLabels: Record<string, string> = {
             数据更新时间：{{ formatDateTime(summary.data_updated_at, store.timezone) }}
           </p>
         </template>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <div class="lai-chart-header">
           <h2 class="lai-card-title">
             趋势分析
@@ -790,9 +790,9 @@ const itemTypeLabels: Record<string, string> = {
             </span>
           </div>
         </template>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           应用排行
         </h2>
@@ -867,9 +867,9 @@ const itemTypeLabels: Record<string, string> = {
             </Card>
           </div>
         </template>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           异常定位
         </h2>
@@ -959,7 +959,7 @@ const itemTypeLabels: Record<string, string> = {
           </table>
           </Card>
         </template>
-      </div>
+      </Card>
     </template>
   </section>
 </template>

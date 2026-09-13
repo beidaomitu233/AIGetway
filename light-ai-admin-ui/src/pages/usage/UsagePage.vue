@@ -538,7 +538,7 @@ const costDelayActive = computed(() => {
       </RouterLink>
     </div>
 
-    <div class="lai-card">
+    <Card :bordered="false" class="lai-card">
       <h2 class="lai-card-title">
         摘要
       </h2>
@@ -623,9 +623,9 @@ const costDelayActive = computed(() => {
           数据更新时间：{{ formatDateTime(sharedUpdatedAt, store.timezone) }}
         </p>
       </template>
-    </div>
+    </Card>
 
-    <div class="lai-card">
+    <Card :bordered="false" class="lai-card">
       <div class="lai-chart-header">
         <h2 class="lai-card-title">
           趋势
@@ -673,9 +673,9 @@ const costDelayActive = computed(() => {
           点击数据点进入该时间桶的 Trace 列表
         </p>
       </template>
-    </div>
+    </Card>
 
-    <div class="lai-card">
+    <Card :bordered="false" class="lai-card">
       <div class="lai-chart-header">
         <h2 class="lai-card-title">
           分组明细
@@ -799,7 +799,7 @@ const costDelayActive = computed(() => {
           @update:page-size="applyGroupPageSize"
         />
       </template>
-    </div>
+    </Card>
   </section>
 </template>
 
