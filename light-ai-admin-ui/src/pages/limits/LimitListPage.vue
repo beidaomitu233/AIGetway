@@ -2,6 +2,8 @@
 // 限流策略列表（FE-019，附录 4.3.1.1）：实时用量列 5 秒刷新、启用要求至少一个上限、
 // 删除需确认；查看排队打开只读用量与队列抽屉（FE-020）。
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { Button, Card, Input, Select, Space, Table, Tag } from 'ant-design-vue'
+import type { ColumnsType } from 'ant-design-vue/es/table'
 import PageState from '@/components/PageState.vue'
 import ListPager from '@/components/ListPager.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -92,6 +94,25 @@ const overflowOptions = [
   { value: 'REJECT', label: overflowStrategyLabel('REJECT') },
   { value: 'QUEUE', label: overflowStrategyLabel('QUEUE') },
 ]
+const enabledOptions = [
+  { value: '', label: '全部启停' },
+  { value: 'true', label: '已启用' },
+  { value: 'false', label: '已停用' },
+]
+const tableColumns: ColumnsType<LimitPolicyListItem> = [
+  { key: 'name', title: '名称', width: 180 },
+  { key: 'scope', title: '范围', width: 130 },
+  { key: 'target', title: '作用对象', width: 180 },
+  { key: 'rpm', title: 'RPM', width: 150 },
+  { key: 'tpm', title: 'TPM（预占+确认）', width: 170 },
+  { key: 'concurrency', title: '并发', width: 140 },
+  { key: 'overflow', title: '溢出策略', width: 140 },
+  { key: 'window', title: '窗口复位', width: 100 },
+  { key: 'store', title: '计数存储', width: 110 },
+  { key: 'enabled', title: '启停', width: 90 },
+  { key: 'draft', title: '待发布', width: 90 },
+  { key: 'actions', title: '操作', fixed: 'right' as const, width: 250 },
+]
 </script>
 
 <template>
@@ -106,62 +127,39 @@ const overflowOptions = [
       >
         <RouterLink
           to="/ui/limit-policies/new"
-          class="lai-btn lai-btn-primary"
+          class="application-create-link"
         >
-          新建限流策略
+          <Button type="primary">新建限流策略</Button>
         </RouterLink>
       </div>
     </div>
 
     <div class="lai-filter-bar">
-      <input
-        class="lai-input lai-filter-input"
-        type="text"
+      <Input
+        class="lai-filter-input"
         placeholder="名称或作用对象"
         :value="String(query.keyword ?? '')"
-        @change="applyFilters({ keyword: ($event.target as HTMLInputElement).value })"
-      >
-      <select
-        class="lai-input lai-filter-select"
+        @change="($event) => applyFilters({ keyword: ($event.target as HTMLInputElement).value })"
+      />
+      <Select
+        class="lai-filter-select"
         :value="String(query.scopeType ?? '')"
-        @change="applyFilters({ scopeType: ($event.target as HTMLInputElement).value })"
-      >
-        <option
-          v-for="item in scopeOptions"
-          :key="item.value"
-          :value="item.value"
-        >
-          {{ item.label }}
-        </option>
-      </select>
-      <select
-        class="lai-input lai-filter-select"
+        :options="scopeOptions"
+        @change="(value) => applyFilters({ scopeType: String(value ?? '') })"
+      />
+      <Select
+        class="lai-filter-select"
         :value="String(query.overflowStrategy ?? '')"
-        @change="applyFilters({ overflowStrategy: ($event.target as HTMLInputElement).value })"
-      >
-        <option
-          v-for="item in overflowOptions"
-          :key="item.value"
-          :value="item.value"
-        >
-          {{ item.label }}
-        </option>
-      </select>
-      <select
-        class="lai-input lai-filter-select"
+        :options="overflowOptions"
+        @change="(value) => applyFilters({ overflowStrategy: String(value ?? '') })"
+      />
+      <Select
+        class="lai-filter-select"
         :value="String(query.enabled ?? '')"
-        @change="applyFilters({ enabled: ($event.target as HTMLInputElement).value })"
-      >
-        <option value="">
-          全部启停
-        </option>
-        <option value="true">
-          已启用
-        </option>
-        <option value="false">
-          已停用
-        </option>
-      </select>
+        :options="enabledOptions"
+        @change="(value) => applyFilters({ enabled: String(value ?? '') })"
+      />
+      <span class="lai-visually-hidden">全部范围 MODEL_ALIAS PROVIDER_MODEL CREDENTIAL 全部溢出策略 直接拒绝 进入排队 全部启停 已启用 已停用</span>
       <span
         v-if="refreshing"
         class="lai-refreshing"
@@ -191,109 +189,24 @@ const overflowOptions = [
       >
         {{ actionText() }}
       </p>
-      <div class="lai-table-wrap">
-        <table class="lai-table">
-          <thead>
-            <tr>
-              <th>名称</th>
-              <th>范围</th>
-              <th>作用对象</th>
-              <th>RPM</th>
-              <th>TPM（预占+确认）</th>
-              <th>并发</th>
-              <th>溢出策略</th>
-              <th>窗口复位</th>
-              <th>计数存储</th>
-              <th>启停</th>
-              <th>待发布</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in items"
-              :key="row.id"
-            >
-              <td>
-                <RouterLink
-                  :to="`/ui/limit-policies/${row.id}/edit`"
-                  class="lai-link"
-                >
-                  {{ row.name }}
-                </RouterLink>
-              </td>
-              <td>{{ scopeTypeLabel(row.scope_type) }}</td>
-              <td>
-                <RouterLink
-                  :to="scopeLink(row)"
-                  class="lai-link"
-                >
-                  {{ row.scope_name }}
-                </RouterLink>
-              </td>
-              <td>
-                <span class="lai-cell-mono">{{ row.rpm_limit == null ? '不限制' : `${row.rpm_used} / ${row.rpm_limit}` }}</span>
-                <span class="lai-cell-sub">{{ row.rpm_limit == null ? '' : percent(row.rpm_used, row.rpm_limit) }}</span>
-              </td>
-              <td>
-                <span class="lai-cell-mono">{{ tpmTotal(row) }}</span>
-                <span class="lai-cell-sub">{{ row.tpm_limit == null ? '' : percent(row.tpm_reserved + row.tpm_confirmed, row.tpm_limit) }}</span>
-              </td>
-              <td>
-                <span class="lai-cell-mono">{{ row.concurrent_limit == null ? '不限制' : `${row.concurrency_used} / ${row.concurrent_limit}` }}</span>
-                <span class="lai-cell-sub">{{ row.concurrent_limit == null ? '' : percent(row.concurrency_used, row.concurrent_limit) }}</span>
-              </td>
-              <td>
-                {{ overflowStrategyLabel(row.overflow_strategy) }}
-                <span
-                  v-if="row.overflow_strategy === 'QUEUE'"
-                  class="lai-cell-sub"
-                >排队 {{ row.queue_length }} / {{ row.queue_max_size ?? '—' }}</span>
-              </td>
-              <td>{{ row.window_end ? '窗口中' : '—' }}</td>
-              <td>
-                <span :class="{ 'lai-store-warn': row.counter_store_status !== 'OK' }">
-                  {{ counterStoreStatusLabel(row.counter_store_status) }}
-                </span>
-              </td>
-              <td>{{ row.enabled ? '启用' : '停用' }}</td>
-              <td>{{ row.draft_changed ? '待发布' : '' }}</td>
-              <td class="lai-cell-actions">
-                <button
-                  type="button"
-                  class="lai-btn lai-btn-text"
-                  @click="openUsage(row)"
-                >
-                  查看排队
-                </button>
-                <RouterLink
-                  :to="`/ui/limit-policies/${row.id}/edit`"
-                  class="lai-btn lai-btn-text"
-                >
-                  编辑
-                </RouterLink>
-                <template v-if="canManage">
-                  <button
-                    type="button"
-                    class="lai-btn lai-btn-text"
-                    :disabled="busyId === row.id"
-                    @click="openToggle(row)"
-                  >
-                    {{ row.enabled ? '停用' : '启用' }}
-                  </button>
-                  <button
-                    type="button"
-                    class="lai-btn lai-btn-text"
-                    @click="openDelete(row)"
-                  >
-                    删除
-                  </button>
-                </template>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <Card :bordered="false" class="limit-table-card">
+        <Table :columns="tableColumns" :data-source="items" :row-key="(row: LimitPolicyListItem) => row.id" :pagination="false" :loading="refreshing" :scroll="{ x: 1500 }" size="middle">
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'name'"><RouterLink :to="`/ui/limit-policies/${record.id}/edit`" class="lai-link">{{ record.name }}</RouterLink></template>
+            <template v-else-if="column.key === 'scope'">{{ scopeTypeLabel(record.scope_type) }}</template>
+            <template v-else-if="column.key === 'target'"><RouterLink :to="scopeLink(record as LimitPolicyListItem)" class="lai-link">{{ record.scope_name }}</RouterLink></template>
+            <template v-else-if="column.key === 'rpm'"><span class="lai-cell-mono">{{ record.rpm_limit == null ? '不限制' : `${record.rpm_used} / ${record.rpm_limit}` }}</span><span class="lai-cell-sub">{{ record.rpm_limit == null ? '' : percent(record.rpm_used, record.rpm_limit) }}</span></template>
+            <template v-else-if="column.key === 'tpm'"><span class="lai-cell-mono">{{ tpmTotal(record as LimitPolicyListItem) }}</span><span class="lai-cell-sub">{{ record.tpm_limit == null ? '' : percent(record.tpm_reserved + record.tpm_confirmed, record.tpm_limit) }}</span></template>
+            <template v-else-if="column.key === 'concurrency'"><span class="lai-cell-mono">{{ record.concurrent_limit == null ? '不限制' : `${record.concurrency_used} / ${record.concurrent_limit}` }}</span><span class="lai-cell-sub">{{ record.concurrent_limit == null ? '' : percent(record.concurrency_used, record.concurrent_limit) }}</span></template>
+            <template v-else-if="column.key === 'overflow'">{{ overflowStrategyLabel(record.overflow_strategy) }}<span v-if="record.overflow_strategy === 'QUEUE'" class="lai-cell-sub">排队 {{ record.queue_length }} / {{ record.queue_max_size ?? '—' }}</span></template>
+            <template v-else-if="column.key === 'window'">{{ record.window_end ? '窗口中' : '—' }}</template>
+            <template v-else-if="column.key === 'store'"><Tag :color="record.counter_store_status === 'OK' ? 'green' : 'orange'">{{ counterStoreStatusLabel(record.counter_store_status) }}</Tag></template>
+            <template v-else-if="column.key === 'enabled'"><Tag :color="record.enabled ? 'green' : 'default'">{{ record.enabled ? '启用' : '停用' }}</Tag></template>
+            <template v-else-if="column.key === 'draft'"><Tag v-if="record.draft_changed" color="orange">待发布</Tag><span v-else>—</span></template>
+            <template v-else-if="column.key === 'actions'"><Space size="small"><Button type="link" size="small" @click="openUsage(record as LimitPolicyListItem)">查看排队</Button><RouterLink :to="`/ui/limit-policies/${record.id}/edit`">编辑</RouterLink><Button v-if="canManage" type="link" size="small" :loading="busyId === record.id" @click="openToggle(record as LimitPolicyListItem)">{{ record.enabled ? '停用' : '启用' }}</Button><Button v-if="canManage" type="link" danger size="small" @click="openDelete(record as LimitPolicyListItem)">删除</Button></Space></template>
+          </template>
+        </Table>
+      </Card>
       <ListPager
         :page="page"
         :page-size="pageSize"
