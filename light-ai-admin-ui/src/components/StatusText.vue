@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Tag } from 'ant-design-vue'
 import { displayLabel } from '@/app/display'
 
 const props = withDefaults(
@@ -20,8 +21,16 @@ const text = computed(() => {
   }
   return displayLabel(props.labels, props.value)
 })
+
+const color = computed(() => {
+  const value = props.value ?? ''
+  if (/^(ACTIVE|HEALTHY|OK|SUCCEEDED|SUCCESS|CLOSED)$/i.test(value)) return 'green'
+  if (/^(DISABLED|DEGRADED|PENDING|OPEN)$/i.test(value)) return 'orange'
+  if (/(ERROR|FAILED|REVOKED|BLOCKED|TIMEOUT)/i.test(value)) return 'red'
+  return 'default'
+})
 </script>
 
 <template>
-  <span class="lai-status-text">{{ text }}</span>
+  <Tag :color="color" class="lai-status-text">{{ text }}</Tag>
 </template>
