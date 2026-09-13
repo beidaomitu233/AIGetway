@@ -41,6 +41,7 @@
 - 真实浏览器（仓库 `dev:mock`）：41 条主要管理路由均加载到预期页面标题，无 page error 或非资源控制台错误；总览与渠道页面导航、折叠导航、768px 窄屏布局通过。
 - 既有 Vue Router/RouterLink 测试警告仍存在，不影响断言结果。
 - 真实后端回归（2026-09-13，zcode-ant-0913，H2+Redis+Vite+Chromium 1920，无 Mock）：应用创建→详情→密钥一次性弹窗全链路通过，64 位/decimal 契约与密钥无残留验证通过；16 条主路由渲染与空态正常、1920 无横向溢出；渠道创建被 `bootstrap` 缺 `adapters` 阻塞（UI-ANT-CONTRACT-001，后端 AdapterMetadataSource 无实现）；渠道表单与其余 8 页的原生控件残留登记 UI-ANT-349/350。
+- UI-ANT-349 修复（提交 `d30cc4f`）：渠道表单类型下拉、名称/地址、超时/优先级/权重与按钮全部迁移为 Ant `Select/Input/Button`；渠道定向测试 14 项、typecheck、lint、全量 255 项测试、build 再次通过；浏览器实测无原生 select 与 `.lai-input/.lai-select` 残留，校验错误正常展示。
 
 未验证：真实 PostgreSQL/MySQL/Redis、真实 Provider 调用与对账、企业身份四角色、1024/1280/1440 全宽度逐页验收、生产部署、数据库迁移（本轮无数据库变更）。
 
