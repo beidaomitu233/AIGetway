@@ -102,10 +102,20 @@ function toggleCollapsed(): void {
       collapsible
       :trigger="null"
     >
-      <div class="lai-brand" aria-label="轻享 AI 管理后台">
-        <div class="lai-brand-mark">AI</div>
-        <div v-if="!collapsed" class="lai-brand-copy">
-          <Typography.Title :level="4">轻享 AI</Typography.Title>
+      <div
+        class="lai-brand"
+        aria-label="轻享 AI 管理后台"
+      >
+        <div class="lai-brand-mark">
+          AI
+        </div>
+        <div
+          v-if="!collapsed"
+          class="lai-brand-copy"
+        >
+          <Typography.Title :level="4">
+            轻享 AI
+          </Typography.Title>
           <Typography.Text>企业 AI 中台</Typography.Text>
         </div>
       </div>
@@ -137,7 +147,10 @@ function toggleCollapsed(): void {
 
     <Layout class="lai-main">
       <Layout.Header class="lai-header">
-        <Space :size="16" class="lai-header-left">
+        <Space
+          :size="16"
+          class="lai-header-left"
+        >
           <Tooltip :title="collapsed ? '展开导航' : '收起导航'">
             <Button
               type="text"
@@ -151,22 +164,39 @@ function toggleCollapsed(): void {
             </Button>
           </Tooltip>
           <Breadcrumb class="lai-breadcrumb">
-            <Breadcrumb.Item v-for="title in breadcrumbs" :key="title">
+            <Breadcrumb.Item
+              v-for="title in breadcrumbs"
+              :key="title"
+            >
               {{ title }}
             </Breadcrumb.Item>
           </Breadcrumb>
         </Space>
-        <Space :size="16" class="lai-header-right">
-          <Tag color="blue">{{ runtimeModeLabel(store.runtimeMode) }}</Tag>
+        <Space
+          :size="16"
+          class="lai-header-right"
+        >
+          <Tag color="blue">
+            {{ runtimeModeLabel(store.runtimeMode) }}
+          </Tag>
           <span class="lai-snapshot">当前快照 #{{ store.currentSnapshotNo ?? '—' }}</span>
-          <Badge :count="store.draftChangeCount" :overflow-count="99" :offset="[-4, 4]">
-            <Button type="text" @click="go('/ui/config/drafts')">
+          <Badge
+            :count="store.draftChangeCount"
+            :overflow-count="99"
+            :offset="[-4, 4]"
+          >
+            <Button
+              type="text"
+              @click="go('/ui/config/drafts')"
+            >
               待发布变更（{{ store.draftChangeCount }}）
             </Button>
           </Badge>
           <Tooltip :title="`${store.displayName} · ${roleText}`">
             <Space :size="8">
-              <Avatar class="lai-avatar">{{ store.displayName.slice(0, 1) || 'U' }}</Avatar>
+              <Avatar class="lai-avatar">
+                {{ store.displayName.slice(0, 1) || 'U' }}
+              </Avatar>
               <span class="lai-user-name">{{ store.displayName || '未命名用户' }}</span>
             </Space>
           </Tooltip>
