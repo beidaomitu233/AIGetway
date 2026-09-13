@@ -78,10 +78,12 @@ watch(
   { immediate: true },
 )
 
-async function onModelChange(): Promise<void> {
+async function onModelChange(modelId: unknown): Promise<void> {
+  const nextModelId = typeof modelId === 'string' ? modelId : ''
+  providerModelId.value = nextModelId
   credentialPoolId.value = ''
   poolOptions.value = []
-  await refreshPoolOptions(providerModelId.value)
+  await refreshPoolOptions(nextModelId)
 }
 
 async function refreshPoolOptions(modelId: string): Promise<void> {
@@ -156,7 +158,7 @@ function close(): void {
           >*</span></label>
           <Select
             id="lai-candidate-model"
-            v-model:value="providerModelId"
+            :value="providerModelId"
             :disabled="isEdit"
             placeholder="请选择模型"
             :options="groupedModelOptions"

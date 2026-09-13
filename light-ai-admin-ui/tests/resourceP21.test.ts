@@ -81,20 +81,29 @@ describe('FE-212 一次性密钥输入', () => {
 })
 describe('FE-215 候选选项竞态', () => {
   it('旧模型选项迟到不覆盖当前模型', async () => {
+    const SelectStub = defineComponent({
+      name: 'ASelect',
+      props: { options: { type: Array, default: () => [] }, placeholder: String },
+      emits: ['update:value'],
+template: `<select @change="$emit('update:value', $event.target.value)"><option value=""></option><option value="a">a</option><option value="b">b</option></select>`,
+    })
     let finishFirst!: (value: CredentialPoolOption[]) => void
     const first = new Promise<CredentialPoolOption[]>((resolve) => { finishFirst = resolve })
     const loadPools = vi.fn().mockReturnValueOnce(first).mockResolvedValueOnce([{ id: 'pool-b', name: '渠道 B', channel_id: 'b', credential_available: 1, status: 'ACTIVE' }])
-    const wrapper = mount(CandidateFormDialog, { props: { open: true, aliasId: 'v', candidate: null, modelGroups: [{ providerName: '测试', models: ['a', 'b'].map((id) => ({ id, label: id, supportStream: true, contextWindow: 100 })) }], loadPools }, global: { stubs: { Teleport: true } } })
-    const emitValue = (owner: { vm: unknown }, value: string) =>
-      (owner.vm as unknown as { $emit: (e: string, ...args: unknown[]) => void }).$emit('update:value', value)
-    const modelSelect = wrapper.findAllComponents(Select).find((c) => JSON.stringify(c.props('options')).includes("'a'"))!
-    await emitValue(modelSelect, 'a')
-    await emitValue(modelSelect, 'b')
-    await flushPromises()
+    const wrapper = mount(CandidateFormDialog, { props: { open: true, aliasId: 'v', candidate: null, modelGroups: [{ providerName: '测试', models: ['a', 'b'].map((id) => ({ id, label: id, supportStream: true, contextWindow: 100 })) }], loadPools }, global: { stubs: { teleport: true, ASelect: SelectStub, Select: SelectStub } } })
+    const selects = wrapper.findAllComponents(SelectStub)
+    const modelSelect = selects.find((component) => component.props('placeholder') === '请选择模型')!
+    const updateValue = async (value: string) => {
+      const handler = (modelSelect.vm as unknown as { $: { vnode: { props: Record<string, unknown> } } }).$.vnode.props['onUpdate:value']
+      for (const callback of (Array.isArray(handler) ? handler : [handler])) (callback as (nextValue: string) => void)(value)
+      await flushPromises()
+    }
+    await updateValue('a')
+    await updateValue('b')
     finishFirst([{ id: 'pool-a', name: '渠道 A', channel_id: 'a', credential_available: 1, status: 'ACTIVE' }])
     await flushPromises()
-    const poolSelect = wrapper.findAllComponents(Select).find((c) => c.props('placeholder') === '请选择所属渠道')!
-    const poolLabels = ((poolSelect.props('options') ?? []) as Array<{ label: string }>).map((o) => o.label).join()
+    expect(loadPools).toHaveBeenCalledTimes(2)
+    const poolLabels = ((wrapper.vm as never as { poolOptions: CredentialPoolOption[] }).poolOptions ?? []).map((option) => option.name).join()
     expect(poolLabels).toContain('渠道 B')
     expect(poolLabels).not.toContain('渠道 A')
     wrapper.unmount()

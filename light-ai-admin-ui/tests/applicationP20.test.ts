@@ -349,7 +349,7 @@ describe('FE-P20 页面边界（同契约夹具，非真实联调）', () => {
     expect(dialog.text()).toContain('保存后会取消这些授权')
     expect(dialog.find('input[value="alias-stale"]').exists()).toBe(false)
     await dialog.get('textarea').setValue('清理失效模型授权')
-    await dialog.get('button.lai-btn-primary').trigger('click')
+    await dialog.findAll('button').find(button => button.text().replace(/\s+/g, '') === '保存授权')!.trigger('click')
     await flushPromises()
     const update = stub.calls.find(call => call.method === 'PUT' && call.url.endsWith(`/admin/applications/${application.id}/models`))
     expect(update?.body).toMatchObject({ virtual_model_ids: ['alias-1'] })

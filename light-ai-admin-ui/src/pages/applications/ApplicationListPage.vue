@@ -89,6 +89,9 @@ const columns: TableColumn[] = [
   { key: 'models', label: '模型 / 密钥', width: '120px' },
   { key: 'tokens', label: 'Token', width: '180px' },
   { key: 'amount', label: '金额', width: '160px' },
+  { key: 'budget', label: '预算状态', width: '120px' },
+  { key: 'requests24h', label: '24h 请求', width: '110px' },
+  { key: 'success24h', label: '24h 成功率', width: '110px' },
   { key: 'rate', label: 'RPM / TPM', width: '140px' },
   { key: 'lastCalled', label: '最近调用', width: '150px' },
 ]
@@ -271,6 +274,9 @@ const columns: TableColumn[] = [
           <template #models="{ row }">{{ row.model_count }} / {{ row.active_key_count }}</template>
           <template #tokens="{ row }"><span>{{ ratio(row.tokens_used, row.tokens_reserved, row.token_limit) }}</span><Progress v-if="row.token_limit" :percent="Math.min(100, Math.round((Number(row.tokens_used) + Number(row.tokens_reserved)) / Math.max(1, Number(row.token_limit)) * 100))" size="small" :show-info="false" /></template>
           <template #amount="{ row }">{{ amount(row) }}</template>
+          <template #budget="{ row }">预算：{{ budgetStatusLabel[row.budget_status] || row.budget_status }}</template>
+          <template #requests24h="{ row }">{{ requestCount(row.requests_24h) }} 次</template>
+          <template #success24h="{ row }">成功率 {{ successRateText(row.success_rate_24h) }}</template>
           <template #rate="{ row }">{{ row.rpm ?? '不限' }} / {{ row.tpm == null ? '不限' : row.tpm.toLocaleString() }}</template>
           <template #lastCalled="{ row }">{{ row.last_called_at ? formatDateTime(row.last_called_at, store.timezone) : '尚未调用' }}</template>
         </DataTable>

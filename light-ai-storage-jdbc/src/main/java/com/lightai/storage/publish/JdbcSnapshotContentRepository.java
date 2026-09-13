@@ -113,9 +113,6 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
         Map<String, Long> counts = new LinkedHashMap<>();
         for (EntityColumns entity : ENTITIES) {
             List<Map<String, Object>> rows = readRows(connection, entity);
-            if ("channel".equals(entity.entityType())) {
-                enrichChannelProviderTypes(connection, rows);
-            }
             counts.put(entity.jsonKey(), (long) rows.size());
             content.put(entity.jsonKey(), rows);
         }
@@ -142,10 +139,12 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
         Map<String, String> typeByProviderId = loadProviderTypes(connection, channels);
         List<Map<String, Object>> providers = new ArrayList<>();
         for (Map<String, Object> channel : channels) {
+            String providerType = typeByProviderId.get(text(channel.get("provider_id")));
+            channel.put("provider_type", providerType);
             Map<String, Object> view = new LinkedHashMap<>();
             view.put("id", channel.get("id"));
             view.put("name", channel.get("name"));
-            view.put("type", typeByProviderId.get(text(channel.get("provider_id"))));
+            view.put("type", providerType);
             view.put("connect_timeout_ms", channel.get("connect_timeout_ms"));
             view.put("read_timeout_ms", channel.get("read_timeout_ms"));
             view.put("default_headers", channel.get("default_headers"));

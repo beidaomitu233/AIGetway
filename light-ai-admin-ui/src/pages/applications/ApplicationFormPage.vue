@@ -563,18 +563,25 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
           <p class="section-help">
             应用只能调用已授权模型；候选来自活动配置快照中已发布且存在可用路由候选的虚拟模型，模型后续可在应用详情中单独管理。
           </p>
+          <PageState
+            v-if="modelsLoadError"
+            status="error"
+            :error="modelsLoadError"
+            message="活动配置快照当前无法读取，请稍后重试。"
+            @retry="load"
+          />
           <CheckboxGroup
-            v-if="aliases.length"
+            v-else-if="modelOptions.length"
             v-model:value="form.virtual_model_ids"
             class="model-options"
           >
             <Checkbox
-              v-for="alias in aliases"
-              :key="alias.id"
-              :value="alias.id"
+              v-for="option in modelOptions"
+              :key="option.virtual_model_id"
+              :value="option.virtual_model_id"
               class="model-option"
             >
-              <span><strong>{{ alias.display_name }}</strong><small>{{ alias.alias }}</small></span>
+              <span><strong>{{ option.code }}</strong><small>{{ option.max_output_tokens === null ? '未声明输出上限' : `候选上限 ${option.max_output_tokens}` }} · {{ option.allow_stream === null ? '流式能力未知' : option.allow_stream ? '支持流式' : '不支持流式' }}</small></span>
             </Checkbox>
           </CheckboxGroup>
           <p

@@ -882,7 +882,7 @@ onScopeDispose(clearContext)
           >
             <div
               v-for="model in detail.models"
-              :key="model.id"
+              :key="model.virtual_model_id"
               class="model-row"
             >
               <div><strong>{{ model.virtual_model_code || model.virtual_model_id }}</strong><small>请求 model 字段</small></div>
@@ -1525,10 +1525,10 @@ onScopeDispose(clearContext)
           >
             <Checkbox
               class="model-option"
-              :value="model.id"
-              @change="ensureConstraintForm(model.id)"
+              :value="model.virtual_model_id"
+              @change="ensureConstraintForm(model.virtual_model_id)"
             >
-              <span><strong>{{ model.display_name }}</strong><small>{{ model.alias }}</small></span>
+              <span><strong>{{ model.code }}</strong><small>{{ capabilityText(model) }}</small></span>
             </Checkbox>
             <div
               v-if="selectedModelIds.includes(model.virtual_model_id)"
@@ -1537,7 +1537,7 @@ onScopeDispose(clearContext)
               <label class="model-constraint-field">
                 <span>最大输出 Token</span>
                 <Input
-                  v-model:value="modelConstraints[model.id].maxOutputTokens"
+                  v-model:value="modelConstraints[model.virtual_model_id].maxOutputTokens"
                   type="number"
                   :min="1"
                   :step="1"
@@ -1547,7 +1547,7 @@ onScopeDispose(clearContext)
               <label class="model-constraint-field">
                 <span>流式调用</span>
                 <Select
-                  v-model:value="modelConstraints[model.id].streamAllowed"
+                  v-model:value="modelConstraints[model.virtual_model_id].streamAllowed"
                   :options="[
                     { value: '', label: '继承（不限）' },
                     { value: 'allow', label: '允许' },
