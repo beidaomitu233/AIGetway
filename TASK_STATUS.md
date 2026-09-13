@@ -40,6 +40,7 @@
 34. UI-R343 由 `codex-ui-final-review-0913` 领取并执行，沿用当前工作分支；范围为最终集成审查、构建、全量回归和远程交付检查，按未完成的旧页面迁移项给出后续安排。
 35. UI-ANT-345～UI-ANT-348 为 UI-R343 后续清理批次，由 `codex-ui-cleanup-0913` 在 `feature/frontend-ant-shell-codex-ui-0913` 完成并记录；范围为应用表单受控绑定、治理列表、用量分组表和额度流水表，均已完成本地验证。2026-09-13 前端执行模型 zcode-ant-0913 接手完成本地复验并普通推送该分支至远程（回读 f996294），发起进入 `dev` 的评审 PR（[#3](https://github.com/beidaomitu233/AIGetway/pull/3)）；剩余事项为 PR 合并与真实后端复验。
 36. UI-ANT-349（渠道表单 Ant 控件迁移）由 `zcode-ant-0913` 于 2026-09-13 在同一分支完成（提交 `d30cc4f`），定向 14 项测试、typecheck、lint、全量 255 项测试、build 与浏览器实测通过；UI-ANT-350（概览/渠道列表/Trace/用量/额度流水/草稿/审计/访问凭证/运行参数共 9 页原生筛选与输入控件迁移）与 UI-ANT-CONTRACT-001（后端 AdapterMetadataSource 无实现导致 bootstrap 缺 adapters、渠道类型下拉为空）已登记 COMMUNICATION，待后续批次领取。
+37. UI-ANT-350 由 `zcode-ant-0913` 于 2026-09-13 领取并执行，沿用 `feature/frontend-ant-shell-codex-ui-0913` 分支；范围为上述 9 页的原生筛选/输入/按钮控件迁移为 Ant `Select/Input/Button` 及对应测试适配，保持 URL 筛选、分页、权限、空态和文案契约不变；UI-ANT-CONTRACT-001 由后端负责人另行处理，不在本批范围。
 
 ## 任务包
 
