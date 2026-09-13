@@ -554,3 +554,8 @@ UI-R312 未修改详情 API、页签 URL、状态转换或权限规则。
 | 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | UI-ANT-314-001 | P1 | 应用详情额度摘要仍以扁平原生表格呈现，Token/金额使用比例缺少可视反馈，难以快速判断治理状态；打开应用详情“额度与限流”页签即可复现。 | `light-ai-admin-ui/src/pages/applications/ApplicationQuotaSummary.vue`；应用额度查询契约不变 | 使用 Ant Design `Card`、`Progress`、`Tag` 建立卡片化摘要和使用进度；保留原表格 aria-label、BigInt Token 计算、金额精度、无限额度和周期结束文案。 | `npm run typecheck` 通过；`antApplicationGovernance.test.ts` 2 项、应用页面回归 39 项通过。 | 代码审查与修复模型/codex-ui-app-governance-0913 | 待复验 |
+## UI-R315 Ant Design 开发接入工作台（2026-09-13，codex-ui-developer-integration-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-315-001 | P1 | 开发接入页的连接信息、模型选择、调用示例、在线测试和错误说明均为扁平原生容器，无法形成清晰的接入步骤层级；进入应用“开发接入”页即可复现。 | `light-ai-admin-ui/src/pages/applications/ApplicationIntegrationPage.vue`；`fetchApplication`、`fetchDeveloperContext`、在线测试 API 契约不变 | 使用 Ant Design `Card` 统一各接入区块容器，保留模型原生选择器、占位密钥提示、在线测试权限和错误码表格；仅调整视觉层级与卡片样式。 | `npm run typecheck` 通过；应用集成、应用页面与开发者页回归 22 项通过。 | 代码审查与修复模型/codex-ui-developer-integration-0913 | 待复验 |
