@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { Card } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import StatusText from '@/components/StatusText.vue'
@@ -158,7 +159,7 @@ const lifecycle = useLifecycleActions({
       @retry="load"
     />
     <template v-else-if="detail">
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           基础信息
         </h2>
@@ -199,9 +200,9 @@ const lifecycle = useLifecycleActions({
             </template>
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           容量摘要
         </h2>
@@ -232,9 +233,9 @@ const lifecycle = useLifecycleActions({
             <span class="lai-summary-label">TPM 已用</span>{{ detail.tpm_used }}
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           引用关系
         </h2>
@@ -246,7 +247,7 @@ const lifecycle = useLifecycleActions({
             <span class="lai-summary-label">涉及模型别名数</span>{{ detail.model_alias_count }}
           </div>
         </div>
-      </div>
+      </Card>
 
       <div
         v-if="canViewCredentials"
@@ -260,7 +261,7 @@ const lifecycle = useLifecycleActions({
         />
       </div>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           审计信息
         </h2>
@@ -278,7 +279,7 @@ const lifecycle = useLifecycleActions({
             <span class="lai-summary-label">更新时间</span>{{ formatDateTime(detail.updated_at, store.timezone) }}
           </div>
         </div>
-      </div>
+      </Card>
     </template>
 
     <ConfirmDialog
