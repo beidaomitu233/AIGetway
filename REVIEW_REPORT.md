@@ -41,8 +41,8 @@
 
 ## 文档、提交与交付
 
-- 已更新 `COMMUNICATION.md`、`TASK_STATUS.md`，记录 UI-R342 清理和 UI-R343 最终复验状态。
-- 代码按任务包拆分提交，最近提交为 `3030637 test(review): UI-R343 收紧额度回归类型`；完整提交历史保留在当前分支。
+- 已更新 `COMMUNICATION.md`、`TASK_STATUS.md` 和 `ANT_DESIGN_REBUILD_PLAN.md`，记录 UI-R342 清理、UI-R343 最终复验以及各任务包的本地验证状态。
+- 代码按任务包拆分提交，最近提交为 `cbf63c1 docs(review): 同步 Ant Design 任务包交付状态`；完整提交历史保留在当前分支。
 - 远程推送曾被自动审查以“缺少外发源码授权”为由拒绝，未绕过审查；当前成果保留在本地特性分支，未修改 `dev`。
 
 ## 合并建议与后续
