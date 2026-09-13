@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { Pagination as AntPagination, Select } from 'ant-design-vue'
 
-const props = defineProps<{
+defineProps<{
   page: number
   pageSize: number
   total: number
@@ -12,67 +12,47 @@ const emit = defineEmits<{
   'page-size-change': [pageSize: number]
 }>()
 
-const totalPages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)))
-const pageNumbers = computed<number[]>(() => {
-  const pages: number[] = []
-  const start = Math.max(1, props.page - 2)
-  const end = Math.min(totalPages.value, start + 4)
-  for (let i = Math.max(1, end - 4); i <= end; i += 1) pages.push(i)
-  return pages
-})
-const pageSizeOptions = [10, 20, 50]
-
-function go(page: number): void {
-  if (page < 1 || page > totalPages.value || page === props.page) return
+function onPageChange(page: number): void {
   emit('page-change', page)
+}
+
+function onPageSizeChange(pageSize: unknown): void {
+  if (typeof pageSize === 'number') emit('page-size-change', pageSize)
 }
 </script>
 
 <template>
-  <div
-    v-if="total > 0"
-    class="lai-pagination"
-  >
+  <div v-if="total > 0" class="lai-pagination">
     <span class="lai-pagination-total">共 {{ total }} 条</span>
-    <button
-      type="button"
-      class="lai-btn lai-pagination-btn"
-      :disabled="page <= 1"
-      @click="go(page - 1)"
-    >
-      上一页
-    </button>
-    <button
-      v-for="n in pageNumbers"
-      :key="n"
-      type="button"
-      class="lai-btn lai-pagination-btn"
-      :class="{ 'lai-btn-primary': n === page }"
-      @click="go(n)"
-    >
-      {{ n }}
-    </button>
-    <button
-      type="button"
-      class="lai-btn lai-pagination-btn"
-      :disabled="page >= totalPages"
-      @click="go(page + 1)"
-    >
-      下一页
-    </button>
-    <select
-      class="lai-select"
+    <AntPagination
+      :current="page"
+      :page-size="pageSize"
+      :total="total"
+      :show-size-changer="false"
+      :show-less-items="true"
+      show-quick-jumper
+      @change="onPageChange"
+    />
+    <Select
       :value="pageSize"
       aria-label="每页条数"
-      @change="emit('page-size-change', Number(($event.target as HTMLSelectElement).value))"
-    >
-      <option
-        v-for="n in pageSizeOptions"
-        :key="n"
-        :value="n"
-      >
-        {{ n }} 条/页
-      </option>
-    </select>
+      :options="[10, 20, 50].map(value => ({ value, label: `${value} 条/页` }))"
+      @change="onPageSizeChange"
+    />
   </div>
 </template>
+
+<style scoped>
+.lai-pagination {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+}
+
+.lai-pagination-total {
+  color: var(--lai-color-text-secondary);
+  font-size: 13px;
+  white-space: nowrap;
+}
+</style>

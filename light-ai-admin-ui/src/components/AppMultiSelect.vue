@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { Checkbox } from 'ant-design-vue'
 
 const props = withDefaults(
   defineProps<{
@@ -75,12 +76,9 @@ function clear(): void {
         class="lai-multiselect-option"
         @click.stop="toggle(option.value)"
       >
-        <input
-          type="checkbox"
-          :checked="modelValue.includes(option.value)"
-          tabindex="-1"
-        >
-        <span>{{ option.label }}</span>
+        <Checkbox :checked="modelValue.includes(option.value)">
+          {{ option.label }}
+        </Checkbox>
       </button>
       <button
         v-if="modelValue.length > 0"

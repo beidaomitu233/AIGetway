@@ -14,6 +14,15 @@ Object.defineProperty(window, 'matchMedia', {
   }),
 })
 
+Object.defineProperty(window, 'getComputedStyle', {
+  writable: true,
+  value: () => ({
+    width: '0px',
+    height: '0px',
+    getPropertyValue: () => '',
+  }),
+})
+
 afterEach(() => {
   document.body.innerHTML = ''
 })
