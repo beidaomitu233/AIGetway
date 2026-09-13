@@ -559,3 +559,8 @@ UI-R312 未修改详情 API、页签 URL、状态转换或权限规则。
 | 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | UI-ANT-315-001 | P1 | 开发接入页的连接信息、模型选择、调用示例、在线测试和错误说明均为扁平原生容器，无法形成清晰的接入步骤层级；进入应用“开发接入”页即可复现。 | `light-ai-admin-ui/src/pages/applications/ApplicationIntegrationPage.vue`；`fetchApplication`、`fetchDeveloperContext`、在线测试 API 契约不变 | 使用 Ant Design `Card` 统一各接入区块容器，保留模型原生选择器、占位密钥提示、在线测试权限和错误码表格；仅调整视觉层级与卡片样式。 | `npm run typecheck` 通过；应用集成、应用页面与开发者页回归 22 项通过。 | 代码审查与修复模型/codex-ui-developer-integration-0913 | 待复验 |
+## UI-R320 Ant Design 供应商渠道列表（2026-09-13，codex-ui-provider-list-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-320-001 | P1 | 渠道列表的筛选区与数据表区使用扁平原生容器，主操作和数据边界不清晰；进入“渠道”列表即可复现。 | `light-ai-admin-ui/src/pages/providers/ProviderListPage.vue`；`listProviders`、生命周期 API 契约不变 | 使用 Ant Design `Card` 分隔筛选与结果工作区，使用 Ant `Button` 统一新建入口；保留原生筛选控件、权限显隐、生命周期确认和 URL 查询状态。 | `npm run typecheck` 通过；`providerPages.test.ts`、`providerDetail.test.ts` 共 14 项通过。 | 代码审查与修复模型/codex-ui-provider-list-0913 | 待复验 |
