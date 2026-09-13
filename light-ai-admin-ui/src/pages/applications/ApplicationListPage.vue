@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
+import { Button, Card, Progress, Tag } from 'ant-design-vue'
 import PageState from '@/components/PageState.vue'
 import ListPager from '@/components/ListPager.vue'
+import DataTable, { type TableColumn } from '@/components/DataTable.vue'
 import { useBootstrapStore } from '@/stores/bootstrap'
 import { Permission } from '@/app/permissions'
 import { useListQuery, type FilterValue } from '@/composables/useListQuery'
@@ -64,10 +66,21 @@ function ratio(used: string, reserved: string, limit: string | null): string {
 function amount(row: ApplicationListItem): string {
   return amountUsage(row.amount_used, row.amount_reserved, row.amount_limit, row.currency)
 }
+
+const columns: TableColumn[] = [
+  { key: 'application', label: '应用', width: '220px' },
+  { key: 'owner', label: '负责人 / 部门', width: '180px' },
+  { key: 'status', label: '状态', width: '100px' },
+  { key: 'models', label: '模型 / 密钥', width: '120px' },
+  { key: 'tokens', label: 'Token', width: '180px' },
+  { key: 'amount', label: '金额', width: '160px' },
+  { key: 'rate', label: 'RPM / TPM', width: '140px' },
+  { key: 'lastCalled', label: '最近调用', width: '150px' },
+]
 </script>
 
 <template>
-  <section class="lai-page">
+  <section class="lai-page application-page">
     <div class="page-header">
       <div>
         <h1 class="lai-page-title">
@@ -80,10 +93,17 @@ function amount(row: ApplicationListItem): string {
       <RouterLink
         v-if="canManage"
         to="/ui/applications/new"
-        class="lai-btn lai-btn-primary"
+        class="application-create-link"
       >
-        新建应用
+        <Button type="primary">新建应用</Button>
       </RouterLink>
+    </div>
+
+    <div class="application-summary-grid">
+      <Card size="small"><span class="summary-label">当前页应用</span><strong>{{ items.length }}</strong></Card>
+      <Card size="small"><span class="summary-label">启用中</span><strong>{{ items.filter(item => item.status === 'ACTIVE').length }}</strong></Card>
+      <Card size="small"><span class="summary-label">已配置模型</span><strong>{{ items.reduce((sum, item) => sum + item.model_count, 0) }}</strong></Card>
+      <Card size="small"><span class="summary-label">已用额度</span><strong>{{ items.length ? amount(items[0]!) : '—' }}</strong></Card>
     </div>
 
     <div class="lai-filter-bar application-filters">
@@ -192,57 +212,28 @@ function amount(row: ApplicationListItem): string {
         :error="error"
         @retry="refresh"
       />
-      <div class="lai-table-wrap">
-        <table class="lai-table application-table">
-          <thead>
-            <tr>
-              <th>应用</th>
-              <th>负责人 / 部门</th>
-              <th>状态</th>
-              <th>模型 / 密钥</th>
-              <th>Token</th>
-              <th>金额</th>
-              <th>RPM / TPM</th>
-              <th>最近调用</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in items"
-              :key="row.id"
-            >
-              <td>
-                <RouterLink
-                  :to="`/ui/applications/${row.id}`"
-                  class="lai-link application-name"
-                >
-                  {{ row.name }}
-                </RouterLink>
-                <div class="cell-muted">
-                  <span class="lai-cell-mono">{{ row.code }}</span> · {{ environmentLabel[row.environment] || row.environment }}
-                </div>
-              </td>
-              <td>
-                <div>{{ row.owner_name }}</div>
-                <div class="cell-muted">
-                  {{ row.department || '—' }}
-                </div>
-              </td>
-              <td>
-                <span
-                  class="status"
-                  :class="`status-${row.status.toLowerCase()}`"
-                >{{ statusLabel[row.status] || row.status }}</span>
-              </td>
-              <td>{{ row.model_count }} / {{ row.active_key_count }}</td>
-              <td>{{ ratio(row.tokens_used, row.tokens_reserved, row.token_limit) }}</td>
-              <td>{{ amount(row) }}</td>
-              <td>{{ row.rpm ?? '不限' }} / {{ row.tpm == null ? '不限' : row.tpm.toLocaleString() }}</td>
-              <td>{{ row.last_called_at ? formatDateTime(row.last_called_at, store.timezone) : '尚未调用' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <Card :bordered="false" class="application-table-card">
+        <DataTable
+          :columns="columns"
+          :rows="items"
+          :row-key="(row: ApplicationListItem) => row.id"
+          :sort="sort"
+          :loading="refreshing"
+          @sort-change="applySort"
+        >
+          <template #application="{ row }">
+            <RouterLink :to="`/ui/applications/${row.id}`" class="lai-link application-name">{{ row.name }}</RouterLink>
+            <div class="cell-muted"><span class="lai-cell-mono">{{ row.code }}</span> · {{ environmentLabel[row.environment] || row.environment }}</div>
+          </template>
+          <template #owner="{ row }"><div>{{ row.owner_name }}</div><div class="cell-muted">{{ row.department || '—' }}</div></template>
+          <template #status="{ row }"><Tag :color="row.status === 'ACTIVE' ? 'green' : row.status === 'DISABLED' ? 'orange' : 'default'">{{ statusLabel[row.status] || row.status }}</Tag></template>
+          <template #models="{ row }">{{ row.model_count }} / {{ row.active_key_count }}</template>
+          <template #tokens="{ row }"><span>{{ ratio(row.tokens_used, row.tokens_reserved, row.token_limit) }}</span><Progress v-if="row.token_limit" :percent="Math.min(100, Math.round((Number(row.tokens_used) + Number(row.tokens_reserved)) / Math.max(1, Number(row.token_limit)) * 100))" size="small" :show-info="false" /></template>
+          <template #amount="{ row }">{{ amount(row) }}</template>
+          <template #rate="{ row }">{{ row.rpm ?? '不限' }} / {{ row.tpm == null ? '不限' : row.tpm.toLocaleString() }}</template>
+          <template #lastCalled="{ row }">{{ row.last_called_at ? formatDateTime(row.last_called_at, store.timezone) : '尚未调用' }}</template>
+        </DataTable>
+      </Card>
       <ListPager
         :page="page"
         :page-size="pageSize"
@@ -258,14 +249,21 @@ function amount(row: ApplicationListItem): string {
 <style scoped>
 .page-header .lai-page-title { margin-bottom: 0; }
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.application-create-link { display: inline-flex; text-decoration: none; }
 .page-subtitle { margin: 6px 0 0; color: #667085; font-size: 14px; }
+.application-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 20px 0; }
+.application-summary-grid :deep(.ant-card-body) { display: grid; gap: 6px; }
+.application-summary-grid strong { color: var(--lai-color-text); font-size: 20px; }
+.summary-label { color: var(--lai-color-text-secondary); font-size: 12px; }
 .application-filters { flex-wrap: wrap; display: flex; gap: 10px; align-items: center; margin: 24px 0 14px; }
 .filter-keyword { width: 280px; }
 .application-table { min-width: 1120px; }
+.application-table-card { border: 1px solid var(--lai-color-border); border-radius: var(--lai-radius-card); box-shadow: var(--lai-shadow-card); }
 .application-name { font-weight: 600; color: #172033; }
 .cell-muted { margin-top: 4px; color: #667085; font-size: 12px; }
 .status { display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
 .status-active { color: #166534; background: #f0fdf4; }
 .status-disabled { color: #92400e; background: #fffbeb; }
 .status-archived { color: #475467; background: #f2f4f7; }
+@media (max-width: 900px) { .application-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
