@@ -590,3 +590,8 @@ UI-R312 未修改详情 API、页签 URL、状态转换或权限规则。
 | 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | UI-ANT-324-001 | P1 | 草稿、发布、影响评估和回滚页面仍使用旧的 6px 扁平卡片，信息边界与应用/渠道工作区不一致；进入配置发布页即可复现。 | `light-ai-admin-ui/src/styles/base.css`、配置发布页面；草稿/发布 API 契约不变 | 统一 `.lai-card` 为 10px 圆角、蓝色低强度阴影和更宽内边距，保持发布校验、影响提示、回滚与错误状态。 | `npm run typecheck` 通过；`configPublish.test.ts` 12 项通过。 | 代码审查与修复模型/codex-ui-release-0913 | 待复验 |
+## UI-R325 Ant Design 可靠性、限流与熔断视觉（2026-09-13，codex-ui-reliability-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-325-001 | P1 | 限流、可靠性和熔断页面筛选栏与结果表格仍是旧的窄边框平面样式，状态和策略数据缺少统一工作区边界；进入治理菜单即可复现。 | `light-ai-admin-ui/src/styles/base.css`、limits/reliabilities/circuits 页面；策略与运行态 API 契约不变 | 统一筛选区浅蓝背景、10px 圆角和表格卡片阴影，保持策略校验、保存、人工摘除、恢复与错误状态。 | `governanceForms.test.ts`、`governanceCircuits.test.ts` 共 10 项通过。 | 代码审查与修复模型/codex-ui-reliability-0913 | 待复验 |
