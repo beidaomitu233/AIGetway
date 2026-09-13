@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { Card } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import DataTable, { type TableColumn } from '@/components/DataTable.vue'
@@ -297,6 +298,7 @@ onMounted(() => {
         @retry="list.refresh()"
       />
       <template v-else>
+        <Card :bordered="false" class="access-table-card">
         <DataTable
           :columns="columns"
           :rows="list.items.value"
@@ -388,6 +390,7 @@ onMounted(() => {
             </span>
           </template>
         </DataTable>
+        </Card>
         <ListPager
           :page="list.page.value"
           :page-size="list.pageSize.value"
@@ -457,3 +460,8 @@ onMounted(() => {
     </template>
   </section>
 </template>
+
+<style scoped>
+.access-table-card { border: 1px solid var(--lai-border); box-shadow: 0 8px 24px rgba(37, 99, 235, .05); }
+.access-table-card :deep(.ant-card-body) { padding: 0; }
+</style>

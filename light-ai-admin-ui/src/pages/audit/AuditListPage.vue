@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { Card } from 'ant-design-vue'
 import PageState from '@/components/PageState.vue'
 import DataTable, { type TableColumn } from '@/components/DataTable.vue'
 import ListPager from '@/components/ListPager.vue'
@@ -226,6 +227,7 @@ defineExpose({ filterByError })
       @retry="list.refresh()"
     />
     <template v-else>
+      <Card :bordered="false" class="audit-table-card">
       <DataTable
         :columns="columns"
         :rows="list.items.value"
@@ -289,6 +291,7 @@ defineExpose({ filterByError })
           </span>
         </template>
       </DataTable>
+      </Card>
       <ListPager
         :page="list.page.value"
         :page-size="list.pageSize.value"
@@ -415,3 +418,8 @@ defineExpose({ filterByError })
     </Teleport>
   </section>
 </template>
+
+<style scoped>
+.audit-table-card { border: 1px solid var(--lai-border); box-shadow: 0 8px 24px rgba(37, 99, 235, .05); }
+.audit-table-card :deep(.ant-card-body) { padding: 0; }
+</style>
