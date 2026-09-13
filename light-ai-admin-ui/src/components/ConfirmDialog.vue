@@ -69,17 +69,8 @@ function confirm(): void {
 
 <template>
   <Teleport to="body">
-    <div
-      v-if="open"
-      class="lai-dialog-overlay"
-      @keydown.esc="cancel"
-    >
-      <div
-        class="lai-dialog"
-        role="dialog"
-        aria-modal="true"
-        :aria-label="title"
-      >
+    <div v-if="open" class="lai-dialog-overlay" @keydown.esc="cancel">
+      <div class="lai-dialog" role="dialog" aria-modal="true" :aria-label="title">
         <h2 class="lai-dialog-title">
           {{ title }}
         </h2>
