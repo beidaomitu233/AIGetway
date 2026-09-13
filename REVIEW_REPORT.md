@@ -40,8 +40,9 @@
 - `rg -n '<div[^>]*class="[^\"]*lai-card' light-ai-admin-ui/src/pages`：未发现原生 `.lai-card` 容器。
 - 真实浏览器（仓库 `dev:mock`）：41 条主要管理路由均加载到预期页面标题，无 page error 或非资源控制台错误；总览与渠道页面导航、折叠导航、768px 窄屏布局通过。
 - 既有 Vue Router/RouterLink 测试警告仍存在，不影响断言结果。
+- 真实后端回归（2026-09-13，zcode-ant-0913，H2+Redis+Vite+Chromium 1920，无 Mock）：应用创建→详情→密钥一次性弹窗全链路通过，64 位/decimal 契约与密钥无残留验证通过；16 条主路由渲染与空态正常、1920 无横向溢出；渠道创建被 `bootstrap` 缺 `adapters` 阻塞（UI-ANT-CONTRACT-001，后端 AdapterMetadataSource 无实现）；渠道表单与其余 8 页的原生控件残留登记 UI-ANT-349/350。
 
-未验证：真实后端逐页视觉和键盘操作、生产部署、数据库迁移（本轮无数据库变更）。
+未验证：真实 PostgreSQL/MySQL/Redis、真实 Provider 调用与对账、企业身份四角色、1024/1280/1440 全宽度逐页验收、生产部署、数据库迁移（本轮无数据库变更）。
 
 ## 文档、提交与交付
 
