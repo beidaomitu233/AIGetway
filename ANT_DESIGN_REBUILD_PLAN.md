@@ -73,6 +73,56 @@
 | 批量检测/发布 | `a-steps`、`a-progress`、`a-result`、逐项状态表格 |
 | Trace 时间线 | `a-timeline` + 详情 `a-drawer`，运行中刷新保持节点顺序 |
 
+### 2.4 UI-R300 页面与 API 映射
+
+| 页面域 | 保留路由 | 主要读取接口 | 主要写入/动作接口 | 重构任务 |
+| --- | --- | --- | --- | --- |
+| 总览 | `/ui/overview` | `/admin/overview/**` | 无 | UI-R332 |
+| 应用列表 | `/ui/applications` | `/admin/applications` | 归档/状态动作 | UI-R310 |
+| 应用创建/编辑 | `/ui/applications/new`、`/:id/settings` | `/admin/applications/{id}/model-options` | `POST/PUT /admin/applications` | UI-R311 |
+| 应用详情 | `/ui/applications/:id` | 应用详情及 `/models`、`/quota`、`/members`、`/audit` | 页签动作由 UI-R313/314 负责 | UI-R312～314 |
+| 开发接入 | `/ui/applications/:id/integration` | 应用接入、模型和限制 | 受控在线测试 | UI-R315 |
+| 渠道 | `/ui/channels`、`/new`、`/:id`、`/:id/edit` | `/admin/channels`、详情与检测记录 | 渠道 CRUD、启停、检测 | UI-R320～321 |
+| 上游模型 | `/ui/models/upstream/**` | `/admin/upstream-models/**`、渠道选项 | 同步、导入、启停、编辑 | UI-R322 |
+| 虚拟模型/路由 | `/ui/models/virtual/**` | `/admin/virtual-models/**`、路由候选 | 草稿编辑、候选启停和排序 | UI-R323 |
+| 限流/可靠性/熔断 | `/ui/limit-policies`、`/ui/reliability-policies`、`/ui/circuits` | 对应 `/admin/**` 策略和运行态接口 | 策略保存、人工摘除/恢复 | UI-R325 |
+| 发布 | `/ui/config/drafts`、`/ui/config/publish` | 草稿、校验、影响、实例和历史 | 发布、回滚 | UI-R324 |
+| 调用观测 | `/ui/traces/**` | `/admin/traces` | 受控导出 | UI-R330 |
+| 用量成本 | `/ui/usage/**` | `/admin/usage/**` | 额度调整 | UI-R331 |
+| 系统管理 | `/ui/audit-logs/**`、`/ui/access-credentials/**`、`/ui/runtime-config` | 审计、访问凭证、运行参数 | 高权限设置、受控导出 | UI-R333 |
+| 开发接入 | `/ui/developer-access` | 可用应用、模型和运行配置 | 受控在线测试 | UI-R334 |
+| 登录/错误 | `/ui/forbidden`、`/ui/not-found`、登录回调 | bootstrap、身份状态 | 登录、退出、重试 | UI-R307 |
+
+页面只负责调用既有 API 模块和展示服务端结果；若映射中发现接口字段缺失，先登记 `UI-ANT-CONTRACT-*`，交 UI-R341 处理，不由业务页面自行改变请求形状。
+
+### 2.5 UI-R300 旧组件去留表
+
+| 现有文件/能力 | 处理决定 | 责任任务 | 保护点 |
+| --- | --- | --- | --- |
+| `AppLayout.vue`、`base.css` | 完全重写并最终移除旧布局样式 | UI-R302、UI-R342 | 路由、权限和快照上下文不变 |
+| `PageState.vue` | 重写为 Ant Skeleton/Empty/Result/Alert 组合 | UI-R303 | loading、empty、error、403 分离 |
+| `DataTable.vue`、`Pagination.vue`、`ListPager.vue` | 以 Table/Pagination 新实现替换 | UI-R304 | URL 筛选、取消旧请求、服务端排序 |
+| `FormField.vue`、`KeyValueEditor.vue` | 以 Form/Form.List 新实现替换 | UI-R305 | 字段错误、动态行、敏感值不落盘 |
+| `ConfirmDialog.vue`、`CheckDialog.vue`、`CheckCommandDialog.vue` | 按风险动作分别迁移 Modal/Progress/Result | UI-R305、UI-R321 | 影响确认、部分失败和最终状态 |
+| `SecretInput.vue`、`TokenOnceDialog.vue` | 保留安全语义，重写为受控 Modal/Input | UI-R305、UI-R313 | 原文仅创建成功展示一次 |
+| `VersionConflictBanner.vue` | 重写为 Alert/Descriptions | UI-R303 | 409 保留输入并显示最新版本 |
+| `StatusText.vue` | 重写为状态映射 + Tag/Badge | UI-R303 | 只给真实状态着色 |
+| `AppMultiSelect.vue` | 替换为 Select multiple/TreeSelect | UI-R304 | 多选搜索、清空和已选计数 |
+| `TrendChart.vue` | 迁移至 UI-R306 图表封装 | UI-R306 | 真实数据、筛选口径和空态 |
+| `credentials/*` | 重写渠道凭证表格与一次性输入 | UI-R321 | 上游 Key 只可掩码读取 |
+| `ModulePlaceholder.vue` | 仅在路由尚未交付期间保留，最终删除或限于明确未实现页 | UI-R307、UI-R342 | 不把业务缺失渲染成成功 |
+| `useListQuery`、`useFormSubmit`、`useDirtyGuard`、`useLifecycleActions` | 保留行为层，按需改为 Ant 事件适配 | 对应业务包 | 竞态、脏数据和幂等语义不变 |
+| `bootstrap`、`permissions`、`routerGuards`、`api/http.ts` | 保留为业务基础，不做视觉复制 | UI-R301、UI-R302、UI-R307 | 鉴权、数据范围和错误解析不变 |
+
+### 2.6 UI-R300 评审结论与待决事项
+
+- 结论：同意以 Ant Design Vue 作为唯一新视图组件体系，采用蓝色浅色、卡片与半平面视觉方向；所有业务页从新页面树实现。
+- 结论：保留现有 Vue/Router/Pinia/Vite 和 API/权限/数据契约；不以 UI 重构为理由新增后端模块或迁移。
+- 结论：共享层先合入，业务域按 UI-R310～UI-R334 并行；UI-R340～UI-R343 负责跨页视觉、契约和清理。
+- 待决：Ant Design Vue 的具体兼容版本由 UI-R301 在当前 Node/Vite 锁定后确定；图表依赖由 UI-R306 做体积和可访问性验证后确定。
+- 待决：企业登录真实身份源和 Provider/真实数据库门禁仍沿用既有阻塞记录，不因页面重构标记为通过。
+- 执行状态：UI-R300 已完成文档、映射和领取矩阵，提交 `1000902`，等待独立评审；UI-R301～UI-R343 尚未领取。
+
 ## 3. 已联调结果保护清单
 
 以下行为在新 UI 中必须原样保留，并由 UI-R341 建立契约保护测试：

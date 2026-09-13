@@ -463,4 +463,4 @@
 
 详细方案见 [ANT_DESIGN_REBUILD_PLAN.md](ANT_DESIGN_REBUILD_PLAN.md)。FE-P20～FE-P23 继续表示业务功能验收，UI-R 系列只表示新界面重构，二者不得互相替代完成状态。
 
-交付记录：方案提交 `1000902` 已推送至 `docs/ant-design-admin-redesign-plan`，评审入口为 PR #2；UI-R301～UI-R343 尚未开始实现。
+交付记录：UI-R300 已完成设计评审基线、页面/API 映射、旧组件去留表和领取矩阵；方案提交 `1000902` 已推送至 `docs/ant-design-admin-redesign-plan`，评审入口为 PR #2；UI-R301～UI-R343 尚未开始实现。
