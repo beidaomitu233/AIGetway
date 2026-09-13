@@ -114,11 +114,15 @@ public class GovernanceAdminService {
                                                                         LimitPolicySaveCommand command,
                                                                         String rawId) {
         RequestPermissions.require(context, Permissions.LIMIT_MANAGE);
-        command.validate();
+        try {
+            command.validate();
+        } catch (IllegalArgumentException e) {
+            throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "限流策略参数不合法");
+        }
         boolean isUpdate = rawId != null;
         UUID id = isUpdate ? parseId(rawId) : UUID.randomUUID();
         String requestId = context.requestId();
-        UUID scopeId = UUID.fromString(command.scopeId());
+        UUID scopeId = requireUuid(command.scopeId(), "scope_id");
 
         DraftWriteResult result = draftWriteService.execute(new DraftWriteCommand(
                 requestId, context.authContext().userId(), sourceMode, context.sourceIpMasked(),
@@ -332,11 +336,15 @@ public class GovernanceAdminService {
     public ManagementOperationResult<ReliabilityPolicyDetail> saveReliabilityPolicy(
             RequestContext context, ReliabilityPolicySaveCommand command, String rawId) {
         RequestPermissions.require(context, Permissions.RELIABILITY_MANAGE);
-        command.validate();
+        try {
+            command.validate();
+        } catch (IllegalArgumentException e) {
+            throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED, "可靠性策略参数不合法");
+        }
         boolean isUpdate = rawId != null;
         UUID id = isUpdate ? parseId(rawId) : UUID.randomUUID();
         String requestId = context.requestId();
-        UUID aliasId = UUID.fromString(command.aliasId());
+        UUID aliasId = requireUuid(command.aliasId(), "alias_id");
 
         DraftWriteResult result = draftWriteService.execute(new DraftWriteCommand(
                 requestId, context.authContext().userId(), sourceMode, context.sourceIpMasked(),
@@ -486,6 +494,18 @@ public class GovernanceAdminService {
             return UUID.fromString(rawId.strip());
         } catch (IllegalArgumentException e) {
             throw new LightAiException(ErrorCode.OBJECT_NOT_FOUND, "对象不存在或已删除");
+        }
+    }
+
+    /** 命令体内的引用 ID（scope_id/alias_id）：缺失或非 UUID 一律 400，不进未分类异常。 */
+    static UUID requireUuid(String rawId, String field) {
+        if (rawId == null || rawId.isBlank()) {
+            throw fieldError(field, "REQUIRED", field + " 必填");
+        }
+        try {
+            return UUID.fromString(rawId.strip());
+        } catch (IllegalArgumentException e) {
+            throw fieldError(field, "INVALID", field + " 必须为合法 UUID");
         }
     }
 

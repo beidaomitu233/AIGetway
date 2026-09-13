@@ -134,9 +134,9 @@ class ConfigValidationServiceTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> candidate = (Map<String, Object>)
                 ((List<?>) invalid.get("route_candidates")).get(0);
-        candidate.put("channel_id", "pool-other");
-        invalid.put("credential_pools", List.of(enabledPool("pool-1", "p-1"),
-                enabledPool("pool-other", "p-other")));
+        candidate.put("channel_id", "p-other");
+        invalid.put("credential_pools", List.of(enabledPool("p-1", "p-1"),
+                enabledPool("p-other", "p-other")));
         invalid.put("providers", List.of(enabledProvider("p-1"), enabledProvider("p-other")));
         content.content = invalid;
 
@@ -245,13 +245,13 @@ class ConfigValidationServiceTest {
         candidate.put("id", "c-1");
         candidate.put("alias_id", "a-1");
         candidate.put("upstream_model_id", "m-1");
-        candidate.put("channel_id", "pool-1");
+        candidate.put("channel_id", "p-1");
         candidate.put("enabled", true);
 
         Map<String, Object> tree = new java.util.LinkedHashMap<>();
         tree.put("schema_version", 1);
         tree.put("providers", List.of(enabledProvider("p-1")));
-        tree.put("credential_pools", List.of(enabledPool("pool-1", "p-1")));
+        tree.put("credential_pools", List.of(enabledPool("p-1", "p-1")));
         tree.put("credentials", List.of(enabledCredential()));
         tree.put("upstream_models", List.of(model));
         tree.put("model_aliases", List.of(alias));
@@ -283,7 +283,7 @@ class ConfigValidationServiceTest {
     static Map<String, Object> enabledCredential() {
         Map<String, Object> credential = new java.util.LinkedHashMap<>();
         credential.put("id", "cred-1");
-        credential.put("channel_id", "pool-1");
+        credential.put("channel_id", "p-1");
         credential.put("name", "sk-***");
         credential.put("enabled", true);
         return credential;
