@@ -615,3 +615,8 @@ UI-R312 未修改详情 API、页签 URL、状态转换或权限规则。
 | 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | UI-ANT-333-001 | P1 | 访问凭证和审计列表结果区缺少统一容器，敏感字段与审计明细的工作区层级弱；进入系统管理列表即可复现。 | `light-ai-admin-ui/src/pages/access/AccessListPage.vue`、`light-ai-admin-ui/src/pages/audit/AuditListPage.vue`；访问凭证、审计 API 契约不变 | 使用 Ant Design `Card` 承载结果表，保留敏感字段裁剪、一次显示、权限判断和筛选分页行为。 | `npm run typecheck` 通过；`runtimeAccess.test.ts`、`layout.test.ts` 共 19 项通过。 | 代码审查与修复模型/codex-ui-admin-0913 | 待复验 |
+## UI-R334 Ant Design 全局开发接入工作区（2026-09-13，codex-ui-developer-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-334-001 | P1 | 全局开发接入页的连接信息、能力限制和错误说明表格缺少统一工作区边界，在线测试区层级不清晰；进入开发接入页即可复现。 | `light-ai-admin-ui/src/pages/developer/DeveloperAccessPage.vue`；开发接入与在线测试 API 契约不变 | 使用 Ant Design `Card` 承载连接能力与错误说明表，保留模型选择、占位密钥、在线测试权限和错误状态。 | `npm run typecheck` 通过；`developerPage.test.ts` 11 项通过。 | 代码审查与修复模型/codex-ui-developer-0913 | 待复验 |
