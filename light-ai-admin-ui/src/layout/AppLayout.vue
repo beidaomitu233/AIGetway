@@ -12,6 +12,8 @@ import {
   FileSearchOutlined,
   FundOutlined,
   KeyOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
   SettingOutlined,
   ToolOutlined,
 } from '@ant-design/icons-vue'
@@ -159,7 +161,7 @@ function toggleCollapsed(): void {
               @click="toggleCollapsed"
             >
               <template #icon>
-                <component :is="collapsed ? SettingOutlined : ControlOutlined" />
+                <component :is="collapsed ? MenuUnfoldOutlined : MenuFoldOutlined" />
               </template>
             </Button>
           </Tooltip>
