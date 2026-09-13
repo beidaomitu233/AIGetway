@@ -549,3 +549,8 @@ UI-R312 未修改详情 API、页签 URL、状态转换或权限规则。
 | 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | UI-ANT-313-001 | P1 | 应用详情密钥面板仍使用扁平容器和原生状态文本，层级与新蓝色管理后台不一致；进入应用详情密钥页即可复现。 | `light-ai-admin-ui/src/pages/applications/ApplicationKeyPanel.vue`；应用密钥 API 契约不变 | 使用 Ant Design `Card` 承载面板、`Button` 统一签发入口、`Tag` 表达密钥状态；保留一次显示、轮换、失效及权限判断。 | `npm run typecheck` 通过；应用页面与凭证面板回归 15 项通过。 | 代码审查与修复模型/codex-ui-app-keys-0913 | 待复验 |
+## UI-R314 Ant Design 应用额度治理摘要（2026-09-13，codex-ui-app-governance-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-314-001 | P1 | 应用详情额度摘要仍以扁平原生表格呈现，Token/金额使用比例缺少可视反馈，难以快速判断治理状态；打开应用详情“额度与限流”页签即可复现。 | `light-ai-admin-ui/src/pages/applications/ApplicationQuotaSummary.vue`；应用额度查询契约不变 | 使用 Ant Design `Card`、`Progress`、`Tag` 建立卡片化摘要和使用进度；保留原表格 aria-label、BigInt Token 计算、金额精度、无限额度和周期结束文案。 | `npm run typecheck` 通过；`antApplicationGovernance.test.ts` 2 项、应用页面回归 39 项通过。 | 代码审查与修复模型/codex-ui-app-governance-0913 | 待复验 |
