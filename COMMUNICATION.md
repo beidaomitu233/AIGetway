@@ -462,3 +462,5 @@
 | UI-ANT-PLAN-004 | 方案 | UI 重写不能丢失已经通过 H2+Redis+Vite+Chromium 验证的应用、渠道和模型字段契约。 | `/admin/applications/**`、`/admin/channels/**`、上游/虚拟模型接口 | 把 `secret`、`allow_stream`、64 位十进制字符串、decimal、`version`、`model-options`、渠道 V2 字段和 `_24h` 字段列为保护清单；统一由 UI-R341 复验。 | 已记录保护条款；真实 PG/MySQL/Provider/企业身份仍保持未验收。 | 方案负责人/codex-ui-plan-0913 | 待实现 |
 
 详细方案见 [ANT_DESIGN_REBUILD_PLAN.md](ANT_DESIGN_REBUILD_PLAN.md)。FE-P20～FE-P23 继续表示业务功能验收，UI-R 系列只表示新界面重构，二者不得互相替代完成状态。
+
+交付记录：方案提交 `1000902` 已推送至 `docs/ant-design-admin-redesign-plan`，评审入口为 PR #2；UI-R301～UI-R343 尚未开始实现。
