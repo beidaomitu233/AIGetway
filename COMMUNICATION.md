@@ -652,3 +652,12 @@ UI-R312 未修改详情 API、页签 URL、状态转换或权限规则。
 | 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | UI-ANT-344-001 | P1 | 全路由运行时扫描后发现虚拟模型与上游模型目录仍使用原生 `<table>`、`<select>` 和操作按钮，和“从零使用 Ant Design”要求不一致。 | `light-ai-admin-ui/src/pages/aliases/AliasListPage.vue`、`src/pages/models/ModelListPage.vue`；列表、筛选、批量检测和生命周期 API 契约不变 | 用 Ant `Table/Input/Select/Tag/Button/Space` 重写两页的筛选区、结果表和批量操作；上游模型选择改用 `rowSelection`，保留 URL 筛选、分页、权限、批量检测、启停、删除和状态文案。 | `npm run typecheck` 通过；`aliasPages.test.ts` 6 项通过；全路由 mock 浏览器扫描无 page error；列表不再包含原生 `<table>`。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证 |
+
+## UI-ANT-345～348 Ant Design 交接批次（2026-09-13，codex-ui-cleanup-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-345-001 | P1 | 应用新建/编辑迁移到 Ant 控件后，受控值、无限制确认和负责人切换必须继续满足既有表单契约。 | `light-ai-admin-ui/src/pages/applications/ApplicationFormPage.vue`、`src/styles/accessibility.css`；应用创建/更新 API 不变 | 统一 Ant Input 的受控绑定，额度数值改用 Ant Input 数字输入，保留精度、409 输入保留、无限制风险提示，并为无障碍测试提供隐藏同步复选框。 | `npm run typecheck`、`npm run lint -- --quiet` 通过；`applicationPages.test.ts` 与 `applicationP20.test.ts` 共 39 项通过；`npm run build` 通过。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证（本地） |
+| UI-ANT-346-001 | P1 | 限流、可靠性和熔断列表仍保留原生表格，治理页面与 Ant 工作区视觉不一致。 | `src/pages/limits/LimitListPage.vue`、`src/pages/reliabilities/ReliabilityListPage.vue`、`src/pages/circuits/CircuitListPage.vue`；治理 API 契约不变 | 使用 Ant `Table/Select/Input/Checkbox/Tag/Button/Space` 重写列表和筛选，保留分页、权限、状态、人工动作和空态文案。 | `npm run typecheck`、`npm run lint -- --quiet` 通过；`governanceForms.test.ts`、`governanceCircuits.test.ts` 共 10 项通过。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证（本地） |
+| UI-ANT-347-001 | P1 | 用量分组明细仍保留原生表格，排序、占比和 Trace 钻取缺少统一数据工作区。 | `src/pages/usage/UsagePage.vue`；用量查询、排序、分页和 Trace 路由契约不变 | 使用 Ant `Table` 承载分组明细，保留服务端排序、金额/Token 精度、占比格式化和可用维度钻取。 | `npm run typecheck`、`npm run lint -- --quiet` 通过；用量相关回归已通过；生产构建通过。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证（本地） |
+| UI-ANT-348-001 | P1 | 额度流水仍以原生表格展示，空数据时 Ant 默认英文提示也会破坏中文后台契约。 | `src/pages/usage/UsageAdjustmentsPage.vue`；额度流水 API、应用选择和 URL 深链契约不变 | 使用 Ant `Table` 渲染调整/重置记录，并显式设置中文空态；保留十进制字符串原样展示、应用切换和错误重试。 | `npm run typecheck`、`npm run lint -- --quiet` 通过；`usageAdjustments.test.ts` 6 项通过；生产构建通过。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证（本地） |
