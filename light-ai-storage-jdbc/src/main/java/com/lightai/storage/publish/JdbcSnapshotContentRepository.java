@@ -113,6 +113,9 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
         Map<String, Long> counts = new LinkedHashMap<>();
         for (EntityColumns entity : ENTITIES) {
             List<Map<String, Object>> rows = readRows(connection, entity);
+            if ("channel".equals(entity.entityType())) {
+                enrichChannelProviderTypes(connection, rows);
+            }
             counts.put(entity.jsonKey(), (long) rows.size());
             content.put(entity.jsonKey(), rows);
         }

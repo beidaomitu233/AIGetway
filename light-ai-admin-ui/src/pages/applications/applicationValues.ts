@@ -71,6 +71,15 @@ export function validPeriod(type: string, start: string, end: string): boolean {
 }
 export const applicationStatusLabels: Record<string, string> = { ACTIVE: '启用', DISABLED: '已停用', ARCHIVED: '已归档' }
 export const applicationEnvironmentLabels: Record<string, string> = { DEV: '开发', TEST: '测试', STAGING: '预发布', PROD: '生产' }
+export const applicationBudgetStatusLabels: Record<string, string> = {
+  NORMAL: '额度正常', EXHAUSTED: '额度已耗尽', UNLIMITED: '未设额度上限',
+}
+export function successRateText(value: string | null): string {
+  if (value === null || !/^\d+(?:\.\d+)?$/.test(value.trim())) return '—'
+  const rate = Number(value)
+  if (!Number.isFinite(rate) || rate < 0 || rate > 1) return '数据异常'
+  return `${(rate * 100).toFixed(1)}%`
+}
 /** 不解析域名，不接受 URL、端口、zone id；IPv6 的地址语法交给浏览器 URL 解析器。 */
 export function validIpRule(value: string): boolean {
   const parts = value.split('/')

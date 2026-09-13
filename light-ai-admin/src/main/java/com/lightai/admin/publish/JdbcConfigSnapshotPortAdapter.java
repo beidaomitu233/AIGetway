@@ -245,11 +245,14 @@ public final class JdbcConfigSnapshotPortAdapter extends AbstractJdbcRepository 
         }
     }
 
-    private List<AliasView> parseAliases(Map<String, Object> content) {
+    /* package */ List<AliasView> parseAliases(Map<String, Object> content) {
         Object aliasesObj = content.get("model_aliases");
         Object candidatesObj = content.get("route_candidates");
         Object modelsObj = content.get("upstream_models");
-        Object providersObj = content.get("providers");
+        // V2 snapshots store provider connection data under channels. Keep the
+        // legacy providers key as a fallback so older snapshots remain readable.
+        Object providersObj = content.containsKey("channels")
+                ? content.get("channels") : content.get("providers");
         if (!(aliasesObj instanceof List<?> aliasList)) {
             return List.of();
         }
@@ -316,7 +319,10 @@ public final class JdbcConfigSnapshotPortAdapter extends AbstractJdbcRepository 
         }
         String channelId = toString(model.get("channel_id"));
         Map<String, Object> provider = providersById.get(channelId);
-        String providerType = provider == null ? null : toString(provider.get("type"));
+        String providerType = provider == null ? null : toString(provider.get("provider_type"));
+        if (providerType == null && provider != null) {
+            providerType = toString(provider.get("type"));
+        }
         if (provider == null) {
             return null;
         }

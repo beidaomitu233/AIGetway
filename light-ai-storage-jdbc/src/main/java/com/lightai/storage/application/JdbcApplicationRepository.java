@@ -414,7 +414,7 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
         sql.append(" WHERE 1=1");
         List<Object> values = new ArrayList<>();
         appendFilter(sql, values, filter, dialect);
-        sql.append(" ORDER BY ").append(orderExpression(sort)).append(", ")
+        sql.append(" ORDER BY ").append(orderExpression(sort, qualify(connection, "application"))).append(", ")
                 .append(qualify(connection, "application")).append(".id ASC ")
                 .append(dialect.limitOffsetClause(limit, offset));
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
@@ -443,16 +443,18 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
     /**
      * BE-P20-001：默认 last_called_at desc 时空值排在末尾，保证未调用过的应用不压倒活跃应用。
      */
-    private static String orderExpression(String sort) {
+    private static String orderExpression(String sort, String table) {
         String trimmed = sort.trim();
+        int space = trimmed.indexOf(' ');
+        String column = space < 0 ? trimmed : trimmed.substring(0, space);
         String lower = trimmed.toLowerCase();
+        String qualified = table == null ? column : table + "." + column;
         if (lower.startsWith("last_called_at")) {
-            String column = trimmed.substring(0, trimmed.indexOf(' ') < 0
-                    ? trimmed.length() : trimmed.indexOf(' '));
             String direction = lower.contains(" asc") ? "ASC" : "DESC";
-            return "(" + column + " IS NULL) ASC, " + column + " " + direction;
+            return "(" + qualified + " IS NULL) ASC, " + qualified + " " + direction;
         }
-        return trimmed;
+        String direction = lower.endsWith(" asc") ? "ASC" : "DESC";
+        return qualified + " " + direction;
     }
 
     public long count(Connection connection, Filter filter) {

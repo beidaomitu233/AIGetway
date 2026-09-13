@@ -702,3 +702,35 @@ UI-ANT-350 已完成（见上表处理结论）。全仓源码扫描发现剩余
 | BE-AUDIT-0913-002 | 后端执行模型/zcode-be-0913 | `POST/PUT /admin/limit-policies`、`/admin/reliability-policies` 对缺失/非法 `scope_id`/`alias_id` 返回 500 INTERNAL_ERROR（P2）：`GovernanceAdminService:121/339` 裸 `UUID.fromString`，异常未分类（实测 scope_id=null → 500）。 | light-ai-admin governance | 应在命令校验或 service 入口报 FIELD_VALIDATION_FAILED（400）；同文件 486 行已有安全解析助手可复用。 | 后端负责人 | 已修复 | 提交 `05c5c85`（2026-09-13）：saveLimitPolicy/saveReliabilityPolicy 的 `command.validate()` 按既有 RouteCandidateService 模式捕获 IllegalArgumentException 映射 400（根因即命令 validate 抛裸 IAE）；scope_id/alias_id 改用新增静态助手 `requireUuid`（缺失→REQUIRED、非 UUID→INVALID，均带字段明细）。新增 GovernanceAdminServiceUuidValidationTest 3 项。 |
 | BE-AUDIT-0913-003 | 后端执行模型/zcode-be-0913 | 命令解析 400 的可诊断性弱（P3）：`CommandBodies.parse` 把字段级反序列化失败（如 primitive `version`/`enabled` 缺失触发 FAIL_ON_NULL_FOR_PRIMITIVES）统一压成 `body INVALID "JSON 格式或字段类型不合法"`，不指明具体字段；离线 Jackson 复现确认根因可定位但响应不可见。 | light-ai-admin web/CommandBodies | 从 JsonProcessingException 提取字段路径生成 FieldIssue（注意不回传内部细节的安全边界）。 | 后端负责人 | 已修复 | 提交 `05c5c85`（2026-09-13）：fieldIssues() 从 JsonMappingException.getPath() 提取字段路径；primitive 缺失/类型错误→INVALID「字段缺失或类型不合法」、未知字段→UNKNOWN+字段名、路径为空退回 body 级；仅含客户端字段名与通用原因，不回传内部细节。新增 CommandBodiesTest 4 项（合法解析、缺失 primitive 报 application_version、未知字段、坏 JSON 退级）。 |
 | BE-AUDIT-0913-PASS | 后端执行模型/zcode-be-0913 | **走通链路记录（2026-09-13 真实后端 H2+Redis@18099，无 Mock）**：只读扫描 32 端点全绿（错误信封/无效 ID 400/未知对象 404 形态统一）；渠道域全链（渠道→凭证掩码无泄漏→上游模型→虚拟模型→路由候选）200 且草稿计数正确；应用创建 201（period_type 必填校验生效）；usage/overview 带时间窗查询 200；audit-logs 记录 7 条操作；bootstrap adapters 4 条与渠道创建复验（见 UI-ANT-CONTRACT-001）。未走通：发布链（BE-AUDIT-0913-001）、网关 /v1/* 与 channel.check（依赖发布链 + Redis 中途下线未完成第三轮）、真实 PG/MySQL。 | 全后端 | 网关链路待 BE-AUDIT-0913-001 修复后重测；本轮探针数据为一次性 H2 内存环境。 | 后端负责人 | 已记录 | 探针脚本与原始输出留存于执行会话临时目录。 |
+
+## FS-RV-P20-001 / FS-RV-P20-002 联调补记（2026-09-13，当前工作区复验）
+
+| 编号 | 问题与复现步骤 | 涉及流程/模块 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+|---|---|---|---|---|---|---|
+| FS-RV-P20-001 | 发布校验切换到 V2 `channels/channel_credentials` 后，既有 V1 草稿夹具使用 `providers/credential_pools/credentials` 时有效草稿被判失败，跨渠道与未注册 Adapter 错误码退化为 `REFERENCE_INVALID` | 配置发布校验、ConfigValidationService | V2 键切换未保留旧草稿读取兼容；校验服务增加 V2 优先、V1 键回退，解析旧候选的 credential_pool→provider 关系，并回退 `type` 字段 | `ConfigValidationServiceTest` 8 项、`ConfigPublishServiceTest` 16 项全部通过；V2 快照路径保留 | 联调模型 / 当前任务 | 已验证 |
+| FS-RV-P20-002 | 应用列表使用 `budget_status=NORMAL` 并按 `updated_at desc` 排序时，真实 H2 查询可能报 ambiguous column `updated_at` | 应用列表、JdbcApplicationRepository | 预算筛选 JOIN quota 表后排序字段未限定表名；排序表达式统一加 `application` 表限定，保留最近调用空值排序 | H2 真实仓储回归通过；真实 HTTP 创建应用后 `GET /admin/applications?budget_status=NORMAL&sort=updated_at desc` 返回 200 且正确回显 | 联调模型 / 当前任务 | 已验证 |
+## RV-P20 应用接入域代码审查补记（2026-09-13，rvagent-0912）
+
+本轮基于 `bbc1340`（后续并行修复提交 `41e6635` 已包含 FS-RV-P20-001/002 的后端修复）复核 FE-201～FE-205 的页面/API 契约。前端修复仍在当前审查分支，主任务占用不变。
+
+| 编号 | 级别 | 问题与依据 | 修复与验证 | 状态 |
+| --- | --- | --- | --- | --- |
+| RV-P20-001 | P1 | 创建/编辑授权仍读取 `/virtual-models`，可能展示未发布或不可路由模型。 | 改用 `/admin/applications/model-options` 与 `/{id}/model-options`，页面测试断言不再访问旧端点；前端 248 项测试/typecheck/build 通过。 | 已验证 |
+| RV-P20-002 | P2 | 应用列表 24h 字段数字后缀 JSON 名称与 `requests_24h/success_rate_24h` 契约不一致。 | `ApplicationListItem` 显式 `@JsonProperty`，补 API 合约断言；前端同步类型并展示摘要。后端 Maven 复验依赖并行线程结果，当前环境本会话无 Maven。 | 已验证（后端待环境复验） |
+| RV-P20-003 | P2 | 应用列表缺部门与预算状态筛选，无法按计划保留 URL/请求状态。 | 增加筛选、URL 参数和回归测试；并行 H2+Redis 真实 HTTP 已验证筛选 200。 | 已验证 |
+| RV-P20-004 | P2 | 资源下线后历史授权从候选消失但仍被提交，无法收口失效授权。 | 候选加载后提示并从提交集合移除，新增 PUT 回归断言。 | 已验证 |
+| RV-P20-005 | P2 | 后端已返回预算状态与 24h 摘要，前端未消费，FE-201 展示验收缺口。 | 补齐接口类型、预算标签、64 位请求计数格式化和成功率展示；页面夹具断言 `42 次`、`87.5%`。 | 已验证 |
+
+本轮前端验证命令：`npm run typecheck`、`npm test -- --run`（28 文件/248 项）、`npm run build`。未将 Mock 结果描述为真实业务成功；真实 Provider、真实 PostgreSQL/MySQL/Redis、企业身份四角色和首调 E2E 仍按既有报告待验收。密钥列表 N+1、`ip_allowlist` 域名解析策略登记为跨包待确认，不在本轮接管。
+
+### RV-P20 最终复验补记（2026-09-13）
+
+在上述提交之后，使用 IntelliJ Maven 运行时重新执行全仓 `mvn -B verify`，14 个模块全部 `BUILD SUCCESS`，退出码 0；真实 H2+Redis HTTP/Chromium 证据与应用域定向测试结果仍以 `INTEGRATION_REPORT.md` §12 为准。真实 PostgreSQL/MySQL/Provider、企业身份和生产级并发/恢复场景仍未验收。
+
+## RV-CORE-001 核心服务链路最小审查与修复（2026-09-13）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+|---|---|---|---|---|---|---|---|
+| RV-CORE-001 | P1 | V2 配置发布成功后，`GET /v1/models` 返回空列表，`POST /v1/chat/completions` 返回 `MODEL_CAPABILITY_NOT_SUPPORTED`；管理端显示渠道、模型、路由均已启用。 | `JdbcConfigSnapshotPortAdapter.parseAliases`；`channels`/`upstream_models`/`route_candidates` 快照；`/v1/models`、`/v1/chat/completions` | 运行时适配器仍只读取旧快照键 `providers`，且只读 `type`；V2 快照使用 `channels` 与 `provider_type`，导致候选被丢弃。适配器改为 V2 优先并保留旧键回退；渠道快照装配补齐 `provider_type`。 | 修复后本地 H2 + Redis + Stub Provider：创建渠道/凭证/上游模型/虚拟模型/路由→校验→发布 `SUCCEEDED`；`/v1/models` 200 且包含 alias；同步聊天 200 含 `choices`；流式聊天 200 含 `[DONE]`。`JdbcConfigSnapshotPortAdapterTest` 3 项通过；server 打包成功。 | 代码审查与修复模型/root | 已验证（本地） |
+
+本次最小检查确认：应用可通过平台访问凭证调用已发布虚拟模型，并转发到指定 OpenAI 兼容渠道。优先级/权重路由、凭证选择、重试/熔断已有单元测试覆盖；本轮未做双真实 Provider 的统计性负载比例测试。真实 Provider、PostgreSQL/MySQL、生产 Redis 集群和企业身份边界仍未验收。

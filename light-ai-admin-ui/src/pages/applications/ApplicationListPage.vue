@@ -10,7 +10,15 @@ import { useListQuery, type FilterValue } from '@/composables/useListQuery'
 import { fetchApplications, type ApplicationListItem } from '@/api/applications'
 import { formatDateTime } from '@/app/display'
 import { ApiError } from '@/api/errors'
-import { amountUsage, integerUnits, integerText, applicationStatusLabels as statusLabel, applicationEnvironmentLabels as environmentLabel } from './applicationValues'
+import {
+  amountUsage,
+  integerUnits,
+  integerText,
+  applicationStatusLabels as statusLabel,
+  applicationEnvironmentLabels as environmentLabel,
+  applicationBudgetStatusLabels as budgetStatusLabel,
+  successRateText,
+} from './applicationValues'
 
 const store = useBootstrapStore()
 const canManage = computed(() => store.can(Permission.applicationManage))
@@ -37,6 +45,9 @@ const {
     status: { default: '', url: true },
     environment: { default: '', url: true },
     owner_id: { default: '', url: true },
+    // BE-P20-001：部门精确匹配与预算状态筛选，后端已支持（BACKEND_PLAN 应用列表补充契约）
+    department: { default: '', url: true },
+    budget_status: { default: '', url: true },
   },
   defaultSort: 'last_called_at desc',
   fetcher: (params, signal) => {
@@ -63,6 +74,10 @@ function ratio(used: string, reserved: string, limit: string | null): string {
   return `${integerText(consumed)} / ${integerText(cap)}（${percent}%）`
 }
 
+function requestCount(value: string): string {
+  const parsed = integerUnits(value)
+  return parsed === null ? '数据异常' : integerText(parsed)
+}
 function amount(row: ApplicationListItem): string {
   return amountUsage(row.amount_used, row.amount_reserved, row.amount_limit, row.currency)
 }
@@ -160,6 +175,32 @@ const columns: TableColumn[] = [
         :value="state.owner_id"
         @change="applyFilters({ owner_id: ($event.target as HTMLInputElement).value.trim() })"
       >
+      <input
+        class="lai-input"
+        aria-label="部门筛选"
+        placeholder="所属部门"
+        :value="state.department"
+        @change="applyFilters({ department: ($event.target as HTMLInputElement).value.trim() })"
+      >
+      <select
+        class="lai-select"
+        aria-label="预算状态筛选"
+        :value="state.budget_status"
+        @change="applyFilters({ budget_status: ($event.target as HTMLSelectElement).value })"
+      >
+        <option value="">
+          全部预算状态
+        </option>
+        <option value="NORMAL">
+          额度正常
+        </option>
+        <option value="EXHAUSTED">
+          额度已耗尽
+        </option>
+        <option value="UNLIMITED">
+          未设额度上限
+        </option>
+      </select>
       <select
         class="lai-select"
         aria-label="排序"
