@@ -164,6 +164,19 @@ describe('OverviewPage（FE-031~033）', () => {
               model_name: 'gpt-4o',
               alias_name: 'chat-default',
             },
+            {
+              item_type: 'CHANNEL_CREDENTIAL',
+              object_id: 'cred-3',
+              object_name: 'OpenAI 主 Key',
+              status: 'INVALID',
+              error_code: 'CREDENTIAL_UNAVAILABLE',
+              error_summary: '凭证不可用',
+              occurrence_count: 1,
+              latest_at: '2026-09-05T09:50:00Z',
+              provider_name: 'OpenAI 生产',
+              model_name: null,
+              alias_name: null,
+            },
           ],
           data_updated_at: '2026-09-05T10:00:00Z',
         })
@@ -200,6 +213,8 @@ describe('OverviewPage（FE-031~033）', () => {
     expect(text).toContain('OPEN 熔断 1')
     expect(text).toContain('gpt-4o + sk-****a1b2')
     expect(text).toContain('PROVIDER_SERVER_ERROR')
+    expect(text).toContain('OpenAI 主 Key')
+    expect(wrapper.find('a[href*="credential-pools"]').exists()).toBe(false)
 
     const chip = wrapper.findAll('button').find((button) => button.text() === 'OPEN 熔断 1')
     await chip!.trigger('click')

@@ -400,7 +400,7 @@ const exceptionChips = computed(() => {
     { key: 'CIRCUIT_HALF_OPEN', label: `HALF_OPEN 熔断 ${summaryData.half_open_circuit_count}`, filter: 'CIRCUIT_HALF_OPEN' },
     { key: 'CANDIDATE', label: `不可用候选 ${summaryData.unavailable_candidate_count}`, filter: 'CANDIDATE' },
     ...(summaryData.invalid_credential_count !== null
-      ? [{ key: 'CREDENTIAL', label: `无效凭证 ${summaryData.invalid_credential_count}`, filter: 'CREDENTIAL' }]
+      ? [{ key: 'CHANNEL_CREDENTIAL', label: `无效凭证 ${summaryData.invalid_credential_count}`, filter: 'CHANNEL_CREDENTIAL' }]
       : []),
     { key: 'TRACE', label: `近期失败 Trace ${summaryData.recent_failure_trace_count}`, filter: 'TRACE' },
   ]
@@ -425,7 +425,9 @@ function exceptionTarget(item: OverviewExceptionItem): { name: string; params: R
     case 'CANDIDATE':
       return { name: 'alias-detail', params: { id: item.object_id } }
     case 'CREDENTIAL':
-      return { name: 'pool-detail', params: { id: item.object_id } }
+    case 'CHANNEL_CREDENTIAL':
+      // 凭证对象没有独立详情路由；后端只保证保留名称快照，避免生成失效链接。
+      return null
     case 'TRACE':
       return { name: 'trace-detail', params: { traceId: item.object_id } }
     default:
@@ -450,6 +452,7 @@ const itemTypeLabels: Record<string, string> = {
   CIRCUIT: '熔断',
   CANDIDATE: '候选',
   CREDENTIAL: '凭证',
+  CHANNEL_CREDENTIAL: '凭证',
   TRACE: 'Trace',
 }
 </script>

@@ -67,7 +67,7 @@ export interface OverviewTrendResult {
   data_updated_at: string
 }
 
-export type OverviewExceptionItemType = 'CIRCUIT' | 'CANDIDATE' | 'CREDENTIAL' | 'TRACE' | string
+export type OverviewExceptionItemType = 'CIRCUIT' | 'CANDIDATE' | 'CREDENTIAL' | 'CHANNEL_CREDENTIAL' | 'TRACE' | string
 
 export interface OverviewExceptionItem {
   item_type: OverviewExceptionItemType
