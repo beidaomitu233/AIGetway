@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Input, Select } from 'ant-design-vue'
+import { Button, Checkbox, Input, Select } from 'ant-design-vue'
 // 限流策略新建/编辑表单（FE-019，附录 4.3.1.2）。
 // scope 创建后只读；REJECT 不提交队列字段；启用要求至少一个限额；空值保留 null。
 import { computed, onMounted, reactive, ref } from 'vue'

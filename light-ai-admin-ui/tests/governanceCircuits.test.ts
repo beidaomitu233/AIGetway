@@ -108,7 +108,7 @@ describe('CircuitDetailPage（FE-023/024）', () => {
 
   function clickDialogButton(text: string): void {
     const buttons = [...document.querySelectorAll('.lai-dialog button')]
-    const target = buttons.find((button) => button.textContent?.trim() === text) as HTMLButtonElement
+    const target = buttons.find((button) => button.textContent?.replace(/\s/g, '') === text) as HTMLButtonElement
     target.click()
   }
 

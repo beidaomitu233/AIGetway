@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button } from 'ant-design-vue'
 // 熔断详情（FE-023/024，附录 4.3.3.2）：状态 5 秒刷新、生效阈值、状态事件、
 // 失败样本、近期探测与人工信息；人工操作使用最新 state_version 提交。
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
@@ -162,29 +163,24 @@ const thresholdRows = computed(() => {
         v-if="canOperate"
         class="lai-page-actions"
       >
-        <button
-          type="button"
-          class="lai-btn"
+        <Button
           :disabled="detail?.state === 'OPEN'"
           @click="startAction('PROBE_NOW')"
         >
           立即探测
-        </button>
-        <button
-          type="button"
-          class="lai-btn"
+        </Button>
+        <Button
           :disabled="detail?.state === 'CLOSED'"
           @click="startAction('MANUAL_RECOVER')"
         >
           人工恢复
-        </button>
-        <button
-          type="button"
-          class="lai-btn lai-btn-danger"
+        </Button>
+        <Button
+          type="link" danger
           @click="startAction('MANUAL_OPEN')"
         >
           人工打开
-        </button>
+        </Button>
       </div>
     </div>
 

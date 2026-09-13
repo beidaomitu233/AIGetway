@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button, Input, Textarea } from 'ant-design-vue'
 // 熔断人工操作弹窗（FE-024，附录 4.3.3.3）：
 // MANUAL_OPEN 需原因+时长、MANUAL_RECOVER 需原因、PROBE_NOW 仅确认；
 // 提交携带页面最后读取的 state_version，CIRCUIT_STATE_CONFLICT 时提示刷新重确认。
@@ -109,13 +110,11 @@ function close(): void {
             class="lai-required"
             aria-hidden="true"
           >*</span></label>
-          <textarea
-            id="lai-circuit-reason"
-            v-model="reason"
-            class="lai-input lai-textarea"
-            rows="3"
-            maxlength="500"
-          />
+          <Textarea id="lai-circuit-reason"
+            v-model:value="reason"
+            class="lai-textarea"
+            :rows="3"
+            :maxlength="500" />
         </div>
 
         <div
@@ -127,13 +126,7 @@ function close(): void {
             for="lai-circuit-open-seconds"
             hint
           >预计恢复时长（秒，1—3600，空为策略默认）</label>
-          <input
-            id="lai-circuit-open-seconds"
-            v-model="openSeconds"
-            class="lai-input"
-            type="text"
-            inputmode="numeric"
-          >
+          <Input id="lai-circuit-open-seconds" v-model:value="openSeconds" type="text" inputmode="numeric" />
           <p
             v-if="openSecondsInvalid"
             class="lai-form-message-error"
@@ -158,23 +151,18 @@ function close(): void {
         </p>
 
         <div class="lai-dialog-actions">
-          <button
-            type="button"
-            class="lai-btn"
+          <Button
             :disabled="submitting"
             @click="close"
           >
             取消
-          </button>
-          <button
-            type="button"
-            class="lai-btn"
-            :class="{ 'lai-btn-danger': action === 'MANUAL_OPEN' }"
+          </Button>
+          <Button
             :disabled="confirmDisabled"
             @click="confirm"
           >
             {{ submitting ? '提交中…' : '确认' }}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

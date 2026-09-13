@@ -410,7 +410,7 @@ describe('PublishPage（FE-039~041）', () => {
     await wrapper.find('input[type="checkbox"]').setValue(true)
     expect((submit.element as HTMLButtonElement).disabled).toBe(true)
     // 填写发布说明后可提交
-    await wrapper.find('#publish-note').setValue('首次发布')
+await wrapper.find('#publish-note').setValue('首次发布')
     expect((submit.element as HTMLButtonElement).disabled).toBe(false)
     await submit.trigger('click')
     await flushPromises()

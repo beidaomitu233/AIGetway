@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button, Input, Textarea } from 'ant-design-vue'
 // 在线测试面板（FE-051/052/053）：同步与流式调用、StreamEvent 解析渲染、
 // 取消与离页清理；正文只保存在当前页内存；只读身份禁用测试。
 import { computed, onBeforeUnmount, reactive, ref, shallowRef } from 'vue'
@@ -196,14 +197,12 @@ defineExpose({ clearOutput })
           class="lai-test-label"
           for="lai-test-system"
         >system_message（可选）</label>
-        <textarea
-          id="lai-test-system"
-          v-model="form.systemMessage"
-          class="lai-input lai-test-area"
-          rows="2"
-          maxlength="2000"
-          :disabled="!canTest"
-        />
+        <Textarea id="lai-test-system"
+          v-model:value="form.systemMessage"
+          class="lai-test-area"
+          :rows="2"
+          :maxlength="2000"
+          :disabled="!canTest" />
       </div>
       <div class="lai-test-row">
         <label
@@ -213,14 +212,12 @@ defineExpose({ clearOutput })
           class="lai-required"
           aria-hidden="true"
         >*</span></label>
-        <textarea
-          id="lai-test-user"
-          v-model="form.userMessage"
-          class="lai-input lai-test-area"
-          rows="3"
-          maxlength="4000"
-          :disabled="!canTest"
-        />
+        <Textarea id="lai-test-user"
+          v-model:value="form.userMessage"
+          class="lai-test-area"
+          :rows="3"
+          :maxlength="4000"
+          :disabled="!canTest" />
         <p
           v-if="userMessageInvalid"
           class="lai-form-message-error"
@@ -239,23 +236,11 @@ defineExpose({ clearOutput })
         </label>
         <label class="lai-test-inline-item">
           temperature
-          <input
-            v-model="form.temperature"
-            class="lai-input lai-test-num"
-            type="text"
-            inputmode="decimal"
-            :disabled="!canTest"
-          >
+          <Input v-model:value="form.temperature" class="lai-test-num" type="text" inputmode="decimal" :disabled="!canTest" />
         </label>
         <label class="lai-test-inline-item">
           top_p
-          <input
-            v-model="form.topP"
-            class="lai-input lai-test-num"
-            type="text"
-            inputmode="decimal"
-            :disabled="!canTest"
-          >
+          <Input v-model:value="form.topP" class="lai-test-num" type="text" inputmode="decimal" :disabled="!canTest" />
           <span
             v-if="topPInvalid"
             class="lai-form-message-error"
@@ -263,40 +248,31 @@ defineExpose({ clearOutput })
         </label>
         <label class="lai-test-inline-item">
           max_tokens
-          <input
-            v-model="form.maxTokens"
-            class="lai-input lai-test-num"
-            type="text"
-            inputmode="numeric"
-            :disabled="!canTest"
-          >
+          <Input v-model:value="form.maxTokens" class="lai-test-num" type="text" inputmode="numeric" :disabled="!canTest" />
         </label>
       </div>
 
       <div class="lai-test-actions">
-        <button
-          type="submit"
-          class="lai-btn lai-btn-primary"
+        <Button
+          type="primary"
+          html-type="submit"
           :disabled="!canTest || submitting || formInvalid || !alias"
         >
           {{ submitting ? '测试中…' : form.stream ? '发起流式测试' : '发起同步测试' }}
-        </button>
-        <button
+        </Button>
+        <Button
           v-if="submitting"
-          type="button"
-          class="lai-btn"
           @click="cancel"
         >
           取消测试
-        </button>
-        <button
-          type="button"
-          class="lai-btn lai-btn-text"
+        </Button>
+        <Button
+          type="link"
           :disabled="submitting"
           @click="clearOutput"
         >
           清空输出
-        </button>
+        </Button>
       </div>
     </form>
 

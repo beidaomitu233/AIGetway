@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button, Input, Textarea } from 'ant-design-vue'
 // 虚拟模型 新建/编辑表单（FE-017，附录 4.2.7.2）。
 // alias 创建后只读：2—64 字符，仅字母、数字、点、短横线、下划线。
 import { computed, onMounted, reactive, ref } from 'vue'
@@ -136,14 +137,7 @@ onMounted(async () => {
         :hint="isEdit ? 'alias 创建后不可修改；如需更名请创建新 Alias 并迁移接入方' : '业务调用入口，创建后不可修改'"
         :error="!isEdit && aliasInvalid ? '2—64 字符，仅字母、数字、点、短横线、下划线' : ''"
       >
-        <input
-          v-model="form.alias"
-          class="lai-input lai-mono"
-          type="text"
-          maxlength="64"
-          spellcheck="false"
-          :disabled="isEdit"
-        >
+        <Input v-model:value="form.alias" class="lai-mono" type="text" :maxlength="64" spellcheck="false" :disabled="isEdit" />
       </FormField>
 
       <FormField
@@ -151,12 +145,7 @@ onMounted(async () => {
         required
         :error="displayNameInvalid ? '长度为 2—64 字符' : ''"
       >
-        <input
-          v-model="form.display_name"
-          class="lai-input"
-          type="text"
-          maxlength="64"
-        >
+        <Input v-model:value="form.display_name" type="text" :maxlength="64" />
       </FormField>
 
       <FormField
@@ -164,12 +153,10 @@ onMounted(async () => {
         :error="descriptionInvalid ? '最多 500 字符' : ''"
         hint="最多 500 字符，不用于模型 Prompt"
       >
-        <textarea
-          v-model="form.description"
-          class="lai-input lai-textarea"
-          rows="4"
-          maxlength="500"
-        />
+        <Textarea v-model:value="form.description"
+          class="lai-textarea"
+          :rows="4"
+          :maxlength="500" />
       </FormField>
 
       <FormField label="路由策略">
@@ -212,22 +199,20 @@ onMounted(async () => {
       </p>
 
       <div class="lai-form-actions">
-        <button
-          type="button"
-          class="lai-btn"
+        <Button
           :disabled="submitting"
           @click="router.back()"
         >
           取消
-        </button>
-        <button
+        </Button>
+        <Button
           v-if="canManage"
-          type="submit"
-          class="lai-btn lai-btn-primary"
+          type="primary"
+          html-type="submit"
           :disabled="submitting || formInvalid"
         >
           {{ submitting ? '保存中…' : '保存' }}
-        </button>
+        </Button>
       </div>
     </form>
   </section>

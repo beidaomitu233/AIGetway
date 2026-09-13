@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button, Select } from 'ant-design-vue'
 // 实时用量与 FIFO 队列抽屉（FE-020，附录 4.3.5.1）：只读展示当前窗口用量与等待记录；
 // CAPACITY_STATE_UNAVAILABLE 时保留上次成功数据并标明更新时间；V1.0 不提供管理端取消排队。
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
@@ -46,6 +47,11 @@ async function loadUsage(): Promise<void> {
     // CAPACITY_STATE_UNAVAILABLE：保留上次成功数据并提示（附录 4.3.5.1）
     usageError.value = toErrorMessage(e)
   }
+}
+
+function onStatusFilterChange(): void {
+  page.value = 1
+  loadQueue()
 }
 
 async function loadQueue(): Promise<void> {
@@ -153,13 +159,11 @@ const usageRows = computed(() => {
           <h2 class="lai-drawer-title">
             实时用量与排队：{{ policy?.name ?? '' }}
           </h2>
-          <button
-            type="button"
-            class="lai-btn"
+          <Button
             @click="close"
           >
             关闭
-          </button>
+          </Button>
         </div>
 
         <p
@@ -199,19 +203,12 @@ const usageRows = computed(() => {
         <h3 class="lai-section-title">
           等待队列
         </h3>
-        <select
-          v-model="statusFilter"
-          class="lai-input lai-queue-filter"
-          @change="page = 1; loadQueue()"
-        >
-          <option
-            v-for="item in statusOptions"
-            :key="item.value"
-            :value="item.value"
-          >
-            {{ item.label }}
-          </option>
-        </select>
+        <Select
+          v-model:value="statusFilter"
+          class="lai-queue-filter"
+          :options="statusOptions"
+          @update:value="onStatusFilterChange"
+        />
 
         <PageState
           v-if="listStatus === 'loading'"

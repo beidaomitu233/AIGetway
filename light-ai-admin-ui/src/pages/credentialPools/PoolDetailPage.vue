@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { Card } from 'ant-design-vue'
+import { Button, Card } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import StatusText from '@/components/StatusText.vue'
@@ -105,37 +105,32 @@ const lifecycle = useLifecycleActions({
         凭证池详情
       </h1>
       <div class="lai-row-actions">
-        <button
-          type="button"
-          class="lai-btn"
+        <Button
           @click="router.back()"
         >
           返回
-        </button>
+        </Button>
         <template v-if="detail">
           <RouterLink
             v-if="canManage"
             :to="{ name: 'pool-edit', params: { id: detail.id } }"
-            class="lai-btn"
+            class="lai-link"
           >
             编辑
           </RouterLink>
-          <button
+          <Button
             v-if="canManage && !lifecycle.isBusy(detail.id)"
-            type="button"
-            class="lai-btn"
             @click="detail.enabled ? lifecycle.requestDisable(detail.id, detail.version) : lifecycle.enable(detail.id, detail.version)"
           >
             {{ detail.enabled ? '停用' : '启用' }}
-          </button>
-          <button
+          </Button>
+          <Button
             v-if="canManage"
-            type="button"
-            class="lai-btn lai-btn-danger"
+            type="link" danger
             @click="lifecycle.requestDelete(detail.id, detail.version)"
           >
             删除
-          </button>
+          </Button>
         </template>
       </div>
     </div>

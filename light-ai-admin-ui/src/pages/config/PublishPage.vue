@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { Card } from 'ant-design-vue'
+import { Button, Card, Checkbox, Input } from 'ant-design-vue'
 import PageState from '@/components/PageState.vue'
 import StatusText from '@/components/StatusText.vue'
 import { useBootstrapStore } from '@/stores/bootstrap'
@@ -77,6 +77,13 @@ const validationStale = computed(() => {
 
 // —— 确认与提交（FE-040）——
 const acknowledged = ref<Set<string>>(new Set())
+
+function toggleWarning(code: string, checked: boolean): void {
+  const next = new Set(acknowledged.value)
+  if (checked) next.add(code)
+  else next.delete(code)
+  acknowledged.value = next
+}
 const publishNote = ref('')
 const publishing = ref(false)
 const publishError = ref('')
@@ -260,7 +267,7 @@ function severityClass(severity: string): string {
       <div class="lai-row-actions">
         <RouterLink
           :to="{ name: 'drafts' }"
-          class="lai-btn"
+          class="lai-link"
         >
           返回待发布变更
         </RouterLink>
@@ -303,15 +310,14 @@ function severityClass(severity: string): string {
         <p class="lai-card-hint">
           校验锁定当前草稿修订号 #{{ draftState.draft_revision }}；草稿随后发生变化时校验结果立即失效。
         </p>
-        <button
+        <Button
           v-if="canManage && draftState.change_count > 0 && draftState.status === 'EDITABLE'"
-          type="button"
-          class="lai-btn lai-btn-primary"
+          type="primary"
           :disabled="validating"
           @click="runValidate"
         >
           {{ validating ? '校验中…' : '开始校验' }}
-        </button>
+        </Button>
         <p
           v-if="validateError"
           class="lai-form-message-error"
@@ -354,13 +360,12 @@ function severityClass(severity: string): string {
             <div class="lai-summary-item">
               <span class="lai-summary-label">内容摘要</span>
               <span class="lai-mono">{{ validation.content_checksum.slice(0, 16) }}…</span>
-              <button
-                type="button"
-                class="lai-btn lai-btn-text"
+              <Button
+                type="link"
                 @click="copyChecksum"
               >
                 {{ copyState || '复制' }}
-              </button>
+              </Button>
             </div>
             <div class="lai-summary-item">
               <span class="lai-summary-label">有效期至</span>{{ formatDateTime(validation.expires_at, store.timezone) }}
@@ -421,15 +426,14 @@ function severityClass(severity: string): string {
             class="lai-warning-row"
           >
             <label class="lai-warning-label">
-              <input
-                v-model="acknowledged"
-                type="checkbox"
-                class="lai-checkbox"
-                :value="issue.code"
+              <Checkbox
+                :checked="acknowledged.has(issue.code)"
+                @change="(e: { target: { checked: boolean } }) => toggleWarning(issue.code, e.target.checked)"
               >
-              <span>
-                {{ issue.code }} · {{ issue.entity_name }} · {{ issue.message }}
-              </span>
+                <span>
+                  {{ issue.code }} · {{ issue.entity_name }} · {{ issue.message }}
+                </span>
+              </Checkbox>
             </label>
           </li>
           <li
@@ -444,13 +448,7 @@ function severityClass(severity: string): string {
             class="lai-form-label"
             for="publish-note"
           >发布说明</label>
-          <input
-            id="publish-note"
-            v-model="publishNote"
-            class="lai-input"
-            type="text"
-            maxlength="500"
-          >
+          <Input id="publish-note" v-model:value="publishNote" type="text" :maxlength="500" />
         </div>
         <p
           v-if="publishError"
@@ -459,14 +457,13 @@ function severityClass(severity: string): string {
         >
           {{ publishError }}
         </p>
-        <button
-          type="button"
-          class="lai-btn lai-btn-primary"
+        <Button
+          type="primary"
           :disabled="!canSubmit"
           @click="submitPublish"
         >
           {{ publishing ? '提交中…' : '提交发布' }}
-        </button>
+        </Button>
       </div>
 
       <div
@@ -595,7 +592,7 @@ function severityClass(severity: string): string {
                 <td>
                   <RouterLink
                     :to="{ name: 'publish-record', params: { id: record.id } }"
-                    class="lai-btn lai-btn-text"
+                    class="lai-link"
                   >
                     详情
                   </RouterLink>

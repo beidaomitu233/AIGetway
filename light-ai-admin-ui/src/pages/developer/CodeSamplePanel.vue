@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button, Select } from 'ant-design-vue'
 // 代码示例面板（FE-050）：按 sample_type/build_tool 请求 code-sample，
 // 只读展示、一键复制保留换行；Token 位置固定占位符，不写剪贴板外存储。
 import { computed, ref, watch } from 'vue'
@@ -92,39 +93,28 @@ async function copySample(): Promise<void> {
         role="tablist"
         aria-label="示例类型"
       >
-        <button
+        <Button
           v-for="item in sampleTypes"
           :key="item.value"
-          type="button"
-          class="lai-btn lai-sample-tab"
           :class="{ 'lai-sample-tab-active': sampleType === item.value }"
           @click="sampleType = item.value"
         >
           {{ item.label }}
-        </button>
+        </Button>
       </div>
-      <select
+      <Select
         v-if="sampleType === 'DEPENDENCY'"
-        v-model="buildTool"
-        class="lai-input lai-sample-tool"
+        v-model:value="buildTool"
+        class="lai-sample-tool"
         aria-label="构建工具"
-      >
-        <option
-          v-for="item in buildTools"
-          :key="item.value"
-          :value="item.value"
-        >
-          {{ item.label }}
-        </option>
-      </select>
-      <button
-        type="button"
-        class="lai-btn"
+        :options="buildTools"
+      />
+      <Button
         :disabled="!sample"
         @click="copySample"
       >
         {{ copied ? '已复制' : '复制示例' }}
-      </button>
+      </Button>
     </div>
 
     <PageState

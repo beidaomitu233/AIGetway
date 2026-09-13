@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button, Checkbox, Input, Select } from 'ant-design-vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import FormField from '@/components/FormField.vue'
@@ -184,24 +185,14 @@ function fieldError(field: string): string | undefined {
         :error="fieldError('provider_id')"
         :hint="isEdit ? 'Provider 创建后只读' : '必须指向未删除的 Provider'"
       >
-        <select
+        <Select
           id="pool-provider"
-          v-model="form.provider_id"
-          class="lai-select"
+          v-model:value="form.provider_id"
           :disabled="isEdit"
-          @change="markDirty"
-        >
-          <option value="">
-            请选择
-          </option>
-          <option
-            v-for="option in providerOptions"
-            :key="option.value"
-            :value="option.value"
-          >
-            {{ option.label }}
-          </option>
-        </select>
+          placeholder="请选择"
+          :options="providerOptions"
+          @update:value="markDirty"
+        />
       </FormField>
 
       <FormField
@@ -211,14 +202,7 @@ function fieldError(field: string): string | undefined {
         :error="fieldError('name')"
         hint="同一 Provider 下唯一"
       >
-        <input
-          id="pool-name"
-          v-model="form.name"
-          class="lai-input"
-          type="text"
-          maxlength="64"
-          @input="markDirty"
-        >
+        <Input id="pool-name" v-model:value="form.name" type="text" :maxlength="64" @update:value="markDirty" />
       </FormField>
 
       <FormField
@@ -227,20 +211,12 @@ function fieldError(field: string): string | undefined {
         required
         :error="fieldError('selection_strategy')"
       >
-        <select
+        <Select
           id="pool-strategy"
-          v-model="form.selection_strategy"
-          class="lai-select"
-          @change="markDirty"
-        >
-          <option
-            v-for="option in strategyOptions"
-            :key="option.value"
-            :value="option.value"
-          >
-            {{ option.label }}
-          </option>
-        </select>
+          v-model:value="form.selection_strategy"
+          :options="strategyOptions"
+          @update:value="markDirty"
+        />
       </FormField>
 
       <FormField
@@ -248,13 +224,7 @@ function fieldError(field: string): string | undefined {
         for-id="pool-enabled"
         hint="停用前需完成影响分析；发布后影响新请求"
       >
-        <input
-          id="pool-enabled"
-          v-model="form.enabled"
-          type="checkbox"
-          class="lai-checkbox"
-          @change="markDirty"
-        >
+        <Checkbox id="pool-enabled" v-model:checked="form.enabled" @update:checked="markDirty" />
       </FormField>
 
       <p
@@ -266,22 +236,20 @@ function fieldError(field: string): string | undefined {
       </p>
 
       <div class="lai-form-actions">
-        <button
-          type="button"
-          class="lai-btn"
+        <Button
           :disabled="submitting"
           @click="cancel"
         >
           取消
-        </button>
-        <button
+        </Button>
+        <Button
           v-if="canManage"
-          type="submit"
-          class="lai-btn lai-btn-primary"
+          type="primary"
+          html-type="submit"
           :disabled="submitting || conflictError !== null"
         >
           {{ submitting ? '保存中…' : '保存' }}
-        </button>
+        </Button>
       </div>
     </form>
   </section>

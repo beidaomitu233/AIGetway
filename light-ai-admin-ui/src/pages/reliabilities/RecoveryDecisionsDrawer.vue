@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button, Select } from 'ant-design-vue'
 // 恢复决策抽屉（FE-022，附录 4.3.2.3/4.3.5.2）：按动作筛选，
 // 展示来源 Attempt、退避等待与累计预算；无正文，trace_id 跳转 Trace 详情。
 import { ref, shallowRef, watch } from 'vue'
@@ -30,6 +31,11 @@ const error = shallowRef<unknown>(null)
 
 let seq = 0
 let controller: AbortController | null = null
+
+function onActionFilterChange(): void {
+  page.value = 1
+  load()
+}
 
 async function load(): Promise<void> {
   if (!props.policy) return
@@ -105,28 +111,19 @@ function budgetText(row: RecoveryDecision): string {
           <h2 class="lai-drawer-title">
             近期恢复决策：{{ policy?.name ?? '' }}
           </h2>
-          <button
-            type="button"
-            class="lai-btn"
+          <Button
             @click="close"
           >
             关闭
-          </button>
+          </Button>
         </div>
 
-        <select
-          v-model="actionFilter"
-          class="lai-input lai-filter-select"
-          @change="page = 1; load()"
-        >
-          <option
-            v-for="item in actionOptions"
-            :key="item.value"
-            :value="item.value"
-          >
-            {{ item.label }}
-          </option>
-        </select>
+        <Select
+          v-model:value="actionFilter"
+          class="lai-filter-select"
+          :options="actionOptions"
+          @update:value="onActionFilterChange"
+        />
 
         <PageState
           v-if="status === 'loading'"

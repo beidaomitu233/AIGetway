@@ -2,7 +2,7 @@
 // 接入说明页（FE-049，附录 4.6.1）：连接信息、Alias 选择、模型摘要、
 // 示例面板与在线测试；开发仅授权 Alias，无已发布模型显示空态。
 import { computed, onMounted, ref, shallowRef, watch } from 'vue'
-import { Card } from 'ant-design-vue'
+import { Button, Card, Select } from 'ant-design-vue'
 import { useRoute } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import CodeSamplePanel from './CodeSamplePanel.vue'
@@ -96,6 +96,10 @@ const availableModels = computed<DeveloperAliasSummary[]>(() => {
   return ctx?.available_models ?? ctx?.published_aliases ?? []
 })
 
+const availableModelOptions = computed(() =>
+  availableModels.value.map((item) => ({ value: item.alias_id, label: `${item.display_name}（${item.alias}）` })),
+)
+
 const selectedAlias = computed(
   () => availableModels.value.find((item) => item.alias_id === selectedAliasId.value) ?? null,
 )
@@ -174,14 +178,13 @@ async function copyBaseUrl(): Promise<void> {
             <dt>API 地址</dt>
             <dd class="lai-cell-mono">
               {{ baseUrlText }}
-              <button
+              <Button
                 v-if="context.runtime_mode === 'STANDALONE_SERVER' && context.api_base_url"
-                type="button"
-                class="lai-btn lai-btn-text"
+                type="link"
                 @click="copyBaseUrl"
               >
                 复制
-              </button>
+              </Button>
             </dd>
             <dt>认证方式</dt>
             <dd>{{ authLabels[context.authentication_type] ?? context.authentication_type }}</dd>
@@ -207,19 +210,13 @@ async function copyBaseUrl(): Promise<void> {
           <h2 class="lai-section-title">
             模型选择
           </h2>
-          <select
-            v-model="selectedAliasId"
-            class="lai-input lai-dev-select"
+          <Select
+            :value="selectedAliasId ?? undefined"
+            class="lai-dev-select"
             aria-label="选择 Model Alias"
-          >
-            <option
-              v-for="item in availableModels"
-              :key="item.alias_id"
-              :value="item.alias_id"
-            >
-              {{ item.display_name }}（{{ item.alias }}）
-            </option>
-          </select>
+            :options="availableModelOptions"
+            @update:value="(v: unknown) => { selectedAliasId = v == null ? null : String(v) }"
+          />
           <dl
             v-if="selectedAlias"
             class="lai-dl lai-dev-summary"
