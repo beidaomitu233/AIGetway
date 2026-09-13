@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Card } from 'ant-design-vue'
+import { Button, Card, Input, Select } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { normalizeResourceUrl, headersValid } from '@/utils/resourceValidation'
 import FormField from '@/components/FormField.vue'
@@ -67,12 +67,28 @@ const adapterOptions = computed(() =>
   })),
 )
 
-function onTypeChange(providerType: string): void {
+function onTypeChange(value: unknown): void {
+  const providerType = Array.isArray(value) ? String(value[0] ?? '') : String(value ?? '')
   form.provider_type = providerType
   const adapter = store.adapters.find((item) => item.provider_type === providerType)
   if (adapter && form.base_url === '') {
     form.base_url = adapter.default_base_url
   }
+  markDirty()
+}
+
+function setTextField(field: 'name' | 'base_url' | 'proxy', value: string): void {
+  form[field] = value
+  markDirty()
+}
+
+function setTimeoutField(field: 'connect_ms' | 'read_ms' | 'stream_idle_ms', value: string): void {
+  form.timeouts[field] = value === '' ? 0 : Number(value)
+  markDirty()
+}
+
+function setCountField(field: 'priority' | 'weight', value: string): void {
+  form[field] = value === '' ? 0 : Number(value)
   markDirty()
 }
 
@@ -242,14 +258,13 @@ function fieldError(field: string): string | undefined {
         required
         :error="fieldError('name')"
       >
-        <input
+        <Input
           id="provider-name"
-          v-model="form.name"
-          class="lai-input"
-          type="text"
-          maxlength="64"
-          @input="markDirty"
-        >
+          :value="form.name"
+          name="name"
+          :maxlength="64"
+          @update:value="(value: string) => setTextField('name', value)"
+        />
       </FormField>
 
       <FormField
@@ -259,24 +274,15 @@ function fieldError(field: string): string | undefined {
         :error="fieldError('provider_type')"
         :hint="isEdit ? '类型创建后只读' : '必须来自当前实例已加载的 Adapter'"
       >
-        <select
+        <Select
           id="provider-type"
-          class="lai-select"
-          :value="form.provider_type"
+          class="provider-type-select"
+          :value="form.provider_type === '' ? undefined : form.provider_type"
+          :options="adapterOptions"
+          placeholder="请选择"
           :disabled="isEdit"
-          @change="onTypeChange(($event.target as HTMLSelectElement).value)"
-        >
-          <option value="">
-            请选择
-          </option>
-          <option
-            v-for="option in adapterOptions"
-            :key="option.value"
-            :value="option.value"
-          >
-            {{ option.label }}
-          </option>
-        </select>
+          @update:value="onTypeChange"
+        />
       </FormField>
 
       <FormField
@@ -286,13 +292,13 @@ function fieldError(field: string): string | undefined {
         :error="fieldError('base_url')"
         hint="不得包含认证信息；服务端验证 DNS、目标网络及重定向，保存后需检测"
       >
-        <input
+        <Input
           id="provider-base-url"
-          v-model="form.base_url"
-          class="lai-input"
+          :value="form.base_url"
+          name="base_url"
           type="url"
-          @input="markDirty"
-        >
+          @update:value="(value: string) => setTextField('base_url', value)"
+        />
       </FormField>
 
       <FormField
@@ -301,13 +307,13 @@ function fieldError(field: string): string | undefined {
         :error="fieldError('proxy')"
         hint="空值直连"
       >
-        <input
+        <Input
           id="provider-proxy"
-          v-model="form.proxy"
-          class="lai-input"
+          :value="form.proxy"
+          name="proxy"
           type="url"
-          @input="markDirty"
-        >
+          @update:value="(value: string) => setTextField('proxy', value)"
+        />
       </FormField>
 
       <div class="lai-form-grid">
@@ -317,15 +323,15 @@ function fieldError(field: string): string | undefined {
           required
           :error="fieldError('connect_ms')"
         >
-          <input
+          <Input
             id="provider-connect-timeout"
-            v-model.number="form.timeouts.connect_ms"
-            class="lai-input"
+            :value="String(form.timeouts.connect_ms)"
+            name="connect_ms"
             type="number"
-            min="100"
-            max="60000"
-            @input="markDirty"
-          >
+            :min="100"
+            :max="60000"
+            @update:value="(value: string) => setTimeoutField('connect_ms', value)"
+          />
         </FormField>
         <FormField
           label="读取超时（毫秒）"
@@ -333,15 +339,15 @@ function fieldError(field: string): string | undefined {
           required
           :error="fieldError('read_ms')"
         >
-          <input
+          <Input
             id="provider-read-timeout"
-            v-model.number="form.timeouts.read_ms"
-            class="lai-input"
+            :value="String(form.timeouts.read_ms)"
+            name="read_ms"
             type="number"
-            min="1000"
-            max="600000"
-            @input="markDirty"
-          >
+            :min="1000"
+            :max="600000"
+            @update:value="(value: string) => setTimeoutField('read_ms', value)"
+          />
         </FormField>
         <FormField
           label="流式空闲超时（毫秒）"
@@ -349,15 +355,15 @@ function fieldError(field: string): string | undefined {
           required
           :error="fieldError('stream_idle_ms')"
         >
-          <input
+          <Input
             id="provider-stream-idle-timeout"
-            v-model.number="form.timeouts.stream_idle_ms"
-            class="lai-input"
+            :value="String(form.timeouts.stream_idle_ms)"
+            name="stream_idle_ms"
             type="number"
-            min="1000"
-            max="600000"
-            @input="markDirty"
-          >
+            :min="1000"
+            :max="600000"
+            @update:value="(value: string) => setTimeoutField('stream_idle_ms', value)"
+          />
         </FormField>
         <FormField
           label="优先级"
@@ -365,15 +371,15 @@ function fieldError(field: string): string | undefined {
           required
           :error="fieldError('priority')"
         >
-          <input
+          <Input
             id="provider-priority"
-            v-model.number="form.priority"
-            class="lai-input"
+            :value="String(form.priority)"
+            name="priority"
             type="number"
-            min="1"
-            max="100"
-            @input="markDirty"
-          >
+            :min="1"
+            :max="100"
+            @update:value="(value: string) => setCountField('priority', value)"
+          />
         </FormField>
         <FormField
           label="权重"
@@ -381,15 +387,15 @@ function fieldError(field: string): string | undefined {
           required
           :error="fieldError('weight')"
         >
-          <input
+          <Input
             id="provider-weight"
-            v-model.number="form.weight"
-            class="lai-input"
+            :value="String(form.weight)"
+            name="weight"
             type="number"
-            min="1"
-            max="100"
-            @input="markDirty"
-          >
+            :min="1"
+            :max="100"
+            @update:value="(value: string) => setCountField('weight', value)"
+          />
         </FormField>
       </div>
 
@@ -416,22 +422,20 @@ function fieldError(field: string): string | undefined {
       </p>
 
       <div class="lai-form-actions">
-        <button
-          type="button"
-          class="lai-btn"
+        <Button
           :disabled="submitting"
           @click="cancel"
         >
           取消
-        </button>
-        <button
+        </Button>
+        <Button
           v-if="canManage"
-          type="submit"
-          class="lai-btn lai-btn-primary"
+          type="primary"
+          html-type="submit"
           :disabled="submitting || !headerValid || conflictError !== null"
         >
           {{ submitting ? '保存中…' : '保存' }}
-        </button>
+        </Button>
       </div>
     </form>
     </Card>
