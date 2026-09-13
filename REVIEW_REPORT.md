@@ -48,7 +48,7 @@
 - 已更新 `COMMUNICATION.md`、`TASK_STATUS.md` 和 `ANT_DESIGN_REBUILD_PLAN.md`，补记 UI-ANT-345～348 的完成状态、验证证据和交接范围。
 - 代码按任务包拆分提交；任务状态同步提交为 `cbf63c1`，本报告修订提交为 `46e4935`，完整提交历史保留在当前分支。
 - 本次交接提交：`82879bd`（应用表单）、`ca17bfc`（治理列表）、`a5502b4`（用量分组）、`a4531a5`（额度流水），文档交接提交为 `f996294`。
-- 2026-09-13 交付记录（前端执行模型 zcode-ant-0913）：接手后复验 typecheck、`lint --quiet`、全量 255 项测试、`npm run build` 均通过（另有一次高负载下 12 项用例超时失败，重跑两轮均 255 项通过，判定为环境负载偶发）；分支 `feature/frontend-ant-shell-codex-ui-0913` 已普通推送远程并经 `git ls-remote` 回读确认为 `f996294`，未强推、未修改 `dev`；已发起进入 `dev` 的独立评审 PR。
+- 2026-09-13 交付记录（前端执行模型 zcode-ant-0913）：接手后复验 typecheck、`lint --quiet`、全量 255 项测试、`npm run build` 均通过（另有一次高负载下 12 项用例超时失败，重跑两轮均 255 项通过，判定为环境负载偶发）；分支 `feature/frontend-ant-shell-codex-ui-0913` 已普通推送远程并经 `git ls-remote` 回读确认为 `f996294`，未强推、未修改 `dev`；已发起进入 `dev` 的独立评审 PR（[#3](https://github.com/beidaomitu233/AIGetway/pull/3)）。
 
 ## 合并建议与后续
 
