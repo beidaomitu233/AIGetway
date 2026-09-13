@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Button, Card } from 'ant-design-vue'
 import { resourceHost } from '@/utils/resourceValidation'
 import { useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
@@ -103,17 +104,17 @@ function onToggleStatus(row: ProviderListItem): void {
       <h1 class="lai-page-title">
         渠道
       </h1>
-      <button
+      <Button
         v-if="canManage"
-        type="button"
-        class="lai-btn lai-btn-primary"
+        type="primary"
+        html-type="button"
         @click="router.push({ name: 'provider-new' })"
       >
         新建 渠道
-      </button>
+      </Button>
     </div>
 
-    <div class="lai-filter-bar">
+    <Card :bordered="false" class="provider-filter-card">
       <input
         v-model="keywordInput"
         class="lai-input lai-filter-keyword"
@@ -163,7 +164,7 @@ function onToggleStatus(row: ProviderListItem): void {
           已发布一致
         </option>
       </select>
-    </div>
+    </Card>
 
     <p
       v-if="lifecycle.actionError"
@@ -184,6 +185,7 @@ function onToggleStatus(row: ProviderListItem): void {
       @retry="list.refresh()"
     />
     <template v-else>
+      <Card :bordered="false" class="provider-table-card">
       <DataTable
         :columns="columns"
         :rows="list.items.value"
@@ -290,6 +292,7 @@ function onToggleStatus(row: ProviderListItem): void {
           </span>
         </template>
       </DataTable>
+      </Card>
       <Pagination
         :page="list.page.value"
         :page-size="list.pageSize.value"
@@ -313,3 +316,10 @@ function onToggleStatus(row: ProviderListItem): void {
     />
   </section>
 </template>
+
+<style scoped>
+.provider-filter-card,
+.provider-table-card { margin-bottom: 16px; border: 1px solid var(--lai-border); box-shadow: 0 8px 24px rgba(37, 99, 235, .05); }
+.provider-filter-card :deep(.ant-card-body) { padding: 14px 16px; }
+.provider-table-card :deep(.ant-card-body) { padding: 0; }
+</style>
