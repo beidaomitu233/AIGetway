@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
+import { Button, Card, Tag } from 'ant-design-vue'
 import { onBeforeRouteUpdate } from 'vue-router'
 import { useDirtyGuard } from '@/composables/useDirtyGuard'
 import { ApiError, isAbortError } from '@/api/errors'
@@ -192,7 +193,7 @@ onScopeDispose(clearScope)
 </script>
 
 <template>
-  <div class="lai-card">
+  <Card :bordered="false" class="lai-card key-card">
     <div class="key-heading">
       <div>
         <h2 class="lai-card-title">
@@ -200,15 +201,15 @@ onScopeDispose(clearScope)
         </h2>
         <p>业务系统使用应用密钥调用平台，上游供应商 Key 不会暴露给应用。</p>
       </div>
-      <button
+      <Button
+        html-type="button"
         v-if="canManage"
-        type="button"
         class="lai-btn lai-btn-primary"
         :disabled="!applicationActive || submitting || secret !== null"
         @click="openCreate"
       >
         签发密钥
-      </button>
+      </Button>
     </div>
     <p
       v-if="refreshing && !loading"
@@ -247,7 +248,7 @@ onScopeDispose(clearScope)
             <td class="lai-cell-mono">
               {{ key.masked_value }}
             </td>
-            <td>{{ labels[key.status] || key.status }}</td>
+            <td><Tag :color="key.status === 'ACTIVE' ? 'green' : key.status === 'DISABLED' ? 'orange' : 'default'">{{ labels[key.status] || key.status }}</Tag></td>
             <td class="model-scope">
               {{ modelScopeText(key) }}
             </td>
@@ -299,7 +300,7 @@ onScopeDispose(clearScope)
     >
       尚未签发应用密钥。签发后，密钥原文只会显示一次。
     </p>
-  </div>
+  </Card>
 
   <div
     v-if="createOpen"
