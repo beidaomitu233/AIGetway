@@ -1,5 +1,6 @@
 <script setup lang="ts" generic="T extends { bucket_start: string; bucket_end: string }">
 import { computed } from 'vue'
+import { Empty } from 'ant-design-vue'
 
 export interface TrendSeries {
   label: string
@@ -113,13 +114,8 @@ function bucketTitle(bucket: T, index: number): string {
 </script>
 
 <template>
-  <div
-    v-if="buckets.length === 0"
-    class="lai-empty lai-chart-empty"
-  >
-    <p class="lai-empty-text">
-      {{ emptyText }}
-    </p>
+  <div v-if="buckets.length === 0" class="lai-empty lai-chart-empty">
+    <Empty :description="emptyText" />
   </div>
   <svg
     v-else
