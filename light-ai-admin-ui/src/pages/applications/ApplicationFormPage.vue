@@ -255,7 +255,7 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
         :disabled="submitting || reviewing || !editable"
         class="application-fields"
       >
-        <div class="lai-card form-section">
+        <Card :bordered="false" class="lai-card form-section">
           <h2 class="lai-card-title">
             基本信息
           </h2>
@@ -378,10 +378,11 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
               </select>
             </FormField>
           </div>
-        </div>
+        </Card>
 
-        <div
+        <Card
           v-if="!isEdit"
+          :bordered="false"
           class="lai-card form-section"
         >
           <h2 class="lai-card-title">
@@ -518,10 +519,11 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
               </FormField>
             </div>
           </div>
-        </div>
+        </Card>
 
-        <div
+        <Card
           v-if="!isEdit"
+          :bordered="false"
           class="lai-card form-section"
         >
           <h2 class="lai-card-title">
@@ -553,7 +555,7 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
           >
             当前没有已启用的虚拟模型，可先创建应用，配置模型后再授权。
           </p>
-        </div>
+        </Card>
       </fieldset>
       <p
         v-if="unlimited"
