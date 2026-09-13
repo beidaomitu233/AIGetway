@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { Card } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import VersionConflictBanner from '@/components/VersionConflictBanner.vue'
@@ -298,7 +299,7 @@ function fieldError(field: string): string | undefined {
         @reload="reloadLatest"
       />
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           配置状态
         </h2>
@@ -319,9 +320,9 @@ function fieldError(field: string): string | undefined {
             <span class="lai-summary-label">最近修改人</span>{{ loaded!.last_modified_by_name }}
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           时间与保留
         </h2>
@@ -492,9 +493,9 @@ function fieldError(field: string): string | undefined {
             {{ fieldError('retention') }}
           </p>
         </div>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           请求限制
         </h2>
@@ -548,9 +549,9 @@ function fieldError(field: string): string | undefined {
             </p>
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           诊断采样
         </h2>
@@ -642,9 +643,9 @@ function fieldError(field: string): string | undefined {
             </p>
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           来源 IP
         </h2>
@@ -706,9 +707,9 @@ function fieldError(field: string): string | undefined {
             </li>
           </ul>
         </div>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           发布协调
         </h2>
@@ -762,7 +763,7 @@ function fieldError(field: string): string | undefined {
             </p>
           </div>
         </div>
-      </div>
+      </Card>
 
       <p
         v-if="errorText"
