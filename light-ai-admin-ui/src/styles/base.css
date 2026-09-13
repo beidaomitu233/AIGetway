@@ -487,9 +487,10 @@
 .lai-card {
   background: #ffffff;
   border: 1px solid var(--lai-border);
-  border-radius: 6px;
-  padding: 16px 20px;
+  border-radius: 10px;
+  padding: 18px 20px;
   margin-bottom: 16px;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, .05);
 }
 
 .lai-card-title {
