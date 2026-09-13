@@ -580,3 +580,8 @@ UI-R312 未修改详情 API、页签 URL、状态转换或权限规则。
 | 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | UI-ANT-322-001 | P1 | 上游模型目录筛选区和结果表格缺少工作区边界，导入、新建入口与列表数据层级弱；进入模型目录即可复现。 | `light-ai-admin-ui/src/pages/models/ModelListPage.vue`；模型列表、导入和同步 API 契约不变 | 使用 Ant Design `Card` 分隔筛选与结果区域，保留原生筛选控件、路由入口、模型能力展示和权限操作。 | `npm run typecheck` 通过；`modelFormAndImport.test.ts` 9 项通过。 | 代码审查与修复模型/codex-ui-upstream-model-0913 | 待复验 |
+## UI-R323 Ant Design 虚拟模型与路由目录（2026-09-13，codex-ui-virtual-route-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-323-001 | P1 | 虚拟模型目录筛选区和路由候选结果仍使用扁平容器，模型授权、排序与启停入口层级不清晰；进入虚拟模型列表即可复现。 | `light-ai-admin-ui/src/pages/aliases/AliasListPage.vue`；别名与候选排序 API 契约不变 | 使用 Ant Design `Card` 分隔筛选与结果表，保留模型别名、候选排序、权限显隐和版本冲突流程。 | `npm run typecheck` 通过；`aliasPages.test.ts` 6 项通过。 | 代码审查与修复模型/codex-ui-virtual-route-0913 | 待复验 |
