@@ -488,3 +488,11 @@ UI-R302 未修改 API、权限判定和路由表；UI-R303 可基于该壳层继
 | UI-ANT-303-001 | P1 | 旧页面状态由自研 skeleton/empty/error/banner DOM 表达，无法统一呈现 Ant Design 反馈、请求 ID、409 冲突和可组合页面结构。 | `light-ai-admin-ui/src/ui/page/**`、`src/components/PageState.vue`、`VersionConflictBanner.vue`、`tests/antPageState.test.ts` | 新增 `PageHeader`、`PageCard`、`PageSection`、`AsyncState`、`RequestError`、`ConflictAlert`；以 Ant `Skeleton/Empty/Alert/Button` 重写现有组件适配层，保留旧 props、事件和错误契约，409 显示服务端版本并提供显式重载。 | typecheck 通过；页面状态与冲突回归 3 项、壳层 6 项通过；lint 0 error（既有格式 warning 保持）。 | codex-ui-page-0913 | 待复验 |
 
 UI-R303 不改变业务请求、路由或权限逻辑；后续页面包可逐步替换旧 `.lai-*` 页面结构。
+
+## UI-R304 Ant Design 列表、筛选与表格基座（2026-09-13，codex-ui-data-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-304-001 | P1 | 旧列表使用自研 table/pagination/multiselect DOM，缺少统一的表格排序、横向容器、空态和分页控件，页面无法共享 Ant Design 交互。 | `light-ai-admin-ui/src/components/DataTable.vue`、`Pagination.vue`、`ListPager.vue`、`AppMultiSelect.vue`、`tests/antDataTable.test.ts` | DataTable 改用 Ant `Table`，保留服务端 `sort-change`、动态单元格 slot 与行 key；分页适配 Ant `Pagination` 并保留事件；多选选项使用 Ant `Checkbox`，维持现有打开/选项类和 v-model 契约。 | typecheck 通过；Ant Table/空态 2 项、页面状态 3 项、壳层 6 项回归通过；lint 0 error。 | codex-ui-data-0913 | 待复验 |
+
+UI-R304 未修改列表请求竞态、URL 查询或业务字段；后续 UI-R310 起的业务列表可直接复用基座。
