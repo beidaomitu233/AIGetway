@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
+import { Button, Card } from 'ant-design-vue'
 import { onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { Permission } from '@/app/permissions'
 import { ApiError, isAbortError } from '@/api/errors'
 import { positiveAmount, positiveInteger, validPeriod, applicationEnvironmentLabels } from './applicationValues'
 import FormField from '@/components/FormField.vue'
 import PageState from '@/components/PageState.vue'
+import PageHeader from '@/ui/page/PageHeader.vue'
 import { useDirtyGuard } from '@/composables/useDirtyGuard'
 import { useFormSubmit } from '@/composables/useFormSubmit'
 import { useBootstrapStore } from '@/stores/bootstrap'
@@ -221,14 +223,10 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
 
 <template>
   <section class="lai-page application-form-page">
-    <div class="form-heading">
-      <div>
-        <h1 class="lai-page-title">
-          {{ isEdit ? '编辑应用' : '新建应用' }}
-        </h1>
-        <p>一个应用对应一个企业系统接入点，独立管理凭证、模型权限、额度和速率。</p>
-      </div>
-    </div>
+    <PageHeader
+      :title="isEdit ? '编辑应用' : '新建应用'"
+      description="一个应用对应一个企业系统接入点，独立管理凭证、模型权限、额度和速率。"
+    />
 
     <PageState
       v-if="loading"
@@ -241,12 +239,12 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
       @retry="load"
     />
 
-    <form
-      v-else
-      @submit.prevent="onSubmit"
-      @input="onInput"
-      @change="onInput"
-    >
+    <Card v-else :bordered="false" class="application-form-surface">
+      <form
+        @submit.prevent="onSubmit"
+        @input="onInput"
+        @change="onInput"
+      >
       <p
         v-if="!editable"
         role="alert"
@@ -574,14 +572,14 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
         <p v-if="!isEdit">
           Token：{{ form.token_limited ? form.token_limit : '不限' }}；金额：{{ form.amount_limited ? form.amount_limit : '不限' }} {{ form.currency }}；RPM：{{ form.rpm_limited ? form.rpm : '不限' }}；TPM：{{ form.tpm_limited ? form.tpm : '不限' }}；模型：{{ form.virtual_model_ids.length }} 个
         </p>
-        <button
-          type="button"
+        <Button
+          html-type="button"
           class="lai-btn"
           :disabled="submitting"
           @click="reviewing = false"
         >
           返回修改
-        </button>
+        </Button>
       </div>
       <p
         v-if="conflictError"
@@ -594,14 +592,14 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
         v-if="conflictError && isEdit"
         class="lai-card"
       >
-        <button
-          type="button"
+        <Button
+          html-type="button"
           class="lai-btn"
           :disabled="latestLoading"
           @click="compareLatest"
         >
           读取最新版本并对比
-        </button>
+        </Button>
         <PageState
           v-if="latestError"
           status="error"
@@ -626,13 +624,13 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
               </tr>
             </tbody>
           </table>
-          <button
-            type="button"
+          <Button
+            html-type="button"
             class="lai-btn"
             @click="acceptVersion"
           >
             已核对，保留输入并使用最新版本
-          </button>
+          </Button>
         </div>
       </div>
       <p
@@ -643,24 +641,25 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
         {{ errorText }}
       </p>
       <div class="form-actions">
-        <button
-          type="button"
+        <Button
+          html-type="button"
           class="lai-btn"
           :disabled="submitting"
           @click="router.back()"
         >
           取消
-        </button>
-        <button
-          type="submit"
+        </Button>
+        <Button
+          html-type="submit"
           data-test="save-application"
           class="lai-btn lai-btn-primary"
           :disabled="submitting || formInvalid || conflictError !== null"
         >
           {{ submitting ? '保存中…' : reviewing ? '确认保存' : '检查并保存' }}
-        </button>
+        </Button>
       </div>
-    </form>
+      </form>
+    </Card>
   </section>
 </template>
 
@@ -668,8 +667,7 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
 .application-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
 .application-form-page { max-width: 1040px; }
 .form-heading p, .section-help { color: #667085; font-size: 14px; }
-.form-heading { margin-bottom: 20px; }
-.form-heading .lai-page-title { margin-bottom: 6px; }
+.application-form-surface { border: 1px solid var(--lai-color-border); border-radius: var(--lai-radius-card); box-shadow: var(--lai-shadow-card); }
 .form-section { margin-bottom: 16px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; }
 .wide-field { grid-column: 1 / -1; }
