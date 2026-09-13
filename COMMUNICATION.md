@@ -605,3 +605,8 @@ UI-R312 未修改详情 API、页签 URL、状态转换或权限规则。
 | 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | UI-ANT-331-001 | P1 | 用量与成本明细表缺少统一工作区边界，金额、Token 和额度流水在页面背景中难以区分；进入用量页即可复现。 | `light-ai-admin-ui/src/pages/usage/UsagePage.vue`；用量、成本和调整 API 契约不变 | 使用 Ant Design `Card` 承载明细表，保留金额精度、Token 展示、分页、筛选和调整入口。 | `usageAdjustments.test.ts`、`overviewUsage.test.ts` 共 21 项通过。 | 代码审查与修复模型/codex-ui-usage-0913 | 待复验 |
+## UI-R332 Ant Design 运行总览工作区（2026-09-13，codex-ui-overview-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-332-001 | P1 | 运行总览的用量明细与聚合表格缺少清晰结果容器，指标卡与明细之间层级不统一；进入总览页即可复现。 | `light-ai-admin-ui/src/pages/overview/OverviewPage.vue`；总览和用量 API 契约不变 | 使用 Ant Design `Card` 承载总览明细表，保留指标、分币种费用、钻取链接和错误状态。 | `npm run typecheck` 通过；`overviewUsage.test.ts` 15 项通过。 | 代码审查与修复模型/codex-ui-overview-0913 | 待复验 |
