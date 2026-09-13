@@ -44,6 +44,11 @@ public class OpenAiCompatibleAdapter implements com.lightai.spi.provider.Provide
     }
 
     @Override
+    public String defaultBaseUrl() {
+        return defaultBaseUrl;
+    }
+
+    @Override
     public long estimateTokens(ProviderChatRequest request) {
         long chars = 0;
         if (request.systemMessage() != null) {

@@ -53,6 +53,11 @@ public final class GeminiAdapter implements com.lightai.spi.provider.ProviderAda
     }
 
     @Override
+    public String defaultBaseUrl() {
+        return DEFAULT_BASE_URL;
+    }
+
+    @Override
     public long estimateTokens(ProviderChatRequest request) {
         long chars = 0;
         if (request.systemMessage() != null) {

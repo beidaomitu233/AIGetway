@@ -16,6 +16,14 @@ public interface ProviderAdapter {
 
     AdapterCapabilities capabilities();
 
+    /**
+     * Adapter 默认 base_url（非敏感声明，UI-ANT-CONTRACT-001）：渠道未配置 base_url
+     * 时由部署方与 Bootstrap 元数据使用；Adapter 未声明默认地址时返回 null。
+     */
+    default String defaultBaseUrl() {
+        return null;
+    }
+
     /** 本地结构校验：对 base_url、代理、超时与 Adapter 专属静态规则生成字段问题。 */
     default List<String> validateConfig(ProviderConfigView config) {
         return List.of();

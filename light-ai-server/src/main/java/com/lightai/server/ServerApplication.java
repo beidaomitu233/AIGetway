@@ -96,6 +96,12 @@ public class ServerApplication {
         return type -> Optional.ofNullable(byType.get(type == null ? null : type.toUpperCase()));
     }
 
+    /** Bootstrap 元数据来源（UI-ANT-CONTRACT-001）：由已装配 Adapter 派生非敏感声明。 */
+    @Bean
+    public com.lightai.spi.adapter.AdapterMetadataSource adapterMetadataSource(List<ProviderAdapter> adapters) {
+        return new com.lightai.spi.adapter.ProviderAdapterMetadataSource(adapters);
+    }
+
     /** Standalone 强制使用 Redis 共享容量状态，连接不可用时启动或预占 fail-closed。 */
     @Bean(destroyMethod = "close")
     public com.lightai.storage.redis.RedisCapacityStore capacityStore(
