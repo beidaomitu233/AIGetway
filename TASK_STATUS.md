@@ -14,6 +14,7 @@
 
 | 任务包 | 编号 | 负责人/分支 | 修改范围 | 状态 | 依赖与入口 |
 |---|---|---|---|---|---|
+| UI-R30 | UI-R300～UI-R343 | 方案负责人 codex-ui-plan-0913 / docs/ant-design-admin-redesign-plan | ANT_DESIGN_REBUILD_PLAN.md、FRONTEND_PLAN.md、COMMUNICATION.md、TASK_STATUS.md；仅编制 Ant Design 全量重构方案和并行任务边界，不修改产品代码 | 待评审 | 2026-09-13 基于 origin/dev=bbc1340 编制。采用 Vue 3 + Ant Design Vue，从应用壳层、设计令牌和共享组件开始重写，再按应用、渠道、模型、发布、观测、用量、系统与开发接入拆成独占任务包；保留已联调 API、权限、64 位字符串、decimal、version、model-options 和一次性密钥契约。UI-R301～UI-R343 均未领取，需按计划依赖顺序领取；RV-P20 PR #1 或等价修复进入 dev 后，应用域业务包方可开始。 |
 | FE-P20 | FE-201～FE-205 | 前端执行模型 codex-0912 / feature/frontend-p20-codex-0912 | 应用页面/API/测试；FRONTEND_PLAN.md、COMMUNICATION.md；暂停后续写入 | 阻塞 | 2026-09-12：418218d、ef8a972 前端子项及 56347c7 文档已合入远程 dev（5b0b55d）；typecheck/build 通过，199 测试通过，lint 0 error/81 历史 warning。FE-P20-001～004/BE-P20-001～005 待契约与真实联调；五项未勾选，保留负责人，未解除占用 |
 | FE-P21 | FE-211～FE-215 | 前端执行模型 codex-0912 / feature/frontend-p21-codex-0912 | light-ai-admin-ui 渠道、上游模型、虚拟模型与路由及相关 API/组件/导航/测试；FRONTEND_PLAN.md、COMMUNICATION.md | 阻塞 | 2026-09-12：def540e/b27689d/fd9014a 已完成契约接入与前端回归，226 项通过；等待 BE-P21-001～006 和真实联调，五项未勾选；8e96984 已合入远程 dev 并普通推送成功，保留负责人、未解除占用 |
 | FE-P22 | FE-221～FE-225 | 前端执行模型 zcode-0912 / feature/frontend-p22-zcode-0912 | light-ai-admin-ui 调用记录、用量成本、配置发布、开发接入与总览页面及其 API、相关组件、测试；FRONTEND_PLAN.md、COMMUNICATION.md | 阻塞 | 2026-09-12：fc0e955 实现与 eaa32e3 文档已随 eb2843a 合入远程 dev；过渡端点加固完成，28 文件 244 测试、typecheck/lint/build 通过；V2 路径/字段差异登记 COMMUNICATION FE-P22-001～005；五项未勾选，保留负责人，未解除占用，待 BE-P22/P23 契约与真实联调 |
