@@ -544,3 +544,8 @@ UI-R311 未改变表单校验、BigInt/decimal 精度、`model-options` 请求�
 | UI-ANT-312-001 | P1 | 应用详情状态与操作区仍使用旧自研标签和按钮，工作台上下文层级弱。 | `light-ai-admin-ui/src/pages/applications/ApplicationDetailPage.vue`、应用页面回归 | 引入 Ant `Tag/Button` 重写状态标签、编辑、启停、归档操作区；保留页签 query、状态机、权限计算、版本与错误处理。 | typecheck、lint 通过；应用页面 8 项、P20 契约 31 项通过。 | codex-ui-app-workbench-0913 | 待复验 |
 
 UI-R312 未修改详情 API、页签 URL、状态转换或权限规则。
+## UI-R313 Ant Design 应用密钥面板（2026-09-13，codex-ui-app-keys-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-313-001 | P1 | 应用详情密钥面板仍使用扁平容器和原生状态文本，层级与新蓝色管理后台不一致；进入应用详情密钥页即可复现。 | `light-ai-admin-ui/src/pages/applications/ApplicationKeyPanel.vue`；应用密钥 API 契约不变 | 使用 Ant Design `Card` 承载面板、`Button` 统一签发入口、`Tag` 表达密钥状态；保留一次显示、轮换、失效及权限判断。 | `npm run typecheck` 通过；应用页面与凭证面板回归 15 项通过。 | 代码审查与修复模型/codex-ui-app-keys-0913 | 待复验 |
