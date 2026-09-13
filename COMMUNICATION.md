@@ -600,3 +600,8 @@ UI-R312 未修改详情 API、页签 URL、状态转换或权限规则。
 | 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | UI-ANT-330-001 | P1 | 调用记录列表的筛选与结果区缺少明确容器，Attempt 展开信息和分页层级弱；进入调用记录列表即可复现。 | `light-ai-admin-ui/src/pages/traces/TraceListPage.vue`；Trace 查询、分页和导出 API 契约不变 | 使用 Ant Design `Card` 承载结果表，沿用 DataTable、筛选、分页和导出权限逻辑。 | `npm run typecheck` 通过；`tracePages.test.ts` 13 项通过。 | 代码审查与修复模型/codex-ui-trace-0913 | 待复验 |
+## UI-R331 Ant Design 用量成本工作区（2026-09-13，codex-ui-usage-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-331-001 | P1 | 用量与成本明细表缺少统一工作区边界，金额、Token 和额度流水在页面背景中难以区分；进入用量页即可复现。 | `light-ai-admin-ui/src/pages/usage/UsagePage.vue`；用量、成本和调整 API 契约不变 | 使用 Ant Design `Card` 承载明细表，保留金额精度、Token 展示、分页、筛选和调整入口。 | `usageAdjustments.test.ts`、`overviewUsage.test.ts` 共 21 项通过。 | 代码审查与修复模型/codex-ui-usage-0913 | 待复验 |
