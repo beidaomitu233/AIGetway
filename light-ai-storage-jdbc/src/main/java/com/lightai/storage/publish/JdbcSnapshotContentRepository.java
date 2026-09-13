@@ -111,6 +111,9 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
         Map<String, Long> counts = new LinkedHashMap<>();
         for (EntityColumns entity : ENTITIES) {
             List<Map<String, Object>> rows = readRows(connection, entity);
+            if ("channel".equals(entity.entityType())) {
+                enrichChannelProviderTypes(connection, rows);
+            }
             counts.put(entity.jsonKey(), (long) rows.size());
             content.put(entity.jsonKey(), rows);
         }
@@ -118,6 +121,51 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
         content.put("runtime_config", runtimeConfig);
         content.put("content_summary", counts);
         return content;
+    }
+
+    /**
+     * 渠道行补充协议类型（FS-P22-002）：channel 表以 provider_id 引用协议类型目录，
+     * provider_type 本身不是 channel 物理列。运行端口 {@code ConfigSnapshotPort} 需要
+     * providerType 选择 Adapter，而快照必须自洽（发布后运行请求绑定该确定版本，
+     * 不得再回查可变的目录行），因此在装配阶段一次性派生写入。恢复时该键被忽略。
+     */
+    private void enrichChannelProviderTypes(Connection connection, List<Map<String, Object>> channels) {
+        java.util.Set<String> providerIds = new java.util.LinkedHashSet<>();
+        for (Map<String, Object> channel : channels) {
+            Object providerId = channel.get("provider_id");
+            if (providerId != null && !providerId.toString().isBlank()) {
+                providerIds.add(providerId.toString());
+            }
+        }
+        if (providerIds.isEmpty()) {
+            return;
+        }
+        DatabaseDialect d = dialect(connection);
+        String placeholders = String.join(", ", java.util.Collections.nCopies(providerIds.size(), "?"));
+        String sql = "SELECT id, type FROM " + qualify(connection, "provider")
+                + " WHERE id IN (" + placeholders + ")";
+        Map<String, String> typeById = new java.util.HashMap<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            int index = 1;
+            for (String providerId : providerIds) {
+                d.bindUuid(statement, index++, UUID.fromString(providerId));
+            }
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    UUID id = d.readUuid(rs, "id");
+                    if (id != null) {
+                        typeById.put(id.toString().toLowerCase(java.util.Locale.ROOT), rs.getString("type"));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            throw translate("渠道协议类型解析失败", e);
+        }
+        for (Map<String, Object> channel : channels) {
+            Object providerId = channel.get("provider_id");
+            channel.put("provider_type", providerId == null ? null
+                    : typeById.get(providerId.toString().toLowerCase(java.util.Locale.ROOT)));
+        }
     }
 
     private Map<String, Object> readRuntimeConfig(Connection connection, String timezone) {

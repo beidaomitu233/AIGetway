@@ -69,3 +69,12 @@ PR #1 已提交前端应用域修复供独立评审；合并前需确认并行�
 
 
 
+
+## 8. 核心 AI 服务链路最小复验（2026-09-13）
+
+- 初次发现：V2 配置发布后运行时仍按旧 `providers/type` 快照键解析，导致已启用路由在 `/v1/models` 中不可见，聊天请求返回 `MODEL_CAPABILITY_NOT_SUPPORTED`（P1，RV-CORE-001）。
+- 修复：`JdbcConfigSnapshotPortAdapter` 读取 V2 `channels` 并优先使用 `provider_type`，保留旧 `providers/type` 回退；渠道快照装配写入 `provider_type`。
+- 真实本地链路：H2(MySQL 模式)+Redis+Stub Provider。渠道、凭证、上游模型、虚拟模型、路由创建后，配置校验通过并发布 `SUCCEEDED`；`GET /v1/models` 返回 alias；同步 `POST /v1/chat/completions` 返回 200/choices；流式请求返回 200/[DONE]。
+- 回归：`mvn -pl light-ai-admin -am -Dtest=JdbcConfigSnapshotPortAdapterTest -Dsurefire.failIfNoSpecifiedTests=false test`（3 项通过）；`mvn -pl light-ai-server -am -DskipTests package`（构建成功）。
+- 负载均衡依据：`RouteServiceTest` 已覆盖优先级、权重候选过滤，`CredentialSelectorTest` 已覆盖凭证权重选择；本轮未运行双真实 Provider 的统计比例测试。
+- 当前结论：**有条件通过**。本地隔离环境核心转发闭环已验证；真实 Provider、PostgreSQL/MySQL、生产 Redis 集群、企业身份与并发容量场景仍待后续任务包验收。

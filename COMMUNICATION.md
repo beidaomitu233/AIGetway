@@ -474,3 +474,11 @@
 ### RV-P20 最终复验补记（2026-09-13）
 
 在上述提交之后，使用 IntelliJ Maven 运行时重新执行全仓 `mvn -B verify`，14 个模块全部 `BUILD SUCCESS`，退出码 0；真实 H2+Redis HTTP/Chromium 证据与应用域定向测试结果仍以 `INTEGRATION_REPORT.md` §12 为准。真实 PostgreSQL/MySQL/Provider、企业身份和生产级并发/恢复场景仍未验收。
+
+## RV-CORE-001 核心服务链路最小审查与修复（2026-09-13）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+|---|---|---|---|---|---|---|---|
+| RV-CORE-001 | P1 | V2 配置发布成功后，`GET /v1/models` 返回空列表，`POST /v1/chat/completions` 返回 `MODEL_CAPABILITY_NOT_SUPPORTED`；管理端显示渠道、模型、路由均已启用。 | `JdbcConfigSnapshotPortAdapter.parseAliases`；`channels`/`upstream_models`/`route_candidates` 快照；`/v1/models`、`/v1/chat/completions` | 运行时适配器仍只读取旧快照键 `providers`，且只读 `type`；V2 快照使用 `channels` 与 `provider_type`，导致候选被丢弃。适配器改为 V2 优先并保留旧键回退；渠道快照装配补齐 `provider_type`。 | 修复后本地 H2 + Redis + Stub Provider：创建渠道/凭证/上游模型/虚拟模型/路由→校验→发布 `SUCCEEDED`；`/v1/models` 200 且包含 alias；同步聊天 200 含 `choices`；流式聊天 200 含 `[DONE]`。`JdbcConfigSnapshotPortAdapterTest` 3 项通过；server 打包成功。 | 代码审查与修复模型/root | 已验证（本地） |
+
+本次最小检查确认：应用可通过平台访问凭证调用已发布虚拟模型，并转发到指定 OpenAI 兼容渠道。优先级/权重路由、凭证选择、重试/熔断已有单元测试覆盖；本轮未做双真实 Provider 的统计性负载比例测试。真实 Provider、PostgreSQL/MySQL、生产 Redis 集群和企业身份边界仍未验收。

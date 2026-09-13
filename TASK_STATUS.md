@@ -34,3 +34,9 @@
 | RV-P23 | RV-231～RV-236 | 未领取 | 验收记录；无产品代码占用 | 待依赖 | 待相应 FE/BE/DB 交付；先准备验收场景 |
 
 
+
+## 核心链路审查接替状态（2026-09-13）
+
+| 任务包 | 编号 | 负责人/分支 | 修改范围 | 状态 | 依赖与入口 |
+|---|---|---|---|---|---|
+| RV-CORE | RV-CORE-001 | 代码审查与修复模型/root / fix-review-rvp20-rvagent-0912 | 运行时 V2 快照解析与渠道快照协议类型；`JdbcConfigSnapshotPortAdapter`、`JdbcSnapshotContentRepository`、回归测试及审查文档 | 已验证（本地），已交接 | 本地 H2+Redis+Stub Provider 已完成配置→发布→同步/流式调用；后续负责人需补真实 Provider、PG/MySQL、生产 Redis、企业身份及双渠道负载比例验证。代码提交 `fix(review): RV-CORE-001 修复 V2 快照路由映射`。 |
