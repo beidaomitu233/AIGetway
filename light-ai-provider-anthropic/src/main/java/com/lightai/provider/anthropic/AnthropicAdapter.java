@@ -52,6 +52,11 @@ public final class AnthropicAdapter implements com.lightai.spi.provider.Provider
     }
 
     @Override
+    public String defaultBaseUrl() {
+        return DEFAULT_BASE_URL;
+    }
+
+    @Override
     public long estimateTokens(ProviderChatRequest request) {
         long chars = 0;
         if (request.systemMessage() != null) {
