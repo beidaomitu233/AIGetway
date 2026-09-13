@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Alert, Button } from 'ant-design-vue'
+import { Alert } from 'ant-design-vue'
 import { ApiError, TimeoutError, toErrorMessage } from '@/api/errors'
 
 const props = defineProps<{ error?: unknown }>()
@@ -18,14 +18,20 @@ const description = computed(() => {
 </script>
 
 <template>
-  <Alert
-    type="error"
-    show-icon
-    message="加载失败"
-    :description="description"
-  >
-    <template #action>
-      <Button size="small" @click="$emit('retry')">重试</Button>
-    </template>
-  </Alert>
+  <div class="lai-request-error">
+    <Alert
+      type="error"
+      show-icon
+      message="加载失败"
+      :description="description"
+    />
+    <button class="lai-btn" type="button" @click="$emit('retry')">重试</button>
+  </div>
 </template>
+
+<style scoped>
+.lai-request-error {
+  display: grid;
+  gap: 10px;
+}
+</style>
