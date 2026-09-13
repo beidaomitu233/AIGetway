@@ -8,6 +8,7 @@ import 'ant-design-vue/dist/reset.css'
 import './styles/reset.css'
 import './styles/base.css'
 import './styles/theme.css'
+import './styles/accessibility.css'
 
 initRuntimeConfig()
 

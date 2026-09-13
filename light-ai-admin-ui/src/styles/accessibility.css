@@ -1,0 +1,21 @@
+:where(button, a, input, select, textarea, [role='button']):focus-visible {
+  outline: 3px solid rgba(37, 99, 235, .35);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .lai-page { padding: 16px; }
+  .lai-page-header { align-items: flex-start; flex-wrap: wrap; }
+  .lai-row-actions { flex-wrap: wrap; }
+  .lai-form-grid { grid-template-columns: 1fr; }
+  .lai-table-wrap { margin-inline: -2px; }
+}
