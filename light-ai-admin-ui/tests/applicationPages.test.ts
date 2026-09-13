@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import { Select } from 'ant-design-vue'
 import { routes } from '@/app/router'
 import { useBootstrapStore } from '@/stores/bootstrap'
 import { bootstrapFixtures } from '../mocks/fixtures/bootstrap'
@@ -182,7 +183,7 @@ describe('Application pages（V2 应用中心）', () => {
 
     await wrapper.findAll('button').find((button) => button.text() === '签发密钥')!.trigger('click')
     const createForm = wrapper.findAll('form').find((form) => form.text().includes('签发应用密钥'))!
-    await createForm.find('input.lai-input').setValue('仅客服模型')
+    await createForm.find('input').setValue('仅客服模型')
     await createForm.find('input[type="checkbox"][value="alias-1"]').setValue(true)
     await createForm.trigger('submit')
     await flushPromises()
@@ -277,7 +278,7 @@ describe('Application pages（V2 应用中心）', () => {
     const adjustmentButton = wrapper.findAll('button').find((button) => button.text() === '人工增减')!
     await adjustmentButton.trigger('click')
     const adjustmentDialog = wrapper.find('[aria-labelledby="application-adjustment-title"]')
-    await adjustmentDialog.find('input').setValue('500000')
+    await adjustmentDialog.find('input[inputmode="decimal"]').setValue('500000')
     await adjustmentDialog.find('textarea').setValue('活动期间临时扩容')
     await adjustmentDialog.findAll('button').find((button) => button.text() === '确认调整')!.trigger('click')
     await flushPromises()
@@ -292,7 +293,7 @@ describe('Application pages（V2 应用中心）', () => {
     await resetButton.trigger('click')
     const resetDialog = wrapper.find('[aria-labelledby="application-reset-title"]')
     await resetDialog.find('textarea').setValue('新结算周期人工重置')
-    await resetDialog.find('input').setValue('customer-service-prod')
+    await resetDialog.find('input[name="confirmation_code"]').setValue('customer-service-prod')
     await resetDialog.findAll('button').find((button) => button.text() === '确认重置')!.trigger('click')
     await flushPromises()
     expect(stub.calls.find((call) => call.method === 'POST' && call.url.endsWith('/quota/reset'))?.body)
@@ -309,7 +310,8 @@ describe('Application pages（V2 应用中心）', () => {
     const aliasTwoGroup = modelDialog.findAll('.model-option-group')
       .find((group) => group.find('input[type="checkbox"][value="alias-2"]').exists())!
     await aliasTwoGroup.find('input[type="number"]').setValue('256')
-    await aliasTwoGroup.find('select').setValue('deny')
+    const streamSelect = aliasTwoGroup.findComponent(Select)
+    ;(streamSelect.vm as unknown as { $emit: (event: string, ...args: unknown[]) => void }).$emit('update:value', 'deny')
     await modelDialog.find('textarea').setValue('增加备用模型')
     await modelDialog.findAll('button').find((button) => button.text() === '保存授权')!.trigger('click')
     await flushPromises()

@@ -24,7 +24,8 @@ async function page(path: string, permissions: string[] = [...bootstrapFixtures.
   await flushPromises()
   return { wrapper, router, store }
 }
-function button(wrapper: VueWrapper, text: string) { return wrapper.findAll('button').find(item => item.text() === text)! }
+// Ant Button 会在两个汉字之间插入空格，匹配时归一化空白
+function button(wrapper: VueWrapper, text: string) { return wrapper.findAll('button').find(item => item.text().replace(/\s/g, '') === text)! }
 function baseStub() {
   return installJsonFetchStub(({ url }) => {
     if (url.pathname.endsWith('/virtual-models')) return pageEnvelope([])

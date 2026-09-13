@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
-import { Button, Card, Tag } from 'ant-design-vue'
+import { Button, Card, Checkbox, CheckboxGroup, Input, Tag } from 'ant-design-vue'
 import { onBeforeRouteUpdate } from 'vue-router'
 import { useDirtyGuard } from '@/composables/useDirtyGuard'
 import { ApiError, isAbortError } from '@/api/errors'
@@ -16,6 +16,8 @@ import {
   revokeApplicationKey, rotateApplicationKey,
   type ApplicationKeySecretResult, type ApplicationKeyView, type ApplicationModelPermission,
 } from '@/api/applications'
+
+const Textarea = Input.TextArea
 
 const props = defineProps<{
   applicationId: string
@@ -202,9 +204,8 @@ onScopeDispose(clearScope)
         <p>业务系统使用应用密钥调用平台，上游供应商 Key 不会暴露给应用。</p>
       </div>
       <Button
-        html-type="button"
         v-if="canManage"
-        class="lai-btn lai-btn-primary"
+        type="primary"
         :disabled="!applicationActive || submitting || secret !== null"
         @click="openCreate"
       >
@@ -260,33 +261,30 @@ onScopeDispose(clearScope)
                 v-if="['ACTIVE', 'DISABLED', 'EXPIRED'].includes(key.status)"
                 class="key-actions"
               >
-                <button
+                <Button
                   v-if="key.status === 'ACTIVE'"
                   :data-test="`key-disable-${key.id}`"
-                  type="button"
-                  class="lai-btn lai-btn-text"
+                  type="link"
                   @click="openAction(key, 'disable')"
-                >停用</button>
-                <button
+                >停用</Button>
+                <Button
                   v-if="key.status === 'DISABLED'"
                   :data-test="`key-enable-${key.id}`"
-                  type="button"
-                  class="lai-btn lai-btn-text"
+                  type="link"
                   :disabled="!applicationActive"
                   @click="openAction(key, 'enable')"
-                >启用</button>
-                <button
+                >启用</Button>
+                <Button
                   v-if="key.status === 'ACTIVE'"
-                  type="button"
-                  class="lai-btn lai-btn-text"
+                  type="link"
                   @click="openAction(key, 'rotate')"
-                >轮换</button>
-                <button
+                >轮换</Button>
+                <Button
                   :data-test="`key-revoke-${key.id}`"
-                  type="button"
-                  class="lai-btn lai-btn-text danger"
+                  type="link"
+                  danger
                   @click="openAction(key, 'revoke')"
-                >撤销</button>
+                >撤销</Button>
               </span>
               <span v-else>—</span>
             </td>
@@ -317,54 +315,51 @@ onScopeDispose(clearScope)
       <h2 class="lai-dialog-title">
         签发应用密钥
       </h2>
-      <label class="dialog-field"><span>名称</span><input
-        v-model="form.name"
-        class="lai-input"
-        maxlength="64"
+      <label class="dialog-field"><span>名称</span><Input
+        v-model:value="form.name"
+        :maxlength="64"
         placeholder="例如：生产服务"
-      ></label>
-      <label class="dialog-field"><span>有效期（可选）</span><input
-        v-model="form.expires_at"
-        class="lai-input"
+      /></label>
+      <label class="dialog-field"><span>有效期（可选）</span><Input
+        v-model:value="form.expires_at"
         type="datetime-local"
-      ></label>
+      /></label>
       <div class="dialog-grid">
-        <label class="dialog-field"><span>独立 RPM</span><input
-          v-model.number="form.rpm"
-          class="lai-input"
+        <label class="dialog-field"><span>独立 RPM</span><Input
+          :value="form.rpm == null ? '' : String(form.rpm)"
+          name="key_rpm"
           type="number"
-          min="1"
+          :min="1"
           placeholder="继承应用"
-        ></label>
-        <label class="dialog-field"><span>独立 TPM</span><input
-          v-model.number="form.tpm"
-          class="lai-input"
+          @update:value="(value: string) => { form.rpm = value === '' ? null : Number(value) }"
+        /></label>
+        <label class="dialog-field"><span>独立 TPM</span><Input
+          :value="form.tpm == null ? '' : String(form.tpm)"
+          name="key_tpm"
           type="number"
-          min="1"
+          :min="1"
           placeholder="继承应用"
-        ></label>
+          @update:value="(value: string) => { form.tpm = value === '' ? null : Number(value) }"
+        /></label>
       </div>
-      <label class="dialog-field"><span>IP 白名单（可选）</span><textarea
-        v-model="form.ip_allowlist"
-        class="lai-input textarea"
-        rows="3"
+      <label class="dialog-field"><span>IP 白名单（可选）</span><Textarea
+        v-model:value="form.ip_allowlist"
+        :rows="3"
         placeholder="每行一个 IP 或 CIDR"
       /></label>
       <fieldset class="model-field">
         <legend>虚拟模型子集（可选）</legend>
         <p>不选择表示继承应用全部授权；选择后只能调用所选模型。</p>
-        <label
-          v-for="model in applicationModels"
-          :key="model.virtual_model_id"
-          class="model-option"
-        >
-          <input
-            v-model="form.virtual_model_ids"
-            type="checkbox"
+        <CheckboxGroup v-model:value="form.virtual_model_ids" class="model-subset-group">
+          <Checkbox
+            v-for="model in applicationModels"
+            :key="model.virtual_model_id"
+            class="model-option"
             :value="model.virtual_model_id"
           >
-          <span>{{ model.virtual_model_code || model.virtual_model_id }}</span>
-        </label>
+            <span>{{ model.virtual_model_code || model.virtual_model_id }}</span>
+          </Checkbox>
+        </CheckboxGroup>
         <span
           v-if="!applicationModels.length"
           class="empty-inline"
@@ -386,20 +381,18 @@ onScopeDispose(clearScope)
         {{ errorText }}
       </p>
       <div class="lai-dialog-actions">
-        <button
-          type="button"
-          class="lai-btn"
+        <Button
           :disabled="submitting"
           @click="createOpen = false"
         >
           取消
-        </button><button
-          type="submit"
-          class="lai-btn lai-btn-primary"
+        </Button><Button
+          type="primary"
+          html-type="submit"
           :disabled="submitting || !!validationMessage || !canManage || !applicationActive"
         >
           {{ submitting ? '签发中…' : '签发' }}
-        </button>
+        </Button>
       </div>
     </form>
   </div>
@@ -425,11 +418,10 @@ onScopeDispose(clearScope)
       <p class="lai-dialog-message">
         {{ actionMessage(action) }}
       </p>
-      <label class="dialog-field"><span>操作原因</span><textarea
-        v-model="reason"
-        class="lai-input textarea"
-        rows="3"
-        maxlength="500"
+      <label class="dialog-field"><span>操作原因</span><Textarea
+        v-model:value="reason"
+        :rows="3"
+        :maxlength="500"
         placeholder="必填，将写入审计记录"
       /></label>
       <p
@@ -445,20 +437,18 @@ onScopeDispose(clearScope)
         {{ errorText }}
       </p>
       <div class="lai-dialog-actions">
-        <button
-          type="button"
-          class="lai-btn"
+        <Button
           :disabled="submitting"
           @click="actionKey = null"
         >
           取消
-        </button><button
-          type="submit"
-          class="lai-btn lai-btn-primary"
+        </Button><Button
+          type="primary"
+          html-type="submit"
           :disabled="submitting || !reason.trim()"
         >
           {{ submitting ? '处理中…' : '确认' }}
-        </button>
+        </Button>
       </div>
     </form>
   </div>
@@ -480,7 +470,7 @@ onScopeDispose(clearScope)
 .key-actions { display:flex; }.danger { color:#b42318; }
 .dialog-field { display:flex; flex-direction:column; gap:6px; margin:12px 0; color:#475467; }
 .dialog-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-.dialog-field .lai-input { width:100%; max-width:none; }
+.dialog-field .ant-input, .dialog-field .ant-select { width:100%; max-width:none; }
 .textarea { height:auto; padding:8px 10px; resize: vertical; }
 .warning { padding:10px; color:#92400e; background:#fffbeb; border-radius:6px; font-size:13px; }
 .model-field { margin:12px 0; padding:10px 12px; border:1px solid #d0d5dd; border-radius:6px; }

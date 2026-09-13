@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
-import { Button, Card, Tag } from 'ant-design-vue'
+import { Button, Card, Checkbox, CheckboxGroup, Input, Select, Tag } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ApiError, isAbortError } from '@/api/errors'
 import { amountUsage, decimalUnits, decimalText, positiveAmount, positiveInteger, validPeriod, integerUnits, integerText, tokenUsageText, positiveIntegerText, toSafeInteger, applicationStatusLabels as statusLabel, applicationEnvironmentLabels as environmentLabel } from './applicationValues'
@@ -28,6 +28,8 @@ import {
   type ApplicationStatus,
 } from '@/api/applications'
 import { fetchModelAliases, type ModelAliasListItem } from '@/api/modelAliases'
+
+const Textarea = Input.TextArea
 
 /** 应用级模型参数上限的表单状态；空值表示不施加该维度限制。 */
 interface ModelConstraintForm {
@@ -600,25 +602,23 @@ onScopeDispose(clearContext)
             :to="`/ui/applications/${detail.id}/settings`"
             class="lai-action-link"
           >
-            <Button class="lai-btn">编辑</Button>
+            <Button>编辑</Button>
           </RouterLink>
           <Button
             v-if="detail.status === 'ACTIVE'"
-            class="lai-btn"
             @click="openStatusDialog('DISABLED')"
           >
             停用
           </Button>
           <Button
             v-else-if="detail.status === 'DISABLED'"
-            class="lai-btn lai-btn-primary"
+            type="primary"
             @click="openStatusDialog('ACTIVE')"
           >
             启用
           </Button>
           <Button
             v-if="detail.status === 'DISABLED'"
-            class="lai-btn"
             @click="openStatusDialog('ARCHIVED')"
           >
             归档
@@ -647,8 +647,8 @@ onScopeDispose(clearContext)
         <button
           v-for="tab in visibleTabs"
           :key="tab.key"
-          type="button"
           role="tab"
+          type="button"
           class="detail-tab"
           :class="{ 'is-active': activeTab === tab.key }"
           :aria-selected="activeTab === tab.key"
@@ -693,7 +693,7 @@ onScopeDispose(clearContext)
                 </h2>
                 <RouterLink
                   :to="`/ui/applications/${detail.id}/integration`"
-                  class="lai-btn lai-btn-small"
+                  class="lai-link"
                 >
                   开发接入
                 </RouterLink>
@@ -722,15 +722,14 @@ onScopeDispose(clearContext)
                 <h2 class="lai-card-title">
                   {{ onboardingComplete ? '运行摘要' : '接入检查清单' }}
                 </h2>
-                <button
+                <Button
                   v-if="onboardingComplete"
-                  type="button"
-                  class="lai-btn lai-btn-small"
+                  size="small"
                   :disabled="loading"
                   @click="load"
                 >
                   刷新
-                </button>
+                </Button>
               </div>
               <div
                 v-if="onboardingComplete"
@@ -831,14 +830,13 @@ onScopeDispose(clearContext)
             <h2 class="lai-card-title">
               可用虚拟模型
             </h2>
-            <button
+            <Button
               v-if="canManageModels && detail.status !== 'ARCHIVED'"
-              type="button"
-              class="lai-btn lai-btn-small"
+              size="small"
               @click="openModelDialog"
             >
               管理授权
-            </button>
+            </Button>
             <span v-else>{{ detail.models.filter((item) => item.enabled).length }} 个</span>
           </div>
           <div
@@ -884,28 +882,25 @@ onScopeDispose(clearContext)
               v-if="canManageQuota && detail.status !== 'ARCHIVED'"
               class="compact-actions"
             >
-              <button
-                type="button"
-                class="lai-btn lai-btn-small"
+              <Button
+                size="small"
                 @click="openAdjustmentDialog"
               >
                 人工增减
-              </button>
-              <button
-                type="button"
-                class="lai-btn lai-btn-small"
+              </Button>
+              <Button
+                size="small"
                 :disabled="!positiveIntegerText(detail.quota.tokens_used) && !positiveAmount(detail.quota.amount_used)"
                 @click="openResetDialog"
               >
                 重置用量
-              </button>
-              <button
-                type="button"
-                class="lai-btn lai-btn-small"
+              </Button>
+              <Button
+                size="small"
                 @click="openQuotaDialog"
               >
                 编辑策略
-              </button>
+              </Button>
             </div>
           </div>
           <dl class="property-list">
@@ -925,14 +920,13 @@ onScopeDispose(clearContext)
           >
             <div class="history-heading">
               <h3>最近额度流水</h3>
-              <button
-                type="button"
-                class="lai-btn lai-btn-text"
+              <Button
+                type="link"
                 :disabled="adjustmentsLoading"
                 @click="loadAdjustments"
               >
                 刷新
-              </button>
+              </Button>
             </div>
             <p
               v-if="adjustmentsLoading"
@@ -980,7 +974,7 @@ onScopeDispose(clearContext)
             </h2>
             <RouterLink
               :to="{ path: '/ui/traces', query: { application: detail.code } }"
-              class="lai-btn lai-btn-small"
+              class="lai-link"
             >
               查看全部
             </RouterLink>
@@ -1012,7 +1006,7 @@ onScopeDispose(clearContext)
             </h2>
             <RouterLink
               :to="{ path: '/ui/usage', query: { application: detail.code } }"
-              class="lai-btn lai-btn-small"
+              class="lai-link"
             >
               查看全部
             </RouterLink>
@@ -1038,14 +1032,13 @@ onScopeDispose(clearContext)
             <h2 class="lai-card-title">
               应用成员
             </h2>
-            <button
-              type="button"
-              class="lai-btn lai-btn-small"
+            <Button
+              size="small"
               :disabled="membersLoading"
               @click="loadMembers"
             >
               刷新
-            </button>
+            </Button>
           </div>
           <p
             v-if="membersLoading"
@@ -1091,7 +1084,7 @@ onScopeDispose(clearContext)
             <RouterLink
               v-if="store.can(Permission.auditView)"
               :to="{ path: '/ui/audit-logs', query: { entity_keyword: detail.id } }"
-              class="lai-btn lai-btn-small"
+              class="lai-link"
             >
               查看审计
             </RouterLink>
@@ -1137,16 +1130,14 @@ onScopeDispose(clearContext)
             :error="quotaSubmission.fieldMessages.value.token_limit"
           >
             <div class="limit-control">
-              <label><input
-                v-model="quotaForm.token_limited"
-                type="checkbox"
-              > 限制</label><input
-                v-model.number="quotaForm.token_limit"
-                class="lai-input"
+              <Checkbox v-model:checked="quotaForm.token_limited">限制</Checkbox><Input
+                :value="String(quotaForm.token_limit ?? '')"
+                name="token_limit"
                 type="number"
-                min="1"
+                :min="1"
                 :disabled="!quotaForm.token_limited"
-              >
+                @update:value="(value: string) => { quotaForm.token_limit = value === '' ? 0 : Number(value) }"
+              />
             </div>
           </FormField>
           <FormField
@@ -1154,20 +1145,16 @@ onScopeDispose(clearContext)
             :error="quotaSubmission.fieldMessages.value.amount_limit"
           >
             <div class="amount-control">
-              <label><input
-                v-model="quotaForm.amount_limited"
-                type="checkbox"
-              > 限制</label><input
-                v-model="quotaForm.amount_limit"
-                class="lai-input"
+              <Checkbox v-model:checked="quotaForm.amount_limited">限制</Checkbox><Input
+                v-model:value="quotaForm.amount_limit"
                 inputmode="decimal"
                 :disabled="!quotaForm.amount_limited"
-              ><input
-                v-model="quotaForm.currency"
-                class="lai-input currency"
-                maxlength="3"
+              /><Input
+                v-model:value="quotaForm.currency"
+                class="currency"
+                :maxlength="3"
                 aria-label="币种"
-              >
+              />
             </div>
           </FormField>
           <FormField
@@ -1176,16 +1163,14 @@ onScopeDispose(clearContext)
             :error="quotaSubmission.fieldMessages.value.rpm"
           >
             <div class="limit-control">
-              <label><input
-                v-model="quotaForm.rpm_limited"
-                type="checkbox"
-              > 限制</label><input
-                v-model.number="quotaForm.rpm"
-                class="lai-input"
+              <Checkbox v-model:checked="quotaForm.rpm_limited">限制</Checkbox><Input
+                :value="String(quotaForm.rpm ?? '')"
+                name="rpm"
                 type="number"
-                min="1"
+                :min="1"
                 :disabled="!quotaForm.rpm_limited"
-              >
+                @update:value="(value: string) => { quotaForm.rpm = value === '' ? 0 : Number(value) }"
+              />
             </div>
           </FormField>
           <FormField
@@ -1194,16 +1179,14 @@ onScopeDispose(clearContext)
             :error="quotaSubmission.fieldMessages.value.tpm"
           >
             <div class="limit-control">
-              <label><input
-                v-model="quotaForm.tpm_limited"
-                type="checkbox"
-              > 限制</label><input
-                v-model.number="quotaForm.tpm"
-                class="lai-input"
+              <Checkbox v-model:checked="quotaForm.tpm_limited">限制</Checkbox><Input
+                :value="String(quotaForm.tpm ?? '')"
+                name="tpm"
                 type="number"
-                min="1"
+                :min="1"
                 :disabled="!quotaForm.tpm_limited"
-              >
+                @update:value="(value: string) => { quotaForm.tpm = value === '' ? 0 : Number(value) }"
+              />
             </div>
           </FormField>
           <FormField
@@ -1211,43 +1194,36 @@ onScopeDispose(clearContext)
             required
             :error="quotaSubmission.fieldMessages.value.period_type"
           >
-            <select
-              v-model="quotaForm.period_type"
-              class="lai-select full-control"
-            >
-              <option value="LIFECYCLE">
-                应用生命周期
-              </option><option value="DAY">
-                每日
-              </option>
-              <option value="MONTH">
-                每月
-              </option><option value="CUSTOM">
-                自定义
-              </option>
-            </select>
+            <Select
+              v-model:value="quotaForm.period_type"
+              class="full-control"
+              :options="[
+                { value: 'LIFECYCLE', label: '应用生命周期' },
+                { value: 'DAY', label: '每日' },
+                { value: 'MONTH', label: '每月' },
+                { value: 'CUSTOM', label: '自定义' },
+              ]"
+            />
           </FormField>
           <template v-if="quotaForm.period_type === 'CUSTOM'">
             <FormField
               label="开始时间"
               required
             >
-              <input
-                v-model="quotaForm.period_start"
-                class="lai-input"
+              <Input
+                v-model:value="quotaForm.period_start"
                 type="datetime-local"
-              >
+              />
             </FormField>
             <FormField
               label="结束时间"
               required
               :error="quotaSubmission.fieldMessages.value.period_end"
             >
-              <input
-                v-model="quotaForm.period_end"
-                class="lai-input"
+              <Input
+                v-model:value="quotaForm.period_end"
                 type="datetime-local"
-              >
+              />
             </FormField>
           </template>
           <FormField
@@ -1256,11 +1232,11 @@ onScopeDispose(clearContext)
             required
             :error="quotaSubmission.fieldMessages.value.reason"
           >
-            <textarea
-              v-model="quotaForm.reason"
-              class="lai-input status-reason"
-              maxlength="500"
-              rows="3"
+            <Textarea
+              v-model:value="quotaForm.reason"
+              class="status-reason"
+              :maxlength="500"
+              :rows="3"
               placeholder="必填，将写入审计记录"
             />
           </FormField>
@@ -1278,22 +1254,19 @@ onScopeDispose(clearContext)
           {{ quotaSubmission.errorText.value }}
         </p>
         <div class="lai-dialog-actions">
-          <button
-            type="button"
-            class="lai-btn"
+          <Button
             :disabled="quotaSubmission.submitting.value"
             @click="quotaDialogOpen = false"
           >
             取消
-          </button>
-          <button
-            type="button"
-            class="lai-btn lai-btn-primary"
+          </Button>
+          <Button
+            type="primary"
             :disabled="quotaSubmission.submitting.value || quotaInvalid"
             @click="saveQuota"
           >
             {{ quotaSubmission.submitting.value ? '保存中…' : '保存调整' }}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -1320,30 +1293,30 @@ onScopeDispose(clearContext)
         </p>
         <label class="lai-dialog-field">
           <span>调整维度</span>
-          <select
-            v-model="adjustmentForm.dimension"
-            class="lai-select full-control"
-          >
-            <option value="TOKEN_LIMIT">Token 额度</option>
-            <option value="AMOUNT_LIMIT">金额预算</option>
-          </select>
+          <Select
+            v-model:value="adjustmentForm.dimension"
+            class="full-control"
+            :options="[
+              { value: 'TOKEN_LIMIT', label: 'Token 额度' },
+              { value: 'AMOUNT_LIMIT', label: '金额预算' },
+            ]"
+          />
         </label>
         <label class="lai-dialog-field">
           <span>增减值</span>
-          <input
-            v-model="adjustmentForm.delta"
-            class="lai-input"
+          <Input
+            v-model:value="adjustmentForm.delta"
             inputmode="decimal"
             placeholder="例如 50000 或 -100"
-          >
+          />
         </label>
         <label class="lai-dialog-field">
           <span>调整原因</span>
-          <textarea
-            v-model="adjustmentForm.reason"
-            class="lai-input status-reason"
-            maxlength="500"
-            rows="3"
+          <Textarea
+            v-model:value="adjustmentForm.reason"
+            class="status-reason"
+            :maxlength="500"
+            :rows="3"
             placeholder="必填，将写入额度流水与审计记录"
           />
         </label>
@@ -1370,22 +1343,19 @@ onScopeDispose(clearContext)
           {{ adjustmentSubmission.errorText.value }}
         </p>
         <div class="lai-dialog-actions">
-          <button
-            type="button"
-            class="lai-btn"
+          <Button
             :disabled="adjustmentSubmission.submitting.value"
             @click="adjustmentDialogOpen = false"
           >
             取消
-          </button>
-          <button
-            type="button"
-            class="lai-btn lai-btn-primary"
+          </Button>
+          <Button
+            type="primary"
             :disabled="adjustmentSubmission.submitting.value || adjustmentInvalid"
             @click="saveAdjustment"
           >
             {{ adjustmentSubmission.submitting.value ? '提交中…' : '确认调整' }}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -1412,38 +1382,33 @@ onScopeDispose(clearContext)
         </p>
         <label class="lai-dialog-field">
           <span>重置维度</span>
-          <select
-            v-model="resetForm.dimension"
-            class="lai-select full-control"
-          >
-            <option
-              value="TOKEN_USAGE"
-              :disabled="!positiveIntegerText(detail.quota.tokens_used)"
-            >Token 已用量（当前 {{ integerText(integerUnits(detail.quota.tokens_used) ?? 0n) }}）</option>
-            <option
-              value="AMOUNT_USAGE"
-              :disabled="!positiveAmount(detail.quota.amount_used)"
-            >金额已用量（当前 {{ detail.quota.amount_used }} {{ detail.quota.currency }}）</option>
-          </select>
+          <Select
+            v-model:value="resetForm.dimension"
+            class="full-control"
+            :options="[
+              { value: 'TOKEN_USAGE', label: `Token 已用量（当前 ${integerText(integerUnits(detail.quota.tokens_used) ?? 0n)}）`, disabled: !positiveIntegerText(detail.quota.tokens_used) },
+              { value: 'AMOUNT_USAGE', label: `金额已用量（当前 ${detail.quota.amount_used} ${detail.quota.currency}）`, disabled: !positiveAmount(detail.quota.amount_used) },
+            ]"
+          />
         </label>
         <label class="lai-dialog-field">
           <span>重置原因</span>
-          <textarea
-            v-model="resetForm.reason"
-            class="lai-input status-reason"
-            maxlength="500"
-            rows="3"
+          <Textarea
+            v-model:value="resetForm.reason"
+            class="status-reason"
+            :maxlength="500"
+            :rows="3"
             placeholder="必填，将写入额度流水与审计记录"
           />
         </label>
         <label class="lai-dialog-field">
           <span>输入应用编码 <code>{{ detail.code }}</code> 确认</span>
-          <input
-            v-model="resetForm.confirmation_code"
-            class="lai-input lai-cell-mono"
+          <Input
+            v-model:value="resetForm.confirmation_code"
+            name="confirmation_code"
             autocomplete="off"
             :placeholder="detail.code"
-          >
+          />
         </label>
         <p
           v-if="resetSubmission.conflictError.value"
@@ -1458,22 +1423,19 @@ onScopeDispose(clearContext)
           {{ resetSubmission.errorText.value }}
         </p>
         <div class="lai-dialog-actions">
-          <button
-            type="button"
-            class="lai-btn"
+          <Button
             :disabled="resetSubmission.submitting.value"
             @click="resetDialogOpen = false"
           >
             取消
-          </button>
-          <button
-            type="button"
-            class="lai-btn lai-btn-primary"
+          </Button>
+          <Button
+            type="primary"
             :disabled="resetSubmission.submitting.value || resetInvalid"
             @click="saveReset"
           >
             {{ resetSubmission.submitting.value ? '重置中…' : '确认重置' }}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -1508,8 +1470,9 @@ onScopeDispose(clearContext)
           :error="modelsLoadError"
           @retry="openModelDialog"
         />
-        <div
+        <CheckboxGroup
           v-else-if="availableModels.length"
+          v-model:value="selectedModelIds"
           class="model-options"
         >
           <div
@@ -1517,40 +1480,37 @@ onScopeDispose(clearContext)
             :key="model.id"
             class="model-option-group"
           >
-            <label class="model-option">
-              <input
-                v-model="selectedModelIds"
-                type="checkbox"
-                :value="model.id"
-                @change="ensureConstraintForm(model.id)"
-              >
+            <Checkbox
+              class="model-option"
+              :value="model.id"
+              @change="ensureConstraintForm(model.id)"
+            >
               <span><strong>{{ model.display_name }}</strong><small>{{ model.alias }}</small></span>
-            </label>
+            </Checkbox>
             <div
               v-if="selectedModelIds.includes(model.id)"
               class="model-constraint"
             >
               <label class="model-constraint-field">
                 <span>最大输出 Token</span>
-                <input
-                  v-model="modelConstraints[model.id].maxOutputTokens"
-                  class="lai-input"
+                <Input
+                  v-model:value="modelConstraints[model.id].maxOutputTokens"
                   type="number"
-                  min="1"
-                  step="1"
+                  :min="1"
+                  :step="1"
                   placeholder="留空表示不限"
-                >
+                />
               </label>
               <label class="model-constraint-field">
                 <span>流式调用</span>
-                <select
-                  v-model="modelConstraints[model.id].streamAllowed"
-                  class="lai-input"
-                >
-                  <option value="">继承（不限）</option>
-                  <option value="allow">允许</option>
-                  <option value="deny">禁止</option>
-                </select>
+                <Select
+                  v-model:value="modelConstraints[model.id].streamAllowed"
+                  :options="[
+                    { value: '', label: '继承（不限）' },
+                    { value: 'allow', label: '允许' },
+                    { value: 'deny', label: '禁止' },
+                  ]"
+                />
               </label>
             </div>
           </div>
@@ -1560,18 +1520,18 @@ onScopeDispose(clearContext)
           >
             最大输出 Token 必须是大于 0 的整数；留空表示不限制。
           </p>
-        </div>
+        </CheckboxGroup>
         <p
           v-else
           class="empty-inline"
         >
           当前没有已启用的虚拟模型。保存后应用将没有可调用模型。
         </p>
-        <label class="lai-dialog-field"><span>变更原因</span><textarea
-          v-model="modelReason"
-          class="lai-input status-reason"
-          maxlength="500"
-          rows="3"
+        <label class="lai-dialog-field"><span>变更原因</span><Textarea
+          v-model:value="modelReason"
+          class="status-reason"
+          :maxlength="500"
+          :rows="3"
           placeholder="必填，将写入审计记录"
         /></label>
         <p
@@ -1587,22 +1547,19 @@ onScopeDispose(clearContext)
           {{ modelSubmission.errorText.value }}
         </p>
         <div class="lai-dialog-actions">
-          <button
-            type="button"
-            class="lai-btn"
+          <Button
             :disabled="modelSubmission.submitting.value"
             @click="modelDialogOpen = false"
           >
             取消
-          </button>
-          <button
-            type="button"
-            class="lai-btn lai-btn-primary"
+          </Button>
+          <Button
+            type="primary"
             :disabled="modelSubmission.submitting.value || !modelReason.trim() || modelsLoading || modelConstraintInvalid"
             @click="saveModels"
           >
             {{ modelSubmission.submitting.value ? '保存中…' : '保存授权' }}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -1627,11 +1584,11 @@ onScopeDispose(clearContext)
         <p class="lai-dialog-message">
           {{ targetStatus === 'DISABLED' ? '停用后应立即拒绝该应用的新调用。' : targetStatus === 'ARCHIVED' ? '归档是终态，必须先停用应用。' : '启用后应用可按密钥、模型权限与额度策略接入。' }}
         </p>
-        <label class="lai-dialog-field"><span>变更原因</span><textarea
-          v-model="statusReason"
-          class="lai-input status-reason"
-          maxlength="500"
-          rows="3"
+        <label class="lai-dialog-field"><span>变更原因</span><Textarea
+          v-model:value="statusReason"
+          class="status-reason"
+          :maxlength="500"
+          :rows="3"
           placeholder="必填，将写入审计记录"
         /></label>
         <p
@@ -1647,22 +1604,19 @@ onScopeDispose(clearContext)
           {{ statusSubmission.errorText.value }}
         </p>
         <div class="lai-dialog-actions">
-          <button
-            type="button"
-            class="lai-btn"
+          <Button
             :disabled="statusSubmission.submitting.value"
             @click="statusDialogOpen = false"
           >
             取消
-          </button>
-          <button
-            type="button"
-            class="lai-btn lai-btn-primary"
+          </Button>
+          <Button
+            type="primary"
             :disabled="statusSubmission.submitting.value || !statusReason.trim()"
             @click="applyStatus"
           >
             {{ statusSubmission.submitting.value ? '处理中…' : '确认' }}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -1693,7 +1647,6 @@ onScopeDispose(clearContext)
 .shortcut-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }.shortcut { display: flex; flex-direction: column; gap: 6px; padding: 14px; color: #172033; border: 1px solid #e6eaf0; border-radius: 6px; }.shortcut:hover { border-color: #2563eb; }.shortcut span { color: #667085; font-size: 13px; }
 .property-list { margin: 0; }.property-list div { padding: 10px 0; border-bottom: 1px solid #e6eaf0; }.property-list div:last-child { border: 0; }.property-list dt { margin-bottom: 3px; color: #667085; font-size: 12px; }.property-list dd { margin: 0; overflow-wrap: anywhere; }
 .status-reason { width: 100%; max-width: none; height: auto; margin-top: 6px; padding: 8px 10px; resize: vertical; }
-.lai-btn-small { min-height: 30px; padding: 4px 10px; font-size: 12px; }
 .compact-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .detail-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid #e6eaf0; }
 .detail-tab { padding: 8px 12px; font-size: 13px; color: #667085; background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer; }
@@ -1709,7 +1662,6 @@ onScopeDispose(clearContext)
 .adjustment-history { padding-top: 14px; margin-top: 14px; border-top: 1px solid #e6eaf0; }
 .history-heading, .adjustment-list li > div, .adjustment-list li p { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .history-heading h3 { margin: 0; font-size: 13px; color: #344054; }
-.history-heading .lai-btn { min-height: 28px; padding: 2px 6px; }
 .history-state { margin: 10px 0 0; color: #667085; font-size: 12px; }
 .error-text { color: #b42318; }
 .adjustment-list { padding: 0; margin: 8px 0 0; list-style: none; }
@@ -1722,7 +1674,7 @@ onScopeDispose(clearContext)
 .governance-dialog { width: min(720px, calc(100vw - 32px)); max-width: 720px; }
 .governance-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; margin-top: 12px; }
 .wide-field { grid-column: 1 / -1; }
-.full-control, .governance-grid .lai-input { width: 100%; max-width: none; }
+.full-control, .governance-grid .ant-input, .governance-grid .ant-select { width: 100%; max-width: none; }
 .limit-control, .amount-control { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; }
 .amount-control { grid-template-columns: 64px 1fr 68px; }
 .model-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 300px; margin: 14px 0; overflow: auto; border: 1px solid #e6eaf0; border-radius: 6px; }
