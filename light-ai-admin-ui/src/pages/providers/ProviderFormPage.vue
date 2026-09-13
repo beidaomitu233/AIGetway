@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { Card } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { normalizeResourceUrl, headersValid } from '@/utils/resourceValidation'
 import FormField from '@/components/FormField.vue'
@@ -220,8 +221,12 @@ function fieldError(field: string): string | undefined {
       :error="loadError"
       @retry="reloadLatest()"
     />
-    <form
+    <Card
       v-else
+      :bordered="false"
+      class="provider-form-card"
+    >
+    <form
       class="lai-form"
       novalidate
       @submit.prevent="save"
@@ -429,5 +434,11 @@ function fieldError(field: string): string | undefined {
         </button>
       </div>
     </form>
+    </Card>
   </section>
 </template>
+
+<style scoped>
+.provider-form-card { border: 1px solid var(--lai-border); box-shadow: 0 8px 24px rgba(37, 99, 235, .05); }
+.provider-form-card :deep(.ant-card-body) { padding: 20px; }
+</style>
