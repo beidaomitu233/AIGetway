@@ -7,7 +7,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -114,10 +116,114 @@ public final class JdbcSnapshotContentRepository extends AbstractJdbcRepository 
             counts.put(entity.jsonKey(), (long) rows.size());
             content.put(entity.jsonKey(), rows);
         }
+        deriveCompatibilityViews(connection, content);
         Map<String, Object> runtimeConfig = readRuntimeConfig(connection, timezone);
         content.put("runtime_config", runtimeConfig);
         content.put("content_summary", counts);
         return content;
+    }
+
+    /**
+     * 派生 V1 内容契约兼容键（BE-AUDIT-0913-001）：V4 资源域把 provider 收敛为协议
+     * 类型目录、取消 credential_pool 中间层（credential 直挂 channel），快照装配随之
+     * 只产出 channels/channel_credentials 等新键；但发布校验与运行端口仍按旧键消费
+     * providers（类型/超时/默认头，id=渠道 id）、credential_pools（渠道 Key 池）、
+     * credentials（凭证容量限额）。这里从新表派生三键，缺任一键将导致：
+     * 校验 REFERENCE_INVALID 恒失败、运行路由候选被全部丢弃、凭证级限额失效。
+     * 恢复路径只按 ENTITIES 白名单读行，派生键被忽略。
+     */
+    private void deriveCompatibilityViews(Connection connection, Map<String, Object> content) {
+        List<Map<String, Object>> channels = rows(content, "channels");
+        List<Map<String, Object>> credentialRows = rows(content, "channel_credentials");
+
+        Map<String, String> typeByProviderId = loadProviderTypes(connection, channels);
+        List<Map<String, Object>> providers = new ArrayList<>();
+        for (Map<String, Object> channel : channels) {
+            Map<String, Object> view = new LinkedHashMap<>();
+            view.put("id", channel.get("id"));
+            view.put("name", channel.get("name"));
+            view.put("type", typeByProviderId.get(text(channel.get("provider_id"))));
+            view.put("connect_timeout_ms", channel.get("connect_timeout_ms"));
+            view.put("read_timeout_ms", channel.get("read_timeout_ms"));
+            view.put("default_headers", channel.get("default_headers"));
+            view.put("enabled", isActive(channel.get("status")));
+            providers.add(view);
+        }
+        content.put("providers", providers);
+
+        List<Map<String, Object>> pools = new ArrayList<>();
+        for (Map<String, Object> channel : channels) {
+            String channelId = text(channel.get("id"));
+            boolean hasCredential = credentialRows.stream()
+                    .anyMatch(row -> channelId.equals(text(row.get("channel_id"))));
+            if (!hasCredential) {
+                continue;
+            }
+            Map<String, Object> pool = new LinkedHashMap<>();
+            pool.put("id", channelId);
+            pool.put("channel_id", channelId);
+            pool.put("name", channel.get("name"));
+            pool.put("enabled", isActive(channel.get("status")));
+            pools.add(pool);
+        }
+        content.put("credential_pools", pools);
+
+        for (Map<String, Object> credential : credentialRows) {
+            credential.put("enabled", isActive(credential.get("status")));
+        }
+        content.put("credentials", credentialRows);
+    }
+
+    private Map<String, String> loadProviderTypes(Connection connection, List<Map<String, Object>> channels) {
+        Set<String> providerIds = new LinkedHashSet<>();
+        for (Map<String, Object> channel : channels) {
+            String providerId = text(channel.get("provider_id"));
+            if (providerId != null && !providerId.isBlank()) {
+                providerIds.add(providerId);
+            }
+        }
+        if (providerIds.isEmpty()) {
+            return Map.of();
+        }
+        DatabaseDialect d = dialect(connection);
+        String placeholders = String.join(", ", java.util.Collections.nCopies(providerIds.size(), "?"));
+        String sql = "SELECT id, type FROM " + qualify(connection, "provider")
+                + " WHERE id IN (" + placeholders + ")";
+        Map<String, String> typeById = new HashMap<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            int index = 1;
+            for (String providerId : providerIds) {
+                d.bindUuid(statement, index++, UUID.fromString(providerId));
+            }
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    UUID id = d.readUuid(rs, "id");
+                    if (id != null) {
+                        typeById.put(id.toString(), rs.getString("type"));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            throw translate("快照协议类型解析失败", e);
+        }
+        return typeById;
+    }
+
+    private static boolean isActive(Object status) {
+        return "ACTIVE".equals(status);
+    }
+
+    private static String text(Object value) {
+        return value == null ? null : value.toString();
+    }
+
+    private static List<Map<String, Object>> rows(Map<String, Object> content, String key) {
+        return content.get(key) instanceof List<?> list ? castRows(list) : List.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> castRows(List<?> list) {
+        return (List<Map<String, Object>>) list;
     }
 
     private Map<String, Object> readRuntimeConfig(Connection connection, String timezone) {
