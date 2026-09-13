@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
-import { Button, Tag } from 'ant-design-vue'
+import { Button, Card, Tag } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ApiError, isAbortError } from '@/api/errors'
 import { amountUsage, decimalUnits, decimalText, positiveAmount, positiveInteger, validPeriod, integerUnits, integerText, tokenUsageText, positiveIntegerText, toSafeInteger, applicationStatusLabels as statusLabel, applicationEnvironmentLabels as environmentLabel } from './applicationValues'
@@ -686,7 +686,7 @@ onScopeDispose(clearContext)
 
         <div class="workspace-grid">
           <div class="main-column">
-            <div class="lai-card">
+            <Card :bordered="false" class="lai-card">
               <div class="card-heading">
                 <h2 class="lai-card-title">
                   接入信息
@@ -715,9 +715,9 @@ onScopeDispose(clearContext)
               <p class="card-note">
                 OpenAI 兼容协议。业务系统只持有平台签发的应用密钥，不接触供应商 Key。应用密钥原文只应在创建或轮换成功时显示一次。
               </p>
-            </div>
+            </Card>
 
-            <div class="lai-card">
+            <Card :bordered="false" class="lai-card">
               <div class="card-heading">
                 <h2 class="lai-card-title">
                   {{ onboardingComplete ? '运行摘要' : '接入检查清单' }}
@@ -765,11 +765,11 @@ onScopeDispose(clearContext)
                   <span>{{ step.hint }}</span>
                 </li>
               </ul>
-            </div>
+            </Card>
           </div>
 
           <aside>
-            <div class="lai-card">
+            <Card :bordered="false" class="lai-card">
               <h2 class="lai-card-title">
                 基本信息
               </h2>
@@ -783,7 +783,7 @@ onScopeDispose(clearContext)
                   <dt>说明</dt><dd>{{ detail.description }}</dd>
                 </div>
               </dl>
-            </div>
+            </Card>
             <div
               v-if="canViewQuota"
               class="lai-card"
@@ -826,7 +826,7 @@ onScopeDispose(clearContext)
         role="tabpanel"
         aria-label="可用模型"
       >
-        <div class="lai-card">
+        <Card :bordered="false" class="lai-card">
           <div class="card-heading">
             <h2 class="lai-card-title">
               可用虚拟模型
@@ -866,7 +866,7 @@ onScopeDispose(clearContext)
           <p class="card-note">
             应用级参数上限只能收紧，不能突破虚拟模型与上游候选的能力边界；越界的显式参数在路由前被拒绝。
           </p>
-        </div>
+        </Card>
       </div>
 
       <div
@@ -875,7 +875,7 @@ onScopeDispose(clearContext)
         role="tabpanel"
         aria-label="额度与速率"
       >
-        <div class="lai-card">
+        <Card :bordered="false" class="lai-card">
           <div class="card-heading">
             <h2 class="lai-card-title">
               额度与速率
@@ -965,7 +965,7 @@ onScopeDispose(clearContext)
               暂无额度调整或重置记录。
             </p>
           </div>
-        </div>
+        </Card>
       </div>
 
       <div
@@ -973,7 +973,7 @@ onScopeDispose(clearContext)
         role="tabpanel"
         aria-label="调用记录"
       >
-        <div class="lai-card">
+        <Card :bordered="false" class="lai-card">
           <div class="card-heading">
             <h2 class="lai-card-title">
               调用记录
@@ -997,7 +997,7 @@ onScopeDispose(clearContext)
           <p class="card-note">
             调用记录按 request_id 展示准入、路由、每次 Attempt、恢复动作与结算结果；应用负责人只能查看本应用。
           </p>
-        </div>
+        </Card>
       </div>
 
       <div
@@ -1005,7 +1005,7 @@ onScopeDispose(clearContext)
         role="tabpanel"
         aria-label="用量成本"
       >
-        <div class="lai-card">
+        <Card :bordered="false" class="lai-card">
           <div class="card-heading">
             <h2 class="lai-card-title">
               用量与成本
@@ -1025,7 +1025,7 @@ onScopeDispose(clearContext)
           <p class="card-note">
             成本按请求发生时的价格快照归属到本应用；供应商未返回 Usage 时按估算标记，不与实际值混淆。
           </p>
-        </div>
+        </Card>
       </div>
 
       <div
@@ -1033,7 +1033,7 @@ onScopeDispose(clearContext)
         role="tabpanel"
         aria-label="成员与审计"
       >
-        <div class="lai-card">
+        <Card :bordered="false" class="lai-card">
           <div class="card-heading">
             <h2 class="lai-card-title">
               应用成员
@@ -1082,8 +1082,8 @@ onScopeDispose(clearContext)
           <p class="card-note">
             成员来源于企业身份系统。成员维护方式仍在产品待确认范围内，当前平台只提供查看。
           </p>
-        </div>
-        <div class="lai-card">
+        </Card>
+        <Card :bordered="false" class="lai-card">
           <div class="card-heading">
             <h2 class="lai-card-title">
               应用审计
@@ -1099,7 +1099,7 @@ onScopeDispose(clearContext)
           <p class="card-note">
             密钥创建、轮换、撤销、模型授权、额度调整、状态变更与成员变更均写入审计，日志不包含密钥原文。
           </p>
-        </div>
+        </Card>
       </div>
     </template>
 
