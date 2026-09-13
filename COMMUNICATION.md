@@ -472,3 +472,11 @@
 | UI-ANT-301-001 | P1 | 管理后台入口仍以旧自研样式体系为唯一基座，无法为后续 Ant Design 全量重构提供统一主题、中文 locale 和组件上下文。 | `light-ai-admin-ui/package.json`、`src/main.ts`、`src/App.vue`、`src/design/theme.ts`、`src/styles/theme.css` | 接入 `ant-design-vue` 与 `@ant-design/icons-vue`；建立蓝色浅色令牌、8px 圆角、卡片表面和布局背景；入口挂载 `ConfigProvider`/`App` 并设置中文 locale，保留旧页面路由以支持分阶段迁移。 | typecheck 通过；lint 0 error（37 条既有 warning）；主题、bootstrap、layout 回归测试通过；Vite 已生成 `dist` 构建产物，生产构建待记录最终退出状态。 | codex-ui-foundation-0913 | 待复验 |
 
 本包不修改管理 API、路由契约、权限逻辑或数据库；后续 UI-R302 以本分支为基线重写应用壳层。
+
+## UI-R302 Ant Design 应用壳层与导航（2026-09-13，codex-ui-shell-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-302-001 | P1 | 旧 `AppLayout` 使用自研 aside/topbar/nav DOM 和样式，无法提供统一的侧栏折叠、面包屑、导航选中态和响应式布局。 | `light-ai-admin-ui/src/layout/AppLayout.vue`、`tests/layout.test.ts`、`tests/setup.ts` | 从零改用 Ant Design `Layout/Sider/Menu/Header/Breadcrumb/Avatar/Badge`，按现有 `navSections` 和 `store.can` 过滤权限；保留所有既有路径、运行模式、快照、待发布计数及用户显示，新增蓝色半平面导航视觉和窄屏适配。 | typecheck 通过；布局回归 6 项通过；lint 0 error（新增壳层仅产生格式 warning，既有审计页面 warning 保持）。 | codex-ui-shell-0913 | 待复验 |
+
+UI-R302 未修改 API、权限判定和路由表；UI-R303 可基于该壳层继续实现共享页面模板。
