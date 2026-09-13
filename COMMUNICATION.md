@@ -661,3 +661,12 @@ UI-R312 未修改详情 API、页签 URL、状态转换或权限规则。
 | UI-ANT-346-001 | P1 | 限流、可靠性和熔断列表仍保留原生表格，治理页面与 Ant 工作区视觉不一致。 | `src/pages/limits/LimitListPage.vue`、`src/pages/reliabilities/ReliabilityListPage.vue`、`src/pages/circuits/CircuitListPage.vue`；治理 API 契约不变 | 使用 Ant `Table/Select/Input/Checkbox/Tag/Button/Space` 重写列表和筛选，保留分页、权限、状态、人工动作和空态文案。 | `npm run typecheck`、`npm run lint -- --quiet` 通过；`governanceForms.test.ts`、`governanceCircuits.test.ts` 共 10 项通过。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证（本地） |
 | UI-ANT-347-001 | P1 | 用量分组明细仍保留原生表格，排序、占比和 Trace 钻取缺少统一数据工作区。 | `src/pages/usage/UsagePage.vue`；用量查询、排序、分页和 Trace 路由契约不变 | 使用 Ant `Table` 承载分组明细，保留服务端排序、金额/Token 精度、占比格式化和可用维度钻取。 | `npm run typecheck`、`npm run lint -- --quiet` 通过；用量相关回归已通过；生产构建通过。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证（本地） |
 | UI-ANT-348-001 | P1 | 额度流水仍以原生表格展示，空数据时 Ant 默认英文提示也会破坏中文后台契约。 | `src/pages/usage/UsageAdjustmentsPage.vue`；额度流水 API、应用选择和 URL 深链契约不变 | 使用 Ant `Table` 渲染调整/重置记录，并显式设置中文空态；保留十进制字符串原样展示、应用切换和错误重试。 | `npm run typecheck`、`npm run lint -- --quiet` 通过；`usageAdjustments.test.ts` 6 项通过；生产构建通过。 | 代码审查与修复模型/codex-ui-cleanup-0913 | 已验证（本地） |
+
+## UI-ANT 远程交付记录（2026-09-13，前端执行模型 zcode-ant-0913）
+
+按 UI-ANT-345～348 交接说明接手，完成本地复验与远程交付。本轮仅推送既有分支并更新协作文档，未修改产品代码。
+
+| 编号 | 提出方 | 问题描述 | 涉及任务/模块 | 影响与建议 | 待确认方 | 状态 | 处理结论 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-DELIV-001 | 前端执行模型/zcode-ant-0913 | UI-R301～UI-R343 及清理批次成果此前仅存在于本地分支 `feature/frontend-ant-shell-codex-ui-0913`（95 个提交），前一轮推送被自动审查阻止，远程无成果、无法评审合并。 | UI-R30 全部任务包、REVIEW_REPORT.md | 已按交接说明接手：重新运行 `npm run typecheck`、`npm run lint -- --quiet`、全量 vitest（33 文件/255 项）、`npm run build`，全部通过；期间一轮高负载全量测试出现 12 项用例超时失败，连续两轮重跑均 255 项全通过，判定为环境负载偶发并在 REVIEW_REPORT.md 记录。以一次性 gh 凭据普通推送分支（未修改任何持久 git 凭据配置、未强推、未改动 `dev`），`git ls-remote` 回读 `refs/heads/feature/frontend-ant-shell-codex-ui-0913=f996294` 与本地一致；已发起进入 `dev` 的独立评审 PR。 | 评审负责人 | 已交付待评审 | PR 合并前 UI-R30 保持待合并占用；合并后按 REVIEW_REPORT 建议，在真实后端环境按应用、渠道、模型、发布和观测主路径完成视觉与写操作回归，再解除占用。 |
+| UI-ANT-DELIV-002 | 前端执行模型/zcode-ant-0913 | 真实后端逐页视觉与写操作回归仍未执行（沿用 REVIEW_REPORT 未验证项）。 | UI-R340～UI-R343 | 仓库 mock 浏览器扫描不替代真实后端验收；建议在 PR 评审期间或合并后，按 FS-P20/FS-P21 方式以 H2 + Redis + Vite + Chromium 完成主路径回归。 | 评审负责人/后续回归负责人 | 待执行 | 未验证项保持如实记录，不因远程交付标记为通过。 |

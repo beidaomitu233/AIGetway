@@ -121,7 +121,7 @@
 - 结论：共享层先合入，业务域按 UI-R310～UI-R334 并行；UI-R340～UI-R343 负责跨页视觉、契约和清理。
 - 待决：Ant Design Vue 的具体兼容版本由 UI-R301 在当前 Node/Vite 锁定后确定；图表依赖由 UI-R306 做体积和可访问性验证后确定。
 - 待决：企业登录真实身份源和 Provider/真实数据库门禁仍沿用既有阻塞记录，不因页面重构标记为通过。
-- 执行状态：UI-R300 已完成文档、映射和领取矩阵；UI-R301～UI-R343 已在独立前端分支完成本地实现、回归与最终集成审查；后续清理批次 UI-ANT-345～348 已完成本地实现与定向回归，当前成果尚未推送到远程 `dev`（自动审查阻止外部源推送），待后续负责人获得授权后普通推送并解除占用。
+- 执行状态：UI-R300 已完成文档、映射和领取矩阵；UI-R301～UI-R343 已在独立前端分支完成本地实现、回归与最终集成审查；后续清理批次 UI-ANT-345～348 已完成本地实现与定向回归。2026-09-13 由前端执行模型 zcode-ant-0913 接手完成本地复验（typecheck、lint、255 项测试、build 通过）并普通推送分支 `feature/frontend-ant-shell-codex-ui-0913` 至远程（`git ls-remote` 回读 f996294），已发起进入 `dev` 的独立评审 PR；合并与真实后端复验由评审流程接续。
 
 ## 3. 已联调结果保护清单
 
@@ -398,7 +398,7 @@ UI 业务包开始前，执行分支必须先包含 RV-P20 PR #1 或其等价合
 | UI-R340 | `test/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 响应式、可访问性、视觉回归 |
 | UI-R341 | `test/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 契约与跨端回归 |
 | UI-R342 | `refactor/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 旧组件和样式清理 |
-| UI-R343 | `release/frontend-ant-shell-codex-ui-0913` | 阻塞（远程交付） | 最终集成和发布评审 |
+| UI-R343 | `release/frontend-ant-shell-codex-ui-0913` | 待合并（PR 评审中） | 最终集成和发布评审 |
 | UI-ANT-345 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 应用表单 Ant 控件受控绑定与回归 |
 | UI-ANT-346 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 限流、可靠性、熔断列表 Ant Table 迁移 |
 | UI-ANT-347 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 用量分组明细 Ant Table 迁移 |
