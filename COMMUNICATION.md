@@ -512,3 +512,11 @@ UI-R305 不改变敏感值持久化、日志和 API 契约；业务表单包可�
 | UI-ANT-306-001 | P2 | 指标卡和趋势空态仍依赖页面局部实现，容易把无数据绘制为 0 并产生不一致的状态颜色。 | `light-ai-admin-ui/src/ui/metrics/MetricCard.vue`、`src/components/TrendChart.vue`、`tests/antMetrics.test.ts` | 新增统一指标卡（状态色仅表达业务状态）；趋势图保留轻量 SVG 数据计算，空桶改用 Ant `Empty`，不绘制虚假零值。 | typecheck 通过；指标/趋势 2 项与概览 15 项回归通过。 | codex-ui-metrics-0913 | 待复验 |
 
 UI-R306 未新增图表依赖，也未改变趋势数据接口和筛选口径。
+
+## UI-R307 Ant Design 权限与系统状态页（2026-09-13，codex-ui-state-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-307-001 | P1 | 403/404 页面仍是旧自研标题、按钮结构，错误状态视觉与后台壳层不一致。 | `light-ai-admin-ui/src/pages/forbidden/ForbiddenPage.vue`、`src/pages/notFound/NotFoundPage.vue`、`tests/routerGuards.test.ts` | 使用 Ant `Result`、`Button` 重写无权限和不存在页面；保留返回上一页、返回概览、公开路由与权限守卫逻辑，不展示堆栈或敏感响应。 | typecheck、lint 通过；bootstrap 5 项、router guard 4 项回归通过。 | codex-ui-state-0913 | 待复验 |
+
+UI-R307 未改变鉴权、目标恢复或路由表契约。
