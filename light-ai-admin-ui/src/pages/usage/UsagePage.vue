@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { Card } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import TrendChart from '@/components/TrendChart.vue'
@@ -713,6 +714,7 @@ const costDelayActive = computed(() => {
           刷新失败，以下为上次数据：{{ errorText(groupError) }}
         </p>
         <div class="lai-table-wrap">
+          <Card :bordered="false" class="usage-table-card">
           <table class="lai-table">
             <thead>
               <tr>
@@ -787,6 +789,7 @@ const costDelayActive = computed(() => {
               </tr>
             </tbody>
           </table>
+          </Card>
         </div>
         <ListPager
           :page="groups.page"
@@ -799,3 +802,8 @@ const costDelayActive = computed(() => {
     </div>
   </section>
 </template>
+
+<style scoped>
+.usage-table-card { margin-top: 16px; border: 1px solid var(--lai-border); box-shadow: 0 8px 24px rgba(37, 99, 235, .05); }
+.usage-table-card :deep(.ant-card-body) { padding: 0; }
+</style>
