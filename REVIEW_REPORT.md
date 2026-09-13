@@ -42,6 +42,7 @@
 - 既有 Vue Router/RouterLink 测试警告仍存在，不影响断言结果。
 - 真实后端回归（2026-09-13，zcode-ant-0913，H2+Redis+Vite+Chromium 1920，无 Mock）：应用创建→详情→密钥一次性弹窗全链路通过，64 位/decimal 契约与密钥无残留验证通过；16 条主路由渲染与空态正常、1920 无横向溢出；渠道创建被 `bootstrap` 缺 `adapters` 阻塞（UI-ANT-CONTRACT-001，后端 AdapterMetadataSource 无实现）；渠道表单与其余 8 页的原生控件残留登记 UI-ANT-349/350。
 - UI-ANT-349 修复（提交 `d30cc4f`）：渠道表单类型下拉、名称/地址、超时/优先级/权重与按钮全部迁移为 Ant `Select/Input/Button`；渠道定向测试 14 项、typecheck、lint、全量 255 项测试、build 再次通过；浏览器实测无原生 select 与 `.lai-input/.lai-select` 残留，校验错误正常展示。
+- UI-ANT-350 交付（提交 `52ffed5`）：额度流水、草稿、渠道列表、访问凭证（含表单对话框）、审计、运行参数、总览、调用记录、用量成本九页的原生筛选/输入/按钮控件全部迁移为 Ant 组件；`AppMultiSelect` 重写为 Ant Select multiple。typecheck、lint、全量 33 文件/255 项测试、build 通过；mock 浏览器实测 8 页无原生控件、无 `.lai-*` 控件类、无横向溢出。剩余表单/详情/对话框长尾登记 UI-ANT-351。
 
 未验证：真实 PostgreSQL/MySQL/Redis、真实 Provider 调用与对账、企业身份四角色、1024/1280/1440 全宽度逐页验收、生产部署、数据库迁移（本轮无数据库变更）。
 
