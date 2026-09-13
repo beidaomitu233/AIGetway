@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
-import { Card } from 'ant-design-vue'
+import { Card, Table } from 'ant-design-vue'
+import type { ColumnsType } from 'ant-design-vue/es/table'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import TrendChart from '@/components/TrendChart.vue'
@@ -358,6 +359,24 @@ const groupRows = computed<UsageGroupRow[]>(() => {
   return g?.rows ?? g?.groups ?? []
 })
 
+const groupColumns: ColumnsType<UsageGroupRow> = [
+  { title: '维度', dataIndex: 'dimension_name', key: 'dimension_name' },
+  { title: '币种', dataIndex: 'currency', key: 'currency', width: 80 },
+  { title: '请求数', dataIndex: 'request_count', key: 'request_count', customHeaderCell: () => ({ onClick: () => applyGroupSort('REQUEST_COUNT'), class: 'lai-th-sortable' }) },
+  { title: '成功率', dataIndex: 'success_rate', key: 'success_rate' },
+  { title: '尝试数', dataIndex: 'attempt_count', key: 'attempt_count', customHeaderCell: () => ({ onClick: () => applyGroupSort('ATTEMPT_COUNT'), class: 'lai-th-sortable' }) },
+  { title: 'Token', dataIndex: 'total_tokens', key: 'total_tokens', customHeaderCell: () => ({ onClick: () => applyGroupSort('TOTAL_TOKENS'), class: 'lai-th-sortable' }) },
+  { title: '费用', dataIndex: 'total_cost', key: 'total_cost', customHeaderCell: () => ({ onClick: () => applyGroupSort('TOTAL_COST'), class: 'lai-th-sortable' }) },
+  { title: '请求占比', dataIndex: 'request_share', key: 'request_share' },
+  { title: 'Token 占比', dataIndex: 'token_share', key: 'token_share' },
+  { title: '费用占比', dataIndex: 'cost_share', key: 'cost_share' },
+  { title: '操作', key: 'actions', width: 88 },
+]
+
+function asGroupRow(record: Record<string, unknown>): UsageGroupRow {
+  return record as unknown as UsageGroupRow
+}
+
 function groupRowTarget(row: UsageGroupRow): { name: string; query: Record<string, string> } | null {
   const base = {
     start_at: String(query.start_at),
@@ -714,82 +733,31 @@ const costDelayActive = computed(() => {
           刷新失败，以下为上次数据：{{ errorText(groupError) }}
         </p>
         <div class="lai-table-wrap">
-          <Card :bordered="false" class="usage-table-card">
-          <table class="lai-table">
-            <thead>
-              <tr>
-                <th>维度</th>
-                <th>币种</th>
-                <th
-                  class="lai-th-sortable"
-                  @click="applyGroupSort('REQUEST_COUNT')"
-                >
-                  请求数
-                </th>
-                <th>成功率</th>
-                <th
-                  class="lai-th-sortable"
-                  @click="applyGroupSort('ATTEMPT_COUNT')"
-                >
-                  尝试数
-                </th>
-                <th
-                  class="lai-th-sortable"
-                  @click="applyGroupSort('TOTAL_TOKENS')"
-                >
-                  Token
-                </th>
-                <th
-                  class="lai-th-sortable"
-                  @click="applyGroupSort('TOTAL_COST')"
-                >
-                  费用
-                </th>
-                <th>请求占比</th>
-                <th>Token 占比</th>
-                <th>费用占比</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="row in groupRows"
-                :key="`${row.dimension_type}-${row.dimension_id}-${row.currency}`"
-              >
-                <td>{{ row.dimension_name }}</td>
-                <td>{{ row.currency }}</td>
-                <td>{{ row.request_count }}</td>
-                <td>{{ formatRate(row.success_rate) }}</td>
-                <td>{{ row.attempt_count }}</td>
-                <td>{{ row.total_tokens }}<span class="lai-related-meta">（实 {{ row.actual_tokens }} / 估 {{ row.estimated_tokens }}）</span></td>
-                <td>{{ row.total_cost }}</td>
-                <td>{{ formatShare(row.request_share) }}</td>
-                <td>{{ formatShare(row.token_share) }}</td>
-                <td>{{ formatShare(row.cost_share) }}</td>
-                <td>
-                  <RouterLink
-                    v-if="groupRowTarget(row)"
-                    :to="{ name: groupRowTarget(row)!.name, query: groupRowTarget(row)!.query }"
-                    class="lai-btn lai-btn-text"
-                  >
-                    Trace
-                  </RouterLink>
-                  <template v-else>
-                    —
-                  </template>
-                </td>
-              </tr>
-              <tr v-if="groupRows.length === 0">
-                <td
-                  colspan="11"
-                  class="lai-table-empty"
-                >
-                  暂无数据
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          </Card>
+          <Table
+            :data-source="groupRows"
+            :columns="groupColumns"
+            :row-key="(row: UsageGroupRow) => `${row.dimension_type}-${row.dimension_id}-${row.currency}`"
+            :pagination="false"
+            size="middle"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'success_rate'">{{ formatRate(record.success_rate) }}</template>
+              <template v-else-if="column.key === 'total_tokens'">
+                {{ record.total_tokens }}<span class="lai-related-meta">（实 {{ record.actual_tokens }} / 估 {{ record.estimated_tokens }}）</span>
+              </template>
+              <template v-else-if="column.key === 'request_share'">{{ formatShare(record.request_share) }}</template>
+              <template v-else-if="column.key === 'token_share'">{{ formatShare(record.token_share) }}</template>
+              <template v-else-if="column.key === 'cost_share'">{{ formatShare(record.cost_share) }}</template>
+              <template v-else-if="column.key === 'actions'">
+                <RouterLink
+                  v-if="groupRowTarget(asGroupRow(record))"
+                  :to="{ name: groupRowTarget(asGroupRow(record))!.name, query: groupRowTarget(asGroupRow(record))!.query }"
+                  class="lai-btn lai-btn-text"
+                >Trace</RouterLink>
+                <span v-else>—</span>
+              </template>
+            </template>
+          </Table>
         </div>
         <ListPager
           :page="groups.page"
