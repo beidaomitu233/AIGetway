@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { Tag } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import StatusText from '@/components/StatusText.vue'
@@ -265,7 +266,7 @@ const headerRows = computed(() => Object.entries(detail.value?.headers ?? {}))
             <span class="lai-summary-label">优先级 / 权重</span>{{ detail.priority }} / {{ detail.weight }}
           </div>
           <div class="lai-summary-item">
-            <span class="lai-summary-label">配置状态</span>{{ detail.status === 'ACTIVE' ? '启用' : detail.status === 'DISABLED' ? '停用' : detail.status }}
+            <span class="lai-summary-label">配置状态</span><Tag :color="detail.status === 'ACTIVE' ? 'green' : detail.status === 'DISABLED' ? 'orange' : 'default'">{{ detail.status === 'ACTIVE' ? '启用' : detail.status === 'DISABLED' ? '停用' : detail.status }}</Tag>
           </div>
           <div class="lai-summary-item">
             <span class="lai-summary-label">版本</span>{{ detail.version }}
