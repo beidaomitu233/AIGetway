@@ -2,6 +2,7 @@
 // 上游模型 列表页（FE-015，附录 4.2.5.1）：筛选同步 URL，行内启停删除带影响确认，
 // 勾选 1—20 个同 渠道 模型发起批量检测（FE-016）。
 import { computed, ref, shallowRef } from 'vue'
+import { Card } from 'ant-design-vue'
 import PageState from '@/components/PageState.vue'
 import ListPager from '@/components/ListPager.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -125,6 +126,7 @@ const connectionOptions = [
       </div>
     </div>
 
+    <Card :bordered="false" class="model-filter-card">
     <div class="lai-filter-bar">
       <input
         class="lai-input lai-filter-input"
@@ -181,6 +183,7 @@ const connectionOptions = [
         class="lai-refreshing"
       >刷新中…</span>
     </div>
+    </Card>
 
     <div
       v-if="canCheck && selected.length > 0"
@@ -231,6 +234,7 @@ const connectionOptions = [
       >
         {{ actionText() }}
       </p>
+      <Card :bordered="false" class="model-table-card">
       <div class="lai-table-wrap">
         <table class="lai-table">
           <thead>
@@ -327,6 +331,7 @@ const connectionOptions = [
           </tbody>
         </table>
       </div>
+      </Card>
       <ListPager
         :page="page"
         :page-size="pageSize"
@@ -378,6 +383,10 @@ const connectionOptions = [
 </template>
 
 <style scoped>
+.model-filter-card,
+.model-table-card { margin-bottom: 16px; border: 1px solid var(--lai-border); box-shadow: 0 8px 24px rgba(37, 99, 235, .05); }
+.model-filter-card :deep(.ant-card-body) { padding: 14px 16px; }
+.model-table-card :deep(.ant-card-body) { padding: 0; }
 .lai-page-header {
   display: flex;
   align-items: center;
