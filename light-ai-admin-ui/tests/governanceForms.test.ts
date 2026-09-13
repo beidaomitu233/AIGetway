@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
+import { Select } from 'ant-design-vue'
 import LimitFormPage from '@/pages/limits/LimitFormPage.vue'
 import ReliabilityFormPage from '@/pages/reliabilities/ReliabilityFormPage.vue'
 import LimitListPage from '@/pages/limits/LimitListPage.vue'
@@ -71,7 +72,7 @@ describe('LimitFormPage（FE-019）', () => {
     const wrapper = await mountAt(LimitFormPage, '/ui/limit-policies/new', pageRoutes)
     expect(wrapper.text()).not.toContain('排队超时')
     expect(wrapper.text()).toContain('至少一个 RPM、TPM、并发上限非空时才允许启用')
-    const saveButton = wrapper.findAll('button').find((button) => button.text() === '保存')!
+    const saveButton = wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '保存')!
     expect((saveButton.element as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -85,10 +86,11 @@ describe('LimitFormPage（FE-019）', () => {
     ])
     const wrapper = await mountAt(LimitFormPage, '/ui/limit-policies/new', pageRoutes)
     await wrapper.find('input[maxlength="64"]').setValue('alias-guard')
-    const selects = wrapper.findAll('select')
-    await selects[1]!.setValue('alias-1')
+    const scopeSelect = wrapper.findAllComponents(Select).find((c) => c.props('placeholder') === '请选择作用对象')!
+    await (scopeSelect.vm as unknown as { $emit: (e: string, ...args: unknown[]) => void }).$emit('update:value', 'alias-1')
     await flushPromises()
-    await selects[2]!.setValue('QUEUE')
+    const overflowSelect = wrapper.findAllComponents(Select).find((c) => ((c.props('options') ?? []) as Array<{ value: string }>).some((o) => o.value === 'QUEUE'))!
+    await (overflowSelect.vm as unknown as { $emit: (e: string, ...args: unknown[]) => void }).$emit('update:value', 'QUEUE')
     await flushPromises()
     const numeric = wrapper.findAll('input[inputmode="numeric"]')
     // RPM、TPM、并发、queue_timeout_ms、queue_max_size
@@ -152,10 +154,11 @@ describe('ReliabilityFormPage（FE-021）', () => {
     await inputs[1]!.setValue('3000')
     await inputs[2]!.setValue('120000')
     await inputs[3]!.setValue('120000')
-    await wrapper.findAll('select')[0]!.setValue('alias-1')
+    const aliasSelect = wrapper.findAllComponents(Select).find((c) => c.props('placeholder') === '请选择 Alias')!
+    await (aliasSelect.vm as unknown as { $emit: (e: string, ...args: unknown[]) => void }).$emit('update:value', 'alias-1')
     await flushPromises()
     expect(wrapper.text()).toContain('必须小于总超时')
-    const saveButton = wrapper.findAll('button').find((button) => button.text() === '保存')!
+    const saveButton = wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '保存')!
     expect((saveButton.element as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -171,7 +174,8 @@ describe('ReliabilityFormPage（FE-021）', () => {
     const wrapper = await mountAt(ReliabilityFormPage, '/ui/reliability-policies/new', pageRoutes)
     const inputs = wrapper.findAll('input[type="text"]')
     await inputs[0]!.setValue('chat-reliability')
-    await wrapper.findAll('select')[0]!.setValue('alias-1')
+    const aliasSelect = wrapper.findAllComponents(Select).find((c) => c.props('placeholder') === '请选择 Alias')!
+    await (aliasSelect.vm as unknown as { $emit: (e: string, ...args: unknown[]) => void }).$emit('update:value', 'alias-1')
     await flushPromises()
     await wrapper.find('form').trigger('submit')
     await flushPromises()

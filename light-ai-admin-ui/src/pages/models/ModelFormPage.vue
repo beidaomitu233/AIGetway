@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button, Checkbox, Input, Select } from 'ant-design-vue'
 // 上游模型 新建/编辑表单（FE-015，附录 4.2.6.1）。
 // 能力开关关闭时隐藏对应范围与默认值；价格保持字符串精度；启用要求能力字段完整。
 import { computed, onMounted, reactive, ref } from 'vue'
@@ -22,6 +23,25 @@ const isEdit = computed(() => modelId.value !== '')
 const loading = ref(true)
 const loadError = ref<unknown>(null)
 const providers = ref<ProviderOption[]>([])
+
+const triStateOptions = [
+  { value: 'null', label: '待确认' },
+  { value: 'true', label: '支持' },
+  { value: 'false', label: '不支持' },
+]
+
+function triState(value: boolean | null): string {
+  return value == null ? 'null' : String(value)
+}
+
+function setTriState(key: 'support_stream' | 'support_system_message' | 'support_temperature' | 'support_top_p' | 'support_stop', v: unknown): void {
+  const state = Array.isArray(v) ? String(v[0] ?? '') : String(v ?? '')
+  form[key] = state === 'null' ? null : state === 'true'
+}
+
+const channelOptions = computed(() =>
+  providers.value.map((item) => ({ value: item.id, label: `${item.name}（${item.provider_type}）` })),
+)
 
 const form = reactive({
   channel_id: '',
@@ -296,58 +316,29 @@ onMounted(reload)
             required
             :error="form.channel_id === '' && loadError ? '请选择 渠道' : ''"
           >
-            <select
-              v-model="form.channel_id"
-              class="lai-input lai-select"
+            <Select
+              v-model:value="form.channel_id"
               :disabled="isEdit"
-            >
-              <option
-                value=""
-                disabled
-              >
-                请选择 渠道
-              </option>
-              <option
-                v-for="item in providers"
-                :key="item.id"
-                :value="item.id"
-              >
-                {{ item.name }}（{{ item.provider_type }}）
-              </option>
-            </select>
+              placeholder="请选择 渠道"
+              :options="channelOptions"
+            />
           </FormField>
           <FormField
             label="展示名称"
             required
             :error="displayNameInvalid ? '长度为 2—64 字符' : ''"
           >
-            <input
-              v-model="form.display_name"
-              class="lai-input"
-              type="text"
-              maxlength="64"
-            >
+            <Input v-model:value="form.display_name" type="text" :maxlength="64" />
           </FormField>
           <FormField
             label="模型标识"
             required
             :error="modelIdInvalid ? '长度为 1—128 字符，保持大小写' : ''"
           >
-            <input
-              v-model="form.model_id"
-              class="lai-input"
-              type="text"
-              maxlength="128"
-              spellcheck="false"
-            >
+            <Input v-model:value="form.model_id" type="text" :maxlength="128" spellcheck="false" />
           </FormField>
           <FormField label="模型类型">
-            <input
-              class="lai-input"
-              type="text"
-              value="CHAT_TEXT"
-              disabled
-            >
+            <Input value="CHAT_TEXT" disabled />
           </FormField>
         </div>
       </fieldset>
@@ -362,59 +353,36 @@ onMounted(reload)
             :hint="'需为当前 渠道 Adapter 声明的 TokenEstimator'"
             :error="form.enabled && form.tokenizer_family.trim() === '' ? '启用模型必须填写' : ''"
           >
-            <input
-              v-model="form.tokenizer_family"
-              class="lai-input"
-              type="text"
-              spellcheck="false"
-            >
+            <Input v-model:value="form.tokenizer_family" type="text" spellcheck="false" />
           </FormField>
           <FormField
             label="上下文窗口"
             :error="contextInvalid ? '需为正整数' : outputInvalid ? '' : ''"
           >
-            <input
-              v-model="form.context_window"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-              placeholder="启用模型必填"
-            >
+            <Input v-model:value="form.context_window" type="text" inputmode="numeric" placeholder="启用模型必填" />
           </FormField>
           <FormField
             label="最大输出 Token"
             :error="outputInvalid ? '需为正整数且小于上下文窗口' : ''"
           >
-            <input
-              v-model="form.max_output_tokens"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-              placeholder="启用模型必填"
-            >
+            <Input v-model:value="form.max_output_tokens" type="text" inputmode="numeric" placeholder="启用模型必填" />
           </FormField>
         </div>
         <label class="lai-switch">支持流式
-          <select
-            v-model="form.support_stream"
-            class="lai-input"
-            aria-label="stream"
-          >
-            <option :value="null">待确认</option>
-            <option :value="true">支持</option>
-            <option :value="false">不支持</option>
-          </select>
+          <Select
+              :value="triState(form.support_stream)"
+              aria-label="stream"
+              :options="triStateOptions"
+              @update:value="(v) => setTriState('support_stream', v)"
+            />
         </label>
         <label class="lai-switch">支持 system 消息
-          <select
-            v-model="form.support_system_message"
-            class="lai-input"
-            aria-label="system_message"
-          >
-            <option :value="null">待确认</option>
-            <option :value="true">支持</option>
-            <option :value="false">不支持</option>
-          </select>
+          <Select
+              :value="triState(form.support_system_message)"
+              aria-label="system_message"
+              :options="triStateOptions"
+              @update:value="(v) => setTriState('support_system_message', v)"
+            />
         </label>
       </fieldset>
 
@@ -423,15 +391,12 @@ onMounted(reload)
           参数能力
         </legend>
         <label class="lai-switch">支持 temperature
-          <select
-            v-model="form.support_temperature"
-            class="lai-input"
-            aria-label="temperature"
-          >
-            <option :value="null">待确认</option>
-            <option :value="true">支持</option>
-            <option :value="false">不支持</option>
-          </select>
+          <Select
+              :value="triState(form.support_temperature)"
+              aria-label="temperature"
+              :options="triStateOptions"
+              @update:value="(v) => setTriState('support_temperature', v)"
+            />
         </label>
         <div
           v-if="form.support_temperature"
@@ -441,36 +406,23 @@ onMounted(reload)
             label="temperature 下限"
             required
           >
-            <input
-              v-model="form.temperature_min"
-              class="lai-input"
-              type="text"
-              inputmode="decimal"
-            >
+            <Input v-model:value="form.temperature_min" type="text" inputmode="decimal" />
           </FormField>
           <FormField
             label="temperature 上限"
             required
             :error="temperatureRangeInvalid ? '上限不能小于下限' : ''"
           >
-            <input
-              v-model="form.temperature_max"
-              class="lai-input"
-              type="text"
-              inputmode="decimal"
-            >
+            <Input v-model:value="form.temperature_max" type="text" inputmode="decimal" />
           </FormField>
         </div>
         <label class="lai-switch">支持 top_p
-          <select
-            v-model="form.support_top_p"
-            class="lai-input"
-            aria-label="top_p"
-          >
-            <option :value="null">待确认</option>
-            <option :value="true">支持</option>
-            <option :value="false">不支持</option>
-          </select>
+          <Select
+              :value="triState(form.support_top_p)"
+              aria-label="top_p"
+              :options="triStateOptions"
+              @update:value="(v) => setTriState('support_top_p', v)"
+            />
         </label>
         <div
           v-if="form.support_top_p"
@@ -480,36 +432,23 @@ onMounted(reload)
             label="top_p 下限（0—1）"
             required
           >
-            <input
-              v-model="form.top_p_min"
-              class="lai-input"
-              type="text"
-              inputmode="decimal"
-            >
+            <Input v-model:value="form.top_p_min" type="text" inputmode="decimal" />
           </FormField>
           <FormField
             label="top_p 上限（0—1）"
             required
             :error="topPRangeInvalid ? '需在 0—1 内且不小于下限' : ''"
           >
-            <input
-              v-model="form.top_p_max"
-              class="lai-input"
-              type="text"
-              inputmode="decimal"
-            >
+            <Input v-model:value="form.top_p_max" type="text" inputmode="decimal" />
           </FormField>
         </div>
         <label class="lai-switch">支持 stop
-          <select
-            v-model="form.support_stop"
-            class="lai-input"
-            aria-label="stop"
-          >
-            <option :value="null">待确认</option>
-            <option :value="true">支持</option>
-            <option :value="false">不支持</option>
-          </select>
+          <Select
+              :value="triState(form.support_stop)"
+              aria-label="stop"
+              :options="triStateOptions"
+              @update:value="(v) => setTriState('support_stop', v)"
+            />
         </label>
         <div
           v-if="form.support_stop"
@@ -520,23 +459,13 @@ onMounted(reload)
             required
             :error="stopRangeInvalid ? '需为 1—4 或 1—128 内的正整数' : ''"
           >
-            <input
-              v-model="form.max_stop_sequences"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.max_stop_sequences" type="text" inputmode="numeric" />
           </FormField>
           <FormField
             label="stop 单项长度上限（1—128）"
             required
           >
-            <input
-              v-model="form.max_stop_length"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-            >
+            <Input v-model:value="form.max_stop_length" type="text" inputmode="numeric" />
           </FormField>
         </div>
       </fieldset>
@@ -551,38 +480,20 @@ onMounted(reload)
             label="默认 temperature"
             :error="defaultTemperatureInvalid ? '需在模型范围内' : ''"
           >
-            <input
-              v-model="form.default_temperature"
-              class="lai-input"
-              type="text"
-              inputmode="decimal"
-              placeholder="空为不设置"
-            >
+            <Input v-model:value="form.default_temperature" type="text" inputmode="decimal" placeholder="空为不设置" />
           </FormField>
           <FormField
             v-if="form.support_top_p"
             label="默认 top_p"
             :error="defaultTopPInvalid ? '需在模型范围内（0—1）' : ''"
           >
-            <input
-              v-model="form.default_top_p"
-              class="lai-input"
-              type="text"
-              inputmode="decimal"
-              placeholder="空为不设置"
-            >
+            <Input v-model:value="form.default_top_p" type="text" inputmode="decimal" placeholder="空为不设置" />
           </FormField>
           <FormField
             label="默认 max_tokens"
             :error="defaultMaxTokensInvalid ? '不能超过最大输出 Token' : ''"
           >
-            <input
-              v-model="form.default_max_tokens"
-              class="lai-input"
-              type="text"
-              inputmode="numeric"
-              placeholder="空为不设置"
-            >
+            <Input v-model:value="form.default_max_tokens" type="text" inputmode="numeric" placeholder="空为不设置" />
           </FormField>
         </div>
         <FormField
@@ -596,27 +507,19 @@ onMounted(reload)
               :key="index"
               class="lai-stop-row"
             >
-              <input
-                v-model="form.default_stop[index]"
-                class="lai-input"
-                type="text"
-                maxlength="128"
-              >
-              <button
-                type="button"
-                class="lai-btn lai-btn-text"
+              <Input v-model:value="form.default_stop[index]" type="text" :maxlength="128" />
+              <Button
+                type="link"
                 @click="removeStop(index)"
               >
                 移除
-              </button>
+              </Button>
             </div>
-            <button
-              type="button"
-              class="lai-btn"
+            <Button
               @click="addStop"
             >
               添加一项
-            </button>
+            </Button>
           </div>
         </FormField>
       </fieldset>
@@ -631,61 +534,29 @@ onMounted(reload)
             required
             :error="priceInvalid ? '需为不小于 0 的金额（最多 8 位小数）' : ''"
           >
-            <input
-              v-model="form.input_price"
-              class="lai-input"
-              type="text"
-              inputmode="decimal"
-            >
+            <Input v-model:value="form.input_price" type="text" inputmode="decimal" />
           </FormField>
           <FormField
             label="输出价格"
             required
           >
-            <input
-              v-model="form.output_price"
-              class="lai-input"
-              type="text"
-              inputmode="decimal"
-            >
+            <Input v-model:value="form.output_price" type="text" inputmode="decimal" />
           </FormField>
           <FormField label="价格单位">
-            <select
-              v-model="form.price_unit"
-              class="lai-input lai-select"
-            >
-              <option :value="1000">
-                每 1000 tokens
-              </option>
-              <option :value="1000000">
-                每 1000000 tokens
-              </option>
-            </select>
+            <Select v-model:value="form.price_unit" :options="[{ value: '1000', label: '每 1000 tokens', disabled: false }, { value: '1000000', label: '每 1000000 tokens', disabled: false }]" />
           </FormField>
           <FormField
             label="币种"
             required
             :error="currencyInvalid ? 'ISO 4217 三位代码' : ''"
           >
-            <input
-              v-model="form.currency"
-              class="lai-input"
-              type="text"
-              maxlength="3"
-              spellcheck="false"
-            >
+            <Input v-model:value="form.currency" type="text" :maxlength="3" spellcheck="false" />
           </FormField>
         </div>
       </fieldset>
 
       <div class="lai-form-footer">
-        <label class="lai-switch">
-          <input
-            v-model="form.enabled"
-            type="checkbox"
-          >
-          启用（发布后参与路由）
-        </label>
+        <Checkbox v-model:checked="form.enabled">启用（发布后参与路由）</Checkbox>
         <p
           v-if="capabilityIncomplete"
           class="lai-form-message-error"
@@ -698,13 +569,12 @@ onMounted(reload)
           role="alert"
         >
           配置已被其他管理员修改（最新版本 {{ conflictError?.serverVersion ?? '未知' }}）。您的输入已保留，
-          <button
-            type="button"
-            class="lai-btn lai-btn-text"
+          <Button
+            type="link"
             @click="reload"
           >
             加载最新后重填
-          </button>
+          </Button>
         </p>
         <p
           v-else-if="errorText"
@@ -714,22 +584,20 @@ onMounted(reload)
           {{ errorText }}
         </p>
         <div class="lai-form-actions">
-          <button
-            type="button"
-            class="lai-btn"
+          <Button
             :disabled="submitting"
             @click="router.back()"
           >
             取消
-          </button>
-          <button
+          </Button>
+          <Button
             v-if="canManage"
-            type="submit"
-            class="lai-btn lai-btn-primary"
+            type="primary"
             :disabled="submitting || formInvalid"
+            html-type="submit"
           >
             {{ submitting ? '保存中…' : '保存' }}
-          </button>
+          </Button>
         </div>
       </div>
     </form>

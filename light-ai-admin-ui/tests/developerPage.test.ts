@@ -228,7 +228,7 @@ describe('ChatTestPanel（FE-051/052/053）', () => {
     await flushPromises()
     const pending = wrapper.find('form').trigger('submit')
     await flushPromises()
-    const cancelButton = wrapper.findAll('button').find((button) => button.text() === '取消测试')!
+    const cancelButton = wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '取消测试')!
     await cancelButton.trigger('click')
     sourceController!.enqueue(new TextEncoder().encode('data: {"event":"DELTA","trace_id":"tr-2","sequence":1,"model":"","provider":"p","provider_model":"pm","delta":"迟到"}\n\n'))
     await pending
@@ -264,7 +264,7 @@ describe('CodeSamplePanel（FE-050）', () => {
       jsonResponse(200, { data: { language: 'bash', filename: null, content, alias_id: 'alias-1', mode: 'STANDALONE_CLIENT', sample_type: 'HTTP' } })]])
     const wrapper = mount(CodeSamplePanel, { props: { aliasId: 'alias-1', mode: 'STANDALONE_CLIENT' } })
     await flushPromises()
-    await wrapper.findAll('button').find((button) => button.text() === '复制示例')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '复制示例')!.trigger('click')
     await flushPromises()
     expect(writeText).toHaveBeenCalledWith(content)
     expect(wrapper.text()).toContain('已复制')

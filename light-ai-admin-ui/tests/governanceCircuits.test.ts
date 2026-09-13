@@ -119,7 +119,7 @@ describe('CircuitDetailPage（FE-023/024）', () => {
         jsonResponse(409, { error: { code: 'CIRCUIT_STATE_CONFLICT', type: 'conflict', message: '状态已变化', retryable: false, current_state_version: 9 } })],
     ])
     const { wrapper } = await mountAt(CircuitDetailPage, '/ui/circuits/cir-1', pageRoutes)
-    await wrapper.findAll('button').find((button) => button.text() === '人工恢复')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '人工恢复')!.trigger('click')
     await flushPromises()
     fillReason('误判，恢复')
     await flushPromises()
@@ -146,7 +146,7 @@ describe('CircuitDetailPage（FE-023/024）', () => {
       }],
     ])
     const { wrapper } = await mountAt(CircuitDetailPage, '/ui/circuits/cir-1', pageRoutes)
-    await wrapper.findAll('button').find((button) => button.text() === '人工恢复')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '人工恢复')!.trigger('click')
     await flushPromises()
     fillReason('误判，恢复')
     await flushPromises()

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button, Checkbox, Input, Select } from 'ant-design-vue'
 // 模型导入向导（FE-016，附录 4.2.5.2）：选择 渠道 与来源 → 勾选候选模型 → 提交导入；
 // 未知能力显示“待补充”，导入默认停用；结果按 created/skipped/failed 逐项展示。
 import { computed, onMounted, ref, shallowRef } from 'vue'
@@ -34,6 +35,19 @@ const loadError = ref('')
 const submitting = ref(false)
 const submitError = ref('')
 const result = shallowRef<ImportResult | null>(null)
+
+const providerSelectOptions = computed(() =>
+  providers.value.map((item) => ({ value: item.id, label: `${item.name}（${item.provider_type}）` })),
+)
+
+const credentialSelectOptions = computed(() =>
+  credentialOptions.value.map((item) => ({ value: item.id, label: item.label })),
+)
+
+function onSourceChange(): void {
+  candidates.value = []
+  selectedModelIds.value = []
+}
 
 const sourceOptions = [
   { value: 'PROVIDER_API', label: '渠道 API（实时拉取）' },
@@ -218,16 +232,14 @@ onMounted(async () => {
           </ul>
         </div>
         <div class="lai-form-actions">
-          <button
-            type="button"
-            class="lai-btn"
+          <Button
             @click="restart"
           >
             继续导入
-          </button>
+          </Button>
           <RouterLink
             to="/ui/models/upstream"
-            class="lai-btn lai-btn-primary"
+            class="lai-link"
           >
             返回模型列表
           </RouterLink>
@@ -249,43 +261,22 @@ onMounted(async () => {
             label="渠道"
             required
           >
-            <select
-              v-model="providerId"
-              class="lai-input lai-select"
-              @change="onProviderChange"
-            >
-              <option
-                value=""
-                disabled
-              >
-                请选择 渠道
-              </option>
-              <option
-                v-for="item in providers"
-                :key="item.id"
-                :value="item.id"
-              >
-                {{ item.name }}（{{ item.provider_type }}）
-              </option>
-            </select>
+            <Select
+              v-model:value="providerId"
+              placeholder="请选择 渠道"
+              :options="providerSelectOptions"
+              @update:value="onProviderChange"
+            />
           </FormField>
           <FormField
             label="来源"
             required
           >
-            <select
-              v-model="source"
-              class="lai-input lai-select"
-              @change="candidates = []; selectedModelIds = []"
-            >
-              <option
-                v-for="item in sourceOptions"
-                :key="item.value"
-                :value="item.value"
-              >
-                {{ item.label }}
-              </option>
-            </select>
+            <Select
+              v-model:value="source"
+              :options="sourceOptions"
+              @update:value="onSourceChange"
+            />
           </FormField>
           <FormField
             v-if="source === 'PROVIDER_API'"
@@ -293,43 +284,23 @@ onMounted(async () => {
             required
             :hint="credentialLoading ? '加载中…' : '只显示同 渠道 的非停用凭证'"
           >
-            <select
-              v-model="credentialId"
-              class="lai-input lai-select"
-            >
-              <option
-                value=""
-                disabled
-              >
-                请选择凭证
-              </option>
-              <option
-                v-for="item in credentialOptions"
-                :key="item.id"
-                :value="item.id"
-              >
-                {{ item.label }}
-              </option>
-            </select>
+            <Select
+              v-model:value="credentialId"
+              placeholder="请选择凭证"
+              :options="credentialSelectOptions"
+            />
           </FormField>
           <FormField label="关键字">
-            <input
-              v-model="keyword"
-              class="lai-input"
-              type="text"
-              placeholder="过滤 model_id / 名称"
-              @input="loadCandidates"
-            >
+            <Input v-model:value="keyword" type="text" placeholder="过滤 model_id / 名称" @input="loadCandidates" />
           </FormField>
         </div>
-        <button
-          type="button"
-          class="lai-btn lai-btn-primary"
+        <Button
+          type="primary"
           :disabled="!canLoadCandidates || loading"
           @click="loadCandidates"
         >
           {{ loading ? '加载中…' : '获取模型列表' }}
-        </button>
+        </Button>
       </fieldset>
 
       <fieldset
@@ -341,12 +312,12 @@ onMounted(async () => {
         </legend>
         <div class="lai-import-toolbar">
           <label class="lai-switch">
-            <input
-              type="checkbox"
+            <Checkbox
               :checked="filteredCandidates.length > 0 && selectedModelIds.length === filteredCandidates.filter((item) => !item.existing).length"
-              @change="toggleAll(($event.target as HTMLInputElement).checked)"
+              @change="(e: { target: { checked: boolean } }) => toggleAll(Boolean(e.target.checked))"
             >
-            全选未存在的模型
+              全选未存在的模型
+            </Checkbox>
           </label>
           <span>已选 {{ selectedModelIds.length }} 项<template v-if="selectedExisting > 0">（含已存在 {{ selectedExisting }} 项，将被跳过）</template></span>
         </div>
@@ -374,12 +345,11 @@ onMounted(async () => {
                 :class="{ 'lai-row-existing': item.existing }"
               >
                 <td>
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     :checked="selectedModelIds.includes(item.model_id)"
                     :aria-label="`选择 ${item.model_id}`"
-                    @change="toggleCandidate(item.model_id, ($event.target as HTMLInputElement).checked)"
-                  >
+                    @change="(e: { target: { checked: boolean } }) => toggleCandidate(item.model_id, Boolean(e.target.checked))"
+                  />
                 </td>
                 <td class="lai-cell-mono">
                   {{ item.model_id }}
@@ -410,20 +380,8 @@ onMounted(async () => {
         <legend class="lai-legend">
           3. 导入选项
         </legend>
-        <label class="lai-switch">
-          <input
-            v-model="applyKnownDefaults"
-            type="checkbox"
-          >
-          应用已知默认值（false 时能力字段留空，逐个补全）
-        </label>
-        <label class="lai-switch">
-          <input
-            v-model="importEnabled"
-            type="checkbox"
-          >
-          导入后启用（仅当能力完整时可用，默认关闭）
-        </label>
+        <Checkbox v-model:checked="applyKnownDefaults">应用已知默认值（false 时能力字段留空，逐个补全）</Checkbox>
+        <Checkbox v-model:checked="importEnabled">导入后启用（仅当能力完整时可用，默认关闭）</Checkbox>
         <p
           v-if="submitError"
           class="lai-form-message-error"
@@ -432,13 +390,13 @@ onMounted(async () => {
           {{ submitError }}
         </p>
         <div class="lai-form-actions">
-          <button
-            type="submit"
-            class="lai-btn lai-btn-primary"
+          <Button
+            type="primary"
             :disabled="!canSubmit"
+            html-type="submit"
           >
             {{ submitting ? '导入中…' : `导入 ${selectedModelIds.length} 个模型` }}
-          </button>
+          </Button>
         </div>
       </fieldset>
     </form>

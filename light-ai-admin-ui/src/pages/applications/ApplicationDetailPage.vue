@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
-import { Button, Card, Checkbox, CheckboxGroup, Input, Select, Tag } from 'ant-design-vue'
+import { Button, Card, Checkbox, CheckboxGroup, Input, Select, Tag, Textarea } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ApiError, isAbortError } from '@/api/errors'
 import { amountUsage, decimalUnits, decimalText, positiveAmount, positiveInteger, validPeriod, integerUnits, integerText, tokenUsageText, positiveIntegerText, toSafeInteger, applicationStatusLabels as statusLabel, applicationEnvironmentLabels as environmentLabel } from './applicationValues'
@@ -29,7 +29,6 @@ import {
 } from '@/api/applications'
 import { fetchModelAliases, type ModelAliasListItem } from '@/api/modelAliases'
 
-const Textarea = Input.TextArea
 
 /** 应用级模型参数上限的表单状态；空值表示不施加该维度限制。 */
 interface ModelConstraintForm {
@@ -259,7 +258,20 @@ function openQuotaDialog(): void {
   quotaDialogOpen.value = true
 }
 
-const quotaInvalid = computed(() => Boolean(
+const quotaInvalid = computed(() => {
+  const checks = {
+    reason: !quotaForm.reason.trim(),
+    token: quotaForm.token_limited && !positiveInteger(quotaForm.token_limit),
+    amount: quotaForm.amount_limited && !positiveAmount(quotaForm.amount_limit),
+    currency: !/^[A-Za-z]{3}$/.test(quotaForm.currency),
+    rpm: quotaForm.rpm_limited && !positiveInteger(quotaForm.rpm),
+    tpm: quotaForm.tpm_limited && !positiveInteger(quotaForm.tpm),
+    period: !validPeriod(quotaForm.period_type, quotaForm.period_start, quotaForm.period_end),
+  }
+  console.log('QINVALID', JSON.stringify({ ...checks, tokenRaw: quotaForm.token_limit, reasonRaw: quotaForm.reason, rpmRaw: quotaForm.rpm }))
+  return Boolean(Object.values(checks).some(Boolean))
+})
+const _unused = computed(() => Boolean(
   !quotaForm.reason.trim()
   || (quotaForm.token_limited && !positiveInteger(quotaForm.token_limit))
   || (quotaForm.amount_limited && !positiveAmount(quotaForm.amount_limit))
@@ -268,6 +280,7 @@ const quotaInvalid = computed(() => Boolean(
   || (quotaForm.tpm_limited && !positiveInteger(quotaForm.tpm))
   || !validPeriod(quotaForm.period_type, quotaForm.period_start, quotaForm.period_end)
 ))
+void _unused
 
 const quotaStopsAdmission = computed(() => {
   if (!detail.value) return false
@@ -293,6 +306,7 @@ const adjustmentPreview = computed(() => {
   return { after: decimalText(after), stops: consumed !== null && after < consumed }
 })
 async function saveQuota(): Promise<void> {
+  console.log('QDIAG', JSON.stringify({ can: canManageQuota.value, hasDetail: !!detail.value, invalid: quotaInvalid.value, reason: quotaForm.reason, token: quotaForm.token_limit, amount: quotaForm.amount_limit, cur: quotaForm.currency, rpm: quotaForm.rpm, tpm: quotaForm.tpm, period: quotaForm.period_type }))
   if (!canManageQuota.value || !detail.value || quotaInvalid.value) return
   const context = contextVersion
   const result = await quotaSubmission.submit(async () => {

@@ -105,10 +105,10 @@ describe('CredentialPanel（FE-013/014）', () => {
       global: { stubs: { teleport: true } },
     })
     await flushPromises()
-    const deleteButton = wrapper.findAll('button').find((button) => button.text() === '删除')!
+    const deleteButton = wrapper.findAll('button').find((button) => button.text().replace(/\s/g, '') === '删除')!
     await deleteButton.trigger('click')
     await flushPromises()
-    const confirmButton = wrapper.findAll('.lai-dialog button').find((button) => button.text() === '确认')
+    const confirmButton = wrapper.findAll('.lai-dialog button').find((button) => button.text().replace(/\s/g, '') === '确认')
     await confirmButton!.trigger('click')
     await flushPromises()
     expect(fetchMock.mock.calls.some(([, init]) => (init?.method ?? 'GET') === 'DELETE' && String(init?.body).includes('cred-1') === false)).toBe(true)

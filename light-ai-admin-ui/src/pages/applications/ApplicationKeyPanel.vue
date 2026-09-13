@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
-import { Button, Card, Checkbox, CheckboxGroup, Input, Tag } from 'ant-design-vue'
+import { Button, Card, Checkbox, CheckboxGroup, Input, Tag, Textarea } from 'ant-design-vue'
 import { onBeforeRouteUpdate } from 'vue-router'
 import { useDirtyGuard } from '@/composables/useDirtyGuard'
 import { ApiError, isAbortError } from '@/api/errors'
@@ -17,7 +17,6 @@ import {
   type ApplicationKeySecretResult, type ApplicationKeyView, type ApplicationModelPermission,
 } from '@/api/applications'
 
-const Textarea = Input.TextArea
 
 const props = defineProps<{
   applicationId: string
