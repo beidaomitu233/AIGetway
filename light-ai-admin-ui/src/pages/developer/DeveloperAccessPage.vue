@@ -2,6 +2,7 @@
 // 接入说明页（FE-049，附录 4.6.1）：连接信息、Alias 选择、模型摘要、
 // 示例面板与在线测试；开发仅授权 Alias，无已发布模型显示空态。
 import { computed, onMounted, ref, shallowRef, watch } from 'vue'
+import { Card } from 'ant-design-vue'
 import { useRoute } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import CodeSamplePanel from './CodeSamplePanel.vue'
@@ -254,6 +255,7 @@ async function copyBaseUrl(): Promise<void> {
           <h2 class="lai-section-title">
             请求字段说明
           </h2>
+          <Card :bordered="false" class="developer-table-card">
           <table class="lai-table">
             <thead>
               <tr><th>字段</th><th>类型</th><th>必填</th><th>规则</th></tr>
@@ -272,12 +274,14 @@ async function copyBaseUrl(): Promise<void> {
               </tr>
             </tbody>
           </table>
+          </Card>
         </div>
 
         <div class="lai-detail-card">
           <h2 class="lai-section-title">
             常见错误
           </h2>
+          <Card :bordered="false" class="developer-table-card">
           <table class="lai-table">
             <thead>
               <tr><th>code</th><th>HTTP</th><th>可重试</th><th>说明</th></tr>
@@ -315,6 +319,7 @@ async function copyBaseUrl(): Promise<void> {
               </tr>
             </tbody>
           </table>
+          </Card>
         </div>
       </div>
 
@@ -327,6 +332,11 @@ async function copyBaseUrl(): Promise<void> {
     </template>
   </section>
 </template>
+
+<style scoped>
+.developer-table-card { margin-top: 16px; border: 1px solid var(--lai-border); box-shadow: 0 8px 24px rgba(37, 99, 235, .05); }
+.developer-table-card :deep(.ant-card-body) { padding: 0; }
+</style>
 
 <style scoped>
 .lai-dev-grid {
