@@ -4,6 +4,7 @@ import PageState from '@/components/PageState.vue'
 import ListPager from '@/components/ListPager.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { computed } from 'vue'
+import { Card } from 'ant-design-vue'
 import { useBootstrapStore } from '@/stores/bootstrap'
 import { Permission } from '@/app/permissions'
 import { useListQuery, type FilterValue } from '@/composables/useListQuery'
@@ -92,6 +93,7 @@ const aliasName = (row: ModelAliasListItem) => row.alias
       </div>
     </div>
 
+    <Card :bordered="false" class="alias-filter-card">
     <div class="lai-filter-bar">
       <input
         class="lai-input lai-filter-input"
@@ -148,6 +150,7 @@ const aliasName = (row: ModelAliasListItem) => row.alias
         class="lai-refreshing"
       >刷新中…</span>
     </div>
+    </Card>
 
     <PageState
       v-if="status === 'loading'"
@@ -172,6 +175,7 @@ const aliasName = (row: ModelAliasListItem) => row.alias
       >
         {{ actionText() }}
       </p>
+      <Card :bordered="false" class="alias-table-card">
       <div class="lai-table-wrap">
         <table class="lai-table">
           <thead>
@@ -253,6 +257,7 @@ const aliasName = (row: ModelAliasListItem) => row.alias
           </tbody>
         </table>
       </div>
+      </Card>
       <ListPager
         :page="page"
         :page-size="pageSize"
@@ -291,6 +296,10 @@ const aliasName = (row: ModelAliasListItem) => row.alias
 </template>
 
 <style scoped>
+.alias-filter-card,
+.alias-table-card { margin-bottom: 16px; border: 1px solid var(--lai-border); box-shadow: 0 8px 24px rgba(37, 99, 235, .05); }
+.alias-filter-card :deep(.ant-card-body) { padding: 14px 16px; }
+.alias-table-card :deep(.ant-card-body) { padding: 0; }
 .lai-page-header {
   display: flex;
   align-items: center;
