@@ -536,3 +536,11 @@ UI-R310 未修改应用 API、字段精度、权限和筛选竞态逻辑。
 | UI-ANT-311-001 | P1 | 应用创建/编辑页面仍以旧表单标题、操作按钮和平面区块呈现，无法与新的后台壳层建立卡片层级。 | `light-ai-admin-ui/src/pages/applications/ApplicationFormPage.vue`、应用页面回归 | 引入共享 `PageHeader` 与 Ant `Card/Button`，保留基本信息、额度限流、模型授权、版本冲突、409 输入保留及候选模型契约。 | typecheck 通过；应用页面回归 8 项通过。 | codex-ui-app-form-0913 | 待复验 |
 
 UI-R311 未改变表单校验、BigInt/decimal 精度、`model-options` 请求或保存 API。
+
+## UI-R312 Ant Design 应用详情工作台头部（2026-09-13，codex-ui-app-workbench-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-312-001 | P1 | 应用详情状态与操作区仍使用旧自研标签和按钮，工作台上下文层级弱。 | `light-ai-admin-ui/src/pages/applications/ApplicationDetailPage.vue`、应用页面回归 | 引入 Ant `Tag/Button` 重写状态标签、编辑、启停、归档操作区；保留页签 query、状态机、权限计算、版本与错误处理。 | typecheck、lint 通过；应用页面 8 项、P20 契约 31 项通过。 | codex-ui-app-workbench-0913 | 待复验 |
+
+UI-R312 未修改详情 API、页签 URL、状态转换或权限规则。
