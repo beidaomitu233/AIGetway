@@ -121,7 +121,7 @@
 - 结论：共享层先合入，业务域按 UI-R310～UI-R334 并行；UI-R340～UI-R343 负责跨页视觉、契约和清理。
 - 待决：Ant Design Vue 的具体兼容版本由 UI-R301 在当前 Node/Vite 锁定后确定；图表依赖由 UI-R306 做体积和可访问性验证后确定。
 - 待决：企业登录真实身份源和 Provider/真实数据库门禁仍沿用既有阻塞记录，不因页面重构标记为通过。
-- 执行状态：UI-R300 已完成文档、映射和领取矩阵，提交 `1000902`，等待独立评审；UI-R301～UI-R343 尚未领取。
+- 执行状态：UI-R300 已完成文档、映射和领取矩阵；UI-R301～UI-R343 已在独立前端分支完成本地实现、回归与最终集成审查，当前成果尚未推送到远程 `dev`（自动审查阻止外部源推送），待授权后普通推送并解除占用。
 
 ## 3. 已联调结果保护清单
 
@@ -371,34 +371,34 @@ UI 业务包开始前，执行分支必须先包含 RV-P20 PR #1 或其等价合
 | 任务 | 建议分支 | 初始状态 | 独占范围摘要 |
 | --- | --- | --- | --- |
 | UI-R300 | `docs/ant-design-admin-redesign-plan` | 待评审 | 设计、契约与任务拆分文档 |
-| UI-R301 | `feature/frontend-ant-foundation` | 待领取 | 依赖、入口、主题与设计令牌 |
-| UI-R302 | `feature/frontend-ant-shell` | 待领取 | 应用壳层、导航与布局 |
-| UI-R303 | `feature/frontend-ant-page-state` | 待领取 | 页面框架、异步状态、冲突反馈 |
-| UI-R304 | `feature/frontend-ant-data` | 待领取 | 筛选、表格、分页与多选 |
-| UI-R305 | `feature/frontend-ant-form` | 待领取 | 表单、弹窗、敏感与高风险操作 |
-| UI-R306 | `feature/frontend-ant-metrics` | 待领取 | 指标卡与图表基座 |
-| UI-R307 | `feature/frontend-ant-access-state` | 待领取 | 权限、登录和系统状态页 |
-| UI-R310 | `feature/frontend-ant-app-list` | 待领取 | 应用列表 |
-| UI-R311 | `feature/frontend-ant-app-form` | 待领取 | 应用创建与编辑 |
-| UI-R312 | `feature/frontend-ant-app-workbench` | 待领取 | 应用详情工作台与概览 |
-| UI-R313 | `feature/frontend-ant-app-keys` | 待领取 | 应用密钥 |
-| UI-R314 | `feature/frontend-ant-app-governance` | 待领取 | 应用模型、额度、成员、审计 |
-| UI-R315 | `feature/frontend-ant-app-integration` | 待领取 | 应用开发接入 |
-| UI-R320 | `feature/frontend-ant-channel` | 待领取 | 渠道列表与表单 |
-| UI-R321 | `feature/frontend-ant-channel-detail` | 待领取 | 渠道详情、Key 与检测 |
-| UI-R322 | `feature/frontend-ant-upstream-model` | 待领取 | 上游模型目录 |
-| UI-R323 | `feature/frontend-ant-virtual-route` | 待领取 | 虚拟模型与路由编辑器 |
-| UI-R324 | `feature/frontend-ant-release` | 待领取 | 草稿、发布与回滚 |
-| UI-R325 | `feature/frontend-ant-reliability` | 待领取 | 可靠性、限流与熔断 |
-| UI-R330 | `feature/frontend-ant-trace` | 待领取 | 调用记录与详情 |
-| UI-R331 | `feature/frontend-ant-usage` | 待领取 | 用量、成本与额度流水 |
-| UI-R332 | `feature/frontend-ant-overview` | 待领取 | 运行总览 |
-| UI-R333 | `feature/frontend-ant-admin` | 待领取 | 审计、访问凭证和系统设置 |
-| UI-R334 | `feature/frontend-ant-developer` | 待领取 | 全局开发接入与在线测试 |
-| UI-R340 | `test/frontend-ant-visual` | 待领取 | 响应式、可访问性、视觉回归 |
-| UI-R341 | `test/frontend-ant-contract` | 待领取 | 契约与跨端回归 |
-| UI-R342 | `refactor/frontend-ant-cleanup` | 待领取 | 旧组件和样式清理 |
-| UI-R343 | `release/frontend-ant-integration` | 待领取 | 最终集成和发布评审 |
+| UI-R301 | `feature/frontend-ant-foundation-codex-ui-0913` | 已验证（本地） | 依赖、入口、主题与设计令牌 |
+| UI-R302 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 应用壳层、导航与布局 |
+| UI-R303 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 页面框架、异步状态、冲突反馈 |
+| UI-R304 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 筛选、表格、分页与多选 |
+| UI-R305 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 表单、弹窗、敏感与高风险操作 |
+| UI-R306 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 指标卡与图表基座 |
+| UI-R307 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 权限、登录和系统状态页 |
+| UI-R310 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 应用列表 |
+| UI-R311 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 应用创建与编辑 |
+| UI-R312 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 应用详情工作台与概览 |
+| UI-R313 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 应用密钥 |
+| UI-R314 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 应用模型、额度、成员、审计 |
+| UI-R315 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 应用开发接入 |
+| UI-R320 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 渠道列表与表单 |
+| UI-R321 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 渠道详情、Key 与检测 |
+| UI-R322 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 上游模型目录 |
+| UI-R323 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 虚拟模型与路由编辑器 |
+| UI-R324 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 草稿、发布与回滚 |
+| UI-R325 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 可靠性、限流与熔断 |
+| UI-R330 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 调用记录与详情 |
+| UI-R331 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 用量、成本与额度流水 |
+| UI-R332 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 运行总览 |
+| UI-R333 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 审计、访问凭证和系统设置 |
+| UI-R334 | `feature/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 全局开发接入与在线测试 |
+| UI-R340 | `test/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 响应式、可访问性、视觉回归 |
+| UI-R341 | `test/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 契约与跨端回归 |
+| UI-R342 | `refactor/frontend-ant-shell-codex-ui-0913` | 已验证（本地） | 旧组件和样式清理 |
+| UI-R343 | `release/frontend-ant-shell-codex-ui-0913` | 阻塞（远程交付） | 最终集成和发布评审 |
 
 领取人必须把“建议分支”追加唯一负责人后缀，例如 `feature/frontend-ant-app-list-<负责人>`。任务进入执行后，真实负责人和分支以 `TASK_STATUS.md` 为准。
 
