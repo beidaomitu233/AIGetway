@@ -167,6 +167,7 @@ export interface ApplicationQuotaUpdatePayload {
   period_end: string | null
   version: string
   reason: string
+  idempotency_key: string
 }
 
 export interface ApplicationQuotaAdjustment {

@@ -180,6 +180,7 @@ const quotaForm = reactive({
   period_start: '',
   period_end: '',
   reason: '',
+  idempotency_key: '',
 })
 
 const periodLabel: Record<string, string> = {
@@ -253,6 +254,7 @@ function openQuotaDialog(): void {
   quotaForm.period_type = quota.period_type
   quotaForm.period_start = asLocalDateTime(quota.period_start)
   quotaForm.period_end = asLocalDateTime(quota.period_end)
+  quotaForm.idempotency_key = crypto.randomUUID()
   quotaForm.reason = ''
   quotaDialogOpen.value = true
 }
@@ -305,6 +307,7 @@ async function saveQuota(): Promise<void> {
       period_end: quotaForm.period_type === 'CUSTOM' ? asOffsetDateTime(quotaForm.period_end) : null,
       version: detail.value!.quota.version,
       reason: quotaForm.reason.trim(),
+      idempotency_key: quotaForm.idempotency_key,
     })
     if (context === contextVersion && response.entity) detail.value = response.entity
   })
