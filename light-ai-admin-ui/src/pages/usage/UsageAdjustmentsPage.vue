@@ -3,7 +3,7 @@
 // 按应用查看额度调整与用量重置流水；应用范围由服务端按身份裁剪。
 // 金额为十进制字符串，直接展示不做浮点运算。
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
-import { Card, Table } from 'ant-design-vue'
+import { Button, Card, Select, Table } from 'ant-design-vue'
 import type { ColumnsType } from 'ant-design-vue/es/table'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
@@ -96,8 +96,9 @@ function selectApplication(applicationId: string): void {
   void loadAdjustments(applicationId)
 }
 
-function onApplicationChange(event: Event): void {
-  selectApplication((event.target as HTMLSelectElement).value)
+function onApplicationChange(value: unknown): void {
+  const applicationId = Array.isArray(value) ? String(value[0] ?? '') : String(value ?? '')
+  if (applicationId !== '') selectApplication(applicationId)
 }
 
 function retryAdjustments(): void {
@@ -130,7 +131,7 @@ const selectedApplication = computed(
 
 const applicationOptions = computed(() =>
   applications.value.map((item) => ({
-    id: item.id,
+    value: item.id,
     label: `${item.name}（${item.code}）`,
     disabled: item.status === 'ARCHIVED',
   })),
@@ -160,10 +161,9 @@ function adjustmentValue(record: Record<string, unknown>, key: unknown): unknown
       </h1>
       <div class="lai-row-actions">
         <RouterLink
-          class="lai-btn"
           :to="{ name: 'usage' }"
         >
-          返回用量与成本
+          <Button>返回用量与成本</Button>
         </RouterLink>
       </div>
     </div>
@@ -185,21 +185,13 @@ function adjustmentValue(record: Record<string, unknown>, key: unknown): unknown
     />
     <template v-else>
       <div class="lai-filter-bar">
-        <select
-          class="lai-select"
+        <Select
+          class="lai-filter-select"
           aria-label="选择应用"
-          :value="selectedApplicationId"
+          :value="selectedApplicationId === '' ? undefined : selectedApplicationId"
+          :options="applicationOptions"
           @change="onApplicationChange"
-        >
-          <option
-            v-for="option in applicationOptions"
-            :key="option.id"
-            :value="option.id"
-            :disabled="option.disabled"
-          >
-            {{ option.label }}
-          </option>
-        </select>
+        />
       </div>
 
       <Card :bordered="false" class="lai-card">

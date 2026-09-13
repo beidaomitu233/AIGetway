@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Card } from 'ant-design-vue'
+import { Button, Card, Input, Select } from 'ant-design-vue'
 import PageState from '@/components/PageState.vue'
 import DataTable, { type TableColumn } from '@/components/DataTable.vue'
 import ListPager from '@/components/ListPager.vue'
@@ -141,79 +141,69 @@ defineExpose({ filterByError })
           v-if="copyState"
           class="lai-related-meta"
         >{{ copyState }}</span>
-        <button
+        <Button
           v-if="canExport"
-          type="button"
-          class="lai-btn"
           :disabled="exportState === 'running'"
           @click="onExport"
         >
           {{ exportState === 'running' ? '导出中…' : '导出 CSV' }}
-        </button>
+        </Button>
       </div>
     </div>
 
     <div class="lai-filter-bar">
-      <input
-        class="lai-input lai-filter-keyword"
+      <Input
+        class="lai-filter-input"
         type="text"
         placeholder="审计 ID 精确查询"
-        :value="list.state.audit_id as string"
+        :value="(list.state.audit_id as string)"
         @change="list.applyFilters({ audit_id: ($event.target as HTMLInputElement).value.trim() })"
-      >
-      <input
-        class="lai-input lai-filter-keyword"
+      />
+      <Input
+        class="lai-filter-input"
         type="text"
         placeholder="request_id 精确查询"
-        :value="list.state.request_id as string"
+        :value="(list.state.request_id as string)"
         @change="list.applyFilters({ request_id: ($event.target as HTMLInputElement).value.trim() })"
-      >
-      <input
-        class="lai-input lai-filter-keyword"
+      />
+      <Input
+        class="lai-filter-input"
         type="text"
         placeholder="操作人"
-        :value="list.state.operator as string"
+        :value="(list.state.operator as string)"
         @change="list.applyFilters({ operator: ($event.target as HTMLInputElement).value.trim() })"
-      >
-      <input
-        class="lai-input lai-filter-keyword"
+      />
+      <Input
+        class="lai-filter-input"
         type="text"
         placeholder="操作类型，如 CREATE / PUBLISH"
-        :value="list.state.operation as string"
+        :value="(list.state.operation as string)"
         @change="list.applyFilters({ operation: ($event.target as HTMLInputElement).value.trim() })"
-      >
-      <input
-        class="lai-input lai-filter-keyword"
+      />
+      <Input
+        class="lai-filter-input"
         type="text"
         placeholder="对象 ID 或名称"
-        :value="list.state.entity_keyword as string"
+        :value="(list.state.entity_keyword as string)"
         @change="list.applyFilters({ entity_keyword: ($event.target as HTMLInputElement).value.trim() })"
-      >
-      <select
-        class="lai-select"
-        :value="list.state.result as string"
+      />
+      <Select
+        class="lai-filter-select"
+        :value="(list.state.result as string) === '' ? undefined : (list.state.result as string)"
         aria-label="结果"
-        @change="list.applyFilters({ result: ($event.target as HTMLSelectElement).value })"
-      >
-        <option value="">
-          全部结果
-        </option>
-        <option
-          v-for="option in resultOptions"
-          :key="option.value"
-          :value="option.value"
-        >
-          {{ option.label }}
-        </option>
-      </select>
-      <input
+        :options="resultOptions"
+        placeholder="全部结果"
+        allow-clear
+        @change="(value) => list.applyFilters({ result: String(value ?? '') })"
+      />
+      <Input
         v-if="canViewClientIp"
-        class="lai-input lai-filter-keyword"
+        class="lai-filter-input"
         type="text"
         placeholder="来源 IP（仅本页生效）"
-        :value="list.state.client_ip as string"
+        :value="(list.state.client_ip as string)"
         @change="list.applyFilters({ client_ip: ($event.target as HTMLInputElement).value.trim() })"
-      >
+      />
     </div>
 
     <PageState
@@ -263,31 +253,28 @@ defineExpose({ filterByError })
           <span :class="{ 'lai-check-fail': row.result === 'FAILED' }">
             {{ row.result === 'SUCCEEDED' ? '成功' : '失败' }}
           </span>
-          <button
+          <Button
             v-if="row.error_code"
-            type="button"
-            class="lai-btn lai-btn-text"
+            type="link"
             @click="filterByError(row.error_code!)"
           >
             {{ row.error_code }}
-          </button>
+          </Button>
         </template>
         <template #actions="{ row }">
           <span class="lai-row-actions">
-            <button
-              type="button"
-              class="lai-btn lai-btn-text"
+            <Button
+              type="link"
               @click="openDetail(row)"
             >
               详情
-            </button>
-            <button
-              type="button"
-              class="lai-btn lai-btn-text"
+            </Button>
+            <Button
+              type="link"
               @click="copyText(row.request_id)"
             >
               复制请求ID
-            </button>
+            </Button>
           </span>
         </template>
       </DataTable>
@@ -316,13 +303,11 @@ defineExpose({ filterByError })
             <h2 class="lai-card-title">
               审计详情
             </h2>
-            <button
-              type="button"
-              class="lai-btn"
+            <Button
               @click="closeDetail"
             >
               关闭
-            </button>
+            </Button>
           </div>
           <div class="lai-drawer-body">
             <p

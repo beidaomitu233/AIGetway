@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
-import { Card, Table } from 'ant-design-vue'
+import { Button, Card, Input, Select, Table, Tag } from 'ant-design-vue'
 import type { ColumnsType } from 'ant-design-vue/es/table'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
@@ -231,15 +231,22 @@ function onFilterChange(): void {
   void loadAll()
 }
 
-function onPresetChange(event: Event): void {
-  applyPreset((event.target as HTMLSelectElement).value)
+function onPresetChange(value: unknown): void {
+  applyPreset(Array.isArray(value) ? String(value[0] ?? '') : String(value ?? ''))
   onFilterChange()
 }
 
-function onGranularityChange(event: Event): void {
-  query.granularity = (event.target as HTMLSelectElement).value as 'HOUR' | 'DAY'
+function onGranularityChange(value: unknown): void {
+  query.granularity = (Array.isArray(value) ? String(value[0] ?? '') : String(value ?? '')) as 'HOUR' | 'DAY'
   onFilterChange()
 }
+
+const rangePresetOptions = rangePresets.map(({ value, label }) => ({ value, label }))
+
+const granularityOptions = [
+  { value: 'HOUR', label: '按小时' },
+  { value: 'DAY', label: '按天' },
+]
 
 function onTextFilterChange(key: 'alias_id' | 'provider_id' | 'provider_model_id' | 'currency', value: string): void {
   if (key === 'alias_id') aliasFilter.value = value
@@ -459,15 +466,13 @@ const costDelayActive = computed(() => {
         Usage 与 Cost
       </h1>
       <div class="lai-row-actions">
-        <button
+        <Button
           v-if="canExport"
-          type="button"
-          class="lai-btn"
           :disabled="exportState === 'running'"
           @click="onExport"
         >
           {{ exportState === 'running' ? '导出中…' : '导出 CSV' }}
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -487,70 +492,57 @@ const costDelayActive = computed(() => {
     </p>
 
     <div class="lai-filter-bar">
-      <select
-        class="lai-select"
+      <Select
+        class="lai-filter-select"
         :value="rangePreset"
         aria-label="时间范围"
+        :options="rangePresetOptions"
         @change="onPresetChange"
-      >
-        <option
-          v-for="preset in rangePresets"
-          :key="preset.value"
-          :value="preset.value"
-        >
-          {{ preset.label }}
-        </option>
-      </select>
-      <select
-        class="lai-select"
+      />
+      <Select
+        class="lai-filter-select"
         :value="query.granularity"
         aria-label="粒度"
+        :options="granularityOptions"
         @change="onGranularityChange"
-      >
-        <option value="HOUR">
-          按小时
-        </option>
-        <option value="DAY">
-          按天
-        </option>
-      </select>
-      <input
-        class="lai-input lai-filter-keyword"
+      />
+      <Input
+        class="lai-filter-input"
         type="text"
         placeholder="应用"
         :value="(query.application ?? []).join(',')"
         @change="onApplicationFilterChange(($event.target as HTMLInputElement).value.trim())"
-      >
-      <input
-        class="lai-input lai-filter-keyword"
+      />
+      <Input
+        class="lai-filter-input"
         type="text"
         placeholder="虚拟模型 ID"
         :value="aliasFilter"
         @change="onTextFilterChange('alias_id', ($event.target as HTMLInputElement).value.trim())"
-      >
-      <input
-        class="lai-input lai-filter-keyword"
+      />
+      <Input
+        class="lai-filter-input"
         type="text"
         placeholder="渠道 ID"
         :value="providerFilter"
         @change="onTextFilterChange('provider_id', ($event.target as HTMLInputElement).value.trim())"
-      >
-      <input
-        class="lai-input lai-filter-keyword"
+      />
+      <Input
+        class="lai-filter-input"
         type="text"
         placeholder="上游模型 ID"
         :value="providerModelFilter"
         @change="onTextFilterChange('provider_model_id', ($event.target as HTMLInputElement).value.trim())"
-      >
-      <input
-        class="lai-input lai-filter-keyword"
+      />
+      <Input
+        class="lai-filter-input"
         type="text"
         placeholder="币种（留空分币种展示）"
         :value="query.currency ?? ''"
         @change="onTextFilterChange('currency', ($event.target as HTMLInputElement).value.trim())"
-      >
+      />
       <RouterLink
-        class="lai-btn"
+        class="lai-link"
         :to="{ name: 'usage-adjustments' }"
       >
         额度流水
@@ -621,15 +613,15 @@ const costDelayActive = computed(() => {
           </div>
         </div>
         <div class="lai-summary-grid lai-status-row">
-          <span class="lai-btn lai-btn-text">成功 {{ summary.success_count }}</span>
-          <span class="lai-btn lai-btn-text">失败 {{ summary.failure_count }}</span>
-          <span class="lai-btn lai-btn-text">取消 {{ summary.cancelled_count }}</span>
-          <span class="lai-btn lai-btn-text">排队 {{ summary.queued_count }}</span>
-          <span class="lai-btn lai-btn-text">流式 {{ summary.stream_count }}</span>
-          <span class="lai-btn lai-btn-text">流中断 {{ summary.stream_interrupted_count }}</span>
-          <span class="lai-btn lai-btn-text">重试 {{ summary.retry_count }}</span>
-          <span class="lai-btn lai-btn-text">凭证切换 {{ summary.credential_failover_count }}</span>
-          <span class="lai-btn lai-btn-text">候选切换 {{ summary.fallback_count }}</span>
+          <Tag>成功 {{ summary.success_count }}</Tag>
+          <Tag>失败 {{ summary.failure_count }}</Tag>
+          <Tag>取消 {{ summary.cancelled_count }}</Tag>
+          <Tag>排队 {{ summary.queued_count }}</Tag>
+          <Tag>流式 {{ summary.stream_count }}</Tag>
+          <Tag>流中断 {{ summary.stream_interrupted_count }}</Tag>
+          <Tag>重试 {{ summary.retry_count }}</Tag>
+          <Tag>凭证切换 {{ summary.credential_failover_count }}</Tag>
+          <Tag>候选切换 {{ summary.fallback_count }}</Tag>
         </div>
         <p
           v-if="costDelayActive"
@@ -649,20 +641,13 @@ const costDelayActive = computed(() => {
         <h2 class="lai-card-title">
           趋势
         </h2>
-        <select
-          v-model="query.trend_metric"
-          class="lai-select"
+        <Select
+          v-model:value="query.trend_metric"
+          class="lai-filter-select"
           aria-label="趋势指标"
+          :options="metricOptions"
           @change="onFilterChange"
-        >
-          <option
-            v-for="option in metricOptions"
-            :key="option.value"
-            :value="option.value"
-          >
-            {{ option.label }}
-          </option>
-        </select>
+        />
       </div>
       <PageState
         v-if="trendStatus === 'loading'"
@@ -699,20 +684,13 @@ const costDelayActive = computed(() => {
         <h2 class="lai-card-title">
           分组明细
         </h2>
-        <select
-          v-model="query.group_by"
-          class="lai-select"
+        <Select
+          v-model:value="query.group_by"
+          class="lai-filter-select"
           aria-label="分组维度"
+          :options="visibleGroupByOptions"
           @change="onFilterChange"
-        >
-          <option
-            v-for="option in visibleGroupByOptions"
-            :key="option.value"
-            :value="option.value"
-          >
-            {{ option.label }}
-          </option>
-        </select>
+        />
       </div>
       <PageState
         v-if="groupStatus === 'loading'"
@@ -752,7 +730,7 @@ const costDelayActive = computed(() => {
                 <RouterLink
                   v-if="groupRowTarget(asGroupRow(record))"
                   :to="{ name: groupRowTarget(asGroupRow(record))!.name, query: groupRowTarget(asGroupRow(record))!.query }"
-                  class="lai-btn lai-btn-text"
+                  class="lai-link"
                 >Trace</RouterLink>
                 <span v-else>—</span>
               </template>

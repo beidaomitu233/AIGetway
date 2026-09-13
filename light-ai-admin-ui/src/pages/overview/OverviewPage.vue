@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
-import { Card } from 'ant-design-vue'
+import { Button, Card, Checkbox, Select } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import TrendChart from '@/components/TrendChart.vue'
@@ -58,6 +58,33 @@ const rangePresets = [
   { value: '24h', label: '最近 24 小时', ms: 24 * 3600_000 },
   { value: '7d', label: '最近 7 天', ms: 7 * 24 * 3600_000 },
   { value: '30d', label: '最近 30 天', ms: 30 * 24 * 3600_000 },
+]
+
+const presetOptions = rangePresets.map(({ value, label }) => ({ value, label }))
+
+function withAllOption(options: Array<{ value: string; label: string }>, label: string): Array<{ value: string; label: string }> {
+  return [{ value: '', label }, ...options]
+}
+
+const applicationOptions = computed(() =>
+  withAllOption((filters.value?.applications ?? []).map((app) => ({ value: app, label: app })), '全部应用'),
+)
+
+const aliasOptions = computed(() =>
+  withAllOption((filters.value?.aliases ?? []).map((alias) => ({ value: alias.id, label: alias.name })), '全部 Alias'),
+)
+
+const providerOptions = computed(() =>
+  withAllOption((filters.value?.providers ?? []).map((provider) => ({ value: provider.id, label: provider.name })), '全部 Provider'),
+)
+
+const currencyOptions = computed(() =>
+  withAllOption((filters.value?.currencies ?? []).map((currency) => ({ value: currency, label: currency })), '全部币种'),
+)
+
+const granularityOptions = [
+  { value: 'HOUR', label: '按小时' },
+  { value: 'DAY', label: '按天' },
 ]
 
 function applyPreset(preset: string): void {
@@ -247,13 +274,18 @@ function onFilterChange(): void {
   refresh()
 }
 
-function onPresetChange(event: Event): void {
-  applyPreset((event.target as HTMLSelectElement).value)
+function onPresetChange(value: unknown): void {
+  applyPreset(Array.isArray(value) ? String(value[0] ?? '') : String(value ?? ''))
   onFilterChange()
 }
 
-function manualGranularity(event: Event): void {
-  query.granularity = (event.target as HTMLSelectElement).value as 'HOUR' | 'DAY'
+function manualGranularity(value: unknown): void {
+  query.granularity = (Array.isArray(value) ? String(value[0] ?? '') : String(value ?? '')) as 'HOUR' | 'DAY'
+  onFilterChange()
+}
+
+function setQueryFilter(field: 'application' | 'alias_id' | 'provider_id' | 'currency', value: unknown): void {
+  query[field] = Array.isArray(value) ? String(value[0] ?? '') : String(value ?? '')
   onFilterChange()
 }
 
@@ -464,24 +496,20 @@ const itemTypeLabels: Record<string, string> = {
         运行概览
       </h1>
       <div class="lai-row-actions">
-        <label class="lai-related-meta">
-          <input
-            type="checkbox"
-            class="lai-checkbox"
-            checked
-            disabled
-            title="按 dashboard_refresh_seconds 自动刷新，连续失败三次暂停"
-          >
+        <Checkbox
+          class="lai-related-meta"
+          checked
+          disabled
+          title="按 dashboard_refresh_seconds 自动刷新，连续失败三次暂停"
+        >
           自动刷新
-        </label>
-        <button
-          type="button"
-          class="lai-btn"
+        </Checkbox>
+        <Button
           :disabled="refreshing"
           @click="refresh"
         >
           手动刷新
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -497,88 +525,49 @@ const itemTypeLabels: Record<string, string> = {
     />
     <template v-else>
       <div class="lai-filter-bar">
-        <select
-          class="lai-select"
+        <Select
+          class="lai-filter-select"
           :value="rangePreset"
           aria-label="时间范围"
+          :options="presetOptions"
           @change="onPresetChange"
-        >
-          <option
-            v-for="preset in rangePresets"
-            :key="preset.value"
-            :value="preset.value"
-          >
-            {{ preset.label }}
-          </option>
-        </select>
-        <select
-          v-model="query.application"
-          class="lai-select"
+        />
+        <Select
+          class="lai-filter-select"
+          :value="query.application === '' ? undefined : query.application"
           aria-label="应用"
-          @change="onFilterChange"
-        >
-          <option value="">
-            全部应用
-          </option>
-          <option
-            v-for="app in filters!.applications"
-            :key="app"
-            :value="app"
-          >
-            {{ app }}
-          </option>
-        </select>
-        <select
-          v-model="query.alias_id"
-          class="lai-select"
+          :options="applicationOptions"
+          placeholder="全部应用"
+          allow-clear
+          @change="(value: unknown) => setQueryFilter('application', value)"
+        />
+        <Select
+          class="lai-filter-select"
+          :value="query.alias_id === '' ? undefined : query.alias_id"
           aria-label="Alias"
-          @change="onFilterChange"
-        >
-          <option value="">
-            全部 Alias
-          </option>
-          <option
-            v-for="alias in filters!.aliases"
-            :key="alias.id"
-            :value="alias.id"
-          >
-            {{ alias.name }}
-          </option>
-        </select>
-        <select
-          v-model="query.provider_id"
-          class="lai-select"
+          :options="aliasOptions"
+          placeholder="全部 Alias"
+          allow-clear
+          @change="(value: unknown) => setQueryFilter('alias_id', value)"
+        />
+        <Select
+          class="lai-filter-select"
+          :value="query.provider_id === '' ? undefined : query.provider_id"
           aria-label="Provider"
-          @change="onFilterChange"
-        >
-          <option value="">
-            全部 Provider
-          </option>
-          <option
-            v-for="provider in filters!.providers"
-            :key="provider.id"
-            :value="provider.id"
-          >
-            {{ provider.name }}
-          </option>
-        </select>
-        <select
-          v-model="query.currency"
-          class="lai-select"
+          :options="providerOptions"
+          placeholder="全部 Provider"
+          allow-clear
+          @change="(value: unknown) => setQueryFilter('provider_id', value)"
+        />
+        <Select
+          class="lai-filter-select"
+          :value="query.currency === '' ? undefined : query.currency"
           aria-label="费用币种"
-          @change="onFilterChange"
-        >
-          <option value="">
-            全部币种
-          </option>
-          <option
-            v-for="currency in filters!.currencies"
-            :key="currency"
-            :value="currency"
-          >
-            {{ currency }}
-          </option>
-        </select>
+          :options="currencyOptions"
+          placeholder="全部币种"
+          allow-clear
+          @change="(value: unknown) => setQueryFilter('currency', value)"
+        />
       </div>
 
       <Card :bordered="false" class="lai-card">
@@ -647,62 +636,54 @@ const itemTypeLabels: Record<string, string> = {
             </button>
           </div>
           <div class="lai-summary-grid lai-status-row">
-            <button
-              type="button"
-              class="lai-btn lai-btn-text"
+            <Button
+              type="link"
               @click="goToTraces({ status: 'SUCCEEDED' })"
-            >
+           >
               成功 {{ summary.success_count }}
-            </button>
-            <button
-              type="button"
-              class="lai-btn lai-btn-text"
+           </Button>
+            <Button
+              type="link"
               @click="goToTraces({ status: 'FAILED' })"
-            >
+           >
               失败 {{ summary.failure_count }}
-            </button>
-            <button
-              type="button"
-              class="lai-btn lai-btn-text"
+           </Button>
+            <Button
+              type="link"
               @click="goToTraces({ status: 'STREAM_INTERRUPTED' })"
-            >
+           >
               流中断 {{ summary.stream_interrupted_count }}
-            </button>
-            <button
-              type="button"
-              class="lai-btn lai-btn-text"
+           </Button>
+            <Button
+              type="link"
               @click="goToTraces({ status: 'CANCELLED' })"
-            >
+           >
               取消 {{ summary.cancelled_count }}
-            </button>
-            <button
-              type="button"
-              class="lai-btn lai-btn-text"
+           </Button>
+            <Button
+              type="link"
               @click="goToTraces({ status: 'RUNNING' })"
-            >
+           >
               运行/排队 {{ summary.active_count }}
-            </button>
-            <button
-              type="button"
-              class="lai-btn lai-btn-text"
+           </Button>
+            <Button
+              type="link"
               @click="goToTraces({ has_retry: 'true' })"
-            >
+           >
               重试 {{ summary.retry_count }}
-            </button>
-            <button
-              type="button"
-              class="lai-btn lai-btn-text"
+           </Button>
+            <Button
+              type="link"
               @click="goToTraces({ has_credential_failover: 'true' })"
-            >
+           >
               凭证切换 {{ summary.credential_failover_count }}
-            </button>
-            <button
-              type="button"
-              class="lai-btn lai-btn-text"
+           </Button>
+            <Button
+              type="link"
               @click="goToTraces({ has_fallback: 'true' })"
-            >
+           >
               候选切换 {{ summary.fallback_count }}
-            </button>
+           </Button>
           </div>
           <p
             v-if="costDelayActive"
@@ -723,33 +704,20 @@ const itemTypeLabels: Record<string, string> = {
             趋势分析
           </h2>
           <div class="lai-row-actions">
-            <select
-              v-model="query.metric"
-              class="lai-select"
+            <Select
+              v-model:value="query.metric"
+              class="lai-filter-select"
               aria-label="趋势指标"
+              :options="metricOptions"
               @change="onFilterChange"
-            >
-              <option
-                v-for="option in metricOptions"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-            <select
+            />
+            <Select
               :value="query.granularity"
-              class="lai-select"
+              class="lai-filter-select"
               aria-label="粒度"
+              :options="granularityOptions"
               @change="manualGranularity"
-            >
-              <option value="HOUR">
-                按小时
-              </option>
-              <option value="DAY">
-                按天
-              </option>
-            </select>
+            />
           </div>
         </div>
         <PageState
@@ -848,7 +816,7 @@ const itemTypeLabels: Record<string, string> = {
                     <RouterLink
                       v-if="rankTarget(row)"
                       :to="{ name: rankTarget(row)!.name, query: rankTarget(row)!.query }"
-                      class="lai-btn lai-btn-text"
+                      class="lai-link"
                     >
                       调用记录
                     </RouterLink>
@@ -895,16 +863,14 @@ const itemTypeLabels: Record<string, string> = {
             刷新失败，以下为上次数据：{{ errorText(exceptionError) }}
           </p>
           <div class="lai-filter-bar">
-            <button
+            <Button
               v-for="chip in exceptionChips"
               :key="chip.key"
-              type="button"
-              class="lai-btn"
-              :class="{ 'lai-btn-primary': exceptionFilter === chip.filter }"
+              :type="exceptionFilter === chip.filter ? 'primary' : 'default'"
               @click="exceptionFilter = exceptionFilter === chip.filter ? '' : chip.filter"
             >
               {{ chip.label }}
-            </button>
+            </Button>
           </div>
           <Card :bordered="false" class="overview-table-card">
           <table class="lai-table">
@@ -941,7 +907,7 @@ const itemTypeLabels: Record<string, string> = {
                   <RouterLink
                     v-if="exceptionTarget(item)"
                     :to="{ name: exceptionTarget(item)!.name, params: exceptionTarget(item)!.params }"
-                    class="lai-btn lai-btn-text"
+                    class="lai-link"
                   >
                     查看
                   </RouterLink>

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { flushPromises, mount } from '@vue/test-utils'
+import { Select } from 'ant-design-vue'
 import { routes } from '@/app/router'
 import { useBootstrapStore } from '@/stores/bootstrap'
 import { bootstrapFixtures } from '../mocks/fixtures/bootstrap'
@@ -163,8 +164,9 @@ describe('UsageAdjustmentsPage（FE-222）', () => {
   it('切换应用加载对应流水并更新 URL', async () => {
     stub = installJsonFetchStub(applicationsHandler())
     const { wrapper, router } = await mountPage('/ui/usage/adjustments')
-    const select = wrapper.find('select[aria-label="选择应用"]')
-    await select.setValue('app-2')
+    const select = wrapper.findComponent(Select)
+    expect(select.exists()).toBe(true)
+    ;(select.vm as unknown as { $emit: (event: string, ...args: unknown[]) => void }).$emit('change', 'app-2')
     await flushPromises()
     const adjustmentCall = stub.calls
       .filter((call) => call.url.includes('/admin/applications/app-2/quota/adjustments'))

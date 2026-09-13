@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Card } from 'ant-design-vue'
+import { Button, Card, Checkbox, Input } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import VersionConflictBanner from '@/components/VersionConflictBanner.vue'
@@ -269,13 +269,9 @@ function fieldError(field: string): string | undefined {
       <h1 class="lai-page-title">
         运行参数
       </h1>
-      <button
-        type="button"
-        class="lai-btn"
-        @click="router.back()"
-      >
+      <Button @click="router.back()">
         返回
-      </button>
+      </Button>
     </div>
 
     <PageState
@@ -329,12 +325,11 @@ function fieldError(field: string): string | undefined {
         <div class="lai-form-grid">
           <div class="lai-form-field">
             <span class="lai-form-label">时区</span>
-            <input
-              class="lai-input"
-              type="text"
+            <Input
+              id="rt-timezone"
               :value="form.timezone"
               readonly
-            >
+            />
             <p class="lai-form-hint">
               已存在聚合数据，时区锁定不可修改
             </p>
@@ -347,15 +342,15 @@ function fieldError(field: string): string | undefined {
               class="lai-form-label"
               for="rt-trace"
             >Trace 保留天数</label>
-            <input
+            <Input
               id="rt-trace"
-              v-model.number="form.trace_retention_days"
-              class="lai-input"
+              :value="String(form.trace_retention_days)"
+              name="trace_retention_days"
               type="number"
-              min="1"
-              max="365"
-              @input="markDirty"
-            >
+              :min="1"
+              :max="365"
+              @update:value="(value: string) => { form.trace_retention_days = value === '' ? 0 : Number(value); markDirty() }"
+            />
             <p
               v-if="fieldError('trace_retention_days')"
               class="lai-form-message-error"
@@ -371,15 +366,15 @@ function fieldError(field: string): string | undefined {
               class="lai-form-label"
               for="rt-usage"
             >Usage 保留天数</label>
-            <input
+            <Input
               id="rt-usage"
-              v-model.number="form.usage_retention_days"
-              class="lai-input"
+              :value="String(form.usage_retention_days)"
+              name="usage_retention_days"
               type="number"
-              min="30"
-              max="3650"
-              @input="markDirty"
-            >
+              :min="30"
+              :max="3650"
+              @update:value="(value: string) => { form.usage_retention_days = value === '' ? 0 : Number(value); markDirty() }"
+            />
             <p
               v-if="fieldError('usage_retention_days')"
               class="lai-form-message-error"
@@ -395,15 +390,15 @@ function fieldError(field: string): string | undefined {
               class="lai-form-label"
               for="rt-audit"
             >审计保留天数</label>
-            <input
+            <Input
               id="rt-audit"
-              v-model.number="form.audit_retention_days"
-              class="lai-input"
+              :value="String(form.audit_retention_days)"
+              name="audit_retention_days"
               type="number"
-              min="365"
-              max="3650"
-              @input="markDirty"
-            >
+              :min="365"
+              :max="3650"
+              @update:value="(value: string) => { form.audit_retention_days = value === '' ? 0 : Number(value); markDirty() }"
+            />
             <p
               v-if="fieldError('audit_retention_days')"
               class="lai-form-message-error"
@@ -419,15 +414,15 @@ function fieldError(field: string): string | undefined {
               class="lai-form-label"
               for="rt-refresh"
             >刷新间隔（秒）</label>
-            <input
+            <Input
               id="rt-refresh"
-              v-model.number="form.dashboard_refresh_seconds"
-              class="lai-input"
+              :value="String(form.dashboard_refresh_seconds)"
+              name="dashboard_refresh_seconds"
               type="number"
-              min="10"
-              max="300"
-              @input="markDirty"
-            >
+              :min="10"
+              :max="300"
+              @update:value="(value: string) => { form.dashboard_refresh_seconds = value === '' ? 0 : Number(value); markDirty() }"
+            />
             <p
               v-if="fieldError('dashboard_refresh_seconds')"
               class="lai-form-message-error"
@@ -443,14 +438,12 @@ function fieldError(field: string): string | undefined {
           <p class="lai-card-hint">
             缩短保留期会提前删除数据；保存前必须完成影响估算。
           </p>
-          <button
-            type="button"
-            class="lai-btn"
+          <Button
             :disabled="impactLoading"
             @click="estimateImpact"
           >
             {{ impactLoading ? '估算中…' : '估算保留影响' }}
-          </button>
+          </Button>
           <p
             v-if="impactError"
             class="lai-form-message-error"
@@ -508,15 +501,15 @@ function fieldError(field: string): string | undefined {
               class="lai-form-label"
               for="rt-msg"
             >单条消息字符上限</label>
-            <input
+            <Input
               id="rt-msg"
-              v-model.number="form.max_message_chars"
-              class="lai-input"
+              :value="String(form.max_message_chars)"
+              name="max_message_chars"
               type="number"
-              min="1000"
-              max="1000000"
-              @input="markDirty"
-            >
+              :min="1000"
+              :max="1000000"
+              @update:value="(value: string) => { form.max_message_chars = value === '' ? 0 : Number(value); markDirty() }"
+            />
             <p
               v-if="fieldError('max_message_chars')"
               class="lai-form-message-error"
@@ -532,15 +525,15 @@ function fieldError(field: string): string | undefined {
               class="lai-form-label"
               for="rt-req"
             >请求总字符上限</label>
-            <input
+            <Input
               id="rt-req"
-              v-model.number="form.max_request_chars"
-              class="lai-input"
+              :value="String(form.max_request_chars)"
+              name="max_request_chars"
               type="number"
-              min="1000"
-              max="5000000"
-              @input="markDirty"
-            >
+              :min="1000"
+              :max="5000000"
+              @update:value="(value: string) => { form.max_request_chars = value === '' ? 0 : Number(value); markDirty() }"
+            />
             <p
               v-if="fieldError('max_request_chars')"
               class="lai-form-message-error"
@@ -560,13 +553,11 @@ function fieldError(field: string): string | undefined {
             class="lai-form-label"
             for="rt-sampling"
           >启用诊断采样</label>
-          <input
+          <Checkbox
             id="rt-sampling"
-            v-model="form.diagnostic_sampling_enabled"
-            type="checkbox"
-            class="lai-checkbox"
-            @change="markDirty"
-          >
+            v-model:checked="form.diagnostic_sampling_enabled"
+            @update:checked="markDirty"
+          />
         </div>
         <div
           v-if="form.diagnostic_sampling_enabled"
@@ -580,13 +571,11 @@ function fieldError(field: string): string | undefined {
               class="lai-form-label"
               for="rt-rate"
             >采样率（0—1）</label>
-            <input
+            <Input
               id="rt-rate"
-              v-model="form.diagnostic_sample_rate"
-              class="lai-input"
-              type="text"
-              @input="markDirty"
-            >
+              v-model:value="form.diagnostic_sample_rate"
+              @update:value="markDirty"
+            />
             <p
               v-if="fieldError('diagnostic_sample_rate')"
               class="lai-form-message-error"
@@ -602,15 +591,15 @@ function fieldError(field: string): string | undefined {
               class="lai-form-label"
               for="rt-sample-retention"
             >样本保留天数</label>
-            <input
+            <Input
               id="rt-sample-retention"
-              v-model.number="form.diagnostic_sample_retention_days"
-              class="lai-input"
+              :value="String(form.diagnostic_sample_retention_days)"
+              name="diagnostic_sample_retention_days"
               type="number"
-              min="1"
-              max="30"
-              @input="markDirty"
-            >
+              :min="1"
+              :max="30"
+              @update:value="(value: string) => { form.diagnostic_sample_retention_days = value === '' ? 0 : Number(value); markDirty() }"
+            />
             <p
               v-if="fieldError('diagnostic_sample_retention_days')"
               class="lai-form-message-error"
@@ -626,15 +615,15 @@ function fieldError(field: string): string | undefined {
               class="lai-form-label"
               for="rt-sample-chars"
             >样本字符上限</label>
-            <input
+            <Input
               id="rt-sample-chars"
-              v-model.number="form.diagnostic_sample_max_chars"
-              class="lai-input"
+              :value="String(form.diagnostic_sample_max_chars)"
+              name="diagnostic_sample_max_chars"
               type="number"
-              min="100"
-              max="10000"
-              @input="markDirty"
-            >
+              :min="100"
+              :max="10000"
+              @update:value="(value: string) => { form.diagnostic_sample_max_chars = value === '' ? 0 : Number(value); markDirty() }"
+            />
             <p
               v-if="fieldError('diagnostic_sample_max_chars')"
               class="lai-form-message-error"
@@ -654,13 +643,11 @@ function fieldError(field: string): string | undefined {
             class="lai-form-label"
             for="rt-ip"
           >记录来源 IP 到 Trace</label>
-          <input
+          <Checkbox
             id="rt-ip"
-            v-model="form.client_ip_recording_enabled"
-            type="checkbox"
-            class="lai-checkbox"
-            @change="markDirty"
-          >
+            v-model:checked="form.client_ip_recording_enabled"
+            @update:checked="markDirty"
+          />
         </div>
         <div class="lai-form-field">
           <label
@@ -668,22 +655,19 @@ function fieldError(field: string): string | undefined {
             for="rt-proxy"
           >可信代理 CIDR（最多 100 项）</label>
           <div class="lai-kv-row">
-            <input
+            <Input
               id="rt-proxy"
-              v-model="form.newProxyCidr"
-              class="lai-input lai-filter-keyword"
-              type="text"
+              v-model:value="form.newProxyCidr"
+              class="lai-filter-input"
               placeholder="IPv4、IPv6 或 CIDR"
               @keydown.enter.prevent="addProxyCidr"
-            >
-            <button
-              type="button"
-              class="lai-btn"
+            />
+            <Button
               :disabled="form.trusted_proxy_cidrs.length >= 100"
               @click="addProxyCidr"
             >
               添加
-            </button>
+            </Button>
           </div>
           <ul class="lai-related-list">
             <li
@@ -691,13 +675,12 @@ function fieldError(field: string): string | undefined {
               :key="cidr"
             >
               {{ cidr }}
-              <button
-                type="button"
-                class="lai-btn lai-btn-text"
+              <Button
+                type="link"
                 @click="removeProxyCidr(index)"
               >
                 移除
-              </button>
+              </Button>
             </li>
             <li
               v-if="form.trusted_proxy_cidrs.length === 0"
@@ -722,15 +705,15 @@ function fieldError(field: string): string | undefined {
               class="lai-form-label"
               for="rt-pub-timeout"
             >发布实例时限（秒）</label>
-            <input
+            <Input
               id="rt-pub-timeout"
-              v-model.number="form.publish_instance_timeout_seconds"
-              class="lai-input"
+              :value="String(form.publish_instance_timeout_seconds)"
+              name="publish_instance_timeout_seconds"
               type="number"
-              min="10"
-              max="300"
-              @input="markDirty"
-            >
+              :min="10"
+              :max="300"
+              @update:value="(value: string) => { form.publish_instance_timeout_seconds = value === '' ? 0 : Number(value); markDirty() }"
+            />
             <p
               v-if="fieldError('publish_instance_timeout_seconds')"
               class="lai-form-message-error"
@@ -746,15 +729,15 @@ function fieldError(field: string): string | undefined {
               class="lai-form-label"
               for="rt-stale"
             >实例失联阈值（秒）</label>
-            <input
+            <Input
               id="rt-stale"
-              v-model.number="form.instance_stale_seconds"
-              class="lai-input"
+              :value="String(form.instance_stale_seconds)"
+              name="instance_stale_seconds"
               type="number"
-              min="30"
-              max="600"
-              @input="markDirty"
-            >
+              :min="30"
+              :max="600"
+              @update:value="(value: string) => { form.instance_stale_seconds = value === '' ? 0 : Number(value); markDirty() }"
+            />
             <p
               v-if="fieldError('instance_stale_seconds')"
               class="lai-form-message-error"
@@ -774,22 +757,20 @@ function fieldError(field: string): string | undefined {
       </p>
 
       <div class="lai-form-actions">
-        <button
-          type="button"
-          class="lai-btn"
+        <Button
           :disabled="submitting"
           @click="reloadLatest"
         >
           重置未保存输入
-        </button>
-        <button
+        </Button>
+        <Button
           v-if="canManage"
-          type="submit"
-          class="lai-btn lai-btn-primary"
+          type="primary"
+          html-type="submit"
           :disabled="submitting || conflictError !== null"
         >
           {{ submitting ? '保存中…' : '保存草稿' }}
-        </button>
+        </Button>
       </div>
     </form>
   </section>

@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { flushPromises, mount } from '@vue/test-utils'
 import { Select } from 'ant-design-vue'
+import AppMultiSelect from '@/components/AppMultiSelect.vue'
 import { routes } from '@/app/router'
 import { useBootstrapStore } from '@/stores/bootstrap'
 import { bootstrapFixtures } from '../mocks/fixtures/bootstrap'
@@ -80,14 +81,12 @@ describe('ProviderListPage（FE-007）', () => {
 
     const keyword = wrapper.find('input[type="text"]')
     await keyword.setValue('openai')
-    const statusTrigger = wrapper
-      .findAll('.lai-multiselect-trigger')
-      .find((button) => button.text().includes('健康状态'))
-    await statusTrigger!.trigger('click')
-    const availableOption = wrapper
-      .findAll('.lai-multiselect-option')
-      .find((option) => option.text() === '可用')
-    await availableOption!.trigger('click')
+    const healthSelect = wrapper
+      .findAllComponents(AppMultiSelect)
+      .find((component) => component.props('placeholder') === '健康状态')
+    expect(healthSelect).toBeDefined()
+    ;(healthSelect!.vm as unknown as { $emit: (event: string, ...args: unknown[]) => void })
+      .$emit('update:modelValue', ['AVAILABLE'])
     await flushPromises()
     await flushPromises()
     const listCall = stub.calls.filter((call) => call.url.includes('/admin/channels?')).at(-1)
