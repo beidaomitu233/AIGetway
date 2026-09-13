@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { Card } from 'ant-design-vue'
 import PageState from '@/components/PageState.vue'
 import StatusText from '@/components/StatusText.vue'
 import { useBootstrapStore } from '@/stores/bootstrap'
@@ -548,7 +549,7 @@ function severityClass(severity: string): string {
         </p>
       </div>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           发布历史
         </h2>
@@ -611,7 +612,7 @@ function severityClass(severity: string): string {
             </tbody>
           </table>
         </template>
-      </div>
+      </Card>
     </template>
   </section>
 </template>

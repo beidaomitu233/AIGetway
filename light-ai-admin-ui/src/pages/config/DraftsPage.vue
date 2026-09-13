@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { Card } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -313,7 +314,7 @@ const summaryChipActive = (type: ChangeType | ''): boolean =>
       @retry="loadAll"
     />
     <template v-else-if="draftState && summary">
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           草稿状态
         </h2>
@@ -338,9 +339,9 @@ const summaryChipActive = (type: ChangeType | ''): boolean =>
             <span class="lai-summary-label">最近修改</span>{{ formatDateTime(draftState.last_modified_at, store.timezone) }}
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div class="lai-card">
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
           变更摘要
         </h2>
@@ -525,7 +526,7 @@ const summaryChipActive = (type: ChangeType | ''): boolean =>
             @update:page-size="applyPageSize"
           />
         </template>
-      </div>
+      </Card>
     </template>
 
     <ConfirmDialog
