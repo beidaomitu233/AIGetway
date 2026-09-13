@@ -610,3 +610,8 @@ UI-R312 未修改详情 API、页签 URL、状态转换或权限规则。
 | 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | UI-ANT-332-001 | P1 | 运行总览的用量明细与聚合表格缺少清晰结果容器，指标卡与明细之间层级不统一；进入总览页即可复现。 | `light-ai-admin-ui/src/pages/overview/OverviewPage.vue`；总览和用量 API 契约不变 | 使用 Ant Design `Card` 承载总览明细表，保留指标、分币种费用、钻取链接和错误状态。 | `npm run typecheck` 通过；`overviewUsage.test.ts` 15 项通过。 | 代码审查与修复模型/codex-ui-overview-0913 | 待复验 |
+## UI-R333 Ant Design 系统管理列表工作区（2026-09-13，codex-ui-admin-0913）
+
+| 编号 | 级别 | 问题与依据 | 涉及文件/接口/表 | 根因与修复 | 验证结果 | 负责人 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| UI-ANT-333-001 | P1 | 访问凭证和审计列表结果区缺少统一容器，敏感字段与审计明细的工作区层级弱；进入系统管理列表即可复现。 | `light-ai-admin-ui/src/pages/access/AccessListPage.vue`、`light-ai-admin-ui/src/pages/audit/AuditListPage.vue`；访问凭证、审计 API 契约不变 | 使用 Ant Design `Card` 承载结果表，保留敏感字段裁剪、一次显示、权限判断和筛选分页行为。 | `npm run typecheck` 通过；`runtimeAccess.test.ts`、`layout.test.ts` 共 19 项通过。 | 代码审查与修复模型/codex-ui-admin-0913 | 待复验 |
