@@ -344,11 +344,24 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.admin.channel.ChannelModelCatalogService lightAiChannelModelCatalogService(
+                DataSource dataSource,
+                com.lightai.storage.application.JdbcApplicationModelMappingRepository mappingRepository,
+                com.lightai.storage.channel.JdbcChannelRepository channelRepository,
+                java.util.List<com.lightai.spi.provider.ProviderAdapter> adapters,
+                ObjectProvider<com.lightai.runtime.ports.CredentialSecretPort> credentialPort) {
+            return new com.lightai.admin.channel.ChannelModelCatalogService(dataSource, mappingRepository,
+                    channelRepository, adapters, credentialPort.getIfAvailable());
+        }
+
+        @Bean
         @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
         public com.lightai.admin.channel.ChannelController lightAiChannelController(
                 com.lightai.admin.channel.ChannelService providerService,
-                com.lightai.admin.check.ChannelCheckService providerCheckService) {
-            return new com.lightai.admin.channel.ChannelController(providerService, providerCheckService);
+                com.lightai.admin.check.ChannelCheckService providerCheckService,
+                com.lightai.admin.channel.ChannelModelCatalogService modelCatalogService) {
+            return new com.lightai.admin.channel.ChannelController(providerService, providerCheckService, modelCatalogService);
         }
 
         @Bean
@@ -987,6 +1000,13 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.application.JdbcApplicationModelMappingRepository lightAiApplicationModelMappingRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.application.JdbcApplicationModelMappingRepository(properties.getSchemaName());
+        }
+
+        @Bean
         @ConditionalOnMissingBean(com.lightai.runtime.ports.ApplicationQuotaPort.class)
         public com.lightai.runtime.ports.ApplicationQuotaPort lightAiApplicationQuotaPort(
                 DataSource dataSource, com.lightai.runtime.capacity.CapacityStore capacityStore,
@@ -1004,11 +1024,14 @@ public class LightAiAdminAutoConfiguration {
                 com.lightai.admin.audit.AuditService auditService,
                 PlatformTransactionManager transactionManager,
                 Clock clock, AdminProperties properties,
-                ObjectProvider<com.lightai.runtime.ports.ConfigSnapshotPort> snapshotPortProvider) {
+                ObjectProvider<com.lightai.runtime.ports.ConfigSnapshotPort> snapshotPortProvider,
+                com.lightai.storage.application.JdbcApplicationModelMappingRepository mappingRepository,
+                com.lightai.admin.channel.ChannelModelCatalogService catalogService) {
             return new com.lightai.admin.application.ApplicationService(
                     dataSource, applicationRepository, aliasRepository, auditService,
                     transactionManager, new com.lightai.admin.query.PageResultFactory(clock),
-                    clock, properties.getRuntimeMode(), snapshotPortProvider.getIfAvailable());
+                    clock, properties.getRuntimeMode(), snapshotPortProvider.getIfAvailable(), mappingRepository,
+                    catalogService);
         }
 
         @Bean
@@ -1105,11 +1128,12 @@ public class LightAiAdminAutoConfiguration {
                 com.lightai.storage.alias.JdbcAliasRepository aliasRepository,
                 com.lightai.storage.application.JdbcApplicationRepository applicationRepository,
                 com.lightai.storage.application.JdbcApplicationKeyRepository applicationKeyRepository,
+                com.lightai.storage.application.JdbcApplicationModelMappingRepository modelMappingRepository,
                 com.lightai.admin.security.AccessTokenService tokenService,
                 Clock clock, AdminProperties properties) {
             return new com.lightai.admin.accesscred.AccessTokenAuthService(
                     dataSource, repository, aliasRepository, tokenService, clock, false,
-                    applicationRepository, applicationKeyRepository);
+                    applicationRepository, applicationKeyRepository, modelMappingRepository);
         }
 
         // ---------- 审计查询与导出（BE-045 / CR-003） ----------

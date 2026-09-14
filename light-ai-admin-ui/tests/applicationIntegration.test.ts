@@ -188,7 +188,7 @@ describe('ApplicationIntegrationPage（FE-224）', () => {
     await router.isReady()
     const wrapper = mount(ApplicationIntegrationPage, { global: { plugins: [router] } })
     await flushPromises()
-    expect(wrapper.text()).toContain('该应用尚未授权任何可调用的虚拟模型')
+    expect(wrapper.text()).toContain('该应用尚未配置可调用的模型映射')
     expect(wrapper.text()).not.toContain('在线测试')
   })
 })

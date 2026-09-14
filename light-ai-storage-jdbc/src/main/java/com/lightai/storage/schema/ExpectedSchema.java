@@ -64,6 +64,9 @@ public final class ExpectedSchema {
             "application_model_permission",
             "application_key",
             "application_key_model_permission",
+            "application_config_revision",
+            "application_model_mapping",
+            "application_model_target",
             "budget_reservation",
             "usage_ledger");
 

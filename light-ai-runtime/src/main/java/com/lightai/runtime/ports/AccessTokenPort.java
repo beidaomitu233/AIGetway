@@ -29,17 +29,19 @@ public interface AccessTokenPort {
             Integer rpm,
             Long tpm,
             boolean allAliasesAllowed,
-            Map<String, ApplicationModelConstraint> aliasConstraints) {
+            Map<String, ApplicationModelConstraint> aliasConstraints,
+            Map<String, String> modelMappings) {
 
         public Principal {
             application = application == null ? "default" : application;
             allowedAliasIds = allowedAliasIds == null ? List.of() : List.copyOf(allowedAliasIds);
             aliasConstraints = aliasConstraints == null ? Map.of() : Map.copyOf(aliasConstraints);
+            modelMappings = modelMappings == null ? Map.of() : Map.copyOf(modelMappings);
         }
 
         /** 旧运行入口保持“空白名单表示全部 Alias”的兼容语义。 */
         public Principal(String application, List<String> allowedAliasIds) {
-            this(application, allowedAliasIds, null, null, null, null, true, Map.of());
+            this(application, allowedAliasIds, null, null, null, null, true, Map.of(), Map.of());
         }
 
         /** V2 企业应用入口：即使未授权任何模型，也必须解释为拒绝全部模型。 */
@@ -55,12 +57,27 @@ public interface AccessTokenPort {
                 String application, List<String> allowedAliasIds, String applicationId,
                 String applicationKeyId, Integer rpm, Long tpm,
                 Map<String, ApplicationModelConstraint> aliasConstraints) {
+            return enterprise(application, allowedAliasIds, applicationId, applicationKeyId,
+                    rpm, tpm, aliasConstraints, Map.of());
+        }
+
+        /** 企业应用映射的对外模型名到运行时 Alias 名称。 */
+        public static Principal enterprise(
+                String application, List<String> allowedAliasIds, String applicationId,
+                String applicationKeyId, Integer rpm, Long tpm,
+                Map<String, ApplicationModelConstraint> aliasConstraints,
+                Map<String, String> modelMappings) {
             return new Principal(application, allowedAliasIds, applicationId,
-                    applicationKeyId, rpm, tpm, false, aliasConstraints);
+                    applicationKeyId, rpm, tpm, false, aliasConstraints, modelMappings);
         }
 
         public boolean aliasAllowed(String alias) {
-            return allAliasesAllowed || allowedAliasIds.contains(alias);
+            return allAliasesAllowed || allowedAliasIds.contains(alias)
+                    || (modelMappings.containsKey(alias) && allowedAliasIds.contains(modelMappings.get(alias)));
+        }
+
+        public String resolveAlias(String alias) {
+            return alias == null ? null : modelMappings.getOrDefault(alias, alias);
         }
 
         /** 应用为该虚拟模型配置的请求参数上限；未配置返回 null。 */
