@@ -266,7 +266,7 @@ public final class ApplicationService {
         try (Connection connection = dataSource.getConnection()) {
             ApplicationRecord application = load(connection, id);
             requireScope(connection, context, application.code());
-            return repository.listModelPermissions(connection, id).stream()
+            return modelPermissionsForView(connection, id).stream()
                     .map(this::toModelView).toList();
         } catch (LightAiException e) {
             throw e;
@@ -1093,10 +1093,17 @@ public final class ApplicationService {
         }
     }
 
+    private List<ApplicationModelPermissionRecord> modelPermissionsForView(
+            Connection connection, UUID applicationId) {
+        List<ApplicationModelPermissionRecord> mapped =
+                repository.listModelPermissionsFromMappings(connection, applicationId);
+        // 存量应用可能还没有 V10 映射行，兼容旧授权读取直到迁移完成。
+        return mapped.isEmpty() ? repository.listModelPermissions(connection, applicationId) : mapped;
+    }
     private ApplicationDetail toDetail(Connection connection, ApplicationRecord record) {
         ApplicationQuotaPolicyView quota = repository.findQuota(connection, record.id())
                 .map(this::toQuotaView).orElse(null);
-        List<ApplicationModelPermissionView> models = repository.listModelPermissions(connection, record.id())
+        List<ApplicationModelPermissionView> models = modelPermissionsForView(connection, record.id())
                 .stream().map(this::toModelView).toList();
         return new ApplicationDetail(
                 record.id().toString(), record.code(), record.name(), record.department(),

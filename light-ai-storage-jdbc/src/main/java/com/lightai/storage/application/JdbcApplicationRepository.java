@@ -407,6 +407,41 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
         }
     }
 
+    /**
+     * 读取应用映射中的模型权限视图，不解析全局 virtual_model 目录。
+     * application_model_permission 仍作为可选的历史约束来源；没有对应权限行时使用映射自身的稳定 ID 和启用状态。
+     */
+    public List<ApplicationModelPermissionRecord> listModelPermissionsFromMappings(
+            Connection connection, UUID applicationId) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT COALESCE(p.id, m.id) AS id, m.application_id, m.virtual_model_id, "
+                + "m.public_model_name AS virtual_model_code, "
+                + "CASE WHEN p.id IS NULL THEN TRUE ELSE p.enabled END AS enabled, "
+                + "p.constraints_json, COALESCE(p.version, m.version) AS version, "
+                + "m.created_at, m.updated_at FROM "
+                + qualify(connection, "application_model_mapping") + " m LEFT JOIN "
+                + qualify(connection, "application_model_permission")
+                + " p ON p.application_id = m.application_id AND p.virtual_model_id = m.virtual_model_id "
+                + "WHERE m.application_id = ? AND m.status = 'ACTIVE' AND m.virtual_model_id IS NOT NULL "
+                + "ORDER BY m.public_model_name, m.id";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, applicationId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<ApplicationModelPermissionRecord> records = new ArrayList<>();
+                while (resultSet.next()) {
+                    records.add(new ApplicationModelPermissionRecord(
+                            dialect.readUuid(resultSet, "id"), dialect.readUuid(resultSet, "application_id"),
+                            dialect.readUuid(resultSet, "virtual_model_id"), resultSet.getString("virtual_model_code"),
+                            resultSet.getBoolean("enabled"), dialect.readJson(resultSet, "constraints_json"),
+                            resultSet.getLong("version"), dialect.readOffsetDateTime(resultSet, "created_at"),
+                            dialect.readOffsetDateTime(resultSet, "updated_at")));
+                }
+                return List.copyOf(records);
+            }
+        } catch (SQLException e) {
+            throw translate("应用映射模型权限读取失败", e);
+        }
+    }
     public List<ApplicationModelPermissionRecord> listModelPermissions(
             Connection connection, UUID applicationId) {
         DatabaseDialect dialect = dialect(connection);
