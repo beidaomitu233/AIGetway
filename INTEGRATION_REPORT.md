@@ -109,3 +109,18 @@ BUILD SUCCESS；以当前源码启动隔离服务并完成上述 SSE 链路复�
 ## 结论
 
 P4-BE-001 已验证。运行时鉴权从应用映射读取公开模型并按密钥范围过滤，Standalone 默认配置端口不再读取旧 `runtime_config`；历史模型约束仍从 `application_model_permission` 读取，不依赖全局目录表。真实供应商、生产数据库、共享状态故障恢复和浏览器页面未在本次隔离环境验证。
+# P4-BE-006-A/B 管理模型读取复验
+
+- 分支：`fix/fullstack-integration-P4-root`
+- 验证环境：H2 内存数据库，使用测试迁移；未使用真实供应商或生产数据库。
+
+## 验证步骤与结果
+
+1. 应用密钥模型范围优先从 `application_model_mapping` 的 ACTIVE 行读取；无映射的存量应用才回退旧授权行。
+2. 非可信身份的应用模型候选集合优先从应用映射读取；映射行存在时不再依赖 `virtual_model` 目录。
+3. 创建应用映射后删除 H2 `route_candidate`、`virtual_model`，调用应用模型候选、`/models` 子资源和应用详情，均返回映射模型名称。
+4. 执行 `mvn -pl light-ai-admin -am -Dtest=ApplicationServiceTest,ApplicationKeyServiceTest,ApplicationApiContractTest -Dsurefire.failIfNoSpecifiedTests=false test`，31/31 通过。
+
+## 结论
+
+P4-BE-006-A/B 已验证。管理端密钥范围、候选目录、模型子资源和详情读取已优先使用应用映射；P4-BE-006-C 的旧模型授权写入、发布装配和观测历史依赖仍待迁移。真实 PostgreSQL/MySQL、真实浏览器页面和真实供应商未在本次复验执行。
