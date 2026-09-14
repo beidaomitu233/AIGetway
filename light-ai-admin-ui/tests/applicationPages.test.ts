@@ -197,7 +197,7 @@ describe('Application pages（V2 应用中心）', () => {
     expect(wrapper.text()).toContain('这是唯一一次显示完整密钥')
   })
 
-  it('在应用详情调整额度并替换模型授权', async () => {
+  it('在应用详情调整额度并替换模型映射', async () => {
     stub = installJsonFetchStub(({ url, method }) => {
       if (method === 'GET' && url.pathname.endsWith(`/admin/applications/${application.id}`)) {
         return dataEnvelope(application)
@@ -309,7 +309,7 @@ describe('Application pages（V2 应用中心）', () => {
         reason: '新结算周期人工重置',
       })
 
-    const modelButton = wrapper.findAll('button').find((button) => button.text() === '管理授权')!
+    const modelButton = wrapper.findAll('button').find((button) => button.text() === '配置映射')!
     await modelButton.trigger('click')
     await flushPromises()
     const modelDialog = wrapper.find('[aria-labelledby="application-model-title"]')
@@ -320,7 +320,7 @@ describe('Application pages（V2 应用中心）', () => {
     const streamSelect = aliasTwoGroup.findComponent(Select)
     ;(streamSelect.vm as unknown as { $emit: (event: string, ...args: unknown[]) => void }).$emit('update:value', 'deny')
     await modelDialog.find('textarea').setValue('增加备用模型')
-    await modelDialog.findAll('button').find((button) => button.text() === '保存授权')!.trigger('click')
+    await modelDialog.findAll('button').find((button) => button.text() === '保存映射')!.trigger('click')
     await flushPromises()
     expect(stub.calls.find((call) => call.method === 'PUT' && call.url.endsWith('/models'))?.body)
       .toMatchObject({
@@ -348,7 +348,7 @@ describe('Application pages（V2 应用中心）', () => {
     const { wrapper, router } = await mountPage(`/ui/applications/${application.id}`)
 
     expect(wrapper.findAll('.detail-tab').map((tab) => tab.text())).toEqual([
-      '概览', '接入密钥', '可用模型', '额度与速率', '调用记录', '用量成本', '成员与审计',
+      '概览', '接入密钥', '模型映射', '额度与速率', '调用记录', '用量成本', '成员与审计',
     ])
 
     const membersTab = wrapper.findAll('.detail-tab').find((tab) => tab.text() === '成员与审计')!

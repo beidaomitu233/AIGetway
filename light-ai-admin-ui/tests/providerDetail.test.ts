@@ -113,6 +113,42 @@ describe('ProviderDetailPage（FE-009/FE-010）', () => {
     expect(text).toContain('审计信息')
   })
 
+  it('按关键词查询渠道实时模型目录', async () => {
+    stub = installJsonFetchStub((context) => {
+      const base = baseHandler()(context)
+      if (base) return base
+      const { url, method } = context
+      if (method === 'GET' && url.pathname.endsWith('/admin/channels/prov-1/available-models')) {
+        return dataEnvelope([
+          {
+            model_id: 'qwen-max',
+            display_name: '通义千问 Max',
+            source: 'PROVIDER_API',
+            existing: false,
+            tokenizer_family: null,
+            context_window: 32768,
+            max_output_tokens: 8192,
+            support_stream: true,
+            support_system_message: true,
+            support_temperature: true,
+            support_top_p: true,
+            support_stop: true,
+          },
+        ])
+      }
+      return undefined
+    })
+    const { wrapper } = await mountDetail('SYSTEM_ADMIN')
+    await wrapper.find('[aria-label="实时模型目录筛选"]').setValue('qwen')
+    await wrapper.get('.catalog-toolbar button').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('实时模型目录')
+    expect(wrapper.text()).toContain('通义千问 Max')
+    expect(wrapper.text()).toContain('qwen-max')
+    const catalogCall = stub.calls.find((call) => call.url.includes('/available-models'))
+    expect(catalogCall?.url).toContain('source=PROVIDER_API')
+    expect(catalogCall?.url).toContain('keyword=qwen')
+  })
   it('检测提交命令并展示结果与耗时', async () => {
     stub = installJsonFetchStub((context) => {
       const base = baseHandler()(context)

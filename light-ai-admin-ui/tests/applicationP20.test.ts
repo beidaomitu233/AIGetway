@@ -201,7 +201,7 @@ describe('FE-P20 页面边界（同契约夹具，非真实联调）', () => {
     installJsonFetchStub(({ url }) => url.pathname.endsWith('/keys') || url.pathname.endsWith('/quota/adjustments') ? dataEnvelope([]) : dataEnvelope({ ...application, status: 'FROZEN' }))
     const { wrapper } = await page(`/ui/applications/${application.id}`)
     expect(wrapper.text()).toContain('FROZEN')
-    expect(button(wrapper, '管理授权')).toBeUndefined()
+    expect(button(wrapper, '配置映射')).toBeUndefined()
     expect(button(wrapper, '编辑策略')).toBeUndefined()
   })
   it('密钥非法 IP 和超应用 RPM 不能签发，复制失败保留一次性弹窗', async () => {
@@ -307,7 +307,7 @@ describe('FE-P20 页面边界（同契约夹具，非真实联调）', () => {
     expect(wrapper.text()).not.toContain('late-fixture-secret')
     expect(wrapper.find('#application-secret-title').exists()).toBe(false)
   })
-  it('模型授权候选使用 model-options，不回退虚拟模型配置视图', async () => {
+  it('模型映射候选使用 model-options，不回退虚拟模型配置视图', async () => {
     const stub = installJsonFetchStub(({ url }) => {
       if (url.pathname === `/admin/applications/${application.id}/model-options`) {
         return dataEnvelope({
@@ -321,7 +321,7 @@ describe('FE-P20 页面边界（同契约夹具，非真实联调）', () => {
       return dataEnvelope(application)
     })
     const { wrapper } = await page(`/ui/applications/${application.id}`)
-    await button(wrapper, '管理授权').trigger('click')
+    await button(wrapper, '配置映射').trigger('click')
     await flushPromises()
     expect(stub.calls.some(call => call.url.endsWith(`/admin/applications/${application.id}/model-options`))).toBe(true)
     expect(stub.calls.some(call => call.url.endsWith('/admin/virtual-models'))).toBe(false)
@@ -351,14 +351,14 @@ describe('FE-P20 页面边界（同契约夹具，非真实联调）', () => {
       return method === 'GET' ? dataEnvelope(staleDetail) : dataEnvelope(application)
     })
     const { wrapper } = await page(`/ui/applications/${application.id}`)
-    await button(wrapper, '管理授权').trigger('click')
+    await button(wrapper, '配置映射').trigger('click')
     await flushPromises()
     const dialog = wrapper.get('[aria-labelledby="application-model-title"]')
     expect(dialog.text()).toContain('chat-retired')
     expect(dialog.text()).toContain('保存后会取消这些授权')
     expect(dialog.find('input[value="alias-stale"]').exists()).toBe(false)
     await dialog.get('textarea').setValue('清理失效模型授权')
-    await dialog.findAll('button').find(button => button.text().replace(/\s+/g, '') === '保存授权')!.trigger('click')
+    await dialog.findAll('button').find(button => button.text().replace(/\s+/g, '') === '保存映射')!.trigger('click')
     await flushPromises()
     const update = stub.calls.find(call => call.method === 'PUT' && call.url.endsWith(`/admin/applications/${application.id}/models`))
     expect(update?.body).toMatchObject({ virtual_model_ids: ['alias-1'] })
