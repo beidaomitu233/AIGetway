@@ -117,6 +117,12 @@ BUILD SUCCESS；以当前源码启动隔离服务并完成上述 SSE 链路复�
 4. `/admin/usage/summary?requested_stream=true` 返回 `request_count=1`、`stream_count=1`、`attempt_count=4`，与调用和 Trace 数据一致。
 5. 测试数据为虚构值；应用密钥原文仅在测试进程变量中使用，未写入代码、日志或报告。
 
+## 复验补充（2026-09-15）
+
+- 重启当前分支构建的 `light-ai-server`（端口 `18084`，H2 MIGRATE，Redis 命名空间 `p5c-e2e-rerun`），通过 V2 管理 API 创建渠道、受保护凭证、企业应用、应用密钥和 `p5c-chat` 手工映射；校验 `PASSED`，发布记录收敛为 `SUCCEEDED`。
+- 应用密钥调用 `/v1/models` 返回 `p5c-chat`；同步 `/v1/chat/completions` 返回 `LIGHT_AI_SYNC_OK` 和实际 4/5/9 Token。
+- 流式调用返回角色块、内容块、finish 和唯一 `[DONE]`，客户端读取到终止帧耗时 188ms；Trace `83294358-449e-4c5b-8320-d58cc6364e39` 为 `SUCCEEDED`、`requested_stream=true`、`response_committed=true`、`usage_source=ACTUAL`、6/2/8 Token；`/admin/usage/summary?requested_stream=true` 返回 `request_count=1`、`stream_count=1`、`attempt_count=1`。
+
 ## 测试与构建
 
 ```text
