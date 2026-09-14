@@ -15,11 +15,12 @@ class SchemaGuardTest {
 
     @Test
     void expectedSchemaContainsEnterpriseApplicationTables() {
-        assertThat(ExpectedSchema.TABLES).hasSize(54);
+        assertThat(ExpectedSchema.TABLES).hasSize(57);
         assertThat(ExpectedSchema.TABLES).contains(
                 "audit_log", "config_draft_state", "draft_change",
                 "application", "application_key", "application_quota_policy",
                 "application_model_permission", "application_key_model_permission",
+                "application_config_revision", "application_model_mapping", "application_model_target",
                 "budget_reservation", "usage_ledger",
                 "virtual_model", "model_sync_job", "model_sync_item");
     }
