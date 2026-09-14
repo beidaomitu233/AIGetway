@@ -277,9 +277,11 @@ P4 当前交付记录（2026-09-15）：
 
 - 已完成前端第一阶段下线：主路由删除旧模型、虚拟模型、限流、可靠性、熔断、草稿/发布、运行参数、旧访问凭证和独立开发接入页面；历史地址统一重定向到应用或渠道工作台。
 - 应用布局移除“待发布变更”入口；渠道列表删除草稿筛选、待发布链接和已下线的模型列表跳转，避免用户进入失效工作流。
-- 新增旧地址重定向回归测试 `light-ai-admin-ui/tests/deprecatedRoutes.test.ts`，9 条地址均通过；前端 `npm run typecheck` 通过，目标测试通过。
-- 后端和数据库暂未删除：网关当前仍通过 `JdbcApplicationModelMappingRepository`、`JdbcApplicationRepository` 读取 `virtual_model`/`route_candidate`，`ServerApplication` 仍提供 `runtime_config` 与 `ConfigSnapshotPort`，管理自动装配仍注册旧服务。直接删除会破坏应用映射解析、路由选择、调用历史关联和配置版本读取，属于待完成的运行链路迁移，不将其标记为已验证。
-- 当前状态保持“进行中”。下一步必须先将运行时配置版本、应用映射目标和历史快照引用切换到新结构，再删除旧控制器、服务、仓储、权限和表，并执行 PostgreSQL/MySQL/全新库迁移回归。
+- 新增旧地址重定向回归测试 `light-ai-admin-ui/tests/deprecatedRoutes.test.ts`，9 条地址均通过；前端 `npm run typecheck`、`npm run build` 和运行/审计回归测试 14/14 通过。
+- 旧访问凭证前后端运行面已删除：管理控制器、服务、客户端 DTO、JDBC 仓储、旧页面/API/Mock 和 API 清单入口均移除；应用密钥是唯一业务鉴权入口。V12 MySQL/PostgreSQL 迁移删除 `access_credential` 与 `access_credential_alias`，SchemaGuard 期望清单同步更新。
+- 应用映射运行时已切换为 V2 映射目标名称和渠道连接，快照读取不再依赖 `upstream_model`；H2 回归在删除 `virtual_model`、`upstream_model` 后仍能读取应用快照和运行映射。
+- 网关当前仍有 `JdbcApplicationRepository` 对 `virtual_model`/`route_candidate` 的历史权限读取，`ServerApplication` 仍提供 `runtime_config` 与 `ConfigSnapshotPort`，草稿/发布服务仍有装配依赖。上述内容属于下一阶段运行链路迁移，不将 P4 标记为已验证。
+- 当前状态保持“进行中”。下一步继续迁移应用密钥模型范围、全局路由和运行配置版本，再删除剩余旧服务和表，并执行 PostgreSQL/MySQL/全新库迁移回归。
 
 ### P5：端到端复验
 
