@@ -222,13 +222,6 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
-        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-        public com.lightai.admin.runtimeconfig.RuntimeConfigController lightAiRuntimeConfigController(
-                com.lightai.admin.runtimeconfig.RuntimeConfigAdminService service) {
-            return new com.lightai.admin.runtimeconfig.RuntimeConfigController(service);
-        }
-
-        @Bean
         public ManagementStateReader lightAiManagementStateReader(
                 DataSource dataSource, RuntimeConfigRepository runtimeConfigRepository,
                 DraftStateRepository draftStateRepository, AdminProperties properties) {
@@ -477,14 +470,6 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
-        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-        public com.lightai.admin.upstream.UpstreamModelController lightAiUpstreamModelController(
-                com.lightai.admin.upstream.UpstreamModelService modelService,
-                com.lightai.admin.upstream.ModelImportService importService) {
-            return new com.lightai.admin.upstream.UpstreamModelController(modelService, importService);
-        }
-
-        @Bean
         public com.lightai.admin.alias.ModelAliasService lightAiModelAliasService(
                 DataSource dataSource,
                 com.lightai.storage.alias.JdbcAliasRepository aliasRepository,
@@ -511,14 +496,6 @@ public class LightAiAdminAutoConfiguration {
             return new com.lightai.admin.alias.RouteCandidateService(dataSource, candidateRepository,
                     aliasRepository, modelRepository, channelRepository,
                     draftWriteService, providerCheckService, properties.getRuntimeMode());
-        }
-
-        @Bean
-        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-        public com.lightai.admin.alias.ModelAliasController lightAiModelAliasController(
-                com.lightai.admin.alias.ModelAliasService aliasService,
-                com.lightai.admin.alias.RouteCandidateService candidateService) {
-            return new com.lightai.admin.alias.ModelAliasController(aliasService, candidateService);
         }
 
         @Bean
@@ -589,17 +566,6 @@ public class LightAiAdminAutoConfiguration {
                     defaultPolicy, new com.lightai.admin.query.PageResultFactory(clock),
                     properties.getRuntimeMode());
         }
-
-        @Bean
-        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-        public com.lightai.admin.governance.GovernanceController lightAiGovernanceController(
-                com.lightai.admin.governance.GovernanceAdminService governanceService,
-                com.lightai.admin.governance.CircuitManagementService circuitService) {
-            return new com.lightai.admin.governance.GovernanceController(governanceService,
-                    circuitService);
-        }
-
-        // ---- 调用观测（BE-P06：BE-031~036）----
 
         @Bean
         @ConditionalOnMissingBean
@@ -746,22 +712,6 @@ public class LightAiAdminAutoConfiguration {
             return new com.lightai.admin.calls.CallObservationController(
                     new com.lightai.admin.calls.CallObservationService(traceService, traceDetailService),
                     traceExportService);
-        }
-
-        @Bean
-        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-        public com.lightai.admin.publish.ConfigReleaseController lightAiConfigReleaseController(
-                com.lightai.admin.publish.ConfigValidationService validationService,
-                com.lightai.admin.publish.ConfigPublishService publishService) {
-            return new com.lightai.admin.publish.ConfigReleaseController(validationService,
-                    publishService);
-        }
-
-        @Bean
-        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-        public com.lightai.admin.settings.SettingsController lightAiSettingsController(
-                com.lightai.admin.runtimeconfig.RuntimeConfigAdminService service) {
-            return new com.lightai.admin.settings.SettingsController(service);
         }
 
         @Bean
@@ -942,22 +892,6 @@ public class LightAiAdminAutoConfiguration {
                 AdminProperties properties) {
             return new com.lightai.admin.publish.InternalInstanceAuth(
                     properties.getInternalInstanceCredentials());
-        }
-
-        @Bean
-        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-        public com.lightai.admin.publish.ConfigDraftController lightAiConfigDraftController(
-                com.lightai.admin.publish.DraftStateQueryService queryService,
-                com.lightai.admin.publish.DraftRevertService revertService) {
-            return new com.lightai.admin.publish.ConfigDraftController(queryService, revertService);
-        }
-
-        @Bean
-        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-        public com.lightai.admin.publish.ConfigPublishController lightAiConfigPublishController(
-                com.lightai.admin.publish.ConfigValidationService validationService,
-                com.lightai.admin.publish.ConfigPublishService publishService) {
-            return new com.lightai.admin.publish.ConfigPublishController(validationService, publishService);
         }
 
         @Bean
