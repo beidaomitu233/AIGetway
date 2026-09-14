@@ -38,14 +38,13 @@ public final class RedisRiskWindowStore implements RiskWindowStore {
 
     @Override
     public Window increment(String key, long ttlSeconds, long requestDelta, long tokenDelta, BigDecimal amountDelta) {
-        if (key == null || key.isBlank()) throw new IllegalArgumentException("风险窗口 key 不能为空");
-        long ttl = Math.max(1, ttlSeconds);
+        validateKey(key);
         try {
             List<?> values = redis.eval(INCREMENT, ScriptOutputType.MULTI,
                     new String[]{prefix + key}, Long.toString(Math.max(0, requestDelta)),
                     Long.toString(Math.max(0, tokenDelta)),
                     (amountDelta == null ? BigDecimal.ZERO : amountDelta.max(BigDecimal.ZERO)).toPlainString(),
-                    Long.toString(ttl));
+                    Long.toString(Math.max(1, ttlSeconds)));
             if (values == null || values.size() != 3) {
                 throw new RiskWindowStore.StateUnavailableException("Redis 风险窗口返回无效状态");
             }
@@ -55,6 +54,41 @@ public final class RedisRiskWindowStore implements RiskWindowStore {
         } catch (RedisException e) {
             throw new RiskWindowStore.StateUnavailableException("Redis 风险窗口不可用");
         }
+    }
+
+    @Override
+    public boolean isBlocked(String key, long nowEpochMillis) {
+        validateKey(key);
+        try {
+            String raw = redis.get(blockKey(key));
+            return raw != null && Long.parseLong(raw) > nowEpochMillis;
+        } catch (RedisException | NumberFormatException e) {
+            throw new RiskWindowStore.StateUnavailableException("Redis 风险阻断状态不可用");
+        }
+    }
+
+    @Override
+    public void block(String key, long ttlSeconds) {
+        block(key, ttlSeconds, System.currentTimeMillis());
+    }
+
+    @Override
+    public void block(String key, long ttlSeconds, long nowEpochMillis) {
+        validateKey(key);
+        try {
+            long ttl = Math.max(1, ttlSeconds);
+            redis.setex(blockKey(key), ttl, Long.toString(nowEpochMillis + ttl * 1000L));
+        } catch (RedisException e) {
+            throw new RiskWindowStore.StateUnavailableException("Redis 风险阻断状态不可用");
+        }
+    }
+
+    private void validateKey(String key) {
+        if (key == null || key.isBlank()) throw new IllegalArgumentException("风险窗口 key 不能为空");
+    }
+
+    private String blockKey(String key) {
+        return prefix + "blocked:" + key;
     }
 
     private static long number(Object value) {

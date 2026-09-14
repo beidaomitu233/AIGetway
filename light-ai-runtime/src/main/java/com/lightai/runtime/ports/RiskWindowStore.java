@@ -11,6 +11,19 @@ import java.math.BigDecimal;
 public interface RiskWindowStore extends AutoCloseable {
     Window increment(String key, long ttlSeconds, long requestDelta, long tokenDelta, BigDecimal amountDelta);
 
+    /** 查询共享阻断标记；共享状态不可用时必须抛出 StateUnavailableException。 */
+    default boolean isBlocked(String key, long nowEpochMillis) {
+        return false;
+    }
+
+    /** 写入共享阻断标记，阻断时长由调用方策略决定。 */
+    default void block(String key, long ttlSeconds) {
+    }
+
+    default void block(String key, long ttlSeconds, long nowEpochMillis) {
+        block(key, ttlSeconds);
+    }
+
     @Override
     default void close() {
     }

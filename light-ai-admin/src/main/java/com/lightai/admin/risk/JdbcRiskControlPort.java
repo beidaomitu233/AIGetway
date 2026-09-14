@@ -16,8 +16,6 @@ import java.time.Clock;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import javax.sql.DataSource;
 
 /** 风险准入实现；异常消耗窗口通过 RiskWindowStore 支持单实例或 Redis 原子计数。 */
@@ -26,7 +24,6 @@ public final class JdbcRiskControlPort implements RiskControlPort {
     private final JdbcRiskControlRepository repository;
     private final Clock clock;
     private final RiskWindowStore windowStore;
-    private final ConcurrentHashMap<String, AtomicLong> blockUntil = new ConcurrentHashMap<>();
 
     public JdbcRiskControlPort(DataSource dataSource, JdbcRiskControlRepository repository, Clock clock) {
         this(dataSource, repository, clock, new com.lightai.runtime.ports.InMemoryRiskWindowStore());
@@ -97,8 +94,7 @@ public final class JdbcRiskControlPort implements RiskControlPort {
                     || policy.anomalyAmountThreshold() != null) {
                 long now = clock.millis();
                 String key = applicationId + ":" + (now / Math.max(1, policy.anomalyWindowSeconds() * 1000L));
-                AtomicLong blockedUntil = blockUntil.get(key);
-                if (blockedUntil != null && blockedUntil.get() > now) {
+                if (windowStore.isBlocked(applicationId.toString(), now)) {
                     event(connection, applicationId, requestId, "ANOMALY_CONSUMPTION", "BLOCK", null,
                             "短时间消耗超过风险阈值");
                     throw blocked("短时间消耗超过风险阈值");
@@ -112,8 +108,7 @@ public final class JdbcRiskControlPort implements RiskControlPort {
                         || policy.anomalyAmountThreshold() != null
                         && window.amount().compareTo(policy.anomalyAmountThreshold()) > 0;
                 if (exceeded) {
-                    blockUntil.computeIfAbsent(key, ignored -> new AtomicLong()).set(
-                            now + Math.max(1L, policy.anomalyBlockSeconds()) * 1000L);
+                    windowStore.block(applicationId.toString(), policy.anomalyBlockSeconds(), now);
                     event(connection, applicationId, requestId, "ANOMALY_CONSUMPTION", "BLOCK", null,
                             "短时间消耗超过风险阈值");
                     throw blocked("短时间消耗超过风险阈值");
