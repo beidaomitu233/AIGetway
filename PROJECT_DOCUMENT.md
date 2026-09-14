@@ -304,6 +304,15 @@ P5-B 当前交付记录（2026-09-15）：
 - 隔离 H2 + Redis 环境验证：正常 SSE 返回角色块、内容块、finish 和 `[DONE]`，Trace `f677d32f-0b2b-4014-bc22-9a9c0cf38c7f` 为 `SUCCEEDED`、`requested_stream=true`、`response_committed=true`、`usage_source=ACTUAL`、4/2/6 tokens；客户端断开 Trace `7818c368-1455-463a-b073-2de13081768a` 在约 1007ms 内为 `CANCELLED`，Attempt 为 `CANCELLED` 且错误码 `CLIENT_CANCELLED`。
 - 当前验证使用本地 OpenAI 协议假上游（正常 `127.0.0.1:19190`，延迟取消 `127.0.0.1:19191`），真实供应商流式协议、生产共享状态和浏览器页面仍需授权环境复验，故本包状态为“待复验”。
 
+### P5-C：失败切换与观测一致性联调
+
+P5-C 当前交付记录（2026-09-15）：
+
+- SSE 解析在收到 [DONE] 后立即结束并关闭上游响应体；Trace Attempt 明确记录 INITIAL、RETRY、CREDENTIAL_FAILOVER、FALLBACK，JDBC 按类型聚合恢复计数。
+- 修复异步 Provider 在首块提交前失败时无法恢复的问题：StreamSession 在同一 Trace 内释放失败 Attempt 并继续重试、换 Key 或 fallback；首块提交后仍固定流终态。
+- 目标回归测试共 39 项通过；隔离 H2 + Redis + 双渠道协议替身复验最终渠道切换成功，Attempt 4 条、恢复计数 1/1/1、实际 Token 6/2/8，Usage 与调用记录一致。
+- 真实供应商、生产共享状态和浏览器页面仍需授权环境复验，本包状态为“待复验”。
+
 ## 8. 验收标准
 
 - 用户可以只填写最小信息创建应用，保存按钮不会无解释地保持灰色。
