@@ -12,6 +12,7 @@ import com.lightai.storage.application.ApplicationQuotaRecord;
 import com.lightai.storage.application.ApplicationRecord;
 import com.lightai.storage.application.JdbcApplicationKeyRepository;
 import com.lightai.storage.application.JdbcApplicationRepository;
+import com.lightai.storage.application.JdbcApplicationModelMappingRepository;
 import java.sql.Connection;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -40,6 +41,7 @@ public class AccessTokenAuthService implements AccessTokenPort {
     private final boolean recordClientIp;
     private final JdbcApplicationRepository applications;
     private final JdbcApplicationKeyRepository applicationKeys;
+    private final JdbcApplicationModelMappingRepository modelMappings;
 
     public AccessTokenAuthService(DataSource dataSource, AccessCredentialRepository repository,
                                   com.lightai.storage.alias.JdbcAliasRepository aliasRepository,
@@ -53,6 +55,7 @@ public class AccessTokenAuthService implements AccessTokenPort {
         this.recordClientIp = recordClientIp;
         this.applications = null;
         this.applicationKeys = null;
+        this.modelMappings = null;
     }
 
     public AccessTokenAuthService(DataSource dataSource, AccessCredentialRepository repository,
@@ -61,6 +64,17 @@ public class AccessTokenAuthService implements AccessTokenPort {
                                   java.time.Clock clock, boolean recordClientIp,
                                   JdbcApplicationRepository applications,
                                   JdbcApplicationKeyRepository applicationKeys) {
+        this(dataSource, repository, aliasRepository, tokenService, clock, recordClientIp,
+                applications, applicationKeys, null);
+    }
+
+    public AccessTokenAuthService(DataSource dataSource, AccessCredentialRepository repository,
+                                  com.lightai.storage.alias.JdbcAliasRepository aliasRepository,
+                                  com.lightai.admin.security.AccessTokenService tokenService,
+                                  java.time.Clock clock, boolean recordClientIp,
+                                  JdbcApplicationRepository applications,
+                                  JdbcApplicationKeyRepository applicationKeys,
+                                  JdbcApplicationModelMappingRepository modelMappings) {
         this.dataSource = dataSource;
         this.repository = repository;
         this.aliasRepository = aliasRepository;
@@ -69,6 +83,7 @@ public class AccessTokenAuthService implements AccessTokenPort {
         this.recordClientIp = recordClientIp;
         this.applications = applications;
         this.applicationKeys = applicationKeys;
+        this.modelMappings = modelMappings;
     }
 
     @Override
@@ -145,8 +160,15 @@ public class AccessTokenAuthService implements AccessTokenPort {
                 .filter(permission -> keyModelIds.isEmpty()
                         || keyModelIds.contains(permission.virtualModelId()))
                 .toList();
-        List<String> aliases = permissions.stream()
+        List<String> permissionAliases = permissions.stream()
                 .map(ApplicationModelPermissionRecord::virtualModelCode).toList();
+        Map<String, String> publicMappings = Map.of();
+        if (modelMappings != null) {
+            // 映射表是应用授权的一部分；读取失败必须让外层鉴权失败，不能回退到旧权限而放宽范围。
+            publicMappings = modelMappings.runtimeMappings(connection, application.id());
+        }
+        List<String> aliases = new ArrayList<>(permissionAliases);
+        for (String publicName : publicMappings.keySet()) if (!aliases.contains(publicName)) aliases.add(publicName);
         Map<String, ApplicationModelConstraint> constraints = new LinkedHashMap<>();
         for (ApplicationModelPermissionRecord permission : permissions) {
             ApplicationModelConstraint constraint = ApplicationModelConstraint.fromJson(
@@ -161,7 +183,7 @@ public class AccessTokenAuthService implements AccessTokenPort {
         if (recordClientIp) applicationKeys.touch(connection, key.id(), now, "recorded");
         return AccessTokenPort.Principal.enterprise(
                 application.code(), aliases, application.id().toString(), key.id().toString(),
-                rpm, tpm, constraints);
+                rpm, tpm, constraints, publicMappings);
     }
 
     private static Integer stricter(Integer left, Integer right) {

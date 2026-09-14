@@ -17,12 +17,14 @@ import com.lightai.client.channel.ChannelSaveCommand;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.UUID;
 
 /**
  * Provider 管理接口（BACKEND_PLAN 4.2.9.1，BE-007~010）。
@@ -34,10 +36,17 @@ public class ChannelController {
 
     private final ChannelService providerService;
     private final ChannelCheckService providerCheckService;
+    private final ChannelModelCatalogService modelCatalogService;
 
     public ChannelController(ChannelService providerService, ChannelCheckService providerCheckService) {
+        this(providerService, providerCheckService, null);
+    }
+
+    public ChannelController(ChannelService providerService, ChannelCheckService providerCheckService,
+                             ChannelModelCatalogService modelCatalogService) {
         this.providerService = providerService;
         this.providerCheckService = providerCheckService;
+        this.modelCatalogService = modelCatalogService;
     }
 
     @GetMapping("/admin/channels")
@@ -49,6 +58,23 @@ public class ChannelController {
     @GetMapping("/admin/channels/{id}")
     public ResponseEntity<String> detail(@PathVariable String id, HttpServletRequest request) {
         return json(ManagementResponses.ok(providerService.detail(context(request), id)));
+    }
+
+    @GetMapping("/admin/channels/{id}/model-catalog")
+    public ResponseEntity<String> modelCatalog(@PathVariable String id,
+                                               @RequestParam(required = false) String query,
+                                               @RequestParam(required = false) String cursor,
+                                               HttpServletRequest request) {
+        if (modelCatalogService == null) {
+            throw new com.lightai.client.error.LightAiException(
+                    com.lightai.client.error.ErrorCode.CONFIG_DATA_UNAVAILABLE, "渠道模型目录服务未就绪");
+        }
+        try {
+            return json(ManagementResponses.ok(modelCatalogService.list(context(request), UUID.fromString(id), query, cursor)));
+        } catch (IllegalArgumentException e) {
+            throw new com.lightai.client.error.LightAiException(
+                    com.lightai.client.error.ErrorCode.FIELD_VALIDATION_FAILED, "渠道 ID 格式不合法", "id");
+        }
     }
 
     @PostMapping("/admin/channels")

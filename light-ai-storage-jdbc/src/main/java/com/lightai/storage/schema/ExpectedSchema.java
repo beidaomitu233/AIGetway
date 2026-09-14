@@ -64,8 +64,16 @@ public final class ExpectedSchema {
             "application_model_permission",
             "application_key",
             "application_key_model_permission",
+            "application_config_revision",
+            "application_model_mapping",
+            "application_model_target",
             "budget_reservation",
-            "usage_ledger");
+            "usage_ledger",
+            "risk_policy",
+            "risk_policy_revision",
+            "risk_keyword_rule",
+            "risk_application_whitelist",
+            "risk_event");
 
     private ExpectedSchema() {
     }
