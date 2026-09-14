@@ -242,6 +242,49 @@ class ChatPipelineRecoveryTest {
                 .contains("fallback-ok");
     }
 
+    @Test
+    void duplicateStreamTerminalCallbacksAreIgnoredPerAttempt() {
+        ChatPipelineTest.RecordingCapacity capacity = new ChatPipelineTest.RecordingCapacity();
+        AtomicInteger completed = new AtomicInteger();
+        AtomicInteger errors = new AtomicInteger();
+        ProviderAdapter adapter = new ChatPipelineTest.StubAdapter() {
+            @Override
+            public Flow.Publisher<ProviderStreamChunk> streamChat(ProviderCallContext context) {
+                return subscriber -> subscriber.onSubscribe(new Flow.Subscription() {
+                    @Override public void request(long n) {
+                        subscriber.onNext(ProviderStreamChunk.content("once"));
+                        subscriber.onNext(ProviderStreamChunk.finish(ProviderChatResponse.FINISH_STOP));
+                        subscriber.onComplete();
+                        // 违反上游单终态契约的迟到回调不应重复结算或改写 Trace。
+                        subscriber.onComplete();
+                        subscriber.onError(new RuntimeException("late callback"));
+                    }
+                    @Override public void cancel() { }
+                });
+            }
+        };
+        InMemoryTraceStore traceStore = new InMemoryTraceStore();
+        ChatPipeline pipeline = new ChatPipeline(snapshot(), () -> Optional.empty(), fixedRouting(),
+                capacity, null,
+                (channelId, index) -> new CredentialSecretPort.ResolvedCredential(
+                        UUID.randomUUID().toString(), () -> "sk-test".toCharArray()),
+                null, type -> Optional.of(adapter), traceStore, ApplicationQuotaPort.unlimited(),
+                () -> new ReliabilityBudgets(0, 0, 0), 30_000, health);
+        pipeline.chatStream(context(request(true), "duplicate-terminal"), new ChatPipeline.StreamListener() {
+            @Override public void onCommit() { }
+            @Override public void onChunk(UnifiedChatChunk chunk) { }
+            @Override public void onError(com.lightai.client.error.UnifiedError error) { errors.incrementAndGet(); }
+            @Override public void onComplete() { completed.incrementAndGet(); }
+        });
+
+        assertThat(completed).hasValue(1);
+        assertThat(errors).hasValue(0);
+        assertThat(capacity.settled).containsExactly("r-1");
+        assertThat(capacity.released).isEmpty();
+        assertThat(traceStore.statusOf("duplicate-terminal")).isEqualTo("SUCCEEDED");
+        assertThat(traceStore.attempts("duplicate-terminal")).singleElement()
+                .extracting(InMemoryTraceStore.AttemptView::status).isEqualTo("SUCCEEDED");
+    }
     // ---------------------------------------------------------------- 429 维度与 retry_after
 
     @Test
