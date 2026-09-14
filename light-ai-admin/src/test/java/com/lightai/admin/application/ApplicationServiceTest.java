@@ -598,6 +598,27 @@ class ApplicationServiceTest {
     }
 
     @Test
+    void ownerModelOptionsReadMappingsAfterLegacyDirectoryRemoved() throws Exception {
+        UUID modelId = UUID.randomUUID();
+        var created = service.create(admin(), new ApplicationCreateCommand(
+                "mapped-options-app", "映射候选应用", null, "owner-1", "张三", "PROD", null,
+                "ACTIVE", null, null, null, null, null, "LIFECYCLE", null, null, List.of()));
+        UUID applicationId = UUID.fromString(created.id());
+        snapshot = new ConfigSnapshotPort.ActiveSnapshot(9, List.of(
+                aliasView(modelId, "mapped-model", 4096L, true, true)));
+        jdbc.update("INSERT INTO application_model_mapping "
+                        + "(id, created_at, updated_at, application_id, revision_id, virtual_model_id, public_model_name, status, version) "
+                        + "VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?, ?, 'ACTIVE', 1)",
+                UUID.randomUUID(), applicationId, applicationId, modelId, "mapped-model");
+        jdbc.execute("DROP TABLE route_candidate");
+        jdbc.execute("DROP TABLE virtual_model");
+
+        assertThat(service.modelOptions(owner(), applicationId).items())
+                .extracting(ApplicationModelOptionView::code)
+                .containsExactly("mapped-model");
+    }
+
+    @Test
     void creationTimeModelOptionsTrimUntrustedOperators() throws Exception {
         UUID modelId = UUID.randomUUID();
         snapshot = new ConfigSnapshotPort.ActiveSnapshot(3, List.of(
