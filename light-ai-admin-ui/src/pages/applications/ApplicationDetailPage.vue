@@ -67,7 +67,7 @@ const router = useRouter()
 const tabs: { key: DetailTab; label: string }[] = [
   { key: 'overview', label: '概览' },
   { key: 'keys', label: '接入密钥' },
-  { key: 'models', label: '可用模型' },
+  { key: 'models', label: '模型映射' },
   { key: 'quota', label: '额度与速率' },
   { key: 'calls', label: '调用记录' },
   { key: 'usage', label: '用量成本' },
@@ -91,9 +91,9 @@ const memberRoleLabel: Record<string, string> = { OWNER: '负责人', VIEWER: '�
 /** 接入检查清单：未完成时给出最短接入路径，完成后只保留运行摘要。 */
 const onboardingSteps = computed(() => [
   {
-    label: '授权虚拟模型',
+    label: '配置模型映射',
     done: (detail.value?.models.filter((item) => item.enabled).length ?? 0) > 0,
-    hint: '在“可用模型”页签选择允许调用的虚拟模型',
+    hint: '在“模型映射”页签批量选择允许调用的模型',
   },
   {
     label: '签发应用密钥',
@@ -705,7 +705,7 @@ onScopeDispose(clearContext)
             <span>活跃密钥</span><strong>{{ detail.active_key_count }}</strong><small>仅统计未撤销且有效的应用密钥</small>
           </div>
           <div class="metric">
-            <span>授权模型</span><strong>{{ detail.models.filter((item) => item.enabled).length }}</strong><small>调用仅允许使用已授权虚拟模型</small>
+            <span>授权模型</span><strong>{{ detail.models.filter((item) => item.enabled).length }}</strong><small>调用仅允许使用已配置模型映射</small>
           </div>
           <div
             v-if="canViewQuota"
@@ -776,7 +776,7 @@ onScopeDispose(clearContext)
                   <span class="lai-summary-label">最近调用</span>{{ formatDateTime(detail.last_called_at, store.timezone, '尚未调用') }}
                 </div>
                 <div class="lai-summary-item">
-                  <span class="lai-summary-label">可用模型</span>{{ detail.models.filter((item) => item.enabled).length }} 个
+                  <span class="lai-summary-label">模型映射数量</span>{{ detail.models.filter((item) => item.enabled).length }} 个
                 </div>
                 <div class="lai-summary-item">
                   <span class="lai-summary-label">活跃密钥</span>{{ detail.active_key_count }} 个
@@ -860,7 +860,7 @@ onScopeDispose(clearContext)
         v-if="store.can(Permission.applicationModelView)"
         v-show="activeTab === 'models'"
         role="tabpanel"
-        aria-label="可用模型"
+        aria-label="模型映射"
       >
         <Card :bordered="false" class="lai-card">
           <div class="card-heading">
@@ -872,7 +872,7 @@ onScopeDispose(clearContext)
               size="small"
               @click="openModelDialog"
             >
-              管理授权
+              配置映射
             </Button>
             <span v-else>{{ detail.models.filter((item) => item.enabled).length }} 个</span>
           </div>
@@ -896,7 +896,7 @@ onScopeDispose(clearContext)
             v-else
             class="empty-inline"
           >
-            尚未授权虚拟模型，应用当前无法完成模型调用。
+            尚未配置模型映射，应用当前无法完成模型调用。
           </p>
           <p class="card-note">
             应用级参数上限只能收紧，不能突破虚拟模型与上游候选的能力边界；越界的显式参数在路由前被拒绝。
@@ -1127,7 +1127,7 @@ onScopeDispose(clearContext)
             </RouterLink>
           </div>
           <p class="card-note">
-            密钥创建、轮换、撤销、模型授权、额度调整、状态变更与成员变更均写入审计，日志不包含密钥原文。
+            密钥创建、轮换、撤销、模型映射、额度调整、状态变更与成员变更均写入审计，日志不包含密钥原文。
           </p>
         </Card>
       </div>
@@ -1492,7 +1492,7 @@ onScopeDispose(clearContext)
           id="application-model-title"
           class="lai-dialog-title"
         >
-          管理模型授权
+          批量配置模型映射
         </h2>
         <p class="lai-dialog-message">
           未授权的模型会在调用进入路由前被拒绝。取消授权不会改写历史调用记录。
@@ -1601,7 +1601,7 @@ onScopeDispose(clearContext)
             :disabled="modelSubmission.submitting.value || !modelReason.trim() || modelsLoading || modelConstraintInvalid"
             @click="saveModels"
           >
-            {{ modelSubmission.submitting.value ? '保存中…' : '保存授权' }}
+            {{ modelSubmission.submitting.value ? '保存中…' : '保存映射' }}
           </Button>
         </div>
       </div>
