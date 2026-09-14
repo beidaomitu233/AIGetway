@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import { Select } from 'ant-design-vue'
 import { routes } from '@/app/router'
 import { useBootstrapStore } from '@/stores/bootstrap'
 import { bootstrapFixtures } from '../mocks/fixtures/bootstrap'
@@ -101,7 +100,7 @@ describe('Application pages（V2 应用中心）', () => {
     const text = wrapper.text()
     expect(text).toContain('OpenAI 兼容协议')
     expect(text).toContain('/v1/chat/completions')
-    expect(text).toContain('chat-default')
+    expect(text).toContain('模型映射数量')
     expect(text).toContain('额度与速率')
     expect(wrapper.find('a[href*="application=customer-service-prod"]').exists()).toBe(true)
   })
@@ -213,13 +212,13 @@ describe('Application pages（V2 应用中心）', () => {
           operator_id: 'user-admin', created_at: '2026-09-08T07:00:00Z',
         }])
       }
-      // 详情授权候选：/admin/applications/{id}/model-options，按快照能力交集返回
-      if (method === 'GET' && url.pathname === `/admin/applications/${application.id}/model-options`) {
+      if (method === 'GET' && url.pathname === `/admin/applications/${application.id}/mappings`) {
         return dataEnvelope({
-          items: [
-            { virtual_model_id: 'alias-1', code: 'chat-default', max_output_tokens: 4096, allow_stream: true, snapshot_no: '7' },
-            { virtual_model_id: 'alias-2', code: 'chat-backup', max_output_tokens: null, allow_stream: null, snapshot_no: '7' },
-          ],
+          application_id: application.id, revision: 3, application_version: 2, updated_at: '2026-09-08T08:00:00Z',
+          mappings: [{ id: 'mapping-1', public_model_name: 'chat-default', status: 'ACTIVE', version: 3, targets: [{
+            id: 'target-1', channel_id: 'channel-1', upstream_model_id: 'model-1', upstream_model_name: 'qwen-max',
+            priority: 10, weight: 1, status: 'ACTIVE', policy_json: null,
+          }] }],
         })
       }
       if (method === 'PUT' && url.pathname.endsWith(`/admin/applications/${application.id}/quota`)) {
@@ -232,14 +231,18 @@ describe('Application pages（V2 应用中心）', () => {
           request_id: 'req-quota',
         })
       }
-      if (method === 'PUT' && url.pathname.endsWith(`/admin/applications/${application.id}/models`)) {
+      if (method === 'POST' && url.pathname.endsWith(`/admin/applications/${application.id}/mappings:validate`)) {
+        return dataEnvelope({ valid: true, issues: [], application_version: 2 })
+      }
+      if (method === 'PUT' && url.pathname.endsWith(`/admin/applications/${application.id}/mappings`)) {
         return dataEnvelope({
-          id: application.id,
-          version: 3,
-          entity: { ...application, version: '3' },
-          draft_changed: false,
-          draft_revision: null,
-          request_id: 'req-model',
+          id: application.id, version: 3, entity: {
+            application_id: application.id, revision: 4, application_version: 3, updated_at: '2026-09-08T09:00:00Z',
+            mappings: [{ id: 'mapping-1', public_model_name: 'chat-primary', status: 'ACTIVE', version: 4, targets: [{
+              id: 'target-1', channel_id: 'channel-1', upstream_model_id: 'model-1', upstream_model_name: 'qwen-max',
+              priority: 1, weight: 2, status: 'ACTIVE', policy_json: '{"retry":2}',
+            }] }],
+          }, draft_changed: false, draft_revision: null, request_id: 'req-mapping',
         })
       }
       if (method === 'POST' && url.pathname.endsWith(`/admin/applications/${application.id}/quota/adjustments`)) {
@@ -309,28 +312,19 @@ describe('Application pages（V2 应用中心）', () => {
         reason: '新结算周期人工重置',
       })
 
-    const modelButton = wrapper.findAll('button').find((button) => button.text() === '管理授权')!
+    await wrapper.findAll('.detail-tab').find((tab) => tab.text() === '模型映射')!.trigger('click')
+    await flushPromises()
+    const modelButton = wrapper.findAll('button').find((button) => button.text() === '编辑映射')!
     await modelButton.trigger('click')
+    const modelDialog = wrapper.find('[aria-labelledby="mapping-editor-title"]')
+    await modelDialog.find('input').setValue('chat-primary')
+    await modelDialog.find('textarea').setValue('替换主模型映射')
+    await modelDialog.findAll('button').find((button) => button.text() === '保存映射')!.trigger('click')
     await flushPromises()
-    const modelDialog = wrapper.find('[aria-labelledby="application-model-title"]')
-    await modelDialog.find('input[type="checkbox"][value="alias-2"]').setValue(true)
-    const aliasTwoGroup = modelDialog.findAll('.model-option-group')
-      .find((group) => group.find('input[type="checkbox"][value="alias-2"]').exists())!
-    await aliasTwoGroup.find('input[type="number"]').setValue('256')
-    const streamSelect = aliasTwoGroup.findComponent(Select)
-    ;(streamSelect.vm as unknown as { $emit: (event: string, ...args: unknown[]) => void }).$emit('update:value', 'deny')
-    await modelDialog.find('textarea').setValue('增加备用模型')
-    await modelDialog.findAll('button').find((button) => button.text() === '保存授权')!.trigger('click')
-    await flushPromises()
-    expect(stub.calls.find((call) => call.method === 'PUT' && call.url.endsWith('/models'))?.body)
-      .toMatchObject({
-        virtual_model_ids: ['alias-1', 'alias-2'],
-        constraints: [{
-          virtual_model_id: 'alias-2', max_output_tokens: 256, allow_stream: false,
-        }],
-        application_version: '2',
-        reason: '增加备用模型',
-      })
+    expect(stub.calls.find((call) => call.method === 'POST' && call.url.endsWith('/mappings:validate'))?.body)
+      .toMatchObject({ application_version: 2, mappings: [{ public_model_name: 'chat-primary' }] })
+    expect(stub.calls.find((call) => call.method === 'PUT' && call.url.endsWith('/mappings'))?.body)
+      .toMatchObject({ application_version: 2, reason: '替换主模型映射' })
   })
 
   it('详情页签切换写入 URL 并按需加载应用成员', async () => {
@@ -348,7 +342,7 @@ describe('Application pages（V2 应用中心）', () => {
     const { wrapper, router } = await mountPage(`/ui/applications/${application.id}`)
 
     expect(wrapper.findAll('.detail-tab').map((tab) => tab.text())).toEqual([
-      '概览', '接入密钥', '可用模型', '额度与速率', '调用记录', '用量成本', '成员与审计',
+      '概览', '接入密钥', '模型映射', '额度与速率', '调用记录', '用量成本', '成员与审计',
     ])
 
     const membersTab = wrapper.findAll('.detail-tab').find((tab) => tab.text() === '成员与审计')!
@@ -404,3 +398,4 @@ describe('Application pages（V2 应用中心）', () => {
     expect(wrapper.text()).not.toContain('未授权模型')
   })
 })
+
