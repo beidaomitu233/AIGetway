@@ -195,6 +195,12 @@ MVP 规则如下：
 
 ## 7. 实施任务包
 
+### 7.0 领取记录
+
+| 任务包 | 负责人 | 领取时间 | 文件范围 | 状态 |
+| --- | --- | --- | --- | --- |
+| P0：恢复可用性与菜单收口 | 代码审查与修复模型/root | 2026-09-15 | `light-ai-admin-ui/src/pages/applications/ApplicationFormPage.vue`、`light-ai-admin-ui/src/app/navConfig.ts`、相关测试 | 领取中 |
+
 ### P0：恢复可用性与菜单收口
 
 - 修复新建应用保存按钮和默认值。
