@@ -1098,13 +1098,6 @@ public class LightAiAdminAutoConfiguration {
 
         @Bean
         @ConditionalOnMissingBean
-        public com.lightai.storage.access.AccessCredentialRepository lightAiAccessCredentialRepository(
-                StorageProperties properties) {
-            return new com.lightai.storage.access.JdbcAccessCredentialRepository(properties.getSchemaName());
-        }
-
-        @Bean
-        @ConditionalOnMissingBean
         public com.lightai.admin.security.AccessTokenService.PepperProvider lightAiAccessTokenPepperProvider(
                 AdminProperties properties) {
             String pepper = properties.getAccessTokenPepper();
@@ -1144,41 +1137,17 @@ public class LightAiAdminAutoConfiguration {
         }
 
         @Bean
-        @ConditionalOnMissingBean
-        public com.lightai.admin.accesscred.AccessCredentialService lightAiAccessCredentialService(
-                DataSource dataSource,
-                com.lightai.storage.access.AccessCredentialRepository repository,
-                com.lightai.admin.security.AccessTokenService tokenService,
-                ObjectProvider<com.lightai.admin.audit.AuditService> auditServiceProvider,
-                Clock clock, AdminProperties properties) {
-            boolean isStandalone = "STANDALONE_SERVER".equalsIgnoreCase(properties.getRuntimeMode());
-            return new com.lightai.admin.accesscred.AccessCredentialService(
-                    dataSource, repository, tokenService,
-                    auditServiceProvider::getIfAvailable,
-                    clock, properties.getRuntimeMode(), isStandalone);
-        }
-
-        @Bean
-        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-        public com.lightai.admin.accesscred.AccessCredentialController lightAiAccessCredentialController(
-                com.lightai.admin.accesscred.AccessCredentialService service) {
-            return new com.lightai.admin.accesscred.AccessCredentialController(service);
-        }
-
-        @Bean
         @ConditionalOnMissingBean(com.lightai.runtime.ports.AccessTokenPort.class)
         public com.lightai.runtime.ports.AccessTokenPort lightAiAccessTokenPort(
                 DataSource dataSource,
-                com.lightai.storage.access.AccessCredentialRepository repository,
-                com.lightai.storage.alias.JdbcAliasRepository aliasRepository,
                 com.lightai.storage.application.JdbcApplicationRepository applicationRepository,
                 com.lightai.storage.application.JdbcApplicationKeyRepository applicationKeyRepository,
                 com.lightai.storage.application.JdbcApplicationModelMappingRepository modelMappingRepository,
                 com.lightai.admin.security.AccessTokenService tokenService,
-                Clock clock, AdminProperties properties) {
+                Clock clock) {
             return new com.lightai.admin.accesscred.AccessTokenAuthService(
-                    dataSource, repository, aliasRepository, tokenService, clock, false,
-                    applicationRepository, applicationKeyRepository, modelMappingRepository);
+                    dataSource, tokenService, clock, applicationRepository,
+                    applicationKeyRepository, modelMappingRepository);
         }
 
         // ---------- 审计查询与导出（BE-045 / CR-003） ----------

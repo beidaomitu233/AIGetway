@@ -166,14 +166,6 @@ public final class ApiCatalog {
         add(list, "RUNTIME", "GET", "/admin/runtime-config");
         add(list, "RUNTIME", "PUT", "/admin/runtime-config");
         add(list, "RUNTIME", "POST", "/admin/runtime-config/retention-impact");
-        add(list, "ACCESS", "GET", "/admin/access-credentials");
-        add(list, "ACCESS", "POST", "/admin/access-credentials");
-        add(list, "ACCESS", "GET", "/admin/access-credentials/{id}");
-        add(list, "ACCESS", "PUT", "/admin/access-credentials/{id}");
-        add(list, "ACCESS", "DELETE", "/admin/access-credentials/{id}");
-        add(list, "ACCESS", "POST", "/admin/access-credentials/{id}/rotate");
-        add(list, "ACCESS", "POST", "/admin/access-credentials/{id}/enable");
-        add(list, "ACCESS", "POST", "/admin/access-credentials/{id}/disable");
         add(list, "AUDIT", "GET", "/admin/audit-logs");
         add(list, "AUDIT", "GET", "/admin/audit-logs/export");
         add(list, "AUDIT", "GET", "/admin/audit-logs/{id}");

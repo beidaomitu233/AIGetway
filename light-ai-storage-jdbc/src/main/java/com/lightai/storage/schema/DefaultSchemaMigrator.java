@@ -27,7 +27,7 @@ import javax.sql.DataSource;
  */
 public class DefaultSchemaMigrator implements SchemaMigrator {
 
-    static final int LATEST_VERSION = 11;
+    static final int LATEST_VERSION = 12;
     private static final long POSTGRES_LOCK_ID = 738_120_426L;
     private static final String MYSQL_LOCK_NAME = "light_ai_schema_migration";
     private static final Migration POSTGRES_BASELINE = new Migration(
@@ -92,6 +92,12 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
             11, "risk_control", "db/migration/postgres/V11__risk_control.sql");
     private static final Migration MYSQL_RISK_CONTROL = new Migration(
             11, "risk_control", "db/migration/mysql/V11__risk_control.sql");
+    private static final Migration POSTGRES_LEGACY_ACCESS_CREDENTIALS = new Migration(
+            12, "legacy_access_credentials_retired",
+            "db/migration/postgres/V12__retire_legacy_access_credentials.sql");
+    private static final Migration MYSQL_LEGACY_ACCESS_CREDENTIALS = new Migration(
+            12, "legacy_access_credentials_retired",
+            "db/migration/mysql/V12__retire_legacy_access_credentials.sql");
 
     private final DataSource dataSource;
 
@@ -123,6 +129,7 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
                     apply(connection, MYSQL_OPTIONAL_APPLICATION_CURRENCY, h2);
                     apply(connection, MYSQL_APPLICATION_MODEL_MAPPINGS, h2);
                     apply(connection, MYSQL_RISK_CONTROL, h2);
+                    apply(connection, MYSQL_LEGACY_ACCESS_CREDENTIALS, h2);
                 } else {
                     apply(connection, POSTGRES_BASELINE, h2);
                     apply(connection, POSTGRES_APPLICATION_FOUNDATION, h2);
@@ -135,6 +142,7 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
                     apply(connection, POSTGRES_OPTIONAL_APPLICATION_CURRENCY, h2);
                     apply(connection, POSTGRES_APPLICATION_MODEL_MAPPINGS, h2);
                     apply(connection, POSTGRES_RISK_CONTROL, h2);
+                    apply(connection, POSTGRES_LEGACY_ACCESS_CREDENTIALS, h2);
                 }
                 if (dialect.databaseType() == DatabaseType.POSTGRESQL) {
                     connection.commit();

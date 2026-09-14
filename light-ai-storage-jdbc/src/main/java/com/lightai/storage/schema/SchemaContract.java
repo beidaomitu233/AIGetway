@@ -68,7 +68,10 @@ final class SchemaContract {
                 "db/migration/" + folder + "/V10__application_model_mappings.sql")
                 + "\n"
                 + DefaultSchemaMigrator.loadScript(
-                "db/migration/" + folder + "/V11__risk_control.sql");
+                "db/migration/" + folder + "/V11__risk_control.sql")
+                + "\n"
+                + DefaultSchemaMigrator.loadScript(
+                "db/migration/" + folder + "/V12__retire_legacy_access_credentials.sql");
         return parse(scripts);
     }
 

@@ -17,7 +17,6 @@ import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
 import com.lightai.client.protocol.Roles;
 import com.lightai.spi.auth.AuthContext;
-import com.lightai.storage.access.JdbcAccessCredentialRepository;
 import com.lightai.runtime.ports.ConfigSnapshotPort;
 import com.lightai.storage.alias.AliasRecord;
 import com.lightai.storage.alias.CandidateRecord;
@@ -25,6 +24,7 @@ import com.lightai.storage.alias.JdbcCandidateRepository;
 import com.lightai.storage.alias.JdbcAliasRepository;
 import com.lightai.storage.application.JdbcApplicationKeyRepository;
 import com.lightai.storage.application.JdbcApplicationRepository;
+import com.lightai.storage.application.JdbcApplicationModelMappingRepository;
 import com.lightai.storage.audit.JdbcAuditRepository;
 import com.lightai.storage.schema.DefaultSchemaMigrator;
 import java.time.Clock;
@@ -115,9 +115,9 @@ class ApplicationKeyServiceTest {
                 });
 
         AccessTokenAuthService auth = new AccessTokenAuthService(
-                dataSource, new JdbcAccessCredentialRepository(), new JdbcAliasRepository(),
-                tokenService, Clock.fixed(Instant.parse("2026-09-08T09:00:00Z"), ZoneOffset.UTC),
-                false, applications, keys);
+                dataSource, tokenService,
+                Clock.fixed(Instant.parse("2026-09-08T09:00:00Z"), ZoneOffset.UTC),
+                applications, keys, new JdbcApplicationModelMappingRepository());
         var principal = auth.authenticate(issued.secret(), "127.0.0.1");
         assertThat(principal.application()).isEqualTo("service-desk");
         assertThat(principal.applicationKeyId()).isEqualTo(issued.keyId());
@@ -186,9 +186,9 @@ class ApplicationKeyServiceTest {
         var issued = service.create(owner(), applicationId,
                 new ApplicationKeyCreateCommand("继承应用模型", List.of(), null, null, null));
         AccessTokenAuthService auth = new AccessTokenAuthService(
-                dataSource, new JdbcAccessCredentialRepository(), new JdbcAliasRepository(),
-                tokenService, Clock.fixed(Instant.parse("2026-09-08T09:00:00Z"), ZoneOffset.UTC),
-                false, applications, keys);
+                dataSource, tokenService,
+                Clock.fixed(Instant.parse("2026-09-08T09:00:00Z"), ZoneOffset.UTC),
+                applications, keys, new JdbcApplicationModelMappingRepository());
 
         var principal = auth.authenticate(issued.secret(), "127.0.0.1");
         assertThat(principal.aliasAllowed("chat-primary")).isTrue();

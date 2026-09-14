@@ -117,12 +117,23 @@ class DefaultSchemaMigratorTest {
             assertThat(resultSet.getString("checksum")).hasSize(64);
             assertThat(resultSet.getBoolean("success")).isTrue();
             assertThat(resultSet.next()).isTrue();
+            assertThat(resultSet.getInt("version")).isEqualTo(11);
+            assertThat(resultSet.getString("description")).isEqualTo("risk_control");
+            assertThat(resultSet.getString("checksum")).hasSize(64);
+            assertThat(resultSet.getBoolean("success")).isTrue();
+            assertThat(resultSet.next()).isTrue();
             assertThat(resultSet.getInt("version")).isEqualTo(DefaultSchemaMigrator.LATEST_VERSION);
             assertThat(resultSet.getString("description"))
-                    .isEqualTo("risk_control");
+                    .isEqualTo("legacy_access_credentials_retired");
             assertThat(resultSet.getString("checksum")).hasSize(64);
             assertThat(resultSet.getBoolean("success")).isTrue();
             assertThat(resultSet.next()).isFalse();
+        }
+        try (Connection connection = dataSource.getConnection();
+             ResultSet resultSet = connection.getMetaData().getTables(null, null, "%", new String[] {"TABLE"})) {
+            java.util.Set<String> tables = new java.util.HashSet<>();
+            while (resultSet.next()) tables.add(resultSet.getString("TABLE_NAME").toLowerCase());
+            assertThat(tables).doesNotContain("access_credential", "access_credential_alias");
         }
     }
 

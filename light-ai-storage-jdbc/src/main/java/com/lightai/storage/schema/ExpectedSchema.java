@@ -53,8 +53,6 @@ public final class ExpectedSchema {
             "publish_record",
             "publish_instance_result",
             "runtime_instance",
-            "access_credential",
-            "access_credential_alias",
             "audit_log",
             "retention_impact",
             "application",
