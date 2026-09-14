@@ -8,7 +8,7 @@
 | P5-A：启动与应用接入链路联调 | 代码审查与修复模型/root | 2026-09-15 | — | 应用密钥、映射、V1 调用 | H2/Redis | 待复验 | 2026-09-15 |
 | P5-B：流式调用与终态结算联调 | 代码审查与修复模型/root | 2026-09-15 | V1 流式响应验证 | ChatPipeline 流式/取消/失败终态 | Trace、Attempt、额度与用量账本 | 待复验 | 2026-09-15 |
 | P4：删除旧模块 | 代码审查与修复模型/root | 2026-09-15 | 旧菜单/路由与页面清理 | 旧模块服务、控制器、装配与权限清理 | 旧表迁移清理及审计/调用/成本快照回归 | 进行中 | 2026-09-15 |
-| P4-BE-001：运行时权限与配置读取迁移 | 代码审查与修复模型/root | 2026-09-15 | — | 应用密钥模型范围、应用映射运行时读取、默认运行配置 | 运行时读取回归与旧依赖扫描 | 领取中 | 2026-09-15 |
+| P4-BE-001：运行时权限与配置读取迁移 | 代码审查与修复模型/root | 2026-09-15 | — | 应用密钥模型范围、应用映射运行时读取、默认运行配置 | 运行时读取回归与旧依赖扫描 | 已验证 | 2026-09-15 |
 > 本表记录联调任务领取与状态；同一任务包只允许一个负责人继续修改，状态更新需附验证证据。
 
 
@@ -22,7 +22,7 @@
 - P4-BE-004 已完成旧管理 HTTP 控制器下线：运行参数、上游模型、虚拟模型/候选路由、治理策略、草稿/发布控制器不再由自动配置暴露；内部发布服务和实例接口暂保留，等待运行时迁移。自动配置测试 6/6 通过。
 - P4-BE-005 已完成渠道目录旧表解耦：无实时 ProviderAdapter 时只返回 `manual_input_allowed`，不再查询 `upstream_model`；映射仓储删除旧目录查询，H2 删除旧表后的批量映射测试通过。目录、映射、快照和应用密钥回归 7/7 通过。
 - 验证：`mvn -pl light-ai-storage-jdbc -am -Dtest=DefaultSchemaMigratorTest,SchemaGuardTest -Dsurefire.failIfNoSpecifiedTests=false test` 通过（10/10）；`mvn -pl light-ai-admin -am -Dtest=ApplicationKeyServiceTest,LightAiAdminAutoConfigurationTest,ApplicationRuntimeSnapshotTest -Dsurefire.failIfNoSpecifiedTests=false test` 通过（10/10）；全仓 `mvn -DskipTests compile` 通过。
-- 待处理：运行时及存储层仍直接读取 `virtual_model`、`route_candidate`、`runtime_config` 和 `config_snapshot`，草稿/发布服务仍有装配依赖。需继续完成运行链路迁移，再删除剩余旧服务和表；当前不宣称 P4 完成。
+- P4-BE-001 已验证：运行时鉴权改从应用映射读取，Standalone 不再查询旧 `runtime_config`；H2 删除 `virtual_model`、`route_candidate` 后鉴权仍通过。`/v1/models`、`/v1/chat/completions` 和调用/Trace 查询已在隔离 H2/Redis/本地桩环境通过。`application_model_permission` 仍仅用于读取历史约束。`JdbcApplicationRepository` 的管理历史权限写路径、草稿/发布服务及观测历史快照依赖仍待后续迁移，P4 顶层保持进行中。
 
 ### P4-BE-001 领取记录（2026-09-15）
 

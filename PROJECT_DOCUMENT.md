@@ -205,7 +205,7 @@ MVP 规则如下：
 | P3：风险控制单页与准入校验 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin-ui 风险控制页、light-ai-admin 风险策略 API、light-ai-runtime 准入校验、Redis/数据库迁移及相关测试 | 待复验 |
 | P5-A：启动与应用接入链路联调 | 代码审查与修复模型/root | 2026-09-15 | light-ai-server 启动配置、管理端应用/密钥/映射接口、V1 调用接口、H2/Redis 联调测试及 INTEGRATION_REPORT.md | 待复验 |
 | P5-B：流式调用与终态结算联调 | 代码审查与修复模型/root | 2026-09-15 | light-ai-runtime ChatPipeline 流式/取消终态、light-ai-server V1 流式接口、Trace/Attempt/额度结算及集成测试 | 待复验 |
-| P4：删除旧模块 | 代码审查与修复模型/root | 2026-09-15 | 旧模型/虚拟模型/候选路由、草稿发布、运行参数、旧访问凭证的前后端与迁移；审计/调用/成本快照回归 | 进行中 |`r`n| P4-BE-001：运行时权限与配置读取迁移 | 代码审查与修复模型/root | 2026-09-15 | 应用密钥模型范围、应用映射运行时读取、默认运行配置读取及回归测试 | 领取中 |
+| P4：删除旧模块 | 代码审查与修复模型/root | 2026-09-15 | 旧模型/虚拟模型/候选路由、草稿发布、运行参数、旧访问凭证的前后端与迁移；审计/调用/成本快照回归 | 进行中 |`r`n| P4-BE-001：运行时权限与配置读取迁移 | 代码审查与修复模型/root | 2026-09-15 | 应用密钥模型范围、应用映射运行时读取、默认运行配置读取及回归测试 | 已验证 |
 
 ### P0：恢复可用性与菜单收口
 
@@ -281,8 +281,8 @@ P4 当前交付记录（2026-09-15）：
 - 旧访问凭证前后端运行面已删除：管理控制器、服务、客户端 DTO、JDBC 仓储、旧页面/API/Mock 和 API 清单入口均移除；应用密钥是唯一业务鉴权入口。V12 MySQL/PostgreSQL 迁移删除 `access_credential` 与 `access_credential_alias`，SchemaGuard 期望清单同步更新。
 - 应用映射运行时已切换为 V2 映射目标名称和渠道连接，快照读取不再依赖 `upstream_model`；渠道无实时模型目录时改为手工输入，不再读取落库旧目录。H2 回归在删除 `virtual_model`、`upstream_model` 后仍能读取应用快照和映射草案。
 - 旧管理 HTTP 控制器已从自动配置移除：运行参数、上游模型、虚拟模型/候选路由、治理策略和草稿/发布控制器不再对外暴露；内部发布服务和实例接口仍为运行时协调所需，暂保留。
-- 网关当前仍有 `JdbcApplicationRepository` 对 `virtual_model`/`route_candidate` 的历史权限读取，Trace/概览历史查询也保留快照字段；`ServerApplication` 仍提供 `runtime_config` 与 `ConfigSnapshotPort`。上述内容属于下一阶段运行链路迁移，不将 P4 标记为已验证。
-- 当前状态保持“进行中”。下一步继续迁移应用密钥模型范围、全局路由和运行配置版本，再删除剩余旧服务和表，并执行 PostgreSQL/MySQL/全新库迁移回归。
+- P4-BE-001 已完成运行时权限与默认模型迁移：鉴权使用应用映射和密钥范围，默认模型优先取单一应用映射，Standalone 不再查询旧 `runtime_config`；删除 `virtual_model`、`route_candidate` 后 H2 鉴权回归仍通过。应用模型约束仍从 `application_model_permission` 读取历史约束 JSON，不回查目录表。
+- 当前状态保持“进行中”。下一步迁移管理面 `JdbcApplicationRepository` 的历史模型权限写路径、草稿/发布装配和观测历史查询，再执行 PostgreSQL/MySQL/全新库迁移回归。
 
 ### P5：端到端复验
 

@@ -90,3 +90,22 @@ BUILD SUCCESS；以当前源码启动隔离服务并完成上述 SSE 链路复�
 ## 未验证项与后续条件
 
 真实供应商流式协议、生产数据库、共享容量故障恢复、多实例取消传播和浏览器页面未执行；需在授权环境复验后再将 P5-B 由“待复验”更新为“已验证”。
+
+# P4-BE-001 运行时权限与配置读取复验
+
+- 任务包：P4-BE-001：运行时权限与配置读取迁移
+- 分支：`fix/fullstack-integration-P4-root`
+- 验证环境：`light-ai-server` 隔离端口 `18081`、H2 内存库（MIGRATE）、Redis `127.0.0.1:6379` 命名空间 `p4-be001-e2e`、本地 OpenAI 协议桩 `127.0.0.1:19090`。本地测试允许内网渠道地址，仅用于隔离环境。
+
+## 验证步骤与结果
+
+1. 通过管理 API 创建应用、应用密钥、渠道和受保护渠道凭证；创建操作返回成功且密钥只在创建响应中显示。
+2. 通过 `PUT /admin/applications/{id}/mappings` 保存 `p4-chat` 到本地 `stub-model` 的应用映射，刷新映射接口确认版本与目标持久化。
+3. 使用应用密钥调用 `GET /v1/models`，返回 `p4-chat`。
+4. 使用应用密钥调用 `POST /v1/chat/completions`，请求经 `OPENAI` 渠道转发到本地桩，响应状态 200，usage 为实际值（输入 8、输出 12、总计 20）。
+5. 查询 `/admin/calls` 与 `/admin/traces`，均返回该应用的 `SUCCEEDED` 记录、最终渠道 `OPENAI`、上游模型 `stub-model` 和实际 Token 用量。
+6. 单元回归删除 `virtual_model`、`route_candidate` 后仍可通过应用密钥鉴权；未设置模型时，单一应用映射可提供默认模型。
+
+## 结论
+
+P4-BE-001 已验证。运行时鉴权从应用映射读取公开模型并按密钥范围过滤，Standalone 默认配置端口不再读取旧 `runtime_config`；历史模型约束仍从 `application_model_permission` 读取，不依赖全局目录表。真实供应商、生产数据库、共享状态故障恢复和浏览器页面未在本次隔离环境验证。
