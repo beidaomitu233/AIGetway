@@ -15,6 +15,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   SettingOutlined,
+  SafetyOutlined,
   ToolOutlined,
 } from '@ant-design/icons-vue'
 import {
@@ -76,6 +77,7 @@ const iconMap: Record<string, Component> = {
   运行参数: ToolOutlined,
   旧访问凭证: KeyOutlined,
   审计日志: FileSearchOutlined,
+  风险控制: SafetyOutlined,
   接入说明与测试: ApiOutlined,
 }
 
