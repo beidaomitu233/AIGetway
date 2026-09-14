@@ -142,28 +142,37 @@ describe('FE-P20 页面边界（同契约夹具，非真实联调）', () => {
     expect(wrapper.text()).toContain(application.name)
     expect(button(wrapper, '概览').exists()).toBe(true)
   })
-  it('创建必须明确填写额度，非法金额与小数 Token 禁止提交', async () => {
+  it('创建应用默认可不配置限额，并在一次提交中完成', async () => {
     const stub = baseStub()
     const { wrapper } = await page('/ui/applications/new')
-    expect(wrapper.get('input[name="amount_limit"]').element).toHaveProperty('value', '')
-    await fillCreate(wrapper)
-    await wrapper.get('input[name="amount_limit"]').setValue('NaN')
+    await wrapper.get('input[name="name"]').setValue('测试应用')
+    await wrapper.get('input[name="code"]').setValue('test-app')
     await wrapper.get('form').trigger('submit')
-    expect(wrapper.get('[data-test="save-application"]').attributes('disabled')).toBeDefined()
-    await wrapper.get('input[name="amount_limit"]').setValue('10')
+    await flushPromises()
+    const createCall = stub.calls.find(call => call.method === 'POST')
+    expect(createCall?.body).toMatchObject({
+      code: 'test-app',
+      token_limit: null,
+      amount_limit: null,
+      currency: '',
+      rpm: null,
+      tpm: null,
+    })
+    expect(wrapper.text()).not.toContain('保存摘要')
+  })
+  it('启用限制时显示错误并阻止非法提交', async () => {
+    const stub = baseStub()
+    const { wrapper } = await page('/ui/applications/new')
+    await wrapper.get('input[name="name"]').setValue('测试应用')
+    await wrapper.get('input[name="code"]').setValue('test-app')
+    await wrapper.get('input[name="amount_limited"]').setValue(true)
+    await wrapper.get('input[name="token_limited"]').setValue(true)
+    await wrapper.get('input[name="amount_limit"]').setValue('NaN')
+    await wrapper.get('input[name="currency"]').setValue('CNY')
     await wrapper.get('input[name="token_limit"]').setValue('1.2')
     await wrapper.get('form').trigger('submit')
     expect(stub.calls.filter(call => call.method === 'POST')).toHaveLength(0)
-  })
-  it('无限制显示风险且保存摘要需要再次确认', async () => {
-    const stub = baseStub()
-    const { wrapper } = await page('/ui/applications/new')
-    await fillCreate(wrapper)
-    await wrapper.findAll('input[type="checkbox"]')[0]!.setValue(false)
-    expect(wrapper.text()).toContain('已选择无限制')
-    await wrapper.get('form').trigger('submit')
-    expect(wrapper.find('[aria-label="保存摘要"]').exists()).toBe(true)
-    expect(stub.calls.filter(call => call.method === 'POST')).toHaveLength(0)
+    expect(wrapper.text()).toContain('请先补全必填信息')
   })
   it('编辑不依赖模型目录，409 保留输入并显式对比新版本', async () => {
     let latest = false

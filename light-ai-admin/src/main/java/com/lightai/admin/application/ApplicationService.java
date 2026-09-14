@@ -892,7 +892,8 @@ public final class ApplicationService {
                 quota.tokenLimit() == null ? null : String.valueOf(quota.tokenLimit()),
                 String.valueOf(quota.tokensUsed()), String.valueOf(quota.tokensReserved()),
                 decimalText(quota.amountLimit()), decimalText(quota.amountUsed()),
-                decimalText(quota.amountReserved()), quota.currency(), quota.rpm(), quota.tpm(),
+                decimalText(quota.amountReserved()), quota.amountLimit() == null ? null : quota.currency(),
+                quota.rpm(), quota.tpm(),
                 quota.periodType(), quota.periodStart(), quota.periodEnd(),
                 null, null, null, null,
                 tokensRemaining, amountRemaining, tokenBlocked || amountBlocked,
@@ -1244,10 +1245,12 @@ public final class ApplicationService {
         String environment = enumValue(command.environment(), ENVIRONMENTS, "environment", issues);
         String status = command.status() == null || command.status().isBlank()
                 ? "ACTIVE" : enumValue(command.status(), CREATE_STATUSES, "status", issues);
-        String currency = enumPattern(command.currency(), CURRENCY, "currency", issues);
-        String period = enumValue(command.periodType(), PERIOD_TYPES, "period_type", issues);
-        Long tokenLimit = positive(command.tokenLimit(), "token_limit", issues);
         BigDecimal amount = amount(command.amountLimit(), issues);
+        String currency = amount == null ? null : enumPattern(command.currency(), CURRENCY, "currency", issues);
+        String period = trimToNull(command.periodType()) == null
+                ? "LIFECYCLE"
+                : enumValue(command.periodType(), PERIOD_TYPES, "period_type", issues);
+        Long tokenLimit = positive(command.tokenLimit(), "token_limit", issues);
         Integer rpm = positive(command.rpm(), "rpm", issues);
         Long tpm = positive(command.tpm(), "tpm", issues);
         String department = optional(command.department(), 128, "department", issues);

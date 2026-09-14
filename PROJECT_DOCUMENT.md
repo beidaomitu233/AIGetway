@@ -199,7 +199,7 @@ MVP 规则如下：
 
 | 任务包 | 负责人 | 领取时间 | 文件范围 | 状态 |
 | --- | --- | --- | --- | --- |
-| P0：恢复可用性与菜单收口 | 代码审查与修复模型/root | 2026-09-15 | `light-ai-admin-ui/src/pages/applications/ApplicationFormPage.vue`、`light-ai-admin-ui/src/app/navConfig.ts`、相关测试 | 领取中 |
+| P0：恢复可用性与菜单收口 | 代码审查与修复模型/root | 2026-09-15 | `light-ai-admin-ui/src/pages/applications/ApplicationFormPage.vue`、`light-ai-admin-ui/src/app/navConfig.ts`、相关测试、应用创建后端契约与 V9 迁移 | 已验证 |
 
 ### P0：恢复可用性与菜单收口
 

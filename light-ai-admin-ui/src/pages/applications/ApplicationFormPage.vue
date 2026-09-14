@@ -28,7 +28,6 @@ const applicationId = computed(() => (typeof route.params.id === 'string' ? rout
 const isEdit = computed(() => applicationId.value !== '')
 
 const loading = ref(true)
-const reviewing = ref(false)
 const canManage = computed(() => store.can(Permission.applicationManage))
 const editable = ref(true)
 let controller: AbortController | null = null
@@ -43,6 +42,7 @@ const latestLoading = ref(false)
 const latestError = ref<unknown>(null)
 const baseline = ref('')
 const dirty = ref(false)
+const validationMessage = ref('')
 
 const form = reactive({
   code: '',
@@ -53,14 +53,14 @@ const form = reactive({
   environment: 'PROD' as ApplicationEnvironment,
   description: '',
   status: 'ACTIVE' as 'ACTIVE' | 'DISABLED',
-  token_limited: true,
+  token_limited: false,
   token_limit: null as number | null,
-  amount_limited: true,
+  amount_limited: false,
   amount_limit: '',
   currency: '',
-  rpm_limited: true,
+  rpm_limited: false,
   rpm: null as number | null,
-  tpm_limited: true,
+  tpm_limited: false,
   tpm: null as number | null,
   period_type: 'MONTH' as 'LIFECYCLE' | 'DAY' | 'MONTH' | 'CUSTOM',
   period_start: '',
@@ -97,7 +97,7 @@ const formInvalid = computed(() => Boolean(
     !['ACTIVE', 'DISABLED'].includes(form.status)
     || (form.token_limited && !positiveInteger(form.token_limit))
     || (form.amount_limited && !positiveAmount(form.amount_limit))
-    || !/^[A-Za-z]{3}$/.test(form.currency.trim())
+    || (form.amount_limited && !/^[A-Za-z]{3}$/.test(form.currency.trim()))
     || (form.rpm_limited && !positiveInteger(form.rpm))
     || (form.tpm_limited && !positiveInteger(form.tpm))
     || customPeriodInvalid.value
@@ -105,6 +105,7 @@ const formInvalid = computed(() => Boolean(
   ))
 ))
 const unlimited = computed(() => !isEdit.value && (!form.token_limited || !form.amount_limited || !form.rpm_limited || !form.tpm_limited))
+const saveDisabled = computed(() => submitting.value || !canManage.value || !editable.value || loading.value || (isEdit.value && (formInvalid.value || conflictError.value !== null)))
 
 function snapshot(): string {
   return JSON.stringify(form)
@@ -112,6 +113,7 @@ function snapshot(): string {
 
 function onInput(): void {
   dirty.value = snapshot() !== baseline.value
+  validationMessage.value = ''
 }
 
 function markClean(): void {
@@ -126,8 +128,12 @@ function asOffsetDateTime(value: string): string | null {
 }
 
 async function onSubmit(): Promise<void> {
-  if (formInvalid.value || conflictError.value || submitting.value) return
-  if (!reviewing.value) { reviewing.value = true; return }
+  if (submitting.value) return
+  if (formInvalid.value || conflictError.value) {
+    validationMessage.value = '请先补全必填信息，并修正已启用限制项的格式。'
+    return
+  }
+  validationMessage.value = ''
   const sequence = loadSequence
   let savedId = applicationId.value
   const outcome = await submit(async () => {
@@ -190,7 +196,6 @@ function acceptVersion(): void {
   version.value = latest.value.version
   editable.value = ['ACTIVE', 'DISABLED'].includes(latest.value.status)
   reset()
-  reviewing.value = false
   latest.value = null
 }
 async function load(): Promise<void> {
@@ -201,7 +206,6 @@ async function load(): Promise<void> {
   loading.value = true
   loadError.value = null
   modelsLoadError.value = null
-  reviewing.value = false
   latest.value = null
   latestLoading.value = false
   latestError.value = null
@@ -216,7 +220,7 @@ async function load(): Promise<void> {
       version.value = detail.version
     } else {
       modelOptions.value = []
-      Object.assign(form, { code: '', name: '', department: '', owner_id: store.userId, owner_name: store.displayName, environment: 'PROD', description: '', status: 'ACTIVE', token_limited: true, token_limit: null, amount_limited: true, amount_limit: '', currency: '', rpm_limited: true, rpm: null, tpm_limited: true, tpm: null, period_type: 'MONTH', period_start: '', period_end: '', virtual_model_ids: [] })
+      Object.assign(form, { code: '', name: '', department: '', owner_id: store.userId, owner_name: store.displayName, environment: 'PROD', description: '', status: 'ACTIVE', token_limited: false, token_limit: null, amount_limited: false, amount_limit: '', currency: '', rpm_limited: false, rpm: null, tpm_limited: false, tpm: null, period_type: 'MONTH', period_start: '', period_end: '', virtual_model_ids: [] })
       editable.value = true
       version.value = null
       // 候选属于局部数据：加载失败只影响模型选择，不阻断基本信息与额度的录入。
@@ -272,7 +276,7 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
         当前应用状态不允许编辑。
       </p>
       <fieldset
-        :disabled="submitting || reviewing || !editable"
+        :disabled="submitting || !editable"
         class="application-fields"
       >
         <Card :bordered="false" class="lai-card form-section">
@@ -405,11 +409,12 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
           <div class="form-grid">
             <FormField
               label="Token 额度"
-              :error="fieldMessages.token_limit"
+              :error="form.token_limited && !positiveInteger(form.token_limit) ? '请输入正整数' : fieldMessages.token_limit"
             >
               <div class="limit-control">
                 <input
                   v-model="form.token_limited"
+                  name="token_limited"
                   type="checkbox"
                   class="lai-visually-hidden"
                   aria-hidden="true"
@@ -429,11 +434,12 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
             </FormField>
             <FormField
               label="金额预算"
-              :error="fieldMessages.amount_limit"
+              :error="form.amount_limited && !positiveAmount(form.amount_limit) ? '请输入正金额' : fieldMessages.amount_limit"
             >
               <div class="amount-control">
                 <input
                   v-model="form.amount_limited"
+                  name="amount_limited"
                   type="checkbox"
                   class="lai-visually-hidden"
                   aria-hidden="true"
@@ -460,11 +466,12 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
             <FormField
               label="RPM"
               hint="每分钟最大请求数"
-              :error="fieldMessages.rpm"
+              :error="form.rpm_limited && !positiveInteger(form.rpm) ? '请输入正整数' : fieldMessages.rpm"
             >
               <div class="limit-control">
                 <input
                   v-model="form.rpm_limited"
+                  name="rpm_limited"
                   type="checkbox"
                   class="lai-visually-hidden"
                   aria-hidden="true"
@@ -485,11 +492,12 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
             <FormField
               label="TPM"
               hint="每分钟最大 Token 数"
-              :error="fieldMessages.tpm"
+              :error="form.tpm_limited && !positiveInteger(form.tpm) ? '请输入正整数' : fieldMessages.tpm"
             >
               <div class="limit-control">
                 <input
                   v-model="form.tpm_limited"
+                  name="tpm_limited"
                   type="checkbox"
                   class="lai-visually-hidden"
                   aria-hidden="true"
@@ -599,25 +607,6 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
       >
         已选择无限制：相应维度不会主动阻止超量调用，请确认企业预算与运行风险。
       </p>
-      <div
-        v-if="reviewing"
-        class="lai-card"
-        aria-label="保存摘要"
-      >
-        <h2>确认应用信息</h2>
-        <p>{{ form.name }} · {{ form.code }} · {{ form.owner_name }} · {{ applicationEnvironmentLabels[form.environment] }}</p>
-        <p v-if="!isEdit">
-          Token：{{ form.token_limited ? form.token_limit : '不限' }}；金额：{{ form.amount_limited ? form.amount_limit : '不限' }} {{ form.currency }}；RPM：{{ form.rpm_limited ? form.rpm : '不限' }}；TPM：{{ form.tpm_limited ? form.tpm : '不限' }}；模型：{{ form.virtual_model_ids.length }} 个
-        </p>
-        <Button
-          html-type="button"
-          class="lai-btn"
-          :disabled="submitting"
-          @click="reviewing = false"
-        >
-          返回修改
-        </Button>
-      </div>
       <p
         v-if="conflictError"
         class="lai-form-message-error"
@@ -677,6 +666,9 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
       >
         {{ errorText }}
       </p>
+      <p v-if="validationMessage" class="lai-form-message-error" role="alert">
+        {{ validationMessage }}
+      </p>
       <div class="form-actions">
         <Button
           html-type="button"
@@ -690,9 +682,9 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
           html-type="submit"
           data-test="save-application"
           class="lai-btn lai-btn-primary"
-          :disabled="submitting || formInvalid || conflictError !== null"
+          :disabled="saveDisabled"
         >
-          {{ submitting ? '保存中…' : reviewing ? '确认保存' : '检查并保存' }}
+          {{ submitting ? '保存中…' : '保存应用' }}
         </Button>
       </div>
       </form>

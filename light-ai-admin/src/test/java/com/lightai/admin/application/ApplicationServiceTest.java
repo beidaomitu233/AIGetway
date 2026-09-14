@@ -118,6 +118,19 @@ class ApplicationServiceTest {
     }
 
     @Test
+    void createsApplicationWithoutQuotaOrCurrency() {
+        var created = service.create(admin(), new ApplicationCreateCommand(
+                "minimal-app", "最小应用", null, "owner-1", "张三", "PROD", null,
+                "ACTIVE", null, null, null, null, null,
+                "MONTH", null, null, List.of()));
+
+        assertThat(created.entity().quota().tokenLimit()).isNull();
+        assertThat(created.entity().quota().amountLimit()).isNull();
+        assertThat(created.entity().quota().currency()).isNull();
+        assertThat(created.entity().quota().rpm()).isNull();
+        assertThat(created.entity().quota().tpm()).isNull();
+    }
+    @Test
     void rejectsDuplicateApplicationCodeWith409ConflictCode() {
         service.create(admin(), new ApplicationCreateCommand(
                 "dup-app", "首个应用", null, "owner-1", "张三", "PROD", null,
