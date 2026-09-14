@@ -26,6 +26,13 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * /v1 业务入口（BE-027/028，4.7.1.1）：Bearer 鉴权、Content-Type/Encoding 校验、
@@ -37,22 +44,35 @@ public class V1Controller {
 
     public static final String VERSION_HEADER = "X-Light-AI-Version";
     public static final String SERVER_VERSION = "0.1.0";
+    private static final ScheduledExecutorService STREAM_HEARTBEATS =
+            Executors.newScheduledThreadPool(1, runnable -> {
+                Thread thread = new Thread(runnable, "light-ai-sse-heartbeat");
+                thread.setDaemon(true);
+                return thread;
+            });
     private final ModelsService modelsService;
     private final ChatPipeline chatPipeline;
     private final AccessTokenPort accessTokenPort;
     private final com.lightai.server.lifecycle.ServerLifecycleService lifecycleService;
+    private final Executor streamExecutor;
 
     public V1Controller(ModelsService modelsService, ChatPipeline chatPipeline, AccessTokenPort accessTokenPort) {
-        this(modelsService, chatPipeline, accessTokenPort, null);
+        this(modelsService, chatPipeline, accessTokenPort, null, ForkJoinPool.commonPool());
     }
 
     @org.springframework.beans.factory.annotation.Autowired
     public V1Controller(ModelsService modelsService, ChatPipeline chatPipeline, AccessTokenPort accessTokenPort,
                         com.lightai.server.lifecycle.ServerLifecycleService lifecycleService) {
+        this(modelsService, chatPipeline, accessTokenPort, lifecycleService, ForkJoinPool.commonPool());
+    }
+
+    V1Controller(ModelsService modelsService, ChatPipeline chatPipeline, AccessTokenPort accessTokenPort,
+                 com.lightai.server.lifecycle.ServerLifecycleService lifecycleService, Executor streamExecutor) {
         this.modelsService = modelsService;
         this.chatPipeline = chatPipeline;
         this.accessTokenPort = accessTokenPort;
         this.lifecycleService = lifecycleService;
+        this.streamExecutor = streamExecutor;
     }
 
     public ResponseEntity<String> models(String authorization) {
@@ -137,7 +157,12 @@ public class V1Controller {
         com.lightai.runtime.chat.CancellationSignal cancellation =
                 new com.lightai.runtime.chat.CancellationSignal("http-stream");
         java.util.concurrent.atomic.AtomicBoolean terminal = new java.util.concurrent.atomic.AtomicBoolean(false);
+        AtomicReference<ScheduledFuture<?>> heartbeat = new AtomicReference<>();
         emitter.onCompletion(() -> {
+            ScheduledFuture<?> scheduled = heartbeat.getAndSet(null);
+            if (scheduled != null) {
+                scheduled.cancel(false);
+            }
             cancellation.cancel("http-stream-closed");
             if (lifecycleService != null && trackedHandle != null) {
                 lifecycleService.trackRequestEnd(trackedHandle.requestId());
@@ -147,51 +172,74 @@ public class V1Controller {
             cancellation.cancel("http-stream-timeout");
             emitter.complete();
         });
-        try {
-            ChatPipeline.ChatContext context = new ChatPipeline.ChatContext(principal, request, cancellation);
-            chatPipeline.chatStream(context, new ChatPipeline.StreamListener() {
-                @Override public void onCommit() { }
+        // 空闲上游期间定期写 SSE 注释，尽早发现客户端断开并触发上游订阅取消。
+        heartbeat.set(STREAM_HEARTBEATS.scheduleAtFixedRate(() -> {
+            if (terminal.get()) {
+                return;
+            }
+            try {
+                emitter.send(SseEmitter.event().comment("keep-alive"));
+            } catch (IOException e) {
+                cancellation.cancel("client-disconnected");
+                // 客户端主动断开是正常终止路径，不再交给全局异常处理器记录为服务端错误。
+                emitter.complete();
+            }
+        }, 500L, 500L, TimeUnit.MILLISECONDS));
+        streamExecutor.execute(() -> {
+            try {
+                ChatPipeline.ChatContext context = new ChatPipeline.ChatContext(principal, request, cancellation);
+                chatPipeline.chatStream(context, new ChatPipeline.StreamListener() {
+                    @Override public void onCommit() { }
 
-                @Override
-                public void onChunk(UnifiedChatChunk chunk) {
-                    if (terminal.get()) return;
-                    try {
-                        emitter.send(SseEmitter.event().data(SseEncoder.chunkJson(chunk)));
-                    } catch (IOException e) {
-                        cancellation.cancel("client-disconnected");
-                        throw new LightAiException(ErrorCode.CLIENT_CANCELLED, "客户端断开");
+                    @Override
+                    public void onChunk(UnifiedChatChunk chunk) {
+                        if (terminal.get()) return;
+                        try {
+                            emitter.send(SseEmitter.event().data(SseEncoder.chunkJson(chunk)));
+                        } catch (IOException e) {
+                            cancellation.cancel("client-disconnected");
+                            throw new LightAiException(ErrorCode.CLIENT_CANCELLED, "客户端断开");
+                        }
                     }
-                }
 
-                @Override
-                public void onError(UnifiedError error) {
-                    if (!terminal.compareAndSet(false, true)) return;
+                    @Override
+                    public void onError(UnifiedError error) {
+                        if (!terminal.compareAndSet(false, true)) return;
+                        try {
+                            emitter.send(SseEmitter.event().data(SseEncoder.errorJson(error)));
+                        } catch (IOException ignored) {
+                            cancellation.cancel("client-disconnected");
+                        }
+                        emitter.complete();
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        if (!terminal.compareAndSet(false, true)) return;
+                        try {
+                            emitter.send(SseEmitter.event().data("[DONE]"));
+                            emitter.complete();
+                        } catch (IOException e) {
+                            cancellation.cancel("client-disconnected");
+                            emitter.complete();
+                        }
+                    }
+                });
+            } catch (LightAiException e) {
+                if (terminal.compareAndSet(false, true)) {
                     try {
-                        emitter.send(SseEmitter.event().data(SseEncoder.errorJson(error)));
+                        emitter.send(SseEmitter.event().data(SseEncoder.errorJson(e.toError())));
                     } catch (IOException ignored) {
                         cancellation.cancel("client-disconnected");
                     }
                     emitter.complete();
                 }
-
-                @Override
-                public void onComplete() {
-                    if (!terminal.compareAndSet(false, true)) return;
-                    try {
-                        emitter.send(SseEmitter.event().data("[DONE]"));
-                        emitter.complete();
-                    } catch (IOException e) {
-                        cancellation.cancel("client-disconnected");
-                        emitter.completeWithError(e);
-                    }
+            } catch (RuntimeException e) {
+                if (terminal.compareAndSet(false, true)) {
+                    emitter.completeWithError(e);
                 }
-            });
-        } catch (LightAiException e) {
-            if (terminal.compareAndSet(false, true)) {
-                emitter.send(SseEmitter.event().data(SseEncoder.errorJson(e.toError())));
-                emitter.complete();
             }
-        }
+        });
         return emitter;
     }
     private void checkAcceptingRequests() {

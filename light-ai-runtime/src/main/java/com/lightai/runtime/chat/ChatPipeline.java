@@ -72,6 +72,7 @@ public class ChatPipeline {
     private final TraceStore traceStore;
     private final ReliabilityBudgets.Port reliabilityPort;
     private final CredentialHealthPort credentialHealthPort;
+    private final com.lightai.runtime.ports.RiskControlPort riskControlPort;
     private final long totalTimeoutMs;
 
     /** 限流窗口与共享容量存储的固定 60s 对齐窗口一致，用于 429 retry_after 计算。 */
@@ -133,6 +134,19 @@ public class ChatPipeline {
                         TraceStore traceStore, ApplicationQuotaPort applicationQuotaPort,
                         ReliabilityBudgets.Port reliabilityPort, long totalTimeoutMs,
                         CredentialHealthPort credentialHealthPort) {
+        this(snapshotPort, runtimeConfigPort, routingPort, capacityPort, circuitStateStore, credentialPort,
+                queueService, adapterRegistry, traceStore, applicationQuotaPort, reliabilityPort, totalTimeoutMs,
+                credentialHealthPort, com.lightai.runtime.ports.RiskControlPort.allowAll());
+    }
+
+    public ChatPipeline(ConfigSnapshotPort snapshotPort, AccessTokenPort.RuntimeConfigPort runtimeConfigPort,
+                        RoutingPort routingPort, CapacityPort capacityPort,
+                        CircuitStateStore circuitStateStore, CredentialSecretPort credentialPort,
+                        QueueService queueService, AdapterRegistryPort adapterRegistry,
+                        TraceStore traceStore, ApplicationQuotaPort applicationQuotaPort,
+                        ReliabilityBudgets.Port reliabilityPort, long totalTimeoutMs,
+                        CredentialHealthPort credentialHealthPort,
+                        com.lightai.runtime.ports.RiskControlPort riskControlPort) {
         this.snapshotPort = snapshotPort;
         this.runtimeConfigPort = runtimeConfigPort;
         this.routingPort = routingPort;
@@ -148,6 +162,8 @@ public class ChatPipeline {
         this.totalTimeoutMs = totalTimeoutMs;
         this.credentialHealthPort = credentialHealthPort == null
                 ? CredentialHealthPort.noop() : credentialHealthPort;
+        this.riskControlPort = riskControlPort == null
+                ? com.lightai.runtime.ports.RiskControlPort.allowAll() : riskControlPort;
     }
 
     /** 一次调用的上下文：身份校验后由入口层构造。 */
@@ -173,15 +189,17 @@ public class ChatPipeline {
     public UnifiedChatResponse chat(ChatContext context) {
         long started = System.currentTimeMillis();
         ParsedRequest parsed = parse(context);
-        List<CandidateView> candidates = route(parsed);
         String requestId = requestId(parsed.request());
+        riskControlPort.check(context.principal(), requestId, parsed.request(),
+                estimatedInput(requestChars(parsed.request())), estimatedRiskAmount(parsed, parsed.aliasView().enabledCandidates()));
+        List<CandidateView> candidates = route(parsed);
         ApplicationQuotaPort.Reservation applicationReservation =
                 reserveApplicationQuota(context.principal(), requestId, parsed, candidates);
         CancellationSignal signal = context.cancellation() != null
                 ? context.cancellation() : new CancellationSignal("trace-pending");
         TraceStore.TraceHandle handle;
         try {
-            handle = traceStore.create(requestId, parsed.alias(), context.principal().application());
+            handle = traceStore.create(requestId, parsed.alias(), context.principal().application(), parsed.request().stream());
         } catch (RuntimeException | Error failure) {
             applicationQuotaPort.release(applicationReservation, "TRACE_CREATE_FAILED");
             throw failure;
@@ -328,15 +346,17 @@ public class ChatPipeline {
     public void chatStream(ChatContext context, StreamListener listener) {
         long started = System.currentTimeMillis();
         ParsedRequest parsed = parse(context);
-        List<CandidateView> candidates = route(parsed);
         String requestId = requestId(parsed.request());
+        riskControlPort.check(context.principal(), requestId, parsed.request(),
+                estimatedInput(requestChars(parsed.request())), estimatedRiskAmount(parsed, parsed.aliasView().enabledCandidates()));
+        List<CandidateView> candidates = route(parsed);
         ApplicationQuotaPort.Reservation applicationReservation =
                 reserveApplicationQuota(context.principal(), requestId, parsed, candidates);
         CancellationSignal signal = context.cancellation() != null
                 ? context.cancellation() : new CancellationSignal("trace-pending");
         TraceStore.TraceHandle handle;
         try {
-            handle = traceStore.create(requestId, parsed.alias(), context.principal().application());
+            handle = traceStore.create(requestId, parsed.alias(), context.principal().application(), parsed.request().stream());
         } catch (RuntimeException | Error failure) {
             applicationQuotaPort.release(applicationReservation, "TRACE_CREATE_FAILED");
             throw failure;
@@ -524,6 +544,16 @@ public class ChatPipeline {
                 @Override
                 public void onSubscribe(java.util.concurrent.Flow.Subscription subscription) {
                     this.subscription = subscription;
+                    // HTTP 客户端断开时 CancellationSignal 立即关闭上游连接并收敛 Trace，
+                    // 不依赖上游再次发送数据才能发现取消。
+                    signal.onTermination(() -> {
+                        if (cancelHandled.compareAndSet(false, true)) {
+                            subscription.cancel();
+                            handleCancelledAfterStream();
+                        } else {
+                            subscription.cancel();
+                        }
+                    });
                     subscription.request(Long.MAX_VALUE);
                 }
 
@@ -717,6 +747,18 @@ public class ChatPipeline {
                 ? UUID.randomUUID().toString() : request.traceId();
     }
 
+    private BigDecimal estimatedRiskAmount(ParsedRequest parsed, List<CandidateView> candidates) {
+        long input = estimatedInput(requestChars(parsed.request()));
+        BigDecimal max = BigDecimal.ZERO;
+        for (CandidateView candidate : candidates) {
+            long output = resolveMaxTokens(candidate, parsed.request(), input,
+                    parsed.applicationMaxOutputTokens());
+            BigDecimal amount = UsageSettlement.settle(priceSnapshot(candidate), null, null, input, output).cost().amount();
+            if (amount.compareTo(max) > 0) max = amount;
+        }
+        return max;
+    }
+
     private ApplicationQuotaPort.Reservation reserveApplicationQuota(
             AccessTokenPort.Principal principal, String requestId, ParsedRequest parsed,
             List<CandidateView> candidates) {
@@ -860,18 +902,20 @@ public class ChatPipeline {
                     .orElseThrow(() -> new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
                             "model 缺省且未配置默认 Alias", "model"));
         }
-        String resolvedAlias = alias;
-        if (context.principal() != null && !context.principal().aliasAllowed(resolvedAlias)) {
+        String requestedAlias = alias;
+        String resolvedAlias = context.principal() == null ? requestedAlias
+                : context.principal().resolveAlias(requestedAlias);
+        if (context.principal() != null && !context.principal().aliasAllowed(requestedAlias)) {
             throw new LightAiException(ErrorCode.ACCESS_DENIED, "应用未授权访问该模型");
         }
-        ConfigSnapshotPort.ActiveSnapshot snapshot = snapshotPort.active();
+        ConfigSnapshotPort.ActiveSnapshot snapshot = snapshotPort.active(context.principal());
         AliasView aliasView = snapshot.alias(resolvedAlias)
                 .orElseThrow(() -> ConfigSnapshotPort.aliasNotFound(resolvedAlias));
         if (!aliasView.enabled()) {
             throw ConfigSnapshotPort.aliasDisabled(resolvedAlias);
         }
         ApplicationModelConstraint constraint = enforceApplicationModelConstraint(
-                context.principal(), resolvedAlias, context.request());
+                context.principal(), requestedAlias, context.request());
         return new ParsedRequest(resolvedAlias, context.request(), snapshot, aliasView,
                 constraint == null ? null : constraint.maxOutputTokens());
     }

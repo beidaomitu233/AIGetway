@@ -9,6 +9,8 @@ import com.lightai.spi.provider.ProviderStreamChunk;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -109,7 +111,7 @@ class OpenAiCompatibleAdapterTest {
                 subscriber.onNext(ProviderStreamChunk.content("done"));
             }
         };
-        java.util.concurrent.atomic.AtomicBoolean completed = new java.util.concurrent.atomic.AtomicBoolean();
+        CountDownLatch completed = new CountDownLatch(1);
 
         adapter.streamChat(null).subscribe(new java.util.concurrent.Flow.Subscriber<>() {
             @Override public void onSubscribe(java.util.concurrent.Flow.Subscription subscription) {
@@ -117,10 +119,15 @@ class OpenAiCompatibleAdapterTest {
             }
             @Override public void onNext(ProviderStreamChunk item) { }
             @Override public void onError(Throwable throwable) { }
-            @Override public void onComplete() { completed.set(true); }
+            @Override public void onComplete() { completed.countDown(); }
         });
 
-        assertThat(completed).isTrue();
+        try {
+            assertThat(completed.await(2, TimeUnit.SECONDS)).isTrue();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
+        }
     }
     @Test
     void sseEventsConvertAndStopAtDone() throws Exception {

@@ -63,6 +63,9 @@ export const Permission = {
 
   developerView: 'developer.view',
   developerTest: 'developer.test',
+
+  riskControlView: 'risk-control.view',
+  riskControlManage: 'risk-control.manage',
 } as const
 
 export type PermissionKey = (typeof Permission)[keyof typeof Permission]

@@ -170,6 +170,20 @@ public class JdbcTraceStoreTest {
     }
 
     @Test
+    void persistsRequestedStreamFlag() throws Exception {
+        TraceStore.TraceHandle handle = traceStore.create("trace-stream-flag", "gpt-4o", "test-app", true);
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "SELECT requested_stream FROM trace WHERE trace_id=?")) {
+            statement.setString(1, handle.traceId());
+            try (var resultSet = statement.executeQuery()) {
+                assertTrue(resultSet.next());
+                assertTrue(resultSet.getBoolean(1));
+            }
+        }
+    }
+
+    @Test
     void testAttemptTimelineAndFinalize() {
         TraceStore.TraceHandle handle = traceStore.create("trace-timeline-1", "gpt-4o", "test-app");
         String traceId = handle.traceId();

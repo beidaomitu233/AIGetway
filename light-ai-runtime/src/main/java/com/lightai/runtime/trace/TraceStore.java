@@ -14,6 +14,12 @@ public interface TraceStore {
     /** 创建 Trace；客户端提供 trace_id 冲突时抛 TRACE_ID_CONFLICT（不提供业务幂等重放）。 */
     TraceHandle create(String clientTraceIdOrNull, String model, String application);
 
+    /** 创建 Trace 并持久化调用方是否请求流式响应。旧实现默认按非流式兼容。 */
+    default TraceHandle create(String clientTraceIdOrNull, String model, String application,
+                                boolean requestedStream) {
+        return create(clientTraceIdOrNull, model, application);
+    }
+
     /** 每次实际向 Provider 发出请求前创建 RUNNING Attempt。 */
     String startAttempt(String traceId, String candidateId, String providerType, String modelId);
 

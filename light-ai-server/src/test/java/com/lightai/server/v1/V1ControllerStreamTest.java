@@ -31,7 +31,7 @@ class V1ControllerStreamTest {
             return null;
         }).when(pipeline).chatStream(any(), any());
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new V1Controller(mock(ModelsService.class), pipeline, tokens)).build();
+                new V1Controller(mock(ModelsService.class), pipeline, tokens, null, Runnable::run)).build();
 
         MvcResult pending = mvc.perform(post("/v1/chat/completions")
                         .header("Authorization", "Bearer token")

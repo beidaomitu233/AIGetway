@@ -56,6 +56,12 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
 
     @Override
     public TraceHandle create(String clientTraceIdOrNull, String model, String application) {
+        return create(clientTraceIdOrNull, model, application, false);
+    }
+
+    @Override
+    public TraceHandle create(String clientTraceIdOrNull, String model, String application,
+                              boolean requestedStream) {
         if (clientTraceIdOrNull != null && !clientTraceIdOrNull.isBlank()) {
             try (Connection conn = dataSource.getConnection()) {
                 String sql = "SELECT 1 FROM " + qualify(conn, "trace") + " WHERE trace_id = ?";
@@ -121,7 +127,7 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
                 d.bindUuid(ps, 7, aliasId);
                 ps.setString(8, model);
                 ps.setLong(9, snapshotNo);
-                ps.setBoolean(10, false);
+                ps.setBoolean(10, requestedStream);
                 ps.setBoolean(11, false);
                 ps.setString(12, "RUNNING");
                 ps.setObject(13, now);

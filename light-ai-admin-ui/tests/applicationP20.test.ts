@@ -307,61 +307,39 @@ describe('FE-P20 页面边界（同契约夹具，非真实联调）', () => {
     expect(wrapper.text()).not.toContain('late-fixture-secret')
     expect(wrapper.find('#application-secret-title').exists()).toBe(false)
   })
-  it('模型授权候选使用 model-options，不回退虚拟模型配置视图', async () => {
-    const stub = installJsonFetchStub(({ url }) => {
-      if (url.pathname === `/admin/applications/${application.id}/model-options`) {
+  it('模型映射页读取渠道目标并通过校验后保存新版本', async () => {
+    const stub = installJsonFetchStub(({ url, method }) => {
+      if (method === 'GET' && url.pathname === `/admin/applications/${application.id}/mappings`) {
         return dataEnvelope({
-          items: [
-            { virtual_model_id: 'alias-1', code: 'chat-default', max_output_tokens: 4096, allow_stream: true, snapshot_no: '7' },
-            { virtual_model_id: 'alias-2', code: 'chat-backup', max_output_tokens: null, allow_stream: false, snapshot_no: '7' },
-          ],
+          application_id: application.id, revision: 1, application_version: 2, updated_at: null,
+          mappings: [{ id: 'mapping-1', public_model_name: 'chat-default', status: 'ACTIVE', version: 1, targets: [{
+            id: 'target-1', channel_id: 'channel-1', upstream_model_id: 'model-1', upstream_model_name: 'qwen-max',
+            priority: 10, weight: 1, status: 'ACTIVE', policy_json: null,
+          }] }],
         })
       }
-      if (url.pathname.endsWith('/keys') || url.pathname.endsWith('/quota/adjustments')) return dataEnvelope([])
+      if (method === 'POST' && url.pathname.endsWith('/mappings:validate')) return dataEnvelope({ valid: true, issues: [], application_version: 2 })
+      if (method === 'PUT' && url.pathname.endsWith('/mappings')) return dataEnvelope({
+        id: application.id, version: 3,
+        entity: { application_id: application.id, revision: 2, application_version: 3, updated_at: '2026-09-12T03:00:00Z', mappings: [] },
+      })
+      if (url.pathname.endsWith('/keys') || url.pathname.endsWith('/quota/adjustments') || url.pathname.endsWith('/members')) return dataEnvelope([])
       return dataEnvelope(application)
     })
     const { wrapper } = await page(`/ui/applications/${application.id}`)
-    await button(wrapper, '管理授权').trigger('click')
+    await button(wrapper, '模型映射').trigger('click')
     await flushPromises()
-    expect(stub.calls.some(call => call.url.endsWith(`/admin/applications/${application.id}/model-options`))).toBe(true)
-    expect(stub.calls.some(call => call.url.endsWith('/admin/virtual-models'))).toBe(false)
-    const dialog = wrapper.get('[aria-labelledby="application-model-title"]')
-    expect(dialog.text()).toContain('chat-default')
-    expect(dialog.text()).toContain('最大输出')
-    expect(dialog.text()).toContain('支持流式')
-    expect(dialog.text()).toContain('不支持流式')
-    expect(wrapper.get('input[type="checkbox"][value="alias-1"]').element).toHaveProperty('checked', true)
-  })
-  it('资源下线后历史授权可被收口，不会把失效模型继续提交', async () => {
-    const staleDetail = {
-      ...application,
-      models: [...application.models, {
-        id: 'permission-stale', virtual_model_id: 'alias-stale', virtual_model_code: 'chat-retired',
-        enabled: true, max_output_tokens: null, allow_stream: null, version: 1,
-      }],
-    }
-    const stub = installJsonFetchStub(({ url, method }) => {
-      if (method === 'GET' && url.pathname === `/admin/applications/${application.id}/model-options`) {
-        return dataEnvelope({ items: [{ virtual_model_id: 'alias-1', code: 'chat-default', max_output_tokens: 4096, allow_stream: true, snapshot_no: '7' }] })
-      }
-      if (method === 'PUT' && url.pathname === `/admin/applications/${application.id}/models`) {
-        return dataEnvelope({ entity: application })
-      }
-      if (url.pathname.endsWith('/keys') || url.pathname.endsWith('/quota/adjustments')) return dataEnvelope([])
-      return method === 'GET' ? dataEnvelope(staleDetail) : dataEnvelope(application)
-    })
-    const { wrapper } = await page(`/ui/applications/${application.id}`)
-    await button(wrapper, '管理授权').trigger('click')
+    expect(wrapper.text()).toContain('chat-default')
+    await button(wrapper, '编辑映射').trigger('click')
+    const dialog = wrapper.get('[aria-labelledby="mapping-editor-title"]')
+    await dialog.find('input').setValue('chat-primary')
+    await dialog.get('textarea').setValue('切换主模型')
+    await dialog.findAll('button').find(item => item.text().replace(/\\s/g, '') === '保存映射')!.trigger('click')
     await flushPromises()
-    const dialog = wrapper.get('[aria-labelledby="application-model-title"]')
-    expect(dialog.text()).toContain('chat-retired')
-    expect(dialog.text()).toContain('保存后会取消这些授权')
-    expect(dialog.find('input[value="alias-stale"]').exists()).toBe(false)
-    await dialog.get('textarea').setValue('清理失效模型授权')
-    await dialog.findAll('button').find(button => button.text().replace(/\s+/g, '') === '保存授权')!.trigger('click')
-    await flushPromises()
-    const update = stub.calls.find(call => call.method === 'PUT' && call.url.endsWith(`/admin/applications/${application.id}/models`))
-    expect(update?.body).toMatchObject({ virtual_model_ids: ['alias-1'] })
+    expect(stub.calls.find(call => call.method === 'POST' && call.url.endsWith('/mappings:validate'))?.body)
+      .toMatchObject({ application_version: 2, mappings: [{ public_model_name: 'chat-primary' }] })
+    expect(stub.calls.find(call => call.method === 'PUT' && call.url.endsWith('/mappings'))?.body)
+      .toMatchObject({ application_version: 2, reason: '切换主模型' })
   })
   it('列表部门与预算状态筛选写入 URL 并随请求发送', async () => {
     const stub = installJsonFetchStub(() => pageEnvelope([application]))
@@ -397,3 +375,4 @@ describe('FE-P20 页面边界（同契约夹具，非真实联调）', () => {
     expect(wrapper.get('input[name="owner_id"]').element).toHaveProperty('value', 'next-user')
     expect(wrapper.get('input[name="amount_limit"]').element).toHaveProperty('value', '')
   })})
+

@@ -139,6 +139,16 @@ public class ServerApplication {
         return new com.lightai.storage.redis.RedisFifoQueue(redisUri, namespace, defaultMaxSize);
     }
 
+    /** Standalone 风险异常消耗使用 Redis 原子窗口；连接故障由准入端口 fail-closed。 */
+    @Bean(destroyMethod = "close")
+    public com.lightai.storage.redis.RedisRiskWindowStore riskWindowStore(
+            @org.springframework.beans.factory.annotation.Value("${light-ai.redis.uri:redis://127.0.0.1:6379/0}")
+            String redisUri,
+            @org.springframework.beans.factory.annotation.Value("${light-ai.redis.namespace:light-ai}")
+            String namespace) {
+        return new com.lightai.storage.redis.RedisRiskWindowStore(redisUri, namespace);
+    }
+
     @Bean
     public RouteService routeService() {
         return new RouteService(new SecureRandom());
@@ -231,10 +241,11 @@ public class ServerApplication {
                                      com.lightai.runtime.ports.AdapterRegistryPort adapterRegistry,
                                      TraceStore traceStore,
                                      com.lightai.runtime.ports.ApplicationQuotaPort applicationQuotaPort,
-                                     com.lightai.runtime.ports.CredentialHealthPort credentialHealthPort) {
+                                     com.lightai.runtime.ports.CredentialHealthPort credentialHealthPort,
+                                     com.lightai.runtime.ports.RiskControlPort riskControlPort) {
         return new ChatPipeline(snapshotPort, runtimeConfigPort::defaultAliasId, routingPort, capacityPort,
                 circuitStateStore, credentialPort, queueService, adapterRegistry, traceStore,
-                applicationQuotaPort, () -> ReliabilityBudgets.DEFAULT, 120_000L, credentialHealthPort);
+                applicationQuotaPort, () -> ReliabilityBudgets.DEFAULT, 120_000L, credentialHealthPort, riskControlPort);
     }
 
     // ---------------- Admin UI 静态资源（/ui/** → classpath:/static/ui/，深链回落 index.html） ----------------
