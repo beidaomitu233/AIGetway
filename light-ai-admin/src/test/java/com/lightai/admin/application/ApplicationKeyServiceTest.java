@@ -92,6 +92,7 @@ class ApplicationKeyServiceTest {
                 "ACTIVE", null, null, "CNY", 100, 50_000L,
                 "MONTH", null, null,
                 List.of(allowedModelId.toString(), otherModelId.toString()))).id());
+        seedApplicationMappings();
         service = new ApplicationKeyService(dataSource, applications, keys, tokenService,
                 audits, transactions, clock, "STANDALONE_SERVER");
     }
@@ -166,6 +167,22 @@ class ApplicationKeyServiceTest {
     }
 
     @Test
+    void authUsesApplicationMappingsWithoutLegacyDirectory() throws Exception {
+        try (var connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.execute("DROP TABLE route_candidate");
+            statement.execute("DROP TABLE virtual_model");
+        }
+        var issued = service.create(owner(), applicationId,
+                new ApplicationKeyCreateCommand("目录下线验证", List.of(), null, null, null));
+        AccessTokenAuthService auth = new AccessTokenAuthService(
+                dataSource, tokenService,
+                Clock.fixed(Instant.parse("2026-09-08T09:00:00Z"), ZoneOffset.UTC),
+                applications, keys, new JdbcApplicationModelMappingRepository());
+
+        assertThat(auth.authenticate(issued.secret(), "127.0.0.1").aliasAllowed("chat-primary")).isTrue();
+    }
+
+    @Test
     void rejectsKeyLimitsLooserThanApplicationPolicy() {
         assertThatThrownBy(() -> service.create(owner(), applicationId,
                 new ApplicationKeyCreateCommand("越界密钥", List.of(), null, 101, null)))
@@ -197,6 +214,38 @@ class ApplicationKeyServiceTest {
                 .satisfies(key -> assertThat(key.virtualModelIds()).isEmpty());
     }
 
+    private void seedApplicationMappings() {
+        UUID revisionId = UUID.randomUUID();
+        try (var connection = dataSource.getConnection();
+             var revision = connection.prepareStatement(
+                     "INSERT INTO application_config_revision "
+                             + "(id, created_at, updated_at, application_id, revision, status, reason, "
+                             + "created_by, mapping_count, content_json) VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, 1, 'ACTIVE', ?, ?, 2, '{}')");
+             var mapping = connection.prepareStatement(
+                     "INSERT INTO application_model_mapping "
+                             + "(id, created_at, updated_at, application_id, revision_id, virtual_model_id, "
+                             + "public_model_name, status, version) VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?, ?, 'ACTIVE', 1)")) {
+            revision.setObject(1, revisionId);
+            revision.setObject(2, applicationId);
+            revision.setString(3, "test mapping");
+            revision.setString(4, "test");
+            revision.executeUpdate();
+            insertApplicationMapping(mapping, allowedModelId, "chat-primary", revisionId);
+            insertApplicationMapping(mapping, otherModelId, "chat-secondary", revisionId);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private void insertApplicationMapping(java.sql.PreparedStatement statement, UUID modelId,
+                                          String publicName, UUID revisionId) throws java.sql.SQLException {
+        statement.setObject(1, UUID.randomUUID());
+        statement.setObject(2, applicationId);
+        statement.setObject(3, revisionId);
+        statement.setObject(4, modelId);
+        statement.setString(5, publicName);
+        statement.executeUpdate();
+    }
     private static RequestContext admin() {
         return context("admin", Roles.SYSTEM_ADMIN);
     }
