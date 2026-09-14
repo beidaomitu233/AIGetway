@@ -202,7 +202,7 @@ MVP 规则如下：
 | P0：恢复可用性与菜单收口 | 代码审查与修复模型/root | 2026-09-15 | `light-ai-admin-ui/src/pages/applications/ApplicationFormPage.vue`、`light-ai-admin-ui/src/app/navConfig.ts`、相关测试、应用创建后端契约与 V9 迁移 | 已验证 |
 | P1：应用模型映射数据与后端 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin, light-ai-client, light-ai-runtime, light-ai-storage-jdbc 及相关测试 | 待合并 |
 | P2：应用工作台与渠道页面 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin-ui 应用详情、渠道详情、接入示例、相关测试 | 待复验 |
-| P3：风险控制单页与准入校验 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin-ui 风险控制页、light-ai-admin 风险策略 API、light-ai-runtime 准入校验、Redis/数据库迁移及相关测试 | 领取中 |
+| P3：风险控制单页与准入校验 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin-ui 风险控制页、light-ai-admin 风险策略 API、light-ai-runtime 准入校验、Redis/数据库迁移及相关测试 | 待复验 |
 
 ### P0：恢复可用性与菜单收口
 
@@ -252,6 +252,15 @@ P2 当前交付记录（2026-09-15）：
 - 在网关准入链路接入三类风险校验。
 - 实现单页风险控制和风险事件查询。
 - 覆盖关键词命中、阈值边界、非白名单、Redis 不可用和权限测试。
+
+P3 当前交付记录（2026-09-15）：
+
+- V11 已加入 MySQL、PostgreSQL/H2 风险策略迁移，包含当前策略、不可变版本快照、关键词规则、应用白名单和风险事件表；策略替换清理旧关联行并写入版本快照。
+- 管理端提供 `GET/PUT /admin/risk-control/policy`、应用候选和带应用/类型/时间筛选的风险事件接口；写入受 `risk-control.manage` 和版本 CAS 保护，所有变更写审计。
+- 风险控制页将关键词、短时请求/Token/金额阈值、白名单和命中事件集中在同一页，支持全局或指定应用关键词规则；菜单与权限矩阵已同步。
+- 网关同步/流式调用在路由和上游调用前执行关键词、白名单和异常消耗准入；Redis 原子窗口实现已接入独立服务，未装配共享窗口时使用嵌入式窗口。共享状态或策略读取失败按 fail-closed 拒绝请求。
+- 已通过 Maven 编译、风险准入 H2 回归（关键词、Token/金额阈值和事件记录）、迁移/SchemaGuard、角色权限测试；前端 typecheck、build、风险控制页和布局回归通过。
+- 真实 Redis 不可用故障、真实管理身份权限和真实供应商上游链路仍待运行环境复验，因此 P3 状态保留“待复验”。
 
 ### P4：删除旧模块
 
