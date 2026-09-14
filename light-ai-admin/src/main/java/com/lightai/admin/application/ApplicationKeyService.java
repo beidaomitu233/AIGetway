@@ -294,10 +294,14 @@ public final class ApplicationKeyService {
     private void validateModelScope(
             Connection connection, UUID applicationId, List<UUID> virtualModelIds) {
         if (virtualModelIds.isEmpty()) return;
-        Set<UUID> applicationModels = applications.listModelPermissions(connection, applicationId).stream()
-                .filter(permission -> permission.enabled())
-                .map(permission -> permission.virtualModelId())
-                .collect(java.util.stream.Collectors.toSet());
+        Set<UUID> applicationModels = applications.listActiveMappedVirtualModelIds(connection, applicationId);
+        // 尚未迁移的存量应用仍可能只有旧授权行，保留一次性兼容读取。
+        if (applicationModels.isEmpty()) {
+            applicationModels = applications.listModelPermissions(connection, applicationId).stream()
+                    .filter(permission -> permission.enabled())
+                    .map(permission -> permission.virtualModelId())
+                    .collect(java.util.stream.Collectors.toSet());
+        }
         if (!applicationModels.containsAll(virtualModelIds)) {
             throw invalid("virtual_model_ids", "密钥模型范围只能从应用已授权模型中选择");
         }

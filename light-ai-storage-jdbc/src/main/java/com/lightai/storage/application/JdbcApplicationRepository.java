@@ -367,9 +367,24 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
         }
     }
 
-    /**
-     * 读取应用模型约束元数据，不解析旧虚拟模型目录；运行时名称由 application_model_mapping 提供。
-     */
+    /** 应用映射中仍兼容保留的历史模型 ID；不读取 virtual_model 目录。 */
+    public java.util.Set<UUID> listActiveMappedVirtualModelIds(Connection connection, UUID applicationId) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT virtual_model_id FROM " + qualify(connection, "application_model_mapping")
+                + " WHERE application_id = ? AND status = 'ACTIVE' AND virtual_model_id IS NOT NULL";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, applicationId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                java.util.Set<UUID> result = new java.util.LinkedHashSet<>();
+                while (resultSet.next()) result.add(dialect.readUuid(resultSet, "virtual_model_id"));
+                return java.util.Set.copyOf(result);
+            }
+        } catch (SQLException e) {
+            throw translate("应用映射模型范围读取失败", e);
+        }
+    }
+
+    /** 读取历史模型约束元数据，不解析旧虚拟模型目录。 */
     public Map<UUID, String> listModelPermissionConstraints(Connection connection, UUID applicationId) {
         DatabaseDialect dialect = dialect(connection);
         String sql = "SELECT virtual_model_id, enabled, constraints_json FROM "
