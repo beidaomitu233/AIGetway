@@ -199,7 +199,7 @@ public class ChatPipeline {
                 ? context.cancellation() : new CancellationSignal("trace-pending");
         TraceStore.TraceHandle handle;
         try {
-            handle = traceStore.create(requestId, parsed.alias(), context.principal().application());
+            handle = traceStore.create(requestId, parsed.alias(), context.principal().application(), parsed.request().stream());
         } catch (RuntimeException | Error failure) {
             applicationQuotaPort.release(applicationReservation, "TRACE_CREATE_FAILED");
             throw failure;
@@ -356,7 +356,7 @@ public class ChatPipeline {
                 ? context.cancellation() : new CancellationSignal("trace-pending");
         TraceStore.TraceHandle handle;
         try {
-            handle = traceStore.create(requestId, parsed.alias(), context.principal().application());
+            handle = traceStore.create(requestId, parsed.alias(), context.principal().application(), parsed.request().stream());
         } catch (RuntimeException | Error failure) {
             applicationQuotaPort.release(applicationReservation, "TRACE_CREATE_FAILED");
             throw failure;
@@ -544,6 +544,16 @@ public class ChatPipeline {
                 @Override
                 public void onSubscribe(java.util.concurrent.Flow.Subscription subscription) {
                     this.subscription = subscription;
+                    // HTTP 客户端断开时 CancellationSignal 立即关闭上游连接并收敛 Trace，
+                    // 不依赖上游再次发送数据才能发现取消。
+                    signal.onTermination(() -> {
+                        if (cancelHandled.compareAndSet(false, true)) {
+                            subscription.cancel();
+                            handleCancelledAfterStream();
+                        } else {
+                            subscription.cancel();
+                        }
+                    });
                     subscription.request(Long.MAX_VALUE);
                 }
 
