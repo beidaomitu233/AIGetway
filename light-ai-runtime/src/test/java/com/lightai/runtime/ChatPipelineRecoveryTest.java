@@ -30,9 +30,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -167,6 +169,77 @@ class ChatPipelineRecoveryTest {
         // p1a → 同级候选 p1b → 下一优先级 p2a
         assertThat(adapter.invocations.get()).isEqualTo(3);
         assertThat(routedCandidates).hasSize(3);
+    }
+
+    @Test
+    void asynchronousPreCommitStreamFailureFallsBackOnSameTrace() throws Exception {
+        AtomicInteger invocations = new AtomicInteger();
+        java.util.concurrent.CountDownLatch terminal = new java.util.concurrent.CountDownLatch(1);
+        List<UnifiedChatChunk> chunks = new CopyOnWriteArrayList<>();
+        AtomicBoolean committed = new AtomicBoolean(false);
+        var adapter = new ProviderAdapter() {
+            @Override public String providerType() { return "STUB"; }
+            @Override public com.lightai.spi.provider.AdapterCapabilities capabilities() {
+                return new com.lightai.spi.provider.AdapterCapabilities(true, true, true, false,
+                        List.of("FAKE"), 4, java.util.Set.of("stop"), List.of());
+            }
+            @Override public long estimateTokens(com.lightai.spi.provider.ProviderChatRequest request) { return 8; }
+            @Override public ProviderChatResponse chat(ProviderCallContext context) {
+                throw new UnsupportedOperationException();
+            }
+            @Override public Flow.Publisher<ProviderStreamChunk> streamChat(ProviderCallContext context) {
+                return subscriber -> subscriber.onSubscribe(new Flow.Subscription() {
+                    private final AtomicBoolean cancelled = new AtomicBoolean(false);
+                    @Override public void request(long n) {
+                        int attempt = invocations.incrementAndGet();
+                        CompletableFuture.runAsync(() -> {
+                            if (cancelled.get()) return;
+                            if (attempt == 1) {
+                                subscriber.onError(new com.lightai.spi.provider.ProviderTransportException(
+                                        ProviderFailure.http(500, null, "async failure"), null));
+                            } else {
+                                subscriber.onNext(ProviderStreamChunk.content("fallback-ok"));
+                                subscriber.onNext(ProviderStreamChunk.finish(ProviderChatResponse.FINISH_STOP));
+                                subscriber.onComplete();
+                            }
+                        });
+                    }
+                    @Override public void cancel() { cancelled.set(true); }
+                });
+            }
+            @Override public com.lightai.spi.provider.ProviderErrorClassification classifyError(
+                    ProviderFailure failure) {
+                return new com.lightai.spi.provider.ProviderErrorClassification(
+                        "PROVIDER_SERVER_ERROR", true, true, true, true);
+            }
+        };
+        ConfigSnapshotPort snapshots = () -> new ConfigSnapshotPort.ActiveSnapshot(7, List.of(
+                new AliasView("alias-1", "assistant", "助理", true, List.of(
+                        candidate("p1a", 1), candidate("p2a", 2)))));
+        ChatPipeline pipeline = new ChatPipeline(snapshots, () -> Optional.empty(), fixedRouting(),
+                new ChatPipelineTest.RecordingCapacity(), null,
+                (channelId, index) -> new CredentialSecretPort.ResolvedCredential(
+                        UUID.randomUUID().toString(), () -> "sk-test".toCharArray()),
+                null, type -> Optional.of(adapter), new InMemoryTraceStore(),
+                ApplicationQuotaPort.unlimited(), () -> new ReliabilityBudgets(0, 0, 0, 1),
+                30_000, health);
+        ChatPipeline.StreamListener listener = new ChatPipeline.StreamListener() {
+            @Override public void onCommit() { committed.set(true); }
+            @Override public void onChunk(UnifiedChatChunk chunk) { chunks.add(chunk); }
+            @Override public void onError(com.lightai.client.error.UnifiedError error) { terminal.countDown(); }
+            @Override public void onComplete() { terminal.countDown(); }
+        };
+
+        pipeline.chatStream(context(request(true), "async-stream-fallback"), listener);
+
+        assertThat(terminal.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        assertThat(committed).isTrue();
+        assertThat(invocations).hasValue(2);
+        assertThat(chunks.stream().map(UnifiedChatChunk::choices)
+                .flatMap(List::stream)
+                .map(choice -> choice.delta().content())
+                .filter(java.util.Objects::nonNull))
+                .contains("fallback-ok");
     }
 
     // ---------------------------------------------------------------- 429 维度与 retry_after
