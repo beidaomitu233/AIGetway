@@ -205,6 +205,7 @@ MVP 规则如下：
 | P3：风险控制单页与准入校验 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin-ui 风险控制页、light-ai-admin 风险策略 API、light-ai-runtime 准入校验、Redis/数据库迁移及相关测试 | 待复验 |
 | P5-A：启动与应用接入链路联调 | 代码审查与修复模型/root | 2026-09-15 | light-ai-server 启动配置、管理端应用/密钥/映射接口、V1 调用接口、H2/Redis 联调测试及 INTEGRATION_REPORT.md | 待复验 |
 | P5-B：流式调用与终态结算联调 | 代码审查与修复模型/root | 2026-09-15 | light-ai-runtime ChatPipeline 流式/取消终态、light-ai-server V1 流式接口、Trace/Attempt/额度结算及集成测试 | 待复验 |
+| P5-C：失败切换与观测一致性联调 | 代码审查与修复模型/root | 2026-09-15 | light-ai-provider-common SSE 终止解析、light-ai-runtime ChatPipeline 恢复 Attempt、light-ai-server Trace/Usage 聚合及集成测试 | 进行中 |
 
 ### P0：恢复可用性与菜单收口
 
