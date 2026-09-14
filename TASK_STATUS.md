@@ -9,7 +9,9 @@
 | P5-B：流式调用与终态结算联调 | 代码审查与修复模型/root | 2026-09-15 | V1 流式响应验证 | ChatPipeline 流式/取消/失败终态 | Trace、Attempt、额度与用量账本 | 待复验 | 2026-09-15 |
 | P4：删除旧模块 | 代码审查与修复模型/root | 2026-09-15 | 旧菜单/路由与页面清理 | 旧模块服务、控制器、装配与权限清理 | 旧表迁移清理及审计/调用/成本快照回归 | 进行中 | 2026-09-15 |
 | P4-BE-001：运行时权限与配置读取迁移 | 代码审查与修复模型/root | 2026-09-15 | — | 应用密钥模型范围、应用映射运行时读取、默认运行配置 | 运行时读取回归与旧依赖扫描 | 已验证 | 2026-09-15 |
-| P4-BE-006：管理历史权限写路径与发布装配迁移 | 代码审查与修复模型/root | 2026-09-15 | — | 管理面旧模型授权写入、草稿/发布装配和依赖检查 | 旧表访问扫描与管理 API 回归 | 领取中 | 2026-09-15 |
+| P4-BE-006-A：密钥模型范围与候选权限读取迁移 | 代码审查与修复模型/root | 2026-09-15 | — | 密钥模型范围、候选权限优先读取应用映射并兼容存量授权 | 旧目录表下线后的密钥与候选目录回归 | 已验证 | 2026-09-15 |
+| P4-BE-006-B：应用详情模型读取迁移 | 代码审查与修复模型/root | 2026-09-15 | 应用详情模型摘要 | 详情与模型权限读取不依赖 virtual_model | 删除旧目录表后的详情/API 回归 | 领取中 | 2026-09-15 |
+| P4-BE-006-C：管理旧模型授权写路径与发布装配迁移 | — | — | — | 旧模型授权写入、草稿/发布装配和依赖检查 | 管理 API、发布与迁移回归 | 待领取 | — |
 > 本表记录联调任务领取与状态；同一任务包只允许一个负责人继续修改，状态更新需附验证证据。
 
 
@@ -24,12 +26,13 @@
 - P4-BE-005 已完成渠道目录旧表解耦：无实时 ProviderAdapter 时只返回 `manual_input_allowed`，不再查询 `upstream_model`；映射仓储删除旧目录查询，H2 删除旧表后的批量映射测试通过。目录、映射、快照和应用密钥回归 7/7 通过。
 - 验证：`mvn -pl light-ai-storage-jdbc -am -Dtest=DefaultSchemaMigratorTest,SchemaGuardTest -Dsurefire.failIfNoSpecifiedTests=false test` 通过（10/10）；`mvn -pl light-ai-admin -am -Dtest=ApplicationKeyServiceTest,LightAiAdminAutoConfigurationTest,ApplicationRuntimeSnapshotTest -Dsurefire.failIfNoSpecifiedTests=false test` 通过（10/10）；全仓 `mvn -DskipTests compile` 通过。
 - P4-BE-001 已验证：运行时鉴权改从应用映射读取，Standalone 不再查询旧 `runtime_config`；H2 删除 `virtual_model`、`route_candidate` 后鉴权仍通过。`/v1/models`、`/v1/chat/completions` 和调用/Trace 查询已在隔离 H2/Redis/本地桩环境通过。`application_model_permission` 仍仅用于读取历史约束。`JdbcApplicationRepository` 的管理历史权限写路径、草稿/发布服务及观测历史快照依赖仍待后续迁移，P4 顶层保持进行中。
+- P4-BE-006-A 已验证：应用密钥模型范围和非可信身份候选集合优先读取 ACTIVE 应用映射；旧目录表删除后 `ApplicationKeyServiceTest` 与应用服务回归仍通过，未迁移存量应用保留明确兼容回退。
 
 ### P4-BE-001 领取记录（2026-09-15）
 
 - 已由代码审查与修复模型/root 领取，范围限定为应用密钥鉴权与密钥模型范围校验、运行时应用映射读取、默认运行配置读取；不删除尚未迁移的管理草稿/发布历史接口。
 - 领取标记与后续修复在本分支提交，其他协作者不得重复领取该子包；完成前保持“领取中/待复验”，不得仅凭代码修改标记为已验证。
-### P4-BE-006 领取记录（2026-09-15）
+### P4-BE-006-A / P4-BE-006-B 领取记录（2026-09-15）
 
 - 已由代码审查与修复模型/root 领取，范围限定为管理 API 的历史模型授权写路径、草稿/发布装配与依赖检查；运行时应用映射链路已由 P4-BE-001 覆盖。
 - 先完成静态依赖核对和可执行的最小迁移，再更新状态；不删除审计、调用与成本快照所需历史字段。
