@@ -204,7 +204,7 @@ MVP 规则如下：
 | P2：应用工作台与渠道页面 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin-ui 应用详情、渠道详情、接入示例、相关测试 | 待复验 |
 | P3：风险控制单页与准入校验 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin-ui 风险控制页、light-ai-admin 风险策略 API、light-ai-runtime 准入校验、Redis/数据库迁移及相关测试 | 待复验 |
 | P5-A：启动与应用接入链路联调 | 代码审查与修复模型/root | 2026-09-15 | light-ai-server 启动配置、管理端应用/密钥/映射接口、V1 调用接口、H2/Redis 联调测试及 INTEGRATION_REPORT.md | 待复验 |
-| P5-B：流式调用与终态结算联调 | 代码审查与修复模型/root | 2026-09-15 | light-ai-runtime ChatPipeline 流式/取消终态、light-ai-server V1 流式接口、Trace/Attempt/额度结算及集成测试 | 进行中 |
+| P5-B：流式调用与终态结算联调 | 代码审查与修复模型/root | 2026-09-15 | light-ai-runtime ChatPipeline 流式/取消终态、light-ai-server V1 流式接口、Trace/Attempt/额度结算及集成测试 | 待复验 |
 
 ### P0：恢复可用性与菜单收口
 
@@ -291,6 +291,18 @@ P5-A 当前交付记录（2026-09-15）：
 - 隔离 H2 + Redis 环境已完成创建应用、签发应用密钥、创建渠道与 Key、保存手工映射、读取 `/v1/models`、调用 `/v1/chat/completions` 的联调；本地假上游返回成功响应，响应包含实际 Token 用量、成本和配置快照信息。
 - 已通过应用运行时快照、额度预占、映射仓储和相关管理服务回归测试；详细环境、命令和证据见 `INTEGRATION_REPORT.md`。
 - 真实供应商上游未执行，避免在未授权条件下发送外部请求；真实供应商同步/流式协议和生产共享状态仍需在授权环境复验，因此本包状态为“待复验”。
+
+### P5-B：流式调用与终态结算联调
+
+P5-B 当前交付记录（2026-09-15）：
+
+- 修复流式 Trace 创建时 `requested_stream` 被 JDBC 实现硬编码为 `false` 的问题；同步/流式调用均通过统一创建契约写入真实请求标志。
+- V1 SSE 改为异步执行，避免上游读取阻塞 Servlet 请求线程；增加空闲 SSE 保活探测，客户端断开时及时触发取消。
+- `CancellationSignal` 增加终止监听，上游 OpenAI 兼容 Adapter 的订阅取消会关闭响应体并中断等待；已提交和未提交流分别收敛为 `STREAM_INTERRUPTED`/`CANCELLED`，容量、应用额度、Attempt 和 Trace 只释放/结算一次。
+- 已通过目标测试：`V1ControllerStreamTest`、`OpenAiCompatibleAdapterTest`、`JdbcTraceStoreTest`、`ChatPipelineTest`、`ChatPipelineRecoveryTest`；共 37 项相关测试通过。
+- 隔离 H2 + Redis 环境验证：正常 SSE 返回角色块、内容块、finish 和 `[DONE]`，Trace `f677d32f-0b2b-4014-bc22-9a9c0cf38c7f` 为 `SUCCEEDED`、`requested_stream=true`、`response_committed=true`、`usage_source=ACTUAL`、4/2/6 tokens；客户端断开 Trace `7818c368-1455-463a-b073-2de13081768a` 在约 1007ms 内为 `CANCELLED`，Attempt 为 `CANCELLED` 且错误码 `CLIENT_CANCELLED`。
+- 当前验证使用本地 OpenAI 协议假上游（正常 `127.0.0.1:19190`，延迟取消 `127.0.0.1:19191`），真实供应商流式协议、生产共享状态和浏览器页面仍需授权环境复验，故本包状态为“待复验”。
+
 ## 8. 验收标准
 
 - 用户可以只填写最小信息创建应用，保存按钮不会无解释地保持灰色。
