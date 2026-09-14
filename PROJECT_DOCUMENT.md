@@ -273,6 +273,14 @@ P3 当前交付记录（2026-09-15）：
 - 保留并回归审计、调用历史和成本快照。
 - 完成 PostgreSQL、MySQL 与全新数据库迁移测试。
 
+P4 当前交付记录（2026-09-15）：
+
+- 已完成前端第一阶段下线：主路由删除旧模型、虚拟模型、限流、可靠性、熔断、草稿/发布、运行参数、旧访问凭证和独立开发接入页面；历史地址统一重定向到应用或渠道工作台。
+- 应用布局移除“待发布变更”入口；渠道列表删除草稿筛选、待发布链接和已下线的模型列表跳转，避免用户进入失效工作流。
+- 新增旧地址重定向回归测试 `light-ai-admin-ui/tests/deprecatedRoutes.test.ts`，9 条地址均通过；前端 `npm run typecheck` 通过，目标测试通过。
+- 后端和数据库暂未删除：网关当前仍通过 `JdbcApplicationModelMappingRepository`、`JdbcApplicationRepository` 读取 `virtual_model`/`route_candidate`，`ServerApplication` 仍提供 `runtime_config` 与 `ConfigSnapshotPort`，管理自动装配仍注册旧服务。直接删除会破坏应用映射解析、路由选择、调用历史关联和配置版本读取，属于待完成的运行链路迁移，不将其标记为已验证。
+- 当前状态保持“进行中”。下一步必须先将运行时配置版本、应用映射目标和历史快照引用切换到新结构，再删除旧控制器、服务、仓储、权限和表，并执行 PostgreSQL/MySQL/全新库迁移回归。
+
 ### P5：端到端复验
 
 - 创建应用。

@@ -9,3 +9,11 @@
 | P5-B：流式调用与终态结算联调 | 代码审查与修复模型/root | 2026-09-15 | V1 流式响应验证 | ChatPipeline 流式/取消/失败终态 | Trace、Attempt、额度与用量账本 | 待复验 | 2026-09-15 |
 | P4：删除旧模块 | 代码审查与修复模型/root | 2026-09-15 | 旧菜单/路由与页面清理 | 旧模块服务、控制器、装配与权限清理 | 旧表迁移清理及审计/调用/成本快照回归 | 进行中 | 2026-09-15 |
 > 本表记录联调任务领取与状态；同一任务包只允许一个负责人继续修改，状态更新需附验证证据。
+
+
+## P4 当前进展（2026-09-15）
+
+- 领取记录已推送到 `origin/claim/fullstack-integration-P4-root`，修复分支为 `fix/fullstack-integration-P4-root`。
+- P4-A 已完成旧管理入口的前端下线：路由重定向、顶部入口清理、渠道页旧草稿/模型跳转清理。
+- 验证：`light-ai-admin-ui` 的 `npm run typecheck` 通过；`npm run test -- --run tests/deprecatedRoutes.test.ts` 通过（9/9）；后端 `mvn -pl light-ai-admin,light-ai-storage-jdbc -am -DskipTests compile` 通过。
+- 待处理：运行时及存储层仍直接读取 `virtual_model`、`route_candidate`、`runtime_config` 和 `config_snapshot`，且管理自动装配仍注册旧模块。需先完成运行链路迁移，再删除后端/迁移和相关测试；当前不宣称 P4 完成。
