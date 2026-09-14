@@ -146,10 +146,10 @@ class OpenAiCompatibleAdapterTest {
 
                 data: {"ignored":"after-done"}
                 """;
-        List<String> events = SseLineParser.readAllEvents(
+        List<String> events = SseLineParser.readUntilDone(
                 new java.io.ByteArrayInputStream(sse.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         // [DONE] 之后的事件被忽略
-        assertThat(events).hasSize(6);
+        assertThat(events).hasSize(5);
         List<ProviderStreamChunk> chunks = events.stream()
                 .takeWhile(event -> !event.equals("[DONE]"))
                 .map(event -> {
