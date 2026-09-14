@@ -202,6 +202,7 @@ MVP 规则如下：
 | P0：恢复可用性与菜单收口 | 代码审查与修复模型/root | 2026-09-15 | `light-ai-admin-ui/src/pages/applications/ApplicationFormPage.vue`、`light-ai-admin-ui/src/app/navConfig.ts`、相关测试、应用创建后端契约与 V9 迁移 | 已验证 |
 | P1：应用模型映射数据与后端 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin, light-ai-client, light-ai-runtime, light-ai-storage-jdbc 及相关测试 | 领取中 |
 | P2：应用工作台与渠道页面 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin-ui 应用详情、渠道详情、接入示例、相关测试 | 领取中 |
+| P5-B：流式调用与终态结算联调 | 代码审查与修复模型/root | 2026-09-15 | light-ai-runtime ChatPipeline 流式/取消终态、light-ai-server V1 流式接口、Trace/Attempt/额度结算及集成测试 | 进行中 |
 
 ### P0：恢复可用性与菜单收口
 
@@ -265,3 +266,4 @@ MVP 规则如下：
 - 旧接口、代码和数据库表完成迁移后删除，不保留双写。
 - 应用密钥、渠道 Key、请求正文和敏感匹配内容不进入日志或审计。
 - 核心链路通过真实数据库、Redis 和至少一个真实供应商的同步与流式验证。
+
