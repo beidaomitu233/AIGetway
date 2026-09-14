@@ -280,7 +280,8 @@ P4 当前交付记录（2026-09-15）：
 - 新增旧地址重定向回归测试 `light-ai-admin-ui/tests/deprecatedRoutes.test.ts`，9 条地址均通过；前端 `npm run typecheck`、`npm run build` 和运行/审计回归测试 14/14 通过。
 - 旧访问凭证前后端运行面已删除：管理控制器、服务、客户端 DTO、JDBC 仓储、旧页面/API/Mock 和 API 清单入口均移除；应用密钥是唯一业务鉴权入口。V12 MySQL/PostgreSQL 迁移删除 `access_credential` 与 `access_credential_alias`，SchemaGuard 期望清单同步更新。
 - 应用映射运行时已切换为 V2 映射目标名称和渠道连接，快照读取不再依赖 `upstream_model`；H2 回归在删除 `virtual_model`、`upstream_model` 后仍能读取应用快照和运行映射。
-- 网关当前仍有 `JdbcApplicationRepository` 对 `virtual_model`/`route_candidate` 的历史权限读取，`ServerApplication` 仍提供 `runtime_config` 与 `ConfigSnapshotPort`，草稿/发布服务仍有装配依赖。上述内容属于下一阶段运行链路迁移，不将 P4 标记为已验证。
+- 旧管理 HTTP 控制器已从自动配置移除：运行参数、上游模型、虚拟模型/候选路由、治理策略和草稿/发布控制器不再对外暴露；内部发布服务和实例接口仍为运行时协调所需，暂保留。
+- 网关当前仍有 `JdbcApplicationRepository` 对 `virtual_model`/`route_candidate` 的历史权限读取，`ServerApplication` 仍提供 `runtime_config` 与 `ConfigSnapshotPort`，上述内容属于下一阶段运行链路迁移，不将 P4 标记为已验证。
 - 当前状态保持“进行中”。下一步继续迁移应用密钥模型范围、全局路由和运行配置版本，再删除剩余旧服务和表，并执行 PostgreSQL/MySQL/全新库迁移回归。
 
 ### P5：端到端复验

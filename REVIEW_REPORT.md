@@ -14,6 +14,7 @@
 | P4-BE-002 | P1 | 旧访问凭证仍有管理控制器、服务、JDBC 仓储和客户端契约，默认鉴权装配依赖已退役表 | 删除旧控制器/服务/仓储/DTO 与 API 清单入口，`AccessTokenAuthService` 仅使用应用密钥；`ApplicationKeyServiceTest`、`LightAiAdminAutoConfigurationTest` 和全仓编译通过 | 已验证 |
 | P4-DB-001 | P1 | 旧访问凭证表仍在基线结构清单中，升级后会继续被 SchemaGuard 视为必需 | 新增 V12 MySQL/PostgreSQL 迁移删除两张表，SchemaContract/ExpectedSchema 同步更新；迁移、SchemaGuard 测试 10/10 通过 | 已验证 |
 | P4-BE-003 | P1 | 应用映射运行时快照回查 `virtual_model`/`upstream_model`，删除旧目录会阻断应用调用 | 快照读取仅使用 V2 映射目标名称和渠道连接，保存不再依赖旧目录回查；H2 删除旧表后快照/运行映射测试通过 | 已验证 |
+| P4-BE-004 | P1 | 运行参数、上游模型、虚拟模型/候选路由、治理策略、草稿/发布等旧控制器仍由自动配置暴露 | 移除对应 HTTP 控制器 Bean，保留内部发布服务和实例接口；`LightAiAdminAutoConfigurationTest` 6/6 通过 | 已验证 |
 
 ## 剩余问题
 
@@ -29,6 +30,7 @@
 - `npx eslint mocks/adminMockPlugin.ts mocks/runtimeAccessMock.ts tests/runtimeAccess.test.ts tests/deprecatedRoutes.test.ts`：通过；全量 lint 仍有 5 个既有错误（ApplicationDetailPage 3 项、developerPage.test 2 项）。
 - `mvn -pl light-ai-storage-jdbc -am -Dtest=DefaultSchemaMigratorTest,SchemaGuardTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，10/10。
 - `mvn -pl light-ai-admin -am -Dtest=ApplicationKeyServiceTest,LightAiAdminAutoConfigurationTest,ApplicationRuntimeSnapshotTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，10/10。
+- `mvn -pl light-ai-admin -am -Dtest=LightAiAdminAutoConfigurationTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，6/6。
 - `mvn -DskipTests compile`：通过，全仓 14 模块。
 - 未执行真实供应商调用、PostgreSQL/MySQL 实例上的全新库迁移和剩余旧路由/发布服务删除后的整链路回归；这些依赖 P4-BE-001 完成及授权环境。
 
@@ -40,6 +42,7 @@
 - `fec5405` `fix(fullstack): P4 下线旧访问凭证运行面`
 - `5ecb928` `fix(fullstack): P4 解耦应用映射运行时旧表`
 - `839d651` `fix(fullstack): P4 删除旧访问凭证前端入口`
+- 689e076 ix(fullstack): P4 下线旧管理控制器装配
 - 文档提交后推送到 `origin/fix/fullstack-integration-P4-root`；未直接合并 `dev`，等待后续运行链路迁移和独立评审。
 
 ## 合并建议
