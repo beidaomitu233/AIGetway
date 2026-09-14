@@ -301,6 +301,31 @@ export async function fetchProviderCredentials(
   return result.items.map((item) => ({ ...item, pool_id: providerId, pool_name: '' }))
 }
 
+export interface ChannelModelCatalogItem {
+  id: string | null
+  channel_id: string
+  model_name: string
+  display_name: string | null
+  active: boolean
+}
+
+export interface ChannelModelCatalogView {
+  items: ChannelModelCatalogItem[]
+  next_cursor: string | null
+  manual_input_allowed: boolean
+}
+
+export function fetchChannelModelCatalog(
+  channelId: string,
+  query: { query?: string; cursor?: string },
+  signal?: AbortSignal,
+): Promise<ChannelModelCatalogView> {
+  return request({
+    path: '/channels/' + channelId + '/model-catalog',
+    query,
+    signal,
+  })
+}
 export interface ProviderModelListItemLite {
   id: string
   display_name: string
@@ -312,3 +337,4 @@ export interface ProviderModelListItemLite {
 export function listProviderModels(query: Record<string, import('./http').QueryValue>, signal: AbortSignal): Promise<PageResult<ProviderModelListItemLite>> {
   return request({ path: '/upstream-models', query, signal })
 }
+

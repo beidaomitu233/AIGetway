@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { Card, Tag } from 'ant-design-vue'
+import { Button, Card, Input, Tag } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageState from '@/components/PageState.vue'
 import StatusText from '@/components/StatusText.vue'
@@ -25,7 +25,7 @@ import {
   getProvider,
   getProviderImpact,
 } from '@/api/providers'
-import { listProviderModels } from '@/api/providerModels'
+import { fetchChannelModelCatalog, listProviderModels, type ChannelModelCatalogItem } from '@/api/providerModels'
 import CredentialPanel from '@/components/credentials/CredentialPanel.vue'
 import { ApiError, isAbortError } from '@/api/errors'
 
@@ -42,9 +42,18 @@ const error = ref<unknown>(null)
 const detail = ref<ProviderDetail | null>(null)
 const relatedModels = ref<Array<{ id: string; display_name: string; model_id: string; connection_status: string }>>([])
 
+/* P2：渠道详情按需读取上游实时目录，避免要求管理员先创建一条全局模型记录。 */
+const catalogModels = ref<ChannelModelCatalogItem[]>([])
+const catalogKeyword = ref('')
+const catalogLoading = ref(false)
+const catalogLoaded = ref(false)
+const catalogError = ref<unknown>(null)
+const catalogManualInputAllowed = ref(false)
+
 const modelsError = ref<unknown>(null)
 let loadSequence = 0
 let loadController: AbortController | null = null
+let catalogController: AbortController | null = null
 
 async function load(): Promise<void> {
   const sequence = ++loadSequence
@@ -70,10 +79,34 @@ async function load(): Promise<void> {
     state.value = 'error'
   }
 }
+async function loadCatalog(): Promise<void> {
+  if (catalogLoading.value) return
+  catalogController?.abort()
+  const controller = new AbortController()
+  catalogController = controller
+  catalogLoading.value = true
+  catalogError.value = null
+  try {
+    const result = await fetchChannelModelCatalog(providerId.value, {
+      query: catalogKeyword.value.trim() || undefined,
+    }, controller.signal)
+    if (controller.signal.aborted) return
+    catalogModels.value = result.items ?? []
+    catalogManualInputAllowed.value = result.manual_input_allowed === true
+    catalogLoaded.value = true
+  } catch (e) {
+    if (controller.signal.aborted || isAbortError(e)) return
+    catalogError.value = e
+    catalogLoaded.value = true
+  } finally {
+    if (!controller.signal.aborted) catalogLoading.value = false
+  }
+}
+
 onMounted(load)
 onMounted(() => void store.refreshDraftSummary())
-watch(providerId, () => { detail.value = null; checkOpen.value = false; void load() })
-onUnmounted(() => { loadSequence++; loadController?.abort() })
+watch(providerId, () => { detail.value = null; checkOpen.value = false; catalogModels.value = []; catalogKeyword.value = ''; catalogLoaded.value = false; catalogError.value = null; catalogManualInputAllowed.value = false; void load() })
+onUnmounted(() => { loadSequence++; loadController?.abort(); catalogController?.abort() })
 
 const lifecycle = useLifecycleActions({
   getImpact: getProviderImpact,
@@ -308,8 +341,84 @@ const headerRows = computed(() => Object.entries(detail.value?.headers ?? {}))
       </Card>
 
       <Card :bordered="false" class="lai-card">
+        <div class="card-heading">
+          <div>
+            <h2 class="lai-card-title">
+              实时模型目录
+            </h2>
+            <p class="lai-card-hint">
+              查询渠道当前模型目录；结果可直接用于应用映射，不需要先创建独立模型页面记录。
+            </p>
+          </div>
+          <Button
+            type="primary"
+            size="small"
+            :loading="catalogLoading"
+            @click="loadCatalog"
+          >
+            查询目录
+          </Button>
+        </div>
+        <div class="catalog-toolbar">
+          <Input
+            v-model:value="catalogKeyword"
+            allow-clear
+            placeholder="按模型名称或标识筛选"
+            aria-label="实时模型目录筛选"
+            @press-enter="loadCatalog"
+          />
+          <Button
+            :disabled="catalogLoading"
+            @click="loadCatalog"
+          >
+            搜索
+          </Button>
+        </div>
+        <p
+          v-if="catalogError"
+          class="lai-form-message-error"
+          role="alert"
+        >
+          实时模型目录查询失败，请重试。
+        </p>
+        <p
+          v-else-if="catalogLoading"
+          class="lai-related-empty"
+          role="status"
+        >
+          正在查询渠道模型目录…
+        </p>
+        <ul
+          v-else-if="catalogModels.length > 0"
+          class="lai-related-list"
+        >
+          <li
+            v-for="model in catalogModels"
+            :key="model.id ?? model.model_name"
+          >
+            <span class="lai-related-name">{{ model.display_name || model.model_name }}</span>
+            <span class="lai-related-meta">
+              {{ model.model_name }}
+              · {{ model.active ? '可用' : '已停用' }}
+            </span>
+          </li>
+        </ul>
+        <p
+          v-else-if="catalogLoaded"
+          class="lai-related-empty"
+        >
+          没有匹配的实时模型。<template v-if="catalogManualInputAllowed">该渠道未提供实时目录，可在应用映射中手工填写真实模型名。</template><template v-else>请调整关键词或确认渠道支持模型目录查询。</template>
+        </p>
+        <p
+          v-else
+          class="lai-related-empty"
+        >
+          输入关键词后查询，或点击“查询目录”读取渠道当前模型。
+        </p>
+      </Card>
+      <Card :bordered="false" class="lai-card">
         <h2 class="lai-card-title">
-          关联模型
+          已关联模型（检测用）
         </h2>
         <PageState
           v-if="modelsError"
@@ -438,3 +547,5 @@ const headerRows = computed(() => Object.entries(detail.value?.headers ?? {}))
     />
   </section>
 </template>
+
+
