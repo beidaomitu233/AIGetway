@@ -616,6 +616,12 @@ class ApplicationServiceTest {
         assertThat(service.modelOptions(owner(), applicationId).items())
                 .extracting(ApplicationModelOptionView::code)
                 .containsExactly("mapped-model");
+        assertThat(service.models(owner(), applicationId))
+                .extracting(item -> item.virtualModelCode())
+                .containsExactly("mapped-model");
+        assertThat(service.detail(owner(), applicationId).models())
+                .extracting(item -> item.virtualModelCode())
+                .containsExactly("mapped-model");
     }
 
     @Test
