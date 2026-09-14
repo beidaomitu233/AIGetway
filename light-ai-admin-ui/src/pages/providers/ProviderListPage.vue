@@ -35,7 +35,6 @@ const list = useListQuery<Record<string, FilterValue>, ProviderListItem>({
     provider_type: { default: [], url: true },
     health: { default: [], url: true },
     status: { default: '', url: true },
-    draft_changed: { default: '', url: true },
   },
   defaultSort: 'updated_at',
   fetcher: (params, signal) => listProviders(params, signal),
@@ -73,7 +72,6 @@ const columns: TableColumn[] = [
   { key: 'credential_count', label: '渠道 Key' },
   { key: 'last_checked_at', label: '最近检测' },
   { key: 'status', label: '配置状态' },
-  { key: 'draft_changed', label: '变更' },
   { key: 'actions', label: '操作' },
 ]
 
@@ -84,7 +82,6 @@ const lifecycle = useLifecycleActions({
   remove: (id, version, confirmed) => deleteProvider(id, version, confirmed),
   onChanged: () => {
     list.refresh()
-    void store.refreshDraftSummary()
   },
 })
 
@@ -144,18 +141,6 @@ function onToggleStatus(row: ProviderListItem): void {
         allow-clear
         @change="(value) => list.applyFilters({ status: String(value ?? '') })"
       />
-      <Select
-        class="lai-filter-select"
-        :value="(list.state.draft_changed as string) === '' ? undefined : (list.state.draft_changed as string)"
-        aria-label="变更状态"
-        :options="[
-          { value: 'true', label: '存在未发布变更' },
-          { value: 'false', label: '已发布一致' },
-        ]"
-        placeholder="全部"
-        allow-clear
-        @change="(value) => list.applyFilters({ draft_changed: String(value ?? '') })"
-      />
     </Card>
 
     <p
@@ -208,12 +193,7 @@ function onToggleStatus(row: ProviderListItem): void {
           />
         </template>
         <template #upstream_model_count="{ row }">
-          <RouterLink
-            :to="{ name: 'model-list', query: { channel_id: row.id } }"
-            class="lai-link"
-          >
-            {{ row.upstream_model_count }}
-          </RouterLink>
+          {{ row.upstream_model_count }}
         </template>
         <template #channel_keys="{ row }">
           <RouterLink
@@ -228,18 +208,6 @@ function onToggleStatus(row: ProviderListItem): void {
         </template>
         <template #status="{ row }">
           {{ row.status === 'ACTIVE' ? '启用' : row.status === 'DISABLED' ? '停用' : row.status }}
-        </template>
-        <template #draft_changed="{ row }">
-          <RouterLink
-            v-if="row.draft_changed"
-            to="/ui/config/drafts"
-            class="lai-link"
-          >
-            待发布
-          </RouterLink>
-          <template v-else>
-            —
-          </template>
         </template>
         <template #actions="{ row }">
           <span class="lai-row-actions">

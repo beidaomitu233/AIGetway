@@ -17,12 +17,6 @@ const pages = {
   overview: () => import('@/pages/overview/OverviewPage.vue'),
   usage: () => import('@/pages/usage/UsagePage.vue'),
   usageAdjustments: () => import('@/pages/usage/UsageAdjustmentsPage.vue'),
-  drafts: () => import('@/pages/config/DraftsPage.vue'),
-  publish: () => import('@/pages/config/PublishPage.vue'),
-  publishRecord: () => import('@/pages/config/PublishRecordDetailPage.vue'),
-  runtimeConfig: () => import('@/pages/runtimeConfig/RuntimeConfigPage.vue'),
-  accessList: () => import('@/pages/access/AccessListPage.vue'),
-  accessDetail: () => import('@/pages/access/AccessDetailPage.vue'),
   auditList: () => import('@/pages/audit/AuditListPage.vue'),
   auditDetail: () => import('@/pages/audit/AuditDetailPage.vue'),
   riskControl: () => import('@/pages/risk/RiskControlPage.vue'),
@@ -62,42 +56,12 @@ export const routes: RouteRecordRaw[] = [
 
   { path: '/ui/credential-pools/:pathMatch(.*)*', redirect: '/ui/channels' },
 
-  { path: '/ui/models/upstream', name: 'model-list', component: () => import('@/pages/models/ModelListPage.vue'), meta: { title: '模型', permission: Permission.modelView } },
-  { path: '/ui/models/upstream/new', name: 'model-new', component: () => import('@/pages/models/ModelFormPage.vue'), meta: { title: '新建模型', permission: Permission.modelManage } },
-  { path: '/ui/models/upstream/import', name: 'model-import', component: () => import('@/pages/models/ModelSyncUnavailablePage.vue'), meta: { title: '模型导入', permission: Permission.modelImport } },
-  { path: '/ui/models/upstream/:id', name: 'model-detail', component: () => import('@/pages/models/ModelDetailPage.vue'), meta: { title: '模型详情', permission: Permission.modelView } },
-  { path: '/ui/models/upstream/:id/edit', name: 'model-edit', component: () => import('@/pages/models/ModelFormPage.vue'), meta: { title: '编辑模型', permission: Permission.modelManage } },
-
-  { path: '/ui/models/virtual', name: 'alias-list', component: () => import('@/pages/aliases/AliasListPage.vue'), meta: { title: '虚拟模型', permission: Permission.aliasView } },
-  { path: '/ui/models/virtual/new', name: 'alias-new', component: () => import('@/pages/aliases/AliasFormPage.vue'), meta: { title: '新建模型别名', permission: Permission.aliasManage } },
-  { path: '/ui/models/virtual/:id', name: 'alias-detail', component: () => import('@/pages/aliases/AliasDetailPage.vue'), meta: { title: '模型别名详情', permission: Permission.aliasView } },
-  { path: '/ui/models/virtual/:id/edit', name: 'alias-edit', component: () => import('@/pages/aliases/AliasFormPage.vue'), meta: { title: '编辑模型别名', permission: Permission.aliasManage } },
-
-  { path: '/ui/limit-policies', name: 'limit-list', component: () => import('@/pages/limits/LimitListPage.vue'), meta: { title: '限流策略', permission: Permission.limitView } },
-  { path: '/ui/limit-policies/new', name: 'limit-new', component: () => import('@/pages/limits/LimitFormPage.vue'), meta: { title: '新建限流策略', permission: Permission.limitManage } },
-  { path: '/ui/limit-policies/:id/edit', name: 'limit-edit', component: () => import('@/pages/limits/LimitFormPage.vue'), meta: { title: '编辑限流策略', permission: Permission.limitManage } },
-
-  {
-    path: '/ui/reliability-policies',
-    name: 'reliability-list',
-    component: () => import('@/pages/reliabilities/ReliabilityListPage.vue'),
-    meta: { title: '可靠性策略', permission: Permission.reliabilityView },
-  },
-  {
-    path: '/ui/reliability-policies/new',
-    name: 'reliability-new',
-    component: () => import('@/pages/reliabilities/ReliabilityFormPage.vue'),
-    meta: { title: '新建可靠性策略', permission: Permission.reliabilityManage },
-  },
-  {
-    path: '/ui/reliability-policies/:id/edit',
-    name: 'reliability-edit',
-    component: () => import('@/pages/reliabilities/ReliabilityFormPage.vue'),
-    meta: { title: '编辑可靠性策略', permission: Permission.reliabilityManage },
-  },
-
-  { path: '/ui/circuits', name: 'circuit-list', component: () => import('@/pages/circuits/CircuitListPage.vue'), meta: { title: '熔断状态', permission: Permission.circuitView } },
-  { path: '/ui/circuits/:id', name: 'circuit-detail', component: () => import('@/pages/circuits/CircuitDetailPage.vue'), meta: { title: '熔断详情', permission: Permission.circuitView } },
+  // 旧模型、虚拟模型、限流、可靠性和熔断页面已并入应用/渠道工作台；
+  // 保留只读重定向，避免历史书签落入失效页面。
+  { path: '/ui/models/:pathMatch(.*)*', redirect: '/ui/applications' },
+  { path: '/ui/limit-policies/:pathMatch(.*)*', redirect: '/ui/applications' },
+  { path: '/ui/reliability-policies/:pathMatch(.*)*', redirect: '/ui/channels' },
+  { path: '/ui/circuits/:pathMatch(.*)*', redirect: '/ui/channels' },
 
   moduleRoute('trace-list', '/ui/traces', 'Trace', Permission.traceView, pages.traceList),
   moduleRoute('trace-detail', '/ui/traces/:traceId', 'Trace 详情', Permission.traceView, pages.traceDetail),
@@ -105,26 +69,17 @@ export const routes: RouteRecordRaw[] = [
   moduleRoute('usage', '/ui/usage', 'Usage 与 Cost', Permission.usageView, pages.usage),
   moduleRoute('usage-adjustments', '/ui/usage/adjustments', '额度流水', Permission.applicationQuotaView, pages.usageAdjustments),
 
-  moduleRoute('drafts', '/ui/config/drafts', '待发布变更', Permission.draftView, pages.drafts),
-  moduleRoute('publish', '/ui/config/publish', '配置发布', Permission.publishView, pages.publish),
-  moduleRoute('publish-record', '/ui/config/publish/records/:id', '发布详情', Permission.publishView, pages.publishRecord),
-
-  moduleRoute('runtime-config', '/ui/runtime-config', '运行参数', Permission.runtimeConfigView, pages.runtimeConfig),
-
-  moduleRoute('access-list', '/ui/access-credentials', '访问凭证', Permission.accessView, pages.accessList),
-  moduleRoute('access-detail', '/ui/access-credentials/:id', '访问凭证详情', Permission.accessView, pages.accessDetail),
+  // 系统管理仅保留审计；发布、运行参数和旧访问凭证不再提供独立页面。
+  { path: '/ui/config/:pathMatch(.*)*', redirect: '/ui/applications' },
+  { path: '/ui/runtime-config', redirect: '/ui/applications' },
+  { path: '/ui/access-credentials/:pathMatch(.*)*', redirect: '/ui/applications' },
 
   moduleRoute('risk-control', '/ui/risk-control', '风险控制', Permission.riskControlView, pages.riskControl),
 
   moduleRoute('audit-list', '/ui/audit-logs', '审计日志', Permission.auditView, pages.auditList),
   moduleRoute('audit-detail', '/ui/audit-logs/:id', '审计详情', Permission.auditView, pages.auditDetail),
 
-  {
-    path: '/ui/developer-access',
-    name: 'developer-access',
-    component: () => import('@/pages/developer/DeveloperAccessPage.vue'),
-    meta: { title: '接入说明与测试', permission: Permission.developerView },
-  },
+  { path: '/ui/developer-access', redirect: '/ui/applications' },
 
   {
     path: '/ui/forbidden',

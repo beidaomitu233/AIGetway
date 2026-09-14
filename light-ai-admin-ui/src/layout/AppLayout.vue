@@ -5,7 +5,6 @@ import {
   ApiOutlined,
   AppstoreOutlined,
   BarChartOutlined,
-  BookOutlined,
   CloudServerOutlined,
   ControlOutlined,
   DashboardOutlined,
@@ -20,7 +19,6 @@ import {
 } from '@ant-design/icons-vue'
 import {
   Avatar,
-  Badge,
   Breadcrumb,
   Button,
   Layout,
@@ -72,7 +70,6 @@ const iconMap: Record<string, Component> = {
   调用记录: FileSearchOutlined,
   用量与成本: BarChartOutlined,
   额度流水: FundOutlined,
-  待发布变更: BookOutlined,
   配置发布: SettingOutlined,
   运行参数: ToolOutlined,
   旧访问凭证: KeyOutlined,
@@ -184,18 +181,6 @@ function toggleCollapsed(): void {
             {{ runtimeModeLabel(store.runtimeMode) }}
           </Tag>
           <span class="lai-snapshot">当前快照 #{{ store.currentSnapshotNo ?? '—' }}</span>
-          <Badge
-            :count="store.draftChangeCount"
-            :overflow-count="99"
-            :offset="[-4, 4]"
-          >
-            <Button
-              type="text"
-              @click="go('/ui/config/drafts')"
-            >
-              待发布变更（{{ store.draftChangeCount }}）
-            </Button>
-          </Badge>
           <Tooltip :title="`${store.displayName} · ${roleText}`">
             <Space :size="8">
               <Avatar class="lai-avatar">
