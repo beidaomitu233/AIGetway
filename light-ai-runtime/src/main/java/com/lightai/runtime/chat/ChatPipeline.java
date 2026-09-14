@@ -616,6 +616,12 @@ public class ChatPipeline {
             return new java.util.concurrent.Flow.Subscriber<>() {
                 private volatile java.util.concurrent.Flow.Subscription subscription;
                 private final AtomicBoolean cancelHandled = new AtomicBoolean(false);
+                /**
+                 * Provider 适配器必须遵守 Reactive Streams 的单终态契约，但网络客户端
+                 * 或自定义适配器可能在取消/错误竞争时迟到回调。每个 Attempt 只允许
+                 * 一个 onComplete、onError 或取消路径进入结算与终态收敛。
+                 */
+                private final AtomicBoolean attemptTerminal = new AtomicBoolean(false);
 
                 @Override
                 public void onSubscribe(java.util.concurrent.Flow.Subscription subscription) {
@@ -634,7 +640,10 @@ public class ChatPipeline {
                 }
 
                 @Override
-                public void onNext(ProviderStreamChunk chunk) {
+                public synchronized void onNext(ProviderStreamChunk chunk) {
+                    if (attemptTerminal.get()) {
+                        return;
+                    }
                     if (signal.cancelled() && cancelHandled.compareAndSet(false, true)) {
                         // 客户端取消：向上游取消订阅，并按提交状态收敛唯一终态与释放
                         if (subscription != null) {
@@ -665,7 +674,10 @@ public class ChatPipeline {
                 }
 
                 @Override
-                public void onError(Throwable throwable) {
+                public synchronized void onError(Throwable throwable) {
+                    if (!attemptTerminal.compareAndSet(false, true)) {
+                        return;
+                    }
                     if (traceStore.committed(traceId(handle))) {
                         // 提交后失败：STREAM_INTERRUPTED，错误事件后关闭，无 finish 无 DONE
                         LightAiException error = asLightAi(throwable, adapter);
@@ -688,7 +700,10 @@ public class ChatPipeline {
                 }
 
                 @Override
-                public void onComplete() {
+                public synchronized void onComplete() {
+                    if (!attemptTerminal.compareAndSet(false, true)) {
+                        return;
+                    }
                     boolean committed = traceStore.committed(traceId(handle));
                     if (!committed) {
                         // 无内容正常结束：提交并只发送 role 块与 finish 块
@@ -725,7 +740,10 @@ public class ChatPipeline {
                 }
 
                 /** 取消后的终态收敛：先终态成功才释放，重复释放由幂等端口阻止。 */
-                private void handleCancelledAfterStream() {
+                private synchronized void handleCancelledAfterStream() {
+                    if (!attemptTerminal.compareAndSet(false, true)) {
+                        return;
+                    }
                     boolean committed = traceStore.committed(traceId(handle));
                     try {
                         if (committed) {
