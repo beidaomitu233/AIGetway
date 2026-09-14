@@ -161,7 +161,7 @@ public class OpenAiCompatibleAdapter implements com.lightai.spi.provider.Provide
             onOpened.accept(stream);
         }
         try {
-            for (String event : SseLineParser.readAllEvents(stream)) {
+            for (String event : SseLineParser.readUntilDone(stream)) {
                 if (event.equals("[DONE]")) {
                     break;
                 }

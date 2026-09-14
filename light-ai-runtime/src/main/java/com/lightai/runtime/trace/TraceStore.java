@@ -28,6 +28,11 @@ public interface TraceStore {
      * 真实运行身份（BE-223：单渠道、真实上游模型、单渠道 Key）与调用时价格快照。
      */
     default String startAttempt(String traceId, AttemptIdentity identity) {
+        return startAttempt(traceId, identity, null);
+    }
+
+    /** 每次恢复动作显式记录 Attempt 类型，便于 Trace/Usage 对账。 */
+    default String startAttempt(String traceId, AttemptIdentity identity, String attemptType) {
         return startAttempt(traceId,
                 identity.routeCandidateId() == null ? null : identity.routeCandidateId().toString(),
                 identity.providerType(), identity.upstreamModelName());

@@ -214,6 +214,7 @@ public class ChatPipeline {
         int failovers = 0;
         int samePriorityFallbacks = 0;
         int fallbacks = 0;
+        String nextAttemptType = "INITIAL";
         String lastError = ErrorCode.ALL_CANDIDATES_FAILED.name();
 
         while (true) {
@@ -235,7 +236,7 @@ public class ChatPipeline {
                 reservation = reserveCapacity(parsed, candidate, credential, estimatedInput,
                         traceId(handle), signal, started);
                 circuitAttempt = acquireCircuit(parsed, candidate, credential);
-                attemptId = traceStore.startAttempt(traceId(handle), attemptIdentity(candidate, credential));
+                attemptId = traceStore.startAttempt(traceId(handle), attemptIdentity(candidate, credential), nextAttemptType);
                 ProviderAdapter adapter = requireAdapter(candidate);
                 ProviderChatRequest adapterRequest = toAdapterRequest(candidate, parsed.request(),
                         estimatedInput, parsed.applicationMaxOutputTokens());
@@ -304,10 +305,12 @@ public class ChatPipeline {
                         retries, failovers, samePriorityFallbacks, fallbacks);
                 switch (action) {
                     case RETRY -> {
+                        nextAttemptType = "RETRY";
                         retries++;
                         awaitBackoff(started, retries);
                     }
                     case CREDENTIAL_FAILOVER -> {
+                        nextAttemptType = "CREDENTIAL_FAILOVER";
                         failovers++;
                         credentialIndex++;
                         if ("PROVIDER_RATE_LIMITED".equals(e.code().name())) {
@@ -315,6 +318,7 @@ public class ChatPipeline {
                         }
                     }
                     case FALLBACK -> {
+                        nextAttemptType = "FALLBACK";
                         if (candidateIndex + 1 >= candidates.size()) {
                             throw fail(handle, ErrorCode.ALL_CANDIDATES_FAILED, lastError);
                         }
@@ -372,6 +376,7 @@ public class ChatPipeline {
         int failovers = 0;
         int samePriorityFallbacks = 0;
         int fallbacks = 0;
+        String nextAttemptType = "INITIAL";
 
         while (true) {
             if (signal.cancelled()) {
@@ -393,7 +398,7 @@ public class ChatPipeline {
                 reservation = reserveCapacity(parsed, candidate, credential, estimatedInput,
                         traceId(handle), signal, started);
                 circuitAttempt = acquireCircuit(parsed, candidate, credential);
-                attemptId = traceStore.startAttempt(traceId(handle), attemptIdentity(candidate, credential));
+                attemptId = traceStore.startAttempt(traceId(handle), attemptIdentity(candidate, credential), nextAttemptType);
                 ProviderAdapter adapter = requireAdapter(candidate);
                 ProviderChatRequest adapterRequest = toAdapterRequest(candidate, parsed.request(),
                         estimatedInput, parsed.applicationMaxOutputTokens());
@@ -433,10 +438,12 @@ public class ChatPipeline {
                         retries, failovers, samePriorityFallbacks, fallbacks);
                 switch (action) {
                     case RETRY -> {
+                        nextAttemptType = "RETRY";
                         retries++;
                         awaitBackoff(started, retries);
                     }
                     case CREDENTIAL_FAILOVER -> {
+                        nextAttemptType = "CREDENTIAL_FAILOVER";
                         failovers++;
                         credentialIndex++;
                         if ("PROVIDER_RATE_LIMITED".equals(e.code().name())) {
@@ -444,6 +451,7 @@ public class ChatPipeline {
                         }
                     }
                     case FALLBACK -> {
+                        nextAttemptType = "FALLBACK";
                         if (candidateIndex + 1 >= candidates.size()) {
                             LightAiException finalFailure =
                                     failFinal(handle, signal, false, ErrorCode.ALL_CANDIDATES_FAILED);
