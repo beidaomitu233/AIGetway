@@ -25,6 +25,13 @@
 - `mvn -pl light-ai-admin,light-ai-storage-jdbc -am -DskipTests compile`：通过。
 - 未执行真实供应商调用、PostgreSQL/MySQL 全新库迁移和后端删除后的整链路回归；这些依赖 P4-BE-001 完成及授权环境。
 
+## Commit / 远程状态
+
+- `d70cafd` `fix(fullstack): P4 下线旧管理页面入口`
+- `bc3d24d` `test(fullstack): P4 覆盖旧路由重定向`
+- `c80bcf1` `docs(fullstack): P4 记录旧模块下线审查`
+- 已推送 `origin/fix/fullstack-integration-P4-root`；未直接合并 `dev`，等待后续运行链路迁移和独立评审。
+
 ## 合并建议
 
 当前仅建议合入前端入口下线提交；P4 包保持进行中。完成运行时配置版本迁移、历史快照引用处理、后端控制器/服务/仓储删除和 PostgreSQL/MySQL/全新库回归后，再提交 P4 完成复验。
