@@ -19,5 +19,6 @@
 - P4-BE-002 已完成旧访问凭证运行面清理：移除管理控制器/服务、客户端 DTO、JDBC 仓储和自动装配，只保留应用密钥鉴权；`ApiCatalog` 删除旧接口，访问凭证表由 V12 迁移删除。
 - P4-BE-003 已完成应用映射运行时解耦：激活映射快照和运行映射不再回查 `virtual_model`，应用目标以保存的模型名称为准；H2 测试删除 `virtual_model`、`upstream_model` 后仍可读取映射快照。
 - P4-BE-004 已完成旧管理 HTTP 控制器下线：运行参数、上游模型、虚拟模型/候选路由、治理策略、草稿/发布控制器不再由自动配置暴露；内部发布服务和实例接口暂保留，等待运行时迁移。自动配置测试 6/6 通过。
+- P4-BE-005 已完成渠道目录旧表解耦：无实时 ProviderAdapter 时只返回 `manual_input_allowed`，不再查询 `upstream_model`；映射仓储删除旧目录查询，H2 删除旧表后的批量映射测试通过。目录、映射、快照和应用密钥回归 7/7 通过。
 - 验证：`mvn -pl light-ai-storage-jdbc -am -Dtest=DefaultSchemaMigratorTest,SchemaGuardTest -Dsurefire.failIfNoSpecifiedTests=false test` 通过（10/10）；`mvn -pl light-ai-admin -am -Dtest=ApplicationKeyServiceTest,LightAiAdminAutoConfigurationTest,ApplicationRuntimeSnapshotTest -Dsurefire.failIfNoSpecifiedTests=false test` 通过（10/10）；全仓 `mvn -DskipTests compile` 通过。
 - 待处理：运行时及存储层仍直接读取 `virtual_model`、`route_candidate`、`runtime_config` 和 `config_snapshot`，草稿/发布服务仍有装配依赖。需继续完成运行链路迁移，再删除剩余旧服务和表；当前不宣称 P4 完成。

@@ -15,6 +15,7 @@
 | P4-DB-001 | P1 | 旧访问凭证表仍在基线结构清单中，升级后会继续被 SchemaGuard 视为必需 | 新增 V12 MySQL/PostgreSQL 迁移删除两张表，SchemaContract/ExpectedSchema 同步更新；迁移、SchemaGuard 测试 10/10 通过 | 已验证 |
 | P4-BE-003 | P1 | 应用映射运行时快照回查 `virtual_model`/`upstream_model`，删除旧目录会阻断应用调用 | 快照读取仅使用 V2 映射目标名称和渠道连接，保存不再依赖旧目录回查；H2 删除旧表后快照/运行映射测试通过 | 已验证 |
 | P4-BE-004 | P1 | 运行参数、上游模型、虚拟模型/候选路由、治理策略、草稿/发布等旧控制器仍由自动配置暴露 | 移除对应 HTTP 控制器 Bean，保留内部发布服务和实例接口；`LightAiAdminAutoConfigurationTest` 6/6 通过 | 已验证 |
+| P4-BE-005 | P1 | 无实时目录能力的渠道仍回退查询已退役 `upstream_model`，删除旧表会阻断应用映射批量草案 | 改为返回 `manual_input_allowed` 并由应用内手工输入；删除仓储 `catalog/activeModel` 旧查询，目录/映射/快照/应用密钥回归 7/7 通过 | 已验证 |
 
 ## 剩余问题
 
@@ -31,6 +32,7 @@
 - `mvn -pl light-ai-storage-jdbc -am -Dtest=DefaultSchemaMigratorTest,SchemaGuardTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，10/10。
 - `mvn -pl light-ai-admin -am -Dtest=ApplicationKeyServiceTest,LightAiAdminAutoConfigurationTest,ApplicationRuntimeSnapshotTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，10/10。
 - `mvn -pl light-ai-admin -am -Dtest=LightAiAdminAutoConfigurationTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，6/6。
+- `mvn -pl light-ai-admin -am -Dtest=ChannelModelCatalogServiceTest,ApplicationMappingServiceTest,ApplicationRuntimeSnapshotTest,ApplicationKeyServiceTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，7/7。
 - `mvn -DskipTests compile`：通过，全仓 14 模块。
 - 未执行真实供应商调用、PostgreSQL/MySQL 实例上的全新库迁移和剩余旧路由/发布服务删除后的整链路回归；这些依赖 P4-BE-001 完成及授权环境。
 
