@@ -163,7 +163,7 @@ const errorRows = [
           </dd>
           <dt>应用当前限制</dt>
           <dd>{{ quotaText }}</dd>
-          <dt>可用虚拟模型</dt>
+          <dt>模型映射</dt>
           <dd>{{ authorizedModels.length }} 个</dd>
         </dl>
         <p class="lai-note">
@@ -183,7 +183,7 @@ const errorRows = [
       <PageState
         v-if="authorizedModels.length === 0"
         status="empty"
-        message="该应用尚未授权任何可调用的虚拟模型，请先在“可用模型”页签完成授权"
+        message="该应用尚未配置可调用的模型映射，请先在“模型映射”页签完成配置"
       />
       <template v-else>
         <Card :bordered="false" class="lai-detail-card">

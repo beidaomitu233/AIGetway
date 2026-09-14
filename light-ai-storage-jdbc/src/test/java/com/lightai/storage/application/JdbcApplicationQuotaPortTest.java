@@ -106,6 +106,30 @@ class JdbcApplicationQuotaPortTest {
     }
 
     @Test
+    void usesEstimateCurrencyWhenAmountBudgetDisabled() throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "UPDATE application_quota_policy SET token_limit=NULL, amount_limit=NULL, " +
+                             "currency=NULL, rpm=NULL, tpm=NULL WHERE application_id=?")) {
+            statement.setString(1, applicationId.toString());
+            statement.executeUpdate();
+        }
+
+        var reservation = port.reserve(principal, "req-unlimited", 400,
+                List.of(new ApplicationQuotaPort.AmountEstimate("USD", BigDecimal.ZERO)));
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "SELECT currency FROM budget_reservation WHERE request_id=?")) {
+            statement.setString(1, "req-unlimited");
+            try (var resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                assertThat(resultSet.getString(1)).isEqualTo("USD");
+            }
+        }
+        port.release(reservation, "TEST_DONE");
+    }
+
+    @Test
     void reclaimsExpiredDatabaseReservationOnce() {
         port.reserve(principal, "req-expired", 400,
                 List.of(new ApplicationQuotaPort.AmountEstimate("CNY", BigDecimal.ONE)));

@@ -18,6 +18,16 @@ public interface ConfigSnapshotPort {
     ActiveSnapshot active();
 
     /**
+     * Return the active runtime view for a specific business principal.
+     * Implementations that do not have application-scoped configuration retain
+     * the global snapshot behavior; JDBC-backed implementations may resolve
+     * application model mappings here without exposing draft state.
+     */
+    default ActiveSnapshot active(AccessTokenPort.Principal principal) {
+        return active();
+    }
+
+    /**
      * 是否存在可用的 ACTIVE 快照（PRD 4.6.4.3）。
      * 首次安装使用 snapshot_no=0 的初始快照，因此不能用快照号是否大于 0 判断就绪。
      */

@@ -8,6 +8,9 @@ import com.lightai.client.application.ApplicationImpactCommand;
 import com.lightai.client.application.ApplicationImpactView;
 import com.lightai.client.application.ApplicationModelOptionView;
 import com.lightai.client.application.ApplicationModelsUpdateCommand;
+import com.lightai.client.application.ApplicationMappingsReplaceCommand;
+import com.lightai.client.application.ApplicationMappingsValidateCommand;
+import com.lightai.client.application.ApplicationMappingsBulkCreateCommand;
 import com.lightai.client.application.ApplicationQuotaAdjustmentCommand;
 import com.lightai.client.application.ApplicationQuotaResetCommand;
 import com.lightai.client.application.ApplicationQuotaUpdateCommand;
@@ -70,6 +73,35 @@ public final class ApplicationController {
     @GetMapping("/admin/applications/{id}/models")
     public ResponseEntity<String> models(@PathVariable String id, HttpServletRequest request) {
         return json(ManagementResponses.ok(service.models(context(request), parseId(id))));
+    }
+
+    @GetMapping("/admin/applications/{id}/mappings")
+    public ResponseEntity<String> mappings(@PathVariable String id, HttpServletRequest request) {
+        return json(ManagementResponses.ok(service.mappings(context(request), parseId(id))));
+    }
+
+    @PutMapping("/admin/applications/{id}/mappings")
+    public ResponseEntity<String> replaceMappings(@PathVariable String id,
+                                                  @RequestBody(required = false) String body,
+                                                  HttpServletRequest request) {
+        ApplicationMappingsReplaceCommand command = CommandBodies.parse(body, ApplicationMappingsReplaceCommand.class);
+        return json(ManagementResponses.ok(service.replaceMappings(context(request), parseId(id), command)));
+    }
+
+    @PostMapping("/admin/applications/{id}/mappings:validate")
+    public ResponseEntity<String> validateMappings(@PathVariable String id,
+                                                    @RequestBody(required = false) String body,
+                                                    HttpServletRequest request) {
+        ApplicationMappingsValidateCommand command = CommandBodies.parse(body, ApplicationMappingsValidateCommand.class);
+        return json(ManagementResponses.ok(service.validateMappings(context(request), parseId(id), command)));
+    }
+
+    @PostMapping("/admin/applications/{id}/mappings:bulk-create")
+    public ResponseEntity<String> bulkCreateMappings(@PathVariable String id,
+                                                     @RequestBody(required = false) String body,
+                                                     HttpServletRequest request) {
+        ApplicationMappingsBulkCreateCommand command = CommandBodies.parse(body, ApplicationMappingsBulkCreateCommand.class);
+        return json(ManagementResponses.ok(service.bulkCreateMappings(context(request), parseId(id), command)));
     }
 
     @PutMapping("/admin/applications/{id}/quota")

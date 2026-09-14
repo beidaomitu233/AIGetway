@@ -61,6 +61,131 @@ public final class JdbcConfigSnapshotPortAdapter extends AbstractJdbcRepository 
         return fresh;
     }
 
+    /**
+     * Resolve the V2 application mapping directly for business requests.
+     * Application mappings are versioned independently from the legacy global
+     * publish snapshot, so an application can route a manually entered model
+     * without creating a global virtual_model row.
+     */
+    @Override
+    public ActiveSnapshot active(com.lightai.runtime.ports.AccessTokenPort.Principal principal) {
+        if (principal == null || principal.applicationId() == null || principal.applicationId().isBlank()) {
+            return active();
+        }
+        try {
+            return readApplicationSnapshot(UUID.fromString(principal.applicationId()));
+        } catch (RuntimeException e) {
+            return new ActiveSnapshot(0L, List.of());
+        }
+    }
+
+    private ActiveSnapshot readApplicationSnapshot(UUID applicationId) {
+        if (connectionSupplier == null) return new ActiveSnapshot(0L, List.of());
+        Map<String, List<CandidateView>> candidates = new LinkedHashMap<>();
+        Map<String, String> names = new LinkedHashMap<>();
+        long revision = 0L;
+        try (Connection connection = connectionSupplier.get()) {
+            String sql = "SELECT r.revision, m.id AS mapping_id, m.public_model_name, "
+                    + "t.id AS target_id, t.channel_id, t.upstream_model_id, t.upstream_model_name, "
+                    + "t.priority, t.weight, c.base_url, c.proxy_url, c.connect_timeout_ms, "
+                    + "c.read_timeout_ms, c.default_headers, p.type AS provider_type, "
+                    + "u.model_id, u.tokenizer_family, u.context_window, u.max_output_tokens, "
+                    + "u.support_stream, u.support_system_message, u.support_temperature, "
+                    + "u.support_top_p, u.support_stop, u.temperature_min, u.temperature_max, "
+                    + "u.top_p_min, u.top_p_max, u.max_stop_sequences, u.default_temperature, "
+                    + "u.default_top_p, u.default_max_tokens, u.input_price, u.output_price, "
+                    + "u.price_unit, u.currency "
+                    + "FROM " + qualify(connection, "application_config_revision") + " r "
+                    + "JOIN " + qualify(connection, "application_model_mapping")
+                    + " m ON m.revision_id = r.id AND m.status = 'ACTIVE' "
+                    + "JOIN " + qualify(connection, "application_model_target")
+                    + " t ON t.mapping_id = m.id AND t.status = 'ACTIVE' "
+                    + "JOIN " + qualify(connection, "channel")
+                    + " c ON c.id = t.channel_id AND c.status = 'ACTIVE' AND c.deleted_at IS NULL "
+                    + "LEFT JOIN " + qualify(connection, "provider") + " p ON p.id = c.provider_id "
+                    + "LEFT JOIN " + qualify(connection, "upstream_model")
+                    + " u ON u.id = t.upstream_model_id AND u.status = 'ACTIVE' AND u.deleted_at IS NULL "
+                    + "WHERE r.application_id = ? AND r.status = 'ACTIVE' "
+                    + "ORDER BY m.public_model_name, t.priority, t.weight DESC, t.id";
+            try (var statement = connection.prepareStatement(sql)) {
+                dialect(connection).bindUuid(statement, 1, applicationId);
+                try (var rs = statement.executeQuery()) {
+                    while (rs.next()) {
+                        revision = Math.max(revision, rs.getLong("revision"));
+                        String mappingId = toString(rs.getObject("mapping_id"));
+                        String publicName = rs.getString("public_model_name");
+                        String providerType = rs.getString("provider_type");
+                        String channelId = toString(rs.getObject("channel_id"));
+                        String targetId = toString(rs.getObject("target_id"));
+                        String modelPk = toString(rs.getObject("upstream_model_id"));
+                        String modelId = rs.getString("model_id");
+                        if (modelId == null || modelId.isBlank()) modelId = rs.getString("upstream_model_name");
+                        if (mappingId == null || publicName == null || providerType == null
+                                || channelId == null || targetId == null || modelId == null) continue;
+                        if (modelPk == null || modelPk.isBlank()) modelPk = targetId;
+                        CandidateView candidate = new CandidateView(
+                                targetId, channelId, providerType, modelPk, modelId,
+                                rs.getLong("priority"), rs.getInt("weight"), true,
+                                rs.getString("tokenizer_family"),
+                                applicationLongOrDefault(rs.getObject("context_window"), 128000L),
+                                applicationLongOrDefault(rs.getObject("max_output_tokens"), 16384L),
+                                applicationBoolOrDefault(rs.getObject("support_stream"), true),
+                                applicationBoolOrDefault(rs.getObject("support_system_message"), true),
+                                applicationBoolOrDefault(rs.getObject("support_temperature"), true),
+                                applicationBoolOrDefault(rs.getObject("support_top_p"), true),
+                                applicationBoolOrDefault(rs.getObject("support_stop"), true),
+                                toBigDecimalOrZero(rs.getObject("temperature_min")),
+                                toBigDecimalOrZero(rs.getObject("temperature_max")),
+                                toBigDecimalOrZero(rs.getObject("top_p_min")),
+                                toBigDecimalOrZero(rs.getObject("top_p_max")),
+                                toIntOrNull(rs.getObject("max_stop_sequences")),
+                                toBigDecimalOrZero(rs.getObject("default_temperature")),
+                                toBigDecimalOrZero(rs.getObject("default_top_p")),
+                                toLongOrNull(rs.getObject("default_max_tokens")),
+                                applicationStringOrDefault(rs.getObject("input_price"), "0"),
+                                applicationStringOrDefault(rs.getObject("output_price"), "0"),
+                                applicationIntOrDefault(rs.getObject("price_unit"), 1000000),
+                                applicationStringOrDefault(rs.getObject("currency"), "USD"),
+                                rs.getString("base_url"), rs.getString("proxy_url"),
+                                applicationIntOrDefault(rs.getObject("connect_timeout_ms"), 3000),
+                                applicationIntOrDefault(rs.getObject("read_timeout_ms"), 120000),
+                                readDefaultHeaders(rs.getString("default_headers")));
+                        names.putIfAbsent(mappingId, publicName);
+                        candidates.computeIfAbsent(mappingId, ignored -> new ArrayList<>()).add(candidate);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            return new ActiveSnapshot(0L, List.of());
+        }
+        List<AliasView> aliases = new ArrayList<>();
+        for (Map.Entry<String, List<CandidateView>> entry : candidates.entrySet()) {
+            String publicName = names.get(entry.getKey());
+            if (entry.getValue().isEmpty()) continue;
+            aliases.add(new AliasView(entry.getKey(), publicName, publicName, true, entry.getValue()));
+        }
+        return new ActiveSnapshot(revision, aliases);
+    }
+
+    private static String applicationStringOrDefault(Object value, String fallback) {
+        String text = toString(value);
+        return text == null || text.isBlank() ? fallback : text;
+    }
+
+    private static Boolean applicationBoolOrDefault(Object value, boolean fallback) {
+        Boolean parsed = toBoolOrNull(value);
+        return parsed == null ? fallback : parsed;
+    }
+
+    private static long applicationLongOrDefault(Object value, long fallback) {
+        Long parsed = toLongOrNull(value);
+        return parsed == null || parsed <= 0 ? fallback : parsed;
+    }
+
+    private static int applicationIntOrDefault(Object value, int fallback) {
+        Integer parsed = toIntOrNull(value);
+        return parsed == null || parsed <= 0 ? fallback : parsed;
+    }
     /** 在发布激活完成后调用，让 Runtime 下次访问时读取新快照。 */
     public void invalidate() {
         cache.set(null);
@@ -369,6 +494,13 @@ public final class JdbcConfigSnapshotPortAdapter extends AbstractJdbcRepository 
     /** default_headers 存储为 JSON 对象（string→string），失败或非对象时返回空表。 */
     @SuppressWarnings("unchecked")
     private static Map<String, String> readDefaultHeaders(Object raw) {
+        if (raw instanceof String json && !json.isBlank()) {
+            try {
+                raw = ProtocolJson.protocol().readValue(json, new TypeReference<Map<String, String>>() { });
+            } catch (Exception ignored) {
+                return Map.of();
+            }
+        }
         if (raw instanceof Map<?, ?> map) {
             Map<String, String> headers = new LinkedHashMap<>();
             for (Map.Entry<?, ?> entry : map.entrySet()) {
