@@ -22,6 +22,7 @@
 
 - `npm run typecheck`：通过。
 - `npm run test -- --run tests/deprecatedRoutes.test.ts`：通过，9/9。
+- `npm run test -- --run tests/routerGuards.test.ts`：通过，4/4。
 - `mvn -pl light-ai-admin,light-ai-storage-jdbc -am -DskipTests compile`：通过。
 - 未执行真实供应商调用、PostgreSQL/MySQL 全新库迁移和后端删除后的整链路回归；这些依赖 P4-BE-001 完成及授权环境。
 
