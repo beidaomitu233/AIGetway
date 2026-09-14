@@ -173,7 +173,7 @@ class ApplicationKeyServiceTest {
             statement.execute("DROP TABLE virtual_model");
         }
         var issued = service.create(owner(), applicationId,
-                new ApplicationKeyCreateCommand("目录下线验证", List.of(), null, null, null));
+                new ApplicationKeyCreateCommand("目录下线验证", List.of(), null, null, null, List.of(allowedModelId.toString())));
         AccessTokenAuthService auth = new AccessTokenAuthService(
                 dataSource, tokenService,
                 Clock.fixed(Instant.parse("2026-09-08T09:00:00Z"), ZoneOffset.UTC),
