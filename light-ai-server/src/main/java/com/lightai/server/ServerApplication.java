@@ -168,26 +168,10 @@ public class ServerApplication {
                 dataSource, credentialRepository, secretCipher);
     }
 
-    /** 运行参数端口（C-010）：default_alias_id 读取自 runtime_config。 */
+    /** 运行时默认模型由应用映射决定；Standalone 不再读取旧 runtime_config。 */
     @Bean
-    public com.lightai.runtime.ports.AccessTokenPort.RuntimeConfigPort runtimeConfigPort(
-            javax.sql.DataSource dataSource) {
-        return () -> {
-            String sql = "SELECT default_alias_id FROM runtime_config WHERE singleton_key = 1";
-            try (var connection = dataSource.getConnection();
-                 var statement = connection.prepareStatement(sql);
-                 var rs = statement.executeQuery()) {
-                if (rs.next()) {
-                    Object aliasId = rs.getObject(1);
-                    if (aliasId != null && !aliasId.toString().isBlank()) {
-                        return Optional.of(aliasId.toString());
-                    }
-                }
-                return Optional.empty();
-            } catch (Exception e) {
-                return Optional.empty();
-            }
-        };
+    public com.lightai.runtime.ports.AccessTokenPort.RuntimeConfigPort runtimeConfigPort() {
+        return Optional::empty;
     }
 
     @Bean

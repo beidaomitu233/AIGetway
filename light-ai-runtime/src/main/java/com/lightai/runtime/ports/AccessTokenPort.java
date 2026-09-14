@@ -80,6 +80,13 @@ public interface AccessTokenPort {
             return alias == null ? null : modelMappings.getOrDefault(alias, alias);
         }
 
+
+        /** 应用仅配置一个对外模型时，可在请求省略 model 的情况下使用该模型。 */
+        public Optional<String> defaultAlias() {
+            if (modelMappings.size() == 1) return modelMappings.keySet().stream().findFirst();
+            if (allowedAliasIds.size() == 1) return Optional.of(allowedAliasIds.get(0));
+            return Optional.empty();
+        }
         /** 应用为该虚拟模型配置的请求参数上限；未配置返回 null。 */
         public ApplicationModelConstraint constraintFor(String alias) {
             return alias == null ? null : aliasConstraints.get(alias);

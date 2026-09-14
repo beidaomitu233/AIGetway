@@ -367,6 +367,31 @@ public final class JdbcApplicationRepository extends AbstractJdbcRepository {
         }
     }
 
+    /**
+     * 读取应用模型约束元数据，不解析旧虚拟模型目录；运行时名称由 application_model_mapping 提供。
+     */
+    public Map<UUID, String> listModelPermissionConstraints(Connection connection, UUID applicationId) {
+        DatabaseDialect dialect = dialect(connection);
+        String sql = "SELECT virtual_model_id, enabled, constraints_json FROM "
+                + qualify(connection, "application_model_permission")
+                + " WHERE application_id = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            dialect.bindUuid(statement, 1, applicationId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                Map<UUID, String> result = new java.util.LinkedHashMap<>();
+                while (resultSet.next()) {
+                    UUID modelId = dialect.readUuid(resultSet, "virtual_model_id");
+                    if (modelId != null && resultSet.getBoolean("enabled")) {
+                        result.put(modelId, dialect.readJson(resultSet, "constraints_json"));
+                    }
+                }
+                return java.util.Collections.unmodifiableMap(result);
+            }
+        } catch (SQLException e) {
+            throw translate("应用模型约束读取失败", e);
+        }
+    }
+
     public List<ApplicationModelPermissionRecord> listModelPermissions(
             Connection connection, UUID applicationId) {
         DatabaseDialect dialect = dialect(connection);

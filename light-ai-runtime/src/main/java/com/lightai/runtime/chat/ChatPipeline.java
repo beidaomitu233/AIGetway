@@ -898,6 +898,10 @@ public class ChatPipeline {
         ChatRequestValidator.validate(context.request(), true);
         String alias = context.request().model();
         if (alias == null || alias.isBlank()) {
+            alias = context.principal() == null ? null
+                    : context.principal().defaultAlias().orElse(null);
+        }
+        if (alias == null || alias.isBlank()) {
             alias = runtimeConfigPort.defaultAliasId()
                     .orElseThrow(() -> new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
                             "model 缺省且未配置默认 Alias", "model"));

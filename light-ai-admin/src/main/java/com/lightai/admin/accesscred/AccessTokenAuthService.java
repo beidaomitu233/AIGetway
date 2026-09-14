@@ -5,7 +5,6 @@ import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
 import com.lightai.runtime.ports.AccessTokenPort;
 import com.lightai.storage.application.ApplicationKeyRecord;
-import com.lightai.storage.application.ApplicationModelPermissionRecord;
 import com.lightai.storage.application.ApplicationQuotaRecord;
 import com.lightai.storage.application.ApplicationRecord;
 import com.lightai.storage.application.JdbcApplicationKeyRepository;
@@ -86,27 +85,29 @@ public class AccessTokenAuthService implements AccessTokenPort {
             }
 
             List<UUID> keyModelIds = applicationKeys.listModelIds(connection, key.id());
-            List<ApplicationModelPermissionRecord> permissions = applications
-                    .listModelPermissions(connection, application.id()).stream()
-                    .filter(permission -> permission.enabled() && permission.virtualModelCode() != null)
-                    .filter(permission -> keyModelIds.isEmpty()
-                            || keyModelIds.contains(permission.virtualModelId()))
+            Map<UUID, String> constraintJson = applications
+                    .listModelPermissionConstraints(connection, application.id());
+            List<com.lightai.storage.application.ApplicationModelMappingRecord> mappings = modelMappings
+                    .list(connection, application.id()).stream()
+                    .filter(mapping -> "ACTIVE".equals(mapping.status()))
+                    .filter(mapping -> keyModelIds.isEmpty()
+                            ? true
+                            : mapping.virtualModelId() != null
+                                    && keyModelIds.contains(mapping.virtualModelId()))
                     .toList();
-            List<String> permissionAliases = permissions.stream()
-                    .map(ApplicationModelPermissionRecord::virtualModelCode).toList();
-            Map<String, String> publicMappings = modelMappings.runtimeMappings(connection, application.id());
-            List<String> aliases = new ArrayList<>(permissionAliases);
-            for (String publicName : publicMappings.keySet()) {
-                if (!aliases.contains(publicName)) aliases.add(publicName);
-            }
+            Map<String, String> publicMappings = new LinkedHashMap<>();
             Map<String, ApplicationModelConstraint> constraints = new LinkedHashMap<>();
-            for (ApplicationModelPermissionRecord permission : permissions) {
-                ApplicationModelConstraint constraint = ApplicationModelConstraint.fromJson(
-                        permission.virtualModelCode(), permission.constraintsJson());
-                if (!constraint.isEmpty()) {
-                    constraints.put(permission.virtualModelCode(), constraint);
+            for (var mapping : mappings) {
+                String publicName = mapping.publicModelName();
+                if (publicName == null || publicName.isBlank()) continue;
+                publicMappings.put(publicName, publicName);
+                if (mapping.virtualModelId() != null) {
+                    String json = constraintJson.get(mapping.virtualModelId());
+                    ApplicationModelConstraint constraint = ApplicationModelConstraint.fromJson(publicName, json);
+                    if (!constraint.isEmpty()) constraints.put(publicName, constraint);
                 }
             }
+            List<String> aliases = new ArrayList<>(publicMappings.keySet());
             ApplicationQuotaRecord quota = applications.findQuota(connection, application.id()).orElse(null);
             Integer rpm = stricter(key.rpm(), quota == null ? null : quota.rpm());
             Long tpm = stricter(key.tpm(), quota == null ? null : quota.tpm());
