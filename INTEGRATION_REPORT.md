@@ -90,3 +90,43 @@ BUILD SUCCESS；以当前源码启动隔离服务并完成上述 SSE 链路复�
 ## 未验证项与后续条件
 
 真实供应商流式协议、生产数据库、共享容量故障恢复、多实例取消传播和浏览器页面未执行；需在授权环境复验后再将 P5-B 由“待复验”更新为“已验证”。
+
+# P5-C 失败切换与观测一致性联调报告
+
+## 范围与结论
+
+- 任务包：P5-C 失败切换与观测一致性联调
+- 负责人：代码审查与修复模型/root
+- 分支：`fix/fullstack-integration-P5-C-root-claim`
+- 基线：`fix/fullstack-integration-P5-B-root`（已占用 P5-B 的流式取消与终态结算成果）
+- 验证环境：`light-ai-server` Standalone 端口 `18084`、H2 内存数据库（MIGRATE）、Redis `127.0.0.1:6379`（命名空间 `p5b2-e2e`）、本地 OpenAI 协议替身 `127.0.0.1:19090`（健康）与 `127.0.0.1:19091`（持续 500 失败）。
+- 当前结论：失败切换的 Attempt 类型、Trace 计数、Usage 聚合和 SSE `[DONE]` 终止在真实 HTTP + H2 + Redis 隔离环境通过；真实供应商、生产共享状态和浏览器页面仍需授权环境复验，任务状态为“待复验”。
+
+## 问题与修复
+
+| 编号 | 问题与复现步骤 | 根因与修复 | 验证结果 | 状态 |
+| --- | --- | --- | --- | --- |
+| P5-C-01 | 上游在发送 `data: [DONE]` 后保持 HTTP 连接，适配器继续等待 EOF，流式请求无法及时收敛。 | 新增 `SseLineParser.readUntilDone`，消费到协议终止帧立即返回并关闭响应体；OpenAI 兼容适配器改用该路径。 | 同一 SSE 连接在约 715ms 内返回 `[DONE]`，curl 正常退出，不读取终止帧之后的数据。 | 已验证 |
+| P5-C-02 | 重试、换 Key、fallback 均使用默认序号推导 Attempt 类型，Trace 的恢复计数保持 0，调用观测无法对账。 | `TraceStore` 增加带类型的兼容契约；ChatPipeline 在同步/流式恢复前写入 `RETRY`、`CREDENTIAL_FAILOVER`、`FALLBACK`；JDBC 最终化按 Attempt 类型聚合三类计数。 | H2 回归及端到端 Trace 均得到 `attempt_count=4`、`retry_count=1`、`credential_failover_count=1`、`fallback_count=1`。 | 已验证 |
+
+## 实际链路证据
+
+1. 通过真实管理 API 创建失败渠道（OPENAI）和健康渠道（DEEPSEEK）、受保护 Key、企业应用、应用密钥与 `p5b-chat` 映射；校验并发布配置。
+2. 使用应用密钥调用 `POST /v1/chat/completions`（`stream=true`），请求先命中失败渠道并依次执行重试、换 Key、优先级 fallback，最终切换健康渠道；SSE 返回角色块、内容块、usage、finish 和 `data: [DONE]`。
+3. 重新读取 `/admin/calls`、`/admin/traces` 和 `/admin/usage/summary`：request_id `e4db7dcb-f18c-4350-9cb0-d1c96d00a8a1`，最终渠道为 DEEPSEEK，状态 `SUCCEEDED`，`requested_stream=true`，Attempt 4 条，恢复计数 1/1/1，实际 Token 6/2/8，Usage 来源 `ACTUAL`。Trace 明细的 Attempt 类型依次为 `INITIAL`、`RETRY`、`CREDENTIAL_FAILOVER`、`FALLBACK`，首个业务块提交后未再切换。
+4. `/admin/usage/summary?requested_stream=true` 返回 `request_count=1`、`stream_count=1`、`attempt_count=4`，与调用和 Trace 数据一致。
+5. 测试数据为虚构值；应用密钥原文仅在测试进程变量中使用，未写入代码、日志或报告。
+
+## 测试与构建
+
+```text
+mvn -B -pl light-ai-provider-common,light-ai-server -am -Dtest=OpenAiCompatibleAdapterTest,JdbcTraceStoreTest,V1ControllerStreamTest,ChatPipelineTest,ChatPipelineRecoveryTest -Dsurefire.failIfNoSpecifiedTests=false test
+BUILD SUCCESS；OpenAiCompatibleAdapterTest 6/6、JdbcTraceStoreTest 6/6、V1ControllerStreamTest 1/1、ChatPipelineTest 18/18、ChatPipelineRecoveryTest 7/7
+
+mvn -B -pl light-ai-server -am -DskipTests package
+BUILD SUCCESS；Spring Boot fat jar repackage succeeded
+```
+
+## 未验证项与后续条件
+
+真实供应商 SSE 终止行为、生产数据库、跨实例共享容量和浏览器页面未执行；需要在授权环境复验后，才可将 P5-C 从“待复验”更新为“已验证”。
