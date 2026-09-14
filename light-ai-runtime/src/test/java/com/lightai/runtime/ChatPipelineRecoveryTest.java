@@ -285,6 +285,55 @@ class ChatPipelineRecoveryTest {
         assertThat(traceStore.attempts("duplicate-terminal")).singleElement()
                 .extracting(InMemoryTraceStore.AttemptView::status).isEqualTo("SUCCEEDED");
     }
+    @Test
+    void lateCompletionAfterPreCommitFailureCannotCommitOldAttempt() {
+        AtomicInteger completed = new AtomicInteger();
+        AtomicInteger errors = new AtomicInteger();
+        ProviderAdapter adapter = new ChatPipelineTest.StubAdapter() {
+            @Override
+            public Flow.Publisher<ProviderStreamChunk> streamChat(ProviderCallContext context) {
+                boolean first = context.request().modelId().endsWith("p1a");
+                return subscriber -> subscriber.onSubscribe(new Flow.Subscription() {
+                    @Override public void request(long n) {
+                        if (first) {
+                            subscriber.onError(new com.lightai.spi.provider.ProviderTransportException(
+                                    ProviderFailure.http(500, null, "pre-commit failure"), null));
+                            // 原失败 Attempt 的迟到 onComplete 不能提交或结算它。
+                            subscriber.onComplete();
+                        } else {
+                            subscriber.onNext(ProviderStreamChunk.content("fallback"));
+                            subscriber.onNext(ProviderStreamChunk.finish(ProviderChatResponse.FINISH_STOP));
+                            subscriber.onComplete();
+                        }
+                    }
+                    @Override public void cancel() { }
+                });
+            }
+        };
+        ConfigSnapshotPort snapshots = () -> new ConfigSnapshotPort.ActiveSnapshot(7, List.of(
+                new AliasView("alias-1", "assistant", "助理", true, List.of(
+                        candidate("p1a", 1), candidate("p2a", 2)))));
+        InMemoryTraceStore traceStore = new InMemoryTraceStore();
+        ChatPipeline pipeline = new ChatPipeline(snapshots, () -> Optional.empty(), fixedRouting(),
+                new ChatPipelineTest.RecordingCapacity(), null,
+                (channelId, index) -> new CredentialSecretPort.ResolvedCredential(
+                        UUID.randomUUID().toString(), () -> "sk-test".toCharArray()),
+                null, type -> Optional.of(adapter), traceStore, ApplicationQuotaPort.unlimited(),
+                () -> new ReliabilityBudgets(0, 0, 0, 1), 30_000, health);
+        pipeline.chatStream(context(request(true), "late-precommit"), new ChatPipeline.StreamListener() {
+            @Override public void onCommit() { }
+            @Override public void onChunk(UnifiedChatChunk chunk) { }
+            @Override public void onError(com.lightai.client.error.UnifiedError error) { errors.incrementAndGet(); }
+            @Override public void onComplete() { completed.incrementAndGet(); }
+        });
+
+        assertThat(completed).hasValue(1);
+        assertThat(errors).hasValue(0);
+        assertThat(traceStore.statusOf("late-precommit")).isEqualTo("SUCCEEDED");
+        assertThat(traceStore.attempts("late-precommit")).hasSize(2);
+        assertThat(traceStore.attempts("late-precommit").get(0).status()).isEqualTo("FAILED");
+        assertThat(traceStore.attempts("late-precommit").get(1).status()).isEqualTo("SUCCEEDED");
+    }
     // ---------------------------------------------------------------- 429 维度与 retry_after
 
     @Test
