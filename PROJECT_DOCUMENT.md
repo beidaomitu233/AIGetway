@@ -200,7 +200,7 @@ MVP 规则如下：
 | 任务包 | 负责人 | 领取时间 | 文件范围 | 状态 |
 | --- | --- | --- | --- | --- |
 | P0：恢复可用性与菜单收口 | 代码审查与修复模型/root | 2026-09-15 | `light-ai-admin-ui/src/pages/applications/ApplicationFormPage.vue`、`light-ai-admin-ui/src/app/navConfig.ts`、相关测试、应用创建后端契约与 V9 迁移 | 已验证 |
-| P1：应用模型映射数据与后端 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin, light-ai-client, light-ai-runtime, light-ai-storage-jdbc 及相关测试 | 领取中 |
+| P1：应用模型映射数据与后端 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin, light-ai-client, light-ai-runtime, light-ai-storage-jdbc 及相关测试 | 待合并 |
 | P2：应用工作台与渠道页面 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin-ui 应用详情、渠道详情、接入示例、相关测试 | 领取中 |
 
 ### P0：恢复可用性与菜单收口
@@ -218,6 +218,14 @@ MVP 规则如下：
 - 实现渠道实时模型目录适配，百炼等大目录使用搜索和分页。
 - 将 Runtime 路由读取切换到应用映射版本。
 - 迁移现有虚拟模型和候选路由数据并完成对账测试。
+
+P1 当前交付记录（2026-09-15）：
+
+- V10 已加入 MySQL、PostgreSQL/H2 迁移，新增应用映射、目标和配置版本表；旧应用模型权限与候选路由按原 ID 回填。
+- 管理端已实现映射查询、校验、完整替换、批量草案和渠道目录接口；应用密钥鉴权会读取当前激活映射并拒绝映射表读取失败时的静默放宽。
+- 替换操作保留禁用历史行，写入真实映射版本快照；当前查询仅返回激活映射和目标。
+- 已通过 `mvn -B -pl light-ai-admin -am test`（240 项）、`mvn -B -pl light-ai-storage-jdbc -am test`（58 项）和运行时回归（81 项）；新增 H2 映射替换/版本快照测试通过。
+- 当前渠道目录读取已启用渠道的落库模型；ProviderAdapter 实时列表和无目录渠道的手工输入尚未接入，相关页面/真实供应商联调待 P2 或后续适配完成，P1 不宣称整条业务链路已通过。
 
 ### P2：应用工作台与渠道页面
 
