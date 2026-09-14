@@ -202,6 +202,7 @@ MVP 规则如下：
 | P0：恢复可用性与菜单收口 | 代码审查与修复模型/root | 2026-09-15 | `light-ai-admin-ui/src/pages/applications/ApplicationFormPage.vue`、`light-ai-admin-ui/src/app/navConfig.ts`、相关测试、应用创建后端契约与 V9 迁移 | 已验证 |
 | P1：应用模型映射数据与后端 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin, light-ai-client, light-ai-runtime, light-ai-storage-jdbc 及相关测试 | 领取中 |
 | P2：应用工作台与渠道页面 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin-ui 应用详情、渠道详情、接入示例、相关测试 | 领取中 |
+| P3：风险控制单页与准入校验 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin-ui 风险控制页、light-ai-admin 风险策略 API、light-ai-runtime 准入校验、Redis/数据库迁移及相关测试 | 领取中 |
 
 ### P0：恢复可用性与菜单收口
 
