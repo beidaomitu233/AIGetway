@@ -197,9 +197,9 @@ public final class RiskControlService {
 
     private void validateApplicationIds(Connection connection, List<UUID> ids) {
         for (UUID id : ids) {
-            try (var statement = connection.prepareStatement("SELECT 1 FROM " + qualify("application")
+            var dialect = com.lightai.storage.dialect.DialectResolver.resolve(connection);
+            try (var statement = connection.prepareStatement("SELECT 1 FROM " + dialect.qualify(schemaName, "application")
                     + " WHERE id=?")) {
-                var dialect = com.lightai.storage.dialect.DialectResolver.resolve(connection);
                 dialect.bindUuid(statement, 1, id);
                 try (var rs = statement.executeQuery()) {
                     if (!rs.next()) throw invalid("whitelist_application_ids", "白名单应用不存在或已删除");
@@ -228,10 +228,6 @@ public final class RiskControlService {
                 event.applicationId() == null ? null : event.applicationId().toString(), event.requestId(),
                 event.eventType(), event.action(), event.ruleId() == null ? null : event.ruleId().toString(),
                 event.reason());
-    }
-
-    private String qualify(String table) {
-        return schemaName + "." + table;
     }
 
     private static UUID parseRuleId(String raw) {
