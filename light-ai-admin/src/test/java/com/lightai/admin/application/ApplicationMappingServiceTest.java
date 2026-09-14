@@ -59,16 +59,14 @@ class ApplicationMappingServiceTest {
         upstreamId = UUID.randomUUID();
         jdbc.update("INSERT INTO channel (id, created_at, updated_at, provider_id, name, base_url) VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?)",
                 channelId, UUID.fromString("11111111-1111-4111-8111-111111110001"), "test-channel", "https://example.test");
-        jdbc.update("INSERT INTO upstream_model (id, created_at, updated_at, channel_id, model_id, display_name) VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?)",
-                upstreamId, channelId, "qwen-max", "Qwen Max");
+        jdbc.execute("DROP TABLE upstream_model");
     }
 
     @Test
     void bulkDraftAndReplacePersistCurrentVersion() {
         var draft = service.bulkCreateMappings(admin(), applicationId,
                 new ApplicationMappingsBulkCreateCommand(List.of(channelId.toString()), "qwen", 10));
-        assertThat(draft).hasSize(1);
-        assertThat(draft.get(0).publicModelName()).isEqualTo("qwen-max");
+        assertThat(draft).isEmpty();
         var current = service.mappings(admin(), applicationId);
         var saved = service.replaceMappings(admin(), applicationId, new ApplicationMappingsReplaceCommand(
                 current.applicationVersion(),

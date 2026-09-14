@@ -80,49 +80,11 @@ public final class JdbcApplicationModelMappingRepository extends AbstractJdbcRep
         return rows.values().stream().map(MutableMapping::freeze).toList();
     }
 
-    public List<CatalogRow> catalog(Connection connection, List<UUID> channelIds, String query, int limit) {
-        return catalog(connection, channelIds, query, limit, 0);
-    }
-
-    public List<CatalogRow> catalog(Connection connection, List<UUID> channelIds, String query, int limit, int offset) {
-        DatabaseDialect d = dialect(connection);
-        StringBuilder sql = new StringBuilder("SELECT u.id, u.channel_id, u.model_id, u.display_name, u.status FROM ")
-                .append(qualify(connection, "upstream_model")).append(" u JOIN ").append(qualify(connection, "channel"))
-                .append(" c ON c.id = u.channel_id WHERE u.deleted_at IS NULL AND c.deleted_at IS NULL AND c.status = 'ACTIVE'");
-        List<Object> params = new ArrayList<>();
-        if (channelIds != null && !channelIds.isEmpty()) {
-            sql.append(" AND u.channel_id IN (").append(inPlaceholders(channelIds.size())).append(")"); params.addAll(channelIds);
-        }
-        if (query != null && !query.isBlank()) {
-            sql.append(" AND (").append(d.ilikeClause("u.model_id")).append(" OR ").append(d.ilikeClause("u.display_name")).append(")");
-            params.add("%" + query.strip() + "%"); params.add("%" + query.strip() + "%");
-        }
-        sql.append(" ORDER BY u.model_id, u.id ").append(d.limitOffsetClause(Math.max(1, Math.min(limit, 500)), Math.max(0, offset)));
-        try (PreparedStatement ps = connection.prepareStatement(sql.toString())) {
-            int i = 1; for (Object value : params) bindParameter(ps, i++, value, d);
-            try (ResultSet rs = ps.executeQuery()) {
-                List<CatalogRow> result = new ArrayList<>();
-                while (rs.next()) result.add(new CatalogRow(d.readUuid(rs, "id"), d.readUuid(rs, "channel_id"), rs.getString("model_id"), rs.getString("display_name"), "ACTIVE".equals(rs.getString("status"))));
-                return List.copyOf(result);
-            }
-        } catch (SQLException e) { throw translate("渠道模型目录读取失败", e); }
-    }
-
     public boolean channelActive(Connection connection, UUID channelId) {
         DatabaseDialect d = dialect(connection);
         try (PreparedStatement ps = connection.prepareStatement("SELECT 1 FROM " + qualify(connection, "channel") + " WHERE id = ? AND deleted_at IS NULL AND status = 'ACTIVE'")) {
             d.bindUuid(ps, 1, channelId); try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
         } catch (SQLException e) { throw translate("渠道引用校验失败", e); }
-    }
-
-    public Optional<CatalogRow> activeModel(Connection connection, UUID channelId, UUID upstreamModelId) {
-        DatabaseDialect d = dialect(connection);
-        String sql = "SELECT u.id, u.channel_id, u.model_id, u.display_name, u.status FROM " + qualify(connection, "upstream_model")
-                + " u JOIN " + qualify(connection, "channel") + " c ON c.id = u.channel_id WHERE u.id = ? AND u.channel_id = ? AND u.deleted_at IS NULL AND u.status = 'ACTIVE' AND c.deleted_at IS NULL AND c.status = 'ACTIVE'";
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            d.bindUuid(ps, 1, upstreamModelId); d.bindUuid(ps, 2, channelId);
-            try (ResultSet rs = ps.executeQuery()) { return rs.next() ? Optional.of(new CatalogRow(d.readUuid(rs, "id"), d.readUuid(rs, "channel_id"), rs.getString("model_id"), rs.getString("display_name"), true)) : Optional.empty(); }
-        } catch (SQLException e) { throw translate("上游模型引用校验失败", e); }
     }
 
     public long nextRevision(Connection connection, UUID applicationId) {
@@ -202,7 +164,6 @@ public final class JdbcApplicationModelMappingRepository extends AbstractJdbcRep
 
     public record WriteMapping(UUID id, UUID virtualModelId, String publicModelName, String status, List<WriteTarget> targets) { public WriteMapping { targets = targets == null ? List.of() : List.copyOf(targets); } }
     public record WriteTarget(UUID id, UUID channelId, UUID upstreamModelId, String upstreamModelName, int priority, int weight, String status, String policyJson) {}
-    public record CatalogRow(UUID id, UUID channelId, String modelName, String displayName, boolean active) {}
     private record MutableMapping(UUID id, UUID applicationId, UUID revisionId, UUID virtualModelId, String publicModelName, String status, long version, java.time.OffsetDateTime createdAt, java.time.OffsetDateTime updatedAt, List<ApplicationModelTargetRecord> targets) {
         ApplicationModelMappingRecord freeze() { return new ApplicationModelMappingRecord(id, applicationId, revisionId, virtualModelId, publicModelName, status, version, createdAt, updatedAt, targets); }
     }

@@ -362,13 +362,7 @@ public final class ApplicationService {
                                     10, 1, "ACTIVE", null));
                 }
             } else {
-                for (JdbcApplicationModelMappingRepository.CatalogRow row : mappingRepository.catalog(
-                        connection, channels, command == null ? null : command.query(), limit)) {
-                    grouped.computeIfAbsent(row.modelName(), ignored -> new ArrayList<>()).add(
-                            new ApplicationModelTargetCommand(row.channelId().toString(),
-                                    row.id() == null ? null : row.id().toString(), row.modelName(),
-                                    10, 1, "ACTIVE", null));
-                }
+                // 没有实时目录适配器时返回空草案，由调用方按 manual_input_allowed 手工填写模型名。
             }
             return grouped.entrySet().stream().map(entry -> new ApplicationModelMappingCommand(
                     null, entry.getKey(), "ACTIVE", entry.getValue())).toList();

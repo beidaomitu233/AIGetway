@@ -96,11 +96,8 @@ public final class ChannelModelCatalogService {
             if (supportsRemote) {
                 items.addAll(remoteItems(channel, adapter, query));
             } else {
+                // V2 允许在应用映射中手工输入模型名；旧 upstream_model 目录已退役。
                 manualInputAllowed = true;
-                items.addAll(mappingRepository.catalog(connection, List.of(channelId), query, 500).stream()
-                        .map(row -> new ChannelModelCatalogItem(row.id() == null ? null : row.id().toString(),
-                                row.channelId().toString(), row.modelName(), row.displayName(), row.active()))
-                        .toList());
             }
         }
         Map<String, ChannelModelCatalogItem> unique = new LinkedHashMap<>();
