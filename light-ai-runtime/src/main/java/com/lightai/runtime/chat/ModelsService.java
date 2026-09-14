@@ -22,7 +22,7 @@ public class ModelsService {
     }
 
     public UnifiedModelList list(AccessTokenPort.Principal principal) {
-        ConfigSnapshotPort.ActiveSnapshot snapshot = snapshotPort.active();
+        ConfigSnapshotPort.ActiveSnapshot snapshot = snapshotPort.active(principal);
         List<UnifiedModelList.ModelSummary> items = snapshot.aliases().stream()
                 .filter(ConfigSnapshotPort.AliasView::enabled)
                 .filter(alias -> !alias.enabledCandidates().isEmpty())

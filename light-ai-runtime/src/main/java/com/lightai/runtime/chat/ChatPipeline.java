@@ -898,7 +898,7 @@ public class ChatPipeline {
         if (context.principal() != null && !context.principal().aliasAllowed(requestedAlias)) {
             throw new LightAiException(ErrorCode.ACCESS_DENIED, "应用未授权访问该模型");
         }
-        ConfigSnapshotPort.ActiveSnapshot snapshot = snapshotPort.active();
+        ConfigSnapshotPort.ActiveSnapshot snapshot = snapshotPort.active(context.principal());
         AliasView aliasView = snapshot.alias(resolvedAlias)
                 .orElseThrow(() -> ConfigSnapshotPort.aliasNotFound(resolvedAlias));
         if (!aliasView.enabled()) {

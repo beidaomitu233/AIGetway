@@ -24,9 +24,10 @@ public final class JdbcApplicationModelMappingRepository extends AbstractJdbcRep
     /** 运行时使用的对外模型名到旧快照 Alias 名称映射；仅返回可落到快照的迁移行。 */
     public Map<String, String> runtimeMappings(Connection connection, UUID applicationId) {
         DatabaseDialect d = dialect(connection);
-        String sql = "SELECT m.public_model_name, v.code FROM " + qualify(connection, "application_model_mapping")
-                + " m JOIN " + qualify(connection, "virtual_model") + " v ON v.id = m.virtual_model_id"
-                + " WHERE m.application_id = ? AND m.status = 'ACTIVE' AND v.deleted_at IS NULL";
+        String sql = "SELECT m.public_model_name, COALESCE(v.code, m.public_model_name) FROM " + qualify(connection, "application_model_mapping")
+                + " m LEFT JOIN " + qualify(connection, "virtual_model") + " v ON v.id = m.virtual_model_id"
+                + " WHERE m.application_id = ? AND m.status = 'ACTIVE'"
+                + " AND (m.virtual_model_id IS NULL OR v.deleted_at IS NULL)";
         Map<String, String> result = new LinkedHashMap<>();
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             d.bindUuid(ps, 1, applicationId);
