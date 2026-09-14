@@ -860,8 +860,10 @@ public class ChatPipeline {
                     .orElseThrow(() -> new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
                             "model 缺省且未配置默认 Alias", "model"));
         }
-        String resolvedAlias = alias;
-        if (context.principal() != null && !context.principal().aliasAllowed(resolvedAlias)) {
+        String requestedAlias = alias;
+        String resolvedAlias = context.principal() == null ? requestedAlias
+                : context.principal().resolveAlias(requestedAlias);
+        if (context.principal() != null && !context.principal().aliasAllowed(requestedAlias)) {
             throw new LightAiException(ErrorCode.ACCESS_DENIED, "应用未授权访问该模型");
         }
         ConfigSnapshotPort.ActiveSnapshot snapshot = snapshotPort.active();
@@ -871,7 +873,7 @@ public class ChatPipeline {
             throw ConfigSnapshotPort.aliasDisabled(resolvedAlias);
         }
         ApplicationModelConstraint constraint = enforceApplicationModelConstraint(
-                context.principal(), resolvedAlias, context.request());
+                context.principal(), requestedAlias, context.request());
         return new ParsedRequest(resolvedAlias, context.request(), snapshot, aliasView,
                 constraint == null ? null : constraint.maxOutputTokens());
     }

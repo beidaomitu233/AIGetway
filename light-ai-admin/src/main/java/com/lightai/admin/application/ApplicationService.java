@@ -12,6 +12,15 @@ import com.lightai.client.application.ApplicationMemberView;
 import com.lightai.client.application.ApplicationModelConstraint;
 import com.lightai.client.application.ApplicationModelPermissionView;
 import com.lightai.client.application.ApplicationModelsUpdateCommand;
+import com.lightai.client.application.ApplicationModelMappingCommand;
+import com.lightai.client.application.ApplicationModelTargetCommand;
+import com.lightai.client.application.ApplicationMappingsBulkCreateCommand;
+import com.lightai.client.application.ApplicationMappingsReplaceCommand;
+import com.lightai.client.application.ApplicationMappingsValidateCommand;
+import com.lightai.client.application.ApplicationMappingsValidationView;
+import com.lightai.client.application.ApplicationMappingsView;
+import com.lightai.client.application.ApplicationModelMappingView;
+import com.lightai.client.application.ApplicationModelTargetView;
 import com.lightai.client.application.ApplicationImpactCommand;
 import com.lightai.client.application.ApplicationImpactView;
 import com.lightai.client.application.ApplicationModelOptionView;
@@ -35,6 +44,9 @@ import com.lightai.storage.application.ApplicationModelPermissionRecord;
 import com.lightai.storage.application.ApplicationQuotaRecord;
 import com.lightai.storage.application.ApplicationRecord;
 import com.lightai.storage.application.JdbcApplicationRepository;
+import com.lightai.storage.application.JdbcApplicationModelMappingRepository;
+import com.lightai.storage.application.ApplicationModelMappingRecord;
+import com.lightai.storage.application.ApplicationModelTargetRecord;
 import com.lightai.storage.application.QuotaAdjustmentRecord;
 import com.lightai.runtime.ports.ConfigSnapshotPort;
 import com.lightai.storage.audit.AuditRecord;
@@ -84,12 +96,24 @@ public final class ApplicationService {
     private final Clock clock;
     private final String sourceMode;
     private final ConfigSnapshotPort snapshotPort;
+    private final JdbcApplicationModelMappingRepository mappingRepository;
 
     public ApplicationService(DataSource dataSource, JdbcApplicationRepository repository,
                               JdbcAliasRepository aliasRepository, AuditService auditService,
                               PlatformTransactionManager transactionManager,
                               PageResultFactory pageResultFactory, Clock clock, String sourceMode,
                               ConfigSnapshotPort snapshotPort) {
+        this(dataSource, repository, aliasRepository, auditService, transactionManager,
+                pageResultFactory, clock, sourceMode, snapshotPort,
+                new JdbcApplicationModelMappingRepository());
+    }
+
+    public ApplicationService(DataSource dataSource, JdbcApplicationRepository repository,
+                              JdbcAliasRepository aliasRepository, AuditService auditService,
+                              PlatformTransactionManager transactionManager,
+                              PageResultFactory pageResultFactory, Clock clock, String sourceMode,
+                              ConfigSnapshotPort snapshotPort,
+                              JdbcApplicationModelMappingRepository mappingRepository) {
         this.dataSource = dataSource;
         this.repository = repository;
         this.aliasRepository = aliasRepository;
@@ -99,6 +123,7 @@ public final class ApplicationService {
         this.clock = clock;
         this.sourceMode = sourceMode;
         this.snapshotPort = snapshotPort;
+        this.mappingRepository = mappingRepository == null ? new JdbcApplicationModelMappingRepository() : mappingRepository;
     }
 
     public PageResult<ApplicationListItem> list(RequestContext context, Map<String, String> params) {
@@ -234,6 +259,192 @@ public final class ApplicationService {
             throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用模型权限当前无法读取");
         }
     }
+
+    /** P1：读取应用当前模型映射和不可变配置版本。 */
+    public ApplicationMappingsView mappings(RequestContext context, UUID id) {
+        RequestPermissions.require(context, Permissions.APPLICATION_MODEL_VIEW);
+        try (Connection connection = dataSource.getConnection()) {
+            ApplicationRecord application = load(connection, id);
+            requireScope(connection, context, application.code());
+            long revision = mappingRepository.currentRevision(connection, id).orElse(0L);
+            return toMappingsView(id, application.version(), revision, mappingRepository.list(connection, id));
+        } catch (LightAiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用模型映射当前无法读取");
+        }
+    }
+
+    /** P1：保存前校验引用、重复名称、权重和应用版本，不写数据库。 */
+    public ApplicationMappingsValidationView validateMappings(RequestContext context, UUID id,
+                                                               ApplicationMappingsValidateCommand command) {
+        RequestPermissions.require(context, Permissions.APPLICATION_MODEL_MANAGE);
+        try (Connection connection = dataSource.getConnection()) {
+            ApplicationRecord application = load(connection, id);
+            requireScope(connection, context, application.code());
+            List<String> issues = mappingIssues(connection, id, command == null ? -1 : command.applicationVersion(),
+                    command == null ? null : command.mappings(), application.version());
+            return new ApplicationMappingsValidationView(issues.isEmpty(), issues, application.version());
+        } catch (LightAiException e) { throw e; }
+        catch (Exception e) { throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用模型映射校验失败"); }
+    }
+
+    /** P1：按应用版本完整替换映射集合，旧行以 DISABLED 保留以维持历史可追溯性。 */
+    public ManagementOperationResult<ApplicationMappingsView> replaceMappings(RequestContext context, UUID id,
+                                                                               ApplicationMappingsReplaceCommand command) {
+        RequestPermissions.require(context, Permissions.APPLICATION_MODEL_MANAGE);
+        try {
+            final ApplicationMappingsView[] result = new ApplicationMappingsView[1];
+            transaction.executeWithoutResult(status -> {
+                Connection connection = DataSourceUtils.getConnection(dataSource);
+                ApplicationRecord application = load(connection, id);
+                requireScope(connection, context, application.code());
+                List<JdbcApplicationModelMappingRepository.WriteMapping> writes = validatedWrites(
+                        connection, id, command == null ? -1 : command.applicationVersion(),
+                        command == null ? null : command.mappings(), application.version());
+                long revision = mappingRepository.nextRevision(connection, id);
+                mappingRepository.replace(connection, id, revision, reasonText(command == null ? null : command.reason()),
+                        operatorId(context), writes);
+                repository.bumpApplicationVersion(connection, id, application.version());
+                auditService.recordSuccess(connection, AuditRecord.succeeded(UUID.randomUUID(), context.requestId(),
+                        operatorId(context), "APPLICATION_MODEL_MAPPING_REPLACE", "APPLICATION", id.toString(),
+                        List.of(FieldChange.changed("mapping_count", null, writes.size()),
+                                FieldChange.changed("revision", null, revision),
+                                FieldChange.changed("reason", null, reasonText(command == null ? null : command.reason()))),
+                        sourceMode, context.sourceIpMasked()));
+                result[0] = toMappingsView(id, application.version() + 1, revision, mappingRepository.list(connection, id));
+            });
+            return new ManagementOperationResult<>(id.toString(), result[0].applicationVersion(), result[0],
+                    false, null, context.requestId());
+        } catch (JdbcApplicationRepository.OptimisticLockException e) {
+            throw new LightAiException(ErrorCode.CONFIG_VERSION_CONFLICT, "应用版本已变化，请刷新后重试");
+        } catch (LightAiException e) { throw e; }
+        catch (Exception e) { throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "应用模型映射保存失败"); }
+    }
+
+    /** P1：从已落库渠道模型生成同名映射草案；不会直接保存配置。 */
+    public List<ApplicationModelMappingCommand> bulkCreateMappings(RequestContext context, UUID id,
+                                                                     ApplicationMappingsBulkCreateCommand command) {
+        RequestPermissions.require(context, Permissions.APPLICATION_MODEL_MANAGE);
+        try (Connection connection = dataSource.getConnection()) {
+            ApplicationRecord application = load(connection, id);
+            requireScope(connection, context, application.code());
+            List<UUID> channels = new ArrayList<>();
+            if (command != null && command.channelIds() != null) {
+                for (String raw : command.channelIds()) {
+                    try { channels.add(UUID.fromString(raw)); }
+                    catch (Exception e) { throw invalid("channel_ids", "渠道 ID 格式不合法"); }
+                }
+            }
+            int limit = command == null || command.limit() == null ? 100 : command.limit();
+            if (limit < 1 || limit > 500) throw invalid("limit", "limit 必须在 1—500 之间");
+            Map<String, List<ApplicationModelTargetCommand>> grouped = new LinkedHashMap<>();
+            for (JdbcApplicationModelMappingRepository.CatalogRow row : mappingRepository.catalog(
+                    connection, channels, command == null ? null : command.query(), limit)) {
+                grouped.computeIfAbsent(row.modelName(), ignored -> new ArrayList<>()).add(
+                        new ApplicationModelTargetCommand(row.channelId().toString(), row.id().toString(),
+                                row.modelName(), 10, 1, "ACTIVE", null));
+            }
+            return grouped.entrySet().stream().map(entry -> new ApplicationModelMappingCommand(
+                    null, entry.getKey(), "ACTIVE", entry.getValue())).toList();
+        } catch (LightAiException e) { throw e; }
+        catch (Exception e) { throw new LightAiException(ErrorCode.CONFIG_DATA_UNAVAILABLE, "渠道模型目录当前无法读取"); }
+    }
+
+    private ApplicationMappingsView toMappingsView(UUID id, long applicationVersion, long revision,
+                                                    List<ApplicationModelMappingRecord> records) {
+        OffsetDateTime updated = records.stream().map(ApplicationModelMappingRecord::updatedAt)
+                .filter(Objects::nonNull).max(OffsetDateTime::compareTo).orElse(null);
+        List<ApplicationModelMappingView> items = records.stream().map(mapping -> new ApplicationModelMappingView(
+                mapping.id().toString(), mapping.publicModelName(), mapping.status(), mapping.version(),
+                mapping.targets().stream().map(target -> new ApplicationModelTargetView(
+                        target.id().toString(), target.channelId().toString(),
+                        target.upstreamModelId() == null ? null : target.upstreamModelId().toString(),
+                        target.upstreamModelName(), target.priority(), target.weight(), target.status(),
+                        target.policyJson())).toList())).toList();
+        return new ApplicationMappingsView(id.toString(), revision, applicationVersion, updated, items);
+    }
+
+    private List<JdbcApplicationModelMappingRepository.WriteMapping> validatedWrites(Connection connection, UUID id,
+                                                                                      long requestedVersion,
+                                                                                      List<ApplicationModelMappingCommand> commands,
+                                                                                      long currentVersion) {
+        List<String> issues = mappingIssues(connection, id, requestedVersion, commands, currentVersion);
+        if (!issues.isEmpty()) throw new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
+                "应用模型映射不合法", issues.stream().map(item -> new FieldIssue("mappings", "INVALID", item)).toList());
+        Map<String, UUID> existingVirtual = new LinkedHashMap<>();
+        Map<String, UUID> existingIds = new LinkedHashMap<>();
+        for (ApplicationModelMappingRecord row : mappingRepository.list(connection, id)) {
+            String key = row.publicModelName().toLowerCase(java.util.Locale.ROOT);
+            existingIds.put(key, row.id());
+            if (row.virtualModelId() != null) existingVirtual.put(key, row.virtualModelId());
+        }
+        List<JdbcApplicationModelMappingRepository.WriteMapping> result = new ArrayList<>();
+        for (ApplicationModelMappingCommand mapping : commands == null ? List.<ApplicationModelMappingCommand>of() : commands) {
+            String name = mapping.publicModelName().trim();
+            String nameKey = name.toLowerCase(java.util.Locale.ROOT);
+            UUID mappingId = existingIds.getOrDefault(nameKey, UUID.randomUUID());
+            UUID virtual = existingVirtual.get(nameKey);
+            List<JdbcApplicationModelMappingRepository.WriteTarget> targets = new ArrayList<>();
+            for (ApplicationModelTargetCommand target : mapping.targets()) {
+                UUID channel = UUID.fromString(target.channelId().trim());
+                UUID upstreamId = target.upstreamModelId() == null || target.upstreamModelId().isBlank() ? null : UUID.fromString(target.upstreamModelId().trim());
+                String upstreamName = target.upstreamModelName().trim();
+                if (upstreamId != null) upstreamName = mappingRepository.activeModel(connection, channel, upstreamId).map(JdbcApplicationModelMappingRepository.CatalogRow::modelName).orElse(upstreamName);
+                targets.add(new JdbcApplicationModelMappingRepository.WriteTarget(parseOrRandom(null), channel, upstreamId,
+                        upstreamName, target.priority() == null ? 10 : target.priority(), target.weight() == null ? 1 : target.weight(),
+                        target.status() == null || target.status().isBlank() ? "ACTIVE" : target.status(), target.policyJson()));
+            }
+            result.add(new JdbcApplicationModelMappingRepository.WriteMapping(mappingId, virtual, name,
+                    mapping.status() == null || mapping.status().isBlank() ? "ACTIVE" : mapping.status(), targets));
+        }
+        return result;
+    }
+
+    private List<String> mappingIssues(Connection connection, UUID id, long requestedVersion,
+                                       List<ApplicationModelMappingCommand> commands, long currentVersion) {
+        List<String> issues = new ArrayList<>();
+        if (requestedVersion < 1) issues.add("application_version 必须是正整数");
+        else if (requestedVersion != currentVersion) issues.add("应用版本已变化，请刷新后重试");
+        Set<String> names = new LinkedHashSet<>();
+        for (ApplicationModelMappingCommand mapping : commands == null ? List.<ApplicationModelMappingCommand>of() : commands) {
+            if (mapping == null) { issues.add("mapping 不能为空"); continue; }
+            String name = mapping.publicModelName() == null ? "" : mapping.publicModelName().trim();
+            if (name.isEmpty() || name.length() > 128 || !name.matches("[A-Za-z0-9._:-]+")) issues.add("对外模型名不合法: " + name);
+            if (!names.add(name.toLowerCase(java.util.Locale.ROOT))) issues.add("对外模型名重复: " + name);
+            String status = mapping.status() == null || mapping.status().isBlank() ? "ACTIVE" : mapping.status().trim();
+            if (!Set.of("ACTIVE", "DISABLED").contains(status)) issues.add("映射状态不合法: " + status);
+            if (mapping.targets() == null || mapping.targets().isEmpty()) { issues.add("映射至少需要一个目标: " + name); continue; }
+            Set<String> targetKeys = new LinkedHashSet<>();
+            int activeTargets = 0;
+            for (ApplicationModelTargetCommand target : mapping.targets()) {
+                if (target == null || target.channelId() == null) { issues.add("目标渠道不能为空: " + name); continue; }
+                UUID channel;
+                try { channel = UUID.fromString(target.channelId().trim()); } catch (Exception e) { issues.add("目标渠道 ID 不合法: " + target.channelId()); continue; }
+                if (!mappingRepository.channelActive(connection, channel)) issues.add("目标渠道不存在或未启用: " + channel);
+                String modelName = target.upstreamModelName() == null ? "" : target.upstreamModelName().trim();
+                if (modelName.isEmpty() || modelName.length() > 128) issues.add("真实模型名不合法: " + modelName);
+                String key = channel + "|" + modelName.toLowerCase(java.util.Locale.ROOT);
+                if (!targetKeys.add(key)) issues.add("同一映射目标重复: " + modelName);
+                if (target.upstreamModelId() != null && !target.upstreamModelId().isBlank()) {
+                    try { if (mappingRepository.activeModel(connection, channel, UUID.fromString(target.upstreamModelId().trim())).isEmpty()) issues.add("上游模型不存在、未启用或不属于目标渠道: " + modelName); }
+                    catch (Exception e) { issues.add("上游模型 ID 不合法: " + target.upstreamModelId()); }
+                }
+                int priority = target.priority() == null ? 10 : target.priority();
+                int weight = target.weight() == null ? 1 : target.weight();
+                if (priority < 1 || priority > 1000) issues.add("目标优先级必须在 1—1000 之间");
+                if (weight < 1 || weight > 1000) issues.add("目标权重必须在 1—1000 之间");
+                String targetStatus = target.status() == null || target.status().isBlank() ? "ACTIVE" : target.status().trim();
+                if (!Set.of("ACTIVE", "DISABLED").contains(targetStatus)) issues.add("目标状态不合法: " + targetStatus);
+                if ("ACTIVE".equals(targetStatus)) activeTargets++;
+            }
+            if ("ACTIVE".equals(status) && activeTargets == 0) issues.add("启用映射至少需要一个启用目标: " + name);
+        }
+        return List.copyOf(issues);
+    }
+
+    private static UUID parseOrRandom(String raw) { try { return raw == null || raw.isBlank() ? UUID.randomUUID() : UUID.fromString(raw.trim()); } catch (Exception e) { return UUID.randomUUID(); } }
+    private static String reasonText(String value) { return value == null || value.isBlank() ? "APPLICATION_MODEL_MAPPING_REPLACE" : value.trim(); }
 
     public ManagementOperationResult<ApplicationDetail> create(
             RequestContext context, ApplicationCreateCommand command) {
