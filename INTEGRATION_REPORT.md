@@ -50,3 +50,4 @@ BUILD SUCCESS；Spring Boot fat jar repackage succeeded
 - `d007781 docs(fullstack): P5-A 记录接入链路联调`
 - `5ebd491 docs(fullstack): P5-A 补充交付提交信息`
 - PR：[#7](https://github.com/beidaomitu233/AIGetway/pull/7)，目标分支 `dev`，当前 OPEN，待真实环境复验后合并。
+- `7cc8dec docs(fullstack): P5-A 更正联调证据`
