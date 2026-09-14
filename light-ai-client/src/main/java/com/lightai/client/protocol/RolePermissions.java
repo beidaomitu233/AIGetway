@@ -27,7 +27,8 @@ public final class RolePermissions {
             Permissions.USAGE_VIEW,
             Permissions.DRAFT_VIEW,
             Permissions.RUNTIME_CONFIG_VIEW,
-            Permissions.DEVELOPER_VIEW);
+            Permissions.DEVELOPER_VIEW,
+            Permissions.RISK_CONTROL_VIEW);
 
     private static final List<String> OPERATOR = List.of(
             // VIEW_ONLY 全部权限，另外具备检测与人工恢复能力
@@ -49,7 +50,8 @@ public final class RolePermissions {
             Permissions.RUNTIME_CONFIG_VIEW,
             Permissions.ACCESS_VIEW,
             Permissions.AUDIT_VIEW, Permissions.AUDIT_EXPORT,
-            Permissions.DEVELOPER_VIEW, Permissions.DEVELOPER_TEST);
+            Permissions.DEVELOPER_VIEW, Permissions.DEVELOPER_TEST,
+            Permissions.RISK_CONTROL_VIEW, Permissions.RISK_CONTROL_MANAGE);
 
     private static final List<String> DEVELOPER = List.of(
             Permissions.OVERVIEW_VIEW,
@@ -67,7 +69,8 @@ public final class RolePermissions {
             Permissions.USAGE_VIEW,
             Permissions.DRAFT_VIEW,
             Permissions.RUNTIME_CONFIG_VIEW,
-            Permissions.DEVELOPER_VIEW, Permissions.DEVELOPER_TEST);
+            Permissions.DEVELOPER_VIEW, Permissions.DEVELOPER_TEST,
+            Permissions.RISK_CONTROL_VIEW);
 
     private static final List<String> APPLICATION_OWNER = List.of(
             Permissions.OVERVIEW_VIEW,
@@ -87,7 +90,7 @@ public final class RolePermissions {
             Permissions.PROVIDER_VIEW, Permissions.CREDENTIAL_VIEW,
             Permissions.MODEL_VIEW, Permissions.ALIAS_VIEW,
             Permissions.TRACE_VIEW, Permissions.USAGE_VIEW,
-            Permissions.AUDIT_VIEW, Permissions.DEVELOPER_VIEW);
+            Permissions.AUDIT_VIEW, Permissions.DEVELOPER_VIEW, Permissions.RISK_CONTROL_VIEW);
 
     private RolePermissions() {
     }

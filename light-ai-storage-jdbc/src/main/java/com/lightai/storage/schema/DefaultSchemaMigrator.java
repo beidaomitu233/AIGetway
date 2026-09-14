@@ -27,7 +27,7 @@ import javax.sql.DataSource;
  */
 public class DefaultSchemaMigrator implements SchemaMigrator {
 
-    static final int LATEST_VERSION = 9;
+    static final int LATEST_VERSION = 11;
     private static final long POSTGRES_LOCK_ID = 738_120_426L;
     private static final String MYSQL_LOCK_NAME = "light_ai_schema_migration";
     private static final Migration POSTGRES_BASELINE = new Migration(
@@ -82,6 +82,16 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
     private static final Migration MYSQL_OPTIONAL_APPLICATION_CURRENCY = new Migration(
             9, "optional_application_currency",
             "db/migration/mysql/V9__optional_application_currency.sql");
+    private static final Migration POSTGRES_APPLICATION_MODEL_MAPPINGS = new Migration(
+            10, "application_model_mappings",
+            "db/migration/postgres/V10__application_model_mappings.sql");
+    private static final Migration MYSQL_APPLICATION_MODEL_MAPPINGS = new Migration(
+            10, "application_model_mappings",
+            "db/migration/mysql/V10__application_model_mappings.sql");
+    private static final Migration POSTGRES_RISK_CONTROL = new Migration(
+            11, "risk_control", "db/migration/postgres/V11__risk_control.sql");
+    private static final Migration MYSQL_RISK_CONTROL = new Migration(
+            11, "risk_control", "db/migration/mysql/V11__risk_control.sql");
 
     private final DataSource dataSource;
 
@@ -111,6 +121,8 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
                     apply(connection, MYSQL_ADMISSION_LEDGER_OBSERVATION, h2);
                     apply(connection, MYSQL_AUDIT_AND_INSTANCE_GATE_INDEXES, h2);
                     apply(connection, MYSQL_OPTIONAL_APPLICATION_CURRENCY, h2);
+                    apply(connection, MYSQL_APPLICATION_MODEL_MAPPINGS, h2);
+                    apply(connection, MYSQL_RISK_CONTROL, h2);
                 } else {
                     apply(connection, POSTGRES_BASELINE, h2);
                     apply(connection, POSTGRES_APPLICATION_FOUNDATION, h2);
@@ -121,6 +133,8 @@ public class DefaultSchemaMigrator implements SchemaMigrator {
                     apply(connection, POSTGRES_ADMISSION_LEDGER_OBSERVATION, h2);
                     apply(connection, POSTGRES_AUDIT_AND_INSTANCE_GATE_INDEXES, h2);
                     apply(connection, POSTGRES_OPTIONAL_APPLICATION_CURRENCY, h2);
+                    apply(connection, POSTGRES_APPLICATION_MODEL_MAPPINGS, h2);
+                    apply(connection, POSTGRES_RISK_CONTROL, h2);
                 }
                 if (dialect.databaseType() == DatabaseType.POSTGRESQL) {
                     connection.commit();

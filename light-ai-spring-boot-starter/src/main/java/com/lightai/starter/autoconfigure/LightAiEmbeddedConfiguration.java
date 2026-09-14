@@ -107,7 +107,8 @@ public class LightAiEmbeddedConfiguration {
             ObjectProvider<com.lightai.runtime.capacity.QueueService> queueServiceProvider,
             ObjectProvider<com.lightai.runtime.ports.AdapterRegistryPort> adapterRegistryPortProvider,
             ObjectProvider<com.lightai.runtime.trace.TraceStore> traceStoreProvider,
-            ObjectProvider<List<ProviderAdapter>> adaptersProvider) {
+            ObjectProvider<List<ProviderAdapter>> adaptersProvider,
+            ObjectProvider<com.lightai.runtime.ports.RiskControlPort> riskControlPortProvider) {
         com.lightai.runtime.capacity.InMemoryCapacityStore capacityStore =
                 new com.lightai.runtime.capacity.InMemoryCapacityStore();
         com.lightai.runtime.ports.ConfigSnapshotPort snapshotPort =
@@ -155,8 +156,10 @@ public class LightAiEmbeddedConfiguration {
                 queueService,
                 adapterRegistry,
                 traceStore,
+                com.lightai.runtime.ports.ApplicationQuotaPort.unlimited(),
                 () -> com.lightai.runtime.chat.ReliabilityBudgets.DEFAULT,
-                120_000L);
+                120_000L, null,
+                riskControlPortProvider.getIfAvailable(com.lightai.runtime.ports.RiskControlPort::allowAll));
     }
 
     @Bean

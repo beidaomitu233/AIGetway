@@ -95,6 +95,26 @@ class ApplicationApiContractTest {
      * 与 BACKEND_PLAN 应用列表契约 requests_24h/success_rate_24h 不一致，必须显式声明并回归断言。
      */
     @Test
+    void modelMappingsExposeVersionAndRejectStaleReplacement() throws Exception {
+        mvc.perform(asOwner(get(base() + "/mappings")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.application_id").value(applicationId))
+                .andExpect(jsonPath("$.data.revision").value(0))
+                .andExpect(jsonPath("$.data.application_version").value("1"))
+                .andExpect(jsonPath("$.data.mappings").isArray());
+        mvc.perform(asOwner(post(base() + "/mappings:validate"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"application_version\":0,\"mappings\":[]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.valid").value(false));
+        mvc.perform(asOwner(put(base() + "/mappings"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"application_version\":0,\"mappings\":[]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("FIELD_VALIDATION_FAILED"));
+    }
+
+    @Test
     void listRowExposesContractNamesFor24hSummaryAndBudgetStatus() throws Exception {
         JsonNode list = read(mvc.perform(asOwner(get("/admin/applications"))).andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString()).path("data").path("items").get(0);

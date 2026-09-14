@@ -68,6 +68,9 @@ public final class Permissions {
     public static final String DEVELOPER_VIEW = "developer.view";
     public static final String DEVELOPER_TEST = "developer.test";
 
+    public static final String RISK_CONTROL_VIEW = "risk-control.view";
+    public static final String RISK_CONTROL_MANAGE = "risk-control.manage";
+
     private Permissions() {
     }
 
@@ -93,6 +96,7 @@ public final class Permissions {
                 RUNTIME_CONFIG_VIEW, RUNTIME_CONFIG_MANAGE,
                 ACCESS_VIEW, ACCESS_MANAGE,
                 AUDIT_VIEW, AUDIT_EXPORT,
-                DEVELOPER_VIEW, DEVELOPER_TEST);
+                DEVELOPER_VIEW, DEVELOPER_TEST,
+                RISK_CONTROL_VIEW, RISK_CONTROL_MANAGE);
     }
 }
