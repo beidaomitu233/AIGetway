@@ -200,8 +200,8 @@ MVP 规则如下：
 | 任务包 | 负责人 | 领取时间 | 文件范围 | 状态 |
 | --- | --- | --- | --- | --- |
 | P0：恢复可用性与菜单收口 | 代码审查与修复模型/root | 2026-09-15 | `light-ai-admin-ui/src/pages/applications/ApplicationFormPage.vue`、`light-ai-admin-ui/src/app/navConfig.ts`、相关测试、应用创建后端契约与 V9 迁移 | 已验证 |
-| P1：应用模型映射数据与后端 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin, light-ai-client, light-ai-runtime, light-ai-storage-jdbc 及相关测试 | 领取中 |
-| P2：应用工作台与渠道页面 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin-ui 应用详情、渠道详情、接入示例、相关测试 | 领取中 |
+| P1：应用模型映射数据与后端 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin, light-ai-client, light-ai-runtime, light-ai-storage-jdbc 及相关测试 | 待合并 |
+| P2：应用工作台与渠道页面 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin-ui 应用详情、渠道详情、接入示例、相关测试 | 待复验 |
 | P3：风险控制单页与准入校验 | 代码审查与修复模型/root | 2026-09-15 | light-ai-admin-ui 风险控制页、light-ai-admin 风险策略 API、light-ai-runtime 准入校验、Redis/数据库迁移及相关测试 | 领取中 |
 
 ### P0：恢复可用性与菜单收口
@@ -220,7 +220,24 @@ MVP 规则如下：
 - 将 Runtime 路由读取切换到应用映射版本。
 - 迁移现有虚拟模型和候选路由数据并完成对账测试。
 
+P1 当前交付记录（2026-09-15）：
+
+- V10 已加入 MySQL、PostgreSQL/H2 迁移，新增应用映射、目标和配置版本表；旧应用模型权限与候选路由按原 ID 回填。
+- 管理端已实现映射查询、校验、完整替换、批量草案和渠道目录接口；应用密钥鉴权会读取当前激活映射并拒绝映射表读取失败时的静默放宽。
+- 替换操作保留禁用历史行，写入真实映射版本快照；当前查询仅返回激活映射和目标。
+- 已通过 `mvn -B -pl light-ai-admin -am test`（243 项）、`mvn -B -pl light-ai-storage-jdbc -am test`（58 项）和运行时回归（81 项）；新增 H2 映射替换/版本快照测试通过。
+- 渠道目录已接入 ProviderAdapter.listModels；不支持实时目录或缺少凭证时返回落库目录并标记 manual_input_allowed，批量草案支持瞬时目录条目。当前仅以 Stub Adapter/H2 验证，真实供应商同步、真实页面和新建手工映射后的网关调用仍待环境复验，P1 不宣称整条业务链路已通过。
+
 ### P2：应用工作台与渠道页面
+
+P2 当前交付记录（2026-09-15）：
+
+- 应用详情已移除旧的模型授权弹窗，改为模型映射工作区，支持现有映射编辑、优先级/权重/启停/策略 JSON、完整替换前校验和变更原因审计。
+- 应用映射支持从渠道目录批量生成草案；草案不会直接写入，保存时调用 `mappings:validate` 和版本化 `PUT /mappings`。
+- 渠道详情已提供实时模型目录搜索，前端按 `model_name`、`manual_input_allowed` 等真实协议字段渲染；不支持实时目录时提示在应用映射中手工输入模型名。
+- 接入示例和应用文案已统一为“模型映射”。旧模型授权代码和弹窗已从应用详情移除。
+- 前端 `npm run typecheck`、`npm run build`，以及应用/渠道回归测试 49 项通过；后端映射、渠道目录和 HTTP 契约测试通过。
+- 仍待真实供应商、真实凭证和网关运行环境复验；当前 ProviderAdapter/H2 验证不能证明真实上游同步或新建手工映射已完成调用链路，故状态为“待复验”。
 
 - 应用详情新增模型映射页签和批量选择流程。
 - 渠道详情新增实时模型查询，不再提供独立上游模型 CRUD。

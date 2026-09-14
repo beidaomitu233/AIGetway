@@ -59,7 +59,13 @@ final class SchemaContract {
                 "db/migration/" + folder + "/V7__admission_ledger_observation_retention.sql")
                 + "\n"
                 + DefaultSchemaMigrator.loadScript(
-                "db/migration/" + folder + "/V8__audit_and_instance_gate_indexes.sql");
+                "db/migration/" + folder + "/V8__audit_and_instance_gate_indexes.sql")
+                + "\n"
+                + DefaultSchemaMigrator.loadScript(
+                "db/migration/" + folder + "/V9__optional_application_currency.sql")
+                + "\n"
+                + DefaultSchemaMigrator.loadScript(
+                "db/migration/" + folder + "/V10__application_model_mappings.sql");
         return parse(scripts);
     }
 

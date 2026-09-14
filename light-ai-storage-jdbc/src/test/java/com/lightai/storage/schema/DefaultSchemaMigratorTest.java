@@ -99,9 +99,21 @@ class DefaultSchemaMigratorTest {
             assertThat(resultSet.getString("checksum")).hasSize(64);
             assertThat(resultSet.getBoolean("success")).isTrue();
             assertThat(resultSet.next()).isTrue();
-            assertThat(resultSet.getInt("version")).isEqualTo(DefaultSchemaMigrator.LATEST_VERSION);
+            assertThat(resultSet.getInt("version")).isEqualTo(8);
             assertThat(resultSet.getString("description"))
                     .isEqualTo("audit_and_instance_gate_indexes");
+            assertThat(resultSet.getString("checksum")).hasSize(64);
+            assertThat(resultSet.getBoolean("success")).isTrue();
+            assertThat(resultSet.next()).isTrue();
+            assertThat(resultSet.getInt("version")).isEqualTo(9);
+            assertThat(resultSet.getString("description"))
+                    .isEqualTo("optional_application_currency");
+            assertThat(resultSet.getString("checksum")).hasSize(64);
+            assertThat(resultSet.getBoolean("success")).isTrue();
+            assertThat(resultSet.next()).isTrue();
+            assertThat(resultSet.getInt("version")).isEqualTo(DefaultSchemaMigrator.LATEST_VERSION);
+            assertThat(resultSet.getString("description"))
+                    .isEqualTo("application_model_mappings");
             assertThat(resultSet.getString("checksum")).hasSize(64);
             assertThat(resultSet.getBoolean("success")).isTrue();
             assertThat(resultSet.next()).isFalse();
