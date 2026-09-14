@@ -812,10 +812,14 @@ public final class ApplicationService {
             requireScope(connection, context, application.code());
             Set<UUID> authorizable = null;
             if (!isTrustedIdentity(context)) {
-                authorizable = repository.listModelPermissions(connection, id).stream()
-                        .filter(ApplicationModelPermissionRecord::enabled)
-                        .map(ApplicationModelPermissionRecord::virtualModelId)
-                        .collect(java.util.stream.Collectors.toSet());
+                authorizable = repository.listActiveMappedVirtualModelIds(connection, id);
+                // 存量应用可能尚未完成 V10 映射回填，兼容读取旧授权集合。
+                if (authorizable.isEmpty()) {
+                    authorizable = repository.listModelPermissions(connection, id).stream()
+                            .filter(ApplicationModelPermissionRecord::enabled)
+                            .map(ApplicationModelPermissionRecord::virtualModelId)
+                            .collect(java.util.stream.Collectors.toSet());
+                }
             }
             return optionsFromSnapshot(authorizable);
         } catch (LightAiException e) {
