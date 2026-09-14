@@ -415,7 +415,8 @@ public final class ApplicationService {
                 UUID channel = UUID.fromString(target.channelId().trim());
                 UUID upstreamId = target.upstreamModelId() == null || target.upstreamModelId().isBlank() ? null : UUID.fromString(target.upstreamModelId().trim());
                 String upstreamName = target.upstreamModelName().trim();
-                if (upstreamId != null) upstreamName = mappingRepository.activeModel(connection, channel, upstreamId).map(JdbcApplicationModelMappingRepository.CatalogRow::modelName).orElse(upstreamName);
+                // upstream_model_id 仅作为历史快照标识保留，运行时以目标模型名为准。
+                // 新目录可以返回瞬时模型（没有持久化 ID），因此保存不能依赖旧目录表回查。
                 targets.add(new JdbcApplicationModelMappingRepository.WriteTarget(parseOrRandom(null), channel, upstreamId,
                         upstreamName, target.priority() == null ? 10 : target.priority(), target.weight() == null ? 1 : target.weight(),
                         target.status() == null || target.status().isBlank() ? "ACTIVE" : target.status(), target.policyJson()));
@@ -452,7 +453,7 @@ public final class ApplicationService {
                 String key = channel + "|" + modelName.toLowerCase(java.util.Locale.ROOT);
                 if (!targetKeys.add(key)) issues.add("同一映射目标重复: " + modelName);
                 if (target.upstreamModelId() != null && !target.upstreamModelId().isBlank()) {
-                    try { if (mappingRepository.activeModel(connection, channel, UUID.fromString(target.upstreamModelId().trim())).isEmpty()) issues.add("上游模型不存在、未启用或不属于目标渠道: " + modelName); }
+                    try { UUID.fromString(target.upstreamModelId().trim()); }
                     catch (Exception e) { issues.add("上游模型 ID 不合法: " + target.upstreamModelId()); }
                 }
                 int priority = target.priority() == null ? 10 : target.priority();

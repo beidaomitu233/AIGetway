@@ -85,16 +85,11 @@ public final class JdbcConfigSnapshotPortAdapter extends AbstractJdbcRepository 
         Map<String, String> names = new LinkedHashMap<>();
         long revision = 0L;
         try (Connection connection = connectionSupplier.get()) {
+            // 应用请求只依赖 V2 映射版本、目标名称和渠道连接；旧 upstream_model 目录删除后仍可运行。
             String sql = "SELECT r.revision, m.id AS mapping_id, m.public_model_name, "
                     + "t.id AS target_id, t.channel_id, t.upstream_model_id, t.upstream_model_name, "
                     + "t.priority, t.weight, c.base_url, c.proxy_url, c.connect_timeout_ms, "
-                    + "c.read_timeout_ms, c.default_headers, p.type AS provider_type, "
-                    + "u.model_id, u.tokenizer_family, u.context_window, u.max_output_tokens, "
-                    + "u.support_stream, u.support_system_message, u.support_temperature, "
-                    + "u.support_top_p, u.support_stop, u.temperature_min, u.temperature_max, "
-                    + "u.top_p_min, u.top_p_max, u.max_stop_sequences, u.default_temperature, "
-                    + "u.default_top_p, u.default_max_tokens, u.input_price, u.output_price, "
-                    + "u.price_unit, u.currency "
+                    + "c.read_timeout_ms, c.default_headers, p.type AS provider_type "
                     + "FROM " + qualify(connection, "application_config_revision") + " r "
                     + "JOIN " + qualify(connection, "application_model_mapping")
                     + " m ON m.revision_id = r.id AND m.status = 'ACTIVE' "
@@ -103,8 +98,6 @@ public final class JdbcConfigSnapshotPortAdapter extends AbstractJdbcRepository 
                     + "JOIN " + qualify(connection, "channel")
                     + " c ON c.id = t.channel_id AND c.status = 'ACTIVE' AND c.deleted_at IS NULL "
                     + "LEFT JOIN " + qualify(connection, "provider") + " p ON p.id = c.provider_id "
-                    + "LEFT JOIN " + qualify(connection, "upstream_model")
-                    + " u ON u.id = t.upstream_model_id AND u.status = 'ACTIVE' AND u.deleted_at IS NULL "
                     + "WHERE r.application_id = ? AND r.status = 'ACTIVE' "
                     + "ORDER BY m.public_model_name, t.priority, t.weight DESC, t.id";
             try (var statement = connection.prepareStatement(sql)) {
@@ -118,34 +111,33 @@ public final class JdbcConfigSnapshotPortAdapter extends AbstractJdbcRepository 
                         String channelId = toString(rs.getObject("channel_id"));
                         String targetId = toString(rs.getObject("target_id"));
                         String modelPk = toString(rs.getObject("upstream_model_id"));
-                        String modelId = rs.getString("model_id");
-                        if (modelId == null || modelId.isBlank()) modelId = rs.getString("upstream_model_name");
+                        String modelId = rs.getString("upstream_model_name");
                         if (mappingId == null || publicName == null || providerType == null
                                 || channelId == null || targetId == null || modelId == null) continue;
                         if (modelPk == null || modelPk.isBlank()) modelPk = targetId;
                         CandidateView candidate = new CandidateView(
                                 targetId, channelId, providerType, modelPk, modelId,
                                 rs.getLong("priority"), rs.getInt("weight"), true,
-                                rs.getString("tokenizer_family"),
-                                applicationLongOrDefault(rs.getObject("context_window"), 128000L),
-                                applicationLongOrDefault(rs.getObject("max_output_tokens"), 16384L),
-                                applicationBoolOrDefault(rs.getObject("support_stream"), true),
-                                applicationBoolOrDefault(rs.getObject("support_system_message"), true),
-                                applicationBoolOrDefault(rs.getObject("support_temperature"), true),
-                                applicationBoolOrDefault(rs.getObject("support_top_p"), true),
-                                applicationBoolOrDefault(rs.getObject("support_stop"), true),
-                                toBigDecimalOrZero(rs.getObject("temperature_min")),
-                                toBigDecimalOrZero(rs.getObject("temperature_max")),
-                                toBigDecimalOrZero(rs.getObject("top_p_min")),
-                                toBigDecimalOrZero(rs.getObject("top_p_max")),
-                                toIntOrNull(rs.getObject("max_stop_sequences")),
-                                toBigDecimalOrZero(rs.getObject("default_temperature")),
-                                toBigDecimalOrZero(rs.getObject("default_top_p")),
-                                toLongOrNull(rs.getObject("default_max_tokens")),
-                                applicationStringOrDefault(rs.getObject("input_price"), "0"),
-                                applicationStringOrDefault(rs.getObject("output_price"), "0"),
-                                applicationIntOrDefault(rs.getObject("price_unit"), 1000000),
-                                applicationStringOrDefault(rs.getObject("currency"), "USD"),
+                                null,
+                                128000L,
+                                16384L,
+                                true,
+                                true,
+                                true,
+                                true,
+                                true,
+                                BigDecimal.ZERO,
+                                BigDecimal.ZERO,
+                                BigDecimal.ZERO,
+                                BigDecimal.ZERO,
+                                null,
+                                BigDecimal.ZERO,
+                                BigDecimal.ZERO,
+                                null,
+                                "0",
+                                "0",
+                                1000000,
+                                "USD",
                                 rs.getString("base_url"), rs.getString("proxy_url"),
                                 applicationIntOrDefault(rs.getObject("connect_timeout_ms"), 3000),
                                 applicationIntOrDefault(rs.getObject("read_timeout_ms"), 120000),

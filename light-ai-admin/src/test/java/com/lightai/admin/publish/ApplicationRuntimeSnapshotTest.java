@@ -71,6 +71,10 @@ class ApplicationRuntimeSnapshotTest {
                         new ApplicationModelTargetCommand(channelId.toString(), null, "qwen-max",
                                 1, 100, "ACTIVE", null)))), "runtime mapping"));
 
+        // P4-BE：应用运行时不能再依赖已下线的全局模型目录。
+        jdbc.execute("DROP TABLE virtual_model");
+        jdbc.execute("DROP TABLE upstream_model");
+
         AccessTokenPort.Principal principal = AccessTokenPort.Principal.enterprise(
                 "runtime-app", List.of("assistant"), applicationId.toString(), UUID.randomUUID().toString(),
                 null, null, Map.of(), Map.of("assistant", "assistant"));
