@@ -44,7 +44,8 @@
 - `fec5405` `fix(fullstack): P4 下线旧访问凭证运行面`
 - `5ecb928` `fix(fullstack): P4 解耦应用映射运行时旧表`
 - `839d651` `fix(fullstack): P4 删除旧访问凭证前端入口`
-- 689e076 ix(fullstack): P4 下线旧管理控制器装配
+- 689e076 
+ix(fullstack): P4 下线旧管理控制器装配
 - 文档提交后推送到 `origin/fix/fullstack-integration-P4-root`；未直接合并 `dev`，等待后续运行链路迁移和独立评审。
 
 ## 合并建议
