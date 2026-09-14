@@ -25,6 +25,7 @@ const pages = {
   accessDetail: () => import('@/pages/access/AccessDetailPage.vue'),
   auditList: () => import('@/pages/audit/AuditListPage.vue'),
   auditDetail: () => import('@/pages/audit/AuditDetailPage.vue'),
+  riskControl: () => import('@/pages/risk/RiskControlPage.vue'),
   applicationList: () => import('@/pages/applications/ApplicationListPage.vue'),
   applicationForm: () => import('@/pages/applications/ApplicationFormPage.vue'),
   applicationDetail: () => import('@/pages/applications/ApplicationDetailPage.vue'),
@@ -112,6 +113,8 @@ export const routes: RouteRecordRaw[] = [
 
   moduleRoute('access-list', '/ui/access-credentials', '访问凭证', Permission.accessView, pages.accessList),
   moduleRoute('access-detail', '/ui/access-credentials/:id', '访问凭证详情', Permission.accessView, pages.accessDetail),
+
+  moduleRoute('risk-control', '/ui/risk-control', '风险控制', Permission.riskControlView, pages.riskControl),
 
   moduleRoute('audit-list', '/ui/audit-logs', '审计日志', Permission.auditView, pages.auditList),
   moduleRoute('audit-detail', '/ui/audit-logs/:id', '审计详情', Permission.auditView, pages.auditDetail),

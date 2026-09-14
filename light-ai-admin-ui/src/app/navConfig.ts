@@ -11,7 +11,7 @@ export interface NavSection {
   items: NavItem[]
 }
 
-/** P0：只展示当前可用的核心业务入口；风险控制在 P3 页面交付后加入。 */
+/** P3：风险控制与审计同属治理入口，策略集中在单页。 */
 export const navSections: NavSection[] = [
   {
     title: '运行概览',
@@ -24,6 +24,12 @@ export const navSections: NavSection[] = [
     items: [
       { title: '应用', to: '/ui/applications', permission: Permission.applicationView },
       { title: '渠道', to: '/ui/channels', permission: Permission.providerView },
+    ],
+  },
+  {
+    title: '安全治理',
+    items: [
+      { title: '风险控制', to: '/ui/risk-control', permission: Permission.riskControlView },
     ],
   },
   {

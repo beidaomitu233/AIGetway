@@ -1041,6 +1041,51 @@ public class LightAiAdminAutoConfiguration {
             return new com.lightai.admin.application.ApplicationController(service);
         }
 
+        // ---------- 风险控制（P3） ----------
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.storage.risk.JdbcRiskControlRepository lightAiRiskControlRepository(
+                StorageProperties properties) {
+            return new com.lightai.storage.risk.JdbcRiskControlRepository(properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        public com.lightai.admin.risk.RiskControlService lightAiRiskControlService(
+                DataSource dataSource,
+                com.lightai.storage.risk.JdbcRiskControlRepository repository,
+                PlatformTransactionManager transactionManager,
+                com.lightai.admin.audit.AuditService auditService,
+                Clock clock,
+                StorageProperties properties) {
+            return new com.lightai.admin.risk.RiskControlService(dataSource, repository, transactionManager, auditService,
+                    clock, properties.getSchemaName());
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(com.lightai.runtime.ports.RiskWindowStore.class)
+        public com.lightai.runtime.ports.RiskWindowStore lightAiRiskWindowStore() {
+            return new com.lightai.runtime.ports.InMemoryRiskWindowStore();
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(com.lightai.runtime.ports.RiskControlPort.class)
+        public com.lightai.runtime.ports.RiskControlPort lightAiRiskControlPort(
+                DataSource dataSource,
+                com.lightai.storage.risk.JdbcRiskControlRepository repository,
+                Clock clock,
+                com.lightai.runtime.ports.RiskWindowStore windowStore) {
+            return new com.lightai.admin.risk.JdbcRiskControlPort(dataSource, repository, clock, windowStore);
+        }
+
+        @Bean
+        @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+        public com.lightai.admin.risk.RiskControlController lightAiRiskControlController(
+                com.lightai.admin.risk.RiskControlService service) {
+            return new com.lightai.admin.risk.RiskControlController(service);
+        }
+
         // ---------- 数据迁移执行器（BE-003 / CR-015） ----------
 
         @Bean

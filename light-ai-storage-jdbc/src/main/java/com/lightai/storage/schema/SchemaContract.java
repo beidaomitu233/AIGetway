@@ -65,7 +65,10 @@ final class SchemaContract {
                 "db/migration/" + folder + "/V9__optional_application_currency.sql")
                 + "\n"
                 + DefaultSchemaMigrator.loadScript(
-                "db/migration/" + folder + "/V10__application_model_mappings.sql");
+                "db/migration/" + folder + "/V10__application_model_mappings.sql")
+                + "\n"
+                + DefaultSchemaMigrator.loadScript(
+                "db/migration/" + folder + "/V11__risk_control.sql");
         return parse(scripts);
     }
 
