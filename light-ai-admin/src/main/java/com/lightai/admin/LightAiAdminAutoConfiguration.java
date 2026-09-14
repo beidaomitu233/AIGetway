@@ -347,8 +347,12 @@ public class LightAiAdminAutoConfiguration {
         @ConditionalOnMissingBean
         public com.lightai.admin.channel.ChannelModelCatalogService lightAiChannelModelCatalogService(
                 DataSource dataSource,
-                com.lightai.storage.application.JdbcApplicationModelMappingRepository mappingRepository) {
-            return new com.lightai.admin.channel.ChannelModelCatalogService(dataSource, mappingRepository);
+                com.lightai.storage.application.JdbcApplicationModelMappingRepository mappingRepository,
+                com.lightai.storage.channel.JdbcChannelRepository channelRepository,
+                java.util.List<com.lightai.spi.provider.ProviderAdapter> adapters,
+                ObjectProvider<com.lightai.runtime.ports.CredentialSecretPort> credentialPort) {
+            return new com.lightai.admin.channel.ChannelModelCatalogService(dataSource, mappingRepository,
+                    channelRepository, adapters, credentialPort.getIfAvailable());
         }
 
         @Bean
@@ -1021,11 +1025,13 @@ public class LightAiAdminAutoConfiguration {
                 PlatformTransactionManager transactionManager,
                 Clock clock, AdminProperties properties,
                 ObjectProvider<com.lightai.runtime.ports.ConfigSnapshotPort> snapshotPortProvider,
-                com.lightai.storage.application.JdbcApplicationModelMappingRepository mappingRepository) {
+                com.lightai.storage.application.JdbcApplicationModelMappingRepository mappingRepository,
+                com.lightai.admin.channel.ChannelModelCatalogService catalogService) {
             return new com.lightai.admin.application.ApplicationService(
                     dataSource, applicationRepository, aliasRepository, auditService,
                     transactionManager, new com.lightai.admin.query.PageResultFactory(clock),
-                    clock, properties.getRuntimeMode(), snapshotPortProvider.getIfAvailable(), mappingRepository);
+                    clock, properties.getRuntimeMode(), snapshotPortProvider.getIfAvailable(), mappingRepository,
+                    catalogService);
         }
 
         @Bean

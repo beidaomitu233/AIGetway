@@ -21,6 +21,7 @@ import com.lightai.client.application.ApplicationMappingsValidationView;
 import com.lightai.client.application.ApplicationMappingsView;
 import com.lightai.client.application.ApplicationModelMappingView;
 import com.lightai.client.application.ApplicationModelTargetView;
+import com.lightai.client.channel.ChannelModelCatalogItem;
 import com.lightai.client.application.ApplicationImpactCommand;
 import com.lightai.client.application.ApplicationImpactView;
 import com.lightai.client.application.ApplicationModelOptionView;
@@ -48,6 +49,7 @@ import com.lightai.storage.application.JdbcApplicationModelMappingRepository;
 import com.lightai.storage.application.ApplicationModelMappingRecord;
 import com.lightai.storage.application.ApplicationModelTargetRecord;
 import com.lightai.storage.application.QuotaAdjustmentRecord;
+import com.lightai.admin.channel.ChannelModelCatalogService;
 import com.lightai.runtime.ports.ConfigSnapshotPort;
 import com.lightai.storage.audit.AuditRecord;
 import java.math.BigDecimal;
@@ -97,6 +99,7 @@ public final class ApplicationService {
     private final String sourceMode;
     private final ConfigSnapshotPort snapshotPort;
     private final JdbcApplicationModelMappingRepository mappingRepository;
+    private final ChannelModelCatalogService catalogService;
 
     public ApplicationService(DataSource dataSource, JdbcApplicationRepository repository,
                               JdbcAliasRepository aliasRepository, AuditService auditService,
@@ -105,7 +108,7 @@ public final class ApplicationService {
                               ConfigSnapshotPort snapshotPort) {
         this(dataSource, repository, aliasRepository, auditService, transactionManager,
                 pageResultFactory, clock, sourceMode, snapshotPort,
-                new JdbcApplicationModelMappingRepository());
+                new JdbcApplicationModelMappingRepository(), null);
     }
 
     public ApplicationService(DataSource dataSource, JdbcApplicationRepository repository,
@@ -114,6 +117,17 @@ public final class ApplicationService {
                               PageResultFactory pageResultFactory, Clock clock, String sourceMode,
                               ConfigSnapshotPort snapshotPort,
                               JdbcApplicationModelMappingRepository mappingRepository) {
+        this(dataSource, repository, aliasRepository, auditService, transactionManager,
+                pageResultFactory, clock, sourceMode, snapshotPort, mappingRepository, null);
+    }
+
+    public ApplicationService(DataSource dataSource, JdbcApplicationRepository repository,
+                              JdbcAliasRepository aliasRepository, AuditService auditService,
+                              PlatformTransactionManager transactionManager,
+                              PageResultFactory pageResultFactory, Clock clock, String sourceMode,
+                              ConfigSnapshotPort snapshotPort,
+                              JdbcApplicationModelMappingRepository mappingRepository,
+                              ChannelModelCatalogService catalogService) {
         this.dataSource = dataSource;
         this.repository = repository;
         this.aliasRepository = aliasRepository;
@@ -124,6 +138,7 @@ public final class ApplicationService {
         this.sourceMode = sourceMode;
         this.snapshotPort = snapshotPort;
         this.mappingRepository = mappingRepository == null ? new JdbcApplicationModelMappingRepository() : mappingRepository;
+        this.catalogService = catalogService;
     }
 
     public PageResult<ApplicationListItem> list(RequestContext context, Map<String, String> params) {
@@ -339,11 +354,21 @@ public final class ApplicationService {
             int limit = command == null || command.limit() == null ? 100 : command.limit();
             if (limit < 1 || limit > 500) throw invalid("limit", "limit 必须在 1—500 之间");
             Map<String, List<ApplicationModelTargetCommand>> grouped = new LinkedHashMap<>();
-            for (JdbcApplicationModelMappingRepository.CatalogRow row : mappingRepository.catalog(
-                    connection, channels, command == null ? null : command.query(), limit)) {
-                grouped.computeIfAbsent(row.modelName(), ignored -> new ArrayList<>()).add(
-                        new ApplicationModelTargetCommand(row.channelId().toString(), row.id().toString(),
-                                row.modelName(), 10, 1, "ACTIVE", null));
+            if (catalogService != null) {
+                for (ChannelModelCatalogItem item : catalogService.listForApplication(context, channels,
+                        command == null ? null : command.query(), limit)) {
+                    grouped.computeIfAbsent(item.modelName(), ignored -> new ArrayList<>()).add(
+                            new ApplicationModelTargetCommand(item.channelId(), item.id(), item.modelName(),
+                                    10, 1, "ACTIVE", null));
+                }
+            } else {
+                for (JdbcApplicationModelMappingRepository.CatalogRow row : mappingRepository.catalog(
+                        connection, channels, command == null ? null : command.query(), limit)) {
+                    grouped.computeIfAbsent(row.modelName(), ignored -> new ArrayList<>()).add(
+                            new ApplicationModelTargetCommand(row.channelId().toString(),
+                                    row.id() == null ? null : row.id().toString(), row.modelName(),
+                                    10, 1, "ACTIVE", null));
+                }
             }
             return grouped.entrySet().stream().map(entry -> new ApplicationModelMappingCommand(
                     null, entry.getKey(), "ACTIVE", entry.getValue())).toList();
