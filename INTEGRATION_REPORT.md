@@ -139,3 +139,10 @@ P4-BE-006-A/B 已验证。管理端密钥范围、候选目录、模型子资源
 ## 结论
 
 P4-BE-006-C 已验证。应用创建与模型映射入口已分离，创建流程不再依赖旧模型候选或写入旧模型授权表；P4-BE-006-D 仍需迁移应用详情旧授权更新写入口、发布装配和观测历史依赖。真实 PostgreSQL/MySQL、真实浏览器和真实供应商未在本次复验执行。
+
+# P4-BE-006-D 旧模型写路由下线复验（进行中）
+
+- 分支：`fix/fullstack-integration-P4-root`
+- 已完成：移除管理 API `PUT /admin/applications/{id}/models` 和前端 `updateApplicationModels` 定义；应用详情 `/mappings` 仍为模型配置入口。
+- 验证：`mvn -pl light-ai-admin -am -Dtest=ApplicationApiContractTest -Dsurefire.failIfNoSpecifiedTests=false test` 通过，8/8；`npm run typecheck` 通过。
+- 未完成：`ApplicationService.updateModels` 内部历史写方法、旧权限表写辅助方法、发布装配和观测查询依赖仍待迁移，不能将 D 包标记为已验证。

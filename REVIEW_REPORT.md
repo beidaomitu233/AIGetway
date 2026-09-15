@@ -25,7 +25,7 @@
 
 | 编号 | 级别 | 位置与依据 | 影响 | 状态 |
 | --- | --- | --- | --- | --- |
-| P4-BE-006-D | P1 | `ApplicationService.updateModels`、发布装配和观测查询仍依赖旧模型权限写入或历史目录装配 | P4-BE-006-C 已完成创建契约收口；本包继续迁移详情旧写入口、发布/观测依赖，保留历史审计、调用和成本快照 | 领取中 |
+| P4-BE-006-D | P1 | `ApplicationService.updateModels`、发布装配和观测查询仍依赖旧模型权限写入或历史目录装配 | 已移除对外旧 `PUT /admin/applications/{id}/models` 路由和前端调用定义，API 契约 8/8、前端 typecheck 通过；服务内部写方法及发布/观测依赖仍待迁移 | 修复中 |
 
 ## 验证
 
@@ -62,6 +62,7 @@
 - `4458015` `fix(fullstack): P4-BE-006-B read application models from mappings`
 - `7d97f5b` `test(fullstack): P4-BE-006-B cover detail model reads`
 - `c43d7de` `fix(fullstack): P4-BE-006-C move model setup to application detail`
+- `d210e5a` `fix(fullstack): P4-BE-006-D remove legacy model write route`
 - 文档提交后推送到 `origin/fix/fullstack-integration-P4-root`；未直接合并 `dev`，等待后续运行链路迁移和独立评审。
 
 ## 合并建议
