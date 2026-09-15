@@ -111,6 +111,7 @@ BUILD SUCCESS；以当前源码启动隔离服务并完成上述 SSE 链路复�
 | P5-C-03 | Provider 异步流在首个业务块提交前失败时，原实现把异常抛到异步回调线程，恢复循环无法接管，Trace 保持 RUNNING。 | 新增 StreamSession 持有同一 Trace 的候选、凭证和恢复预算；首块前错误通过回调释放当前 Attempt 并继续重试、换 Key 或 fallback，提交后仍固定终态。 | 异步回调回归通过；真实 HTTP + H2 + Redis 复验最终切换健康渠道，Trace/Usage 恢复计数与 Attempt 类型一致。 | 已验证 |
 | P5-C-04 | Provider 在完成或失败后重复/迟到回调时，原实现可能重复结算、重复通知，或由旧 Attempt 的迟到 `onComplete` 改写恢复中的 Trace。 | StreamAccumulator 为每个 Attempt 增加终态 CAS，并串行化 `onNext`、`onError`、`onComplete` 与取消回调；首个终态之后的回调直接丢弃。 | `duplicateStreamTerminalCallbacksAreIgnoredPerAttempt` 与 `lateCompletionAfterPreCommitFailureCannotCommitOldAttempt` 回归通过：重复终态回调未产生第二次结算或通知，失败 Attempt 的迟到完成也未改写 fallback Trace。 | 已验证 |
 | P5-C-05 | Provider 在建立流式 Publisher 或 `subscribe` 阶段直接抛出运行时异常时，原实现未进入恢复，容量和 Attempt 可能遗留为 RUNNING。 | StreamSession 捕获适配器流式订阅阶段的运行时异常，转换为统一 Provider 错误并复用失败 Attempt 清理与 fallback 决策。 | `streamPublisherSetupFailureUsesFallbackAndClosesAttempt` 回归通过：首候选 Publisher 建立失败后第二候选成功，Trace 两个 Attempt 分别为 FAILED/SUCCEEDED，最终仅一次成功终态。 | 已验证 |
+| P5-C-06 | HTTP 流超时被当作客户端取消，迟到的 `onComplete` 可能把已超时 Attempt/Trace 误收敛为成功，或保留错误终态。 | V1 超时回调使用 `CancellationSignal.timeout`；StreamAccumulator 在 `onNext`、`onError`、`onComplete` 前统一检查取消/超时，并按提交状态与终止错误收敛 `FAILED`/`STREAM_INTERRUPTED`，容量与应用额度仍走一次性释放。 | `streamTimeoutBeforeCommitFinalizesFailedAttempt` 回归通过：超时后迟到内容和完成回调均被丢弃，Attempt=FAILED、error_code=TOTAL_TIMEOUT、Trace=FAILED，容量只释放一次。 | 已验证 |
 
 ## 实际链路证据
 
@@ -130,7 +131,7 @@ BUILD SUCCESS；以当前源码启动隔离服务并完成上述 SSE 链路复�
 
 ```text
 mvn -B -pl light-ai-provider-common,light-ai-server -am -Dtest=OpenAiCompatibleAdapterTest,JdbcTraceStoreTest,V1ControllerStreamTest,ChatPipelineTest,ChatPipelineRecoveryTest -Dsurefire.failIfNoSpecifiedTests=false test
-BUILD SUCCESS；OpenAiCompatibleAdapterTest 6/6、JdbcTraceStoreTest 6/6、V1ControllerStreamTest 1/1、ChatPipelineTest 18/18、ChatPipelineRecoveryTest 11/11
+BUILD SUCCESS；OpenAiCompatibleAdapterTest 6/6、JdbcTraceStoreTest 6/6、V1ControllerStreamTest 1/1、ChatPipelineTest 18/18、ChatPipelineRecoveryTest 12/12
 
 mvn -B -pl light-ai-server -am -DskipTests package
 BUILD SUCCESS；Spring Boot fat jar repackage succeeded
