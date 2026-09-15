@@ -631,6 +631,10 @@ public class ChatPipeline {
                  */
                 private final AtomicBoolean attemptTerminal = new AtomicBoolean(false);
 
+                private boolean streamTerminated() {
+                    return signal.cancelled() || signal.timedOut();
+                }
+
                 @Override
                 public void onSubscribe(java.util.concurrent.Flow.Subscription subscription) {
                     this.subscription = subscription;
@@ -652,7 +656,7 @@ public class ChatPipeline {
                     if (attemptTerminal.get()) {
                         return;
                     }
-                    if (signal.cancelled() && cancelHandled.compareAndSet(false, true)) {
+                    if (streamTerminated() && cancelHandled.compareAndSet(false, true)) {
                         // 客户端取消：向上游取消订阅，并按提交状态收敛唯一终态与释放
                         if (subscription != null) {
                             subscription.cancel();
@@ -660,7 +664,7 @@ public class ChatPipeline {
                         handleCancelledAfterStream();
                         return;
                     }
-                    if (signal.cancelled()) {
+                    if (streamTerminated()) {
                         return;
                     }
                     if (chunk.type() == ProviderStreamChunk.Type.CONTENT
@@ -683,6 +687,10 @@ public class ChatPipeline {
 
                 @Override
                 public synchronized void onError(Throwable throwable) {
+                    if (streamTerminated()) {
+                        handleCancelledAfterStream();
+                        return;
+                    }
                     if (!attemptTerminal.compareAndSet(false, true)) {
                         return;
                     }
@@ -709,6 +717,10 @@ public class ChatPipeline {
 
                 @Override
                 public synchronized void onComplete() {
+                    if (streamTerminated()) {
+                        handleCancelledAfterStream();
+                        return;
+                    }
                     if (!attemptTerminal.compareAndSet(false, true)) {
                         return;
                     }
@@ -753,27 +765,23 @@ public class ChatPipeline {
                         return;
                     }
                     boolean committed = traceStore.committed(traceId(handle));
+                    ErrorCode terminalError = signal.terminalError(committed);
+                    String attemptStatus = committed || terminalError == ErrorCode.TOTAL_TIMEOUT
+                            ? "FAILED" : "CANCELLED";
+                    String traceStatus = committed ? "STREAM_INTERRUPTED"
+                            : terminalError == ErrorCode.TOTAL_TIMEOUT ? "FAILED" : "CANCELLED";
                     try {
-                        if (committed) {
-                            traceStore.finishAttempt(traceId(handle), attemptId, "FAILED",
-                                    ErrorCode.STREAM_INTERRUPTED.name(), 0, 0, "ESTIMATED",
-                                    java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
-                                    java.math.BigDecimal.ZERO, null, true);
-                            traceStore.finalizeTrace(traceId(handle), "STREAM_INTERRUPTED");
-                        } else {
-                            traceStore.finishAttempt(traceId(handle), attemptId, "CANCELLED",
-                                    ErrorCode.CLIENT_CANCELLED.name(), 0, 0, "ESTIMATED",
-                                    java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
-                                    java.math.BigDecimal.ZERO, null, true);
-                            traceStore.finalizeTrace(traceId(handle), "CANCELLED");
-                        }
+                        traceStore.finishAttempt(traceId(handle), attemptId, attemptStatus,
+                                terminalError.name(), 0, 0, "ESTIMATED",
+                                java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
+                                java.math.BigDecimal.ZERO, null, true);
+                        traceStore.finalizeTrace(traceId(handle), traceStatus);
                         markErrorTerminal.run();
                     } catch (RuntimeException alreadyTerminal) {
                         return; // 终态已由其他路径收敛，保持唯一终态
                     }
                     signal.releaseOnce(() -> capacityPort.release(reservation.reservationId()));
-                    applicationQuotaPort.release(applicationReservation,
-                            committed ? "STREAM_INTERRUPTED" : "CLIENT_CANCELLED");
+                    applicationQuotaPort.release(applicationReservation, terminalError.name());
                     completeCircuit(circuitAttempt, false, false);
                 }
 

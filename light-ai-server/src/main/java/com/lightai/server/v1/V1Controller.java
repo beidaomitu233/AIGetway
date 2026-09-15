@@ -169,7 +169,7 @@ public class V1Controller {
             }
         });
         emitter.onTimeout(() -> {
-            cancellation.cancel("http-stream-timeout");
+            cancellation.timeout("http-stream-timeout");
             emitter.complete();
         });
         // 空闲上游期间定期写 SSE 注释，尽早发现客户端断开并触发上游订阅取消。
