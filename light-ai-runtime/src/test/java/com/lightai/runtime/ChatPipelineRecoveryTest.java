@@ -243,6 +243,54 @@ class ChatPipelineRecoveryTest {
     }
 
     @Test
+    void streamPublisherSetupFailureUsesFallbackAndClosesAttempt() {
+        AtomicInteger completed = new AtomicInteger();
+        AtomicInteger errors = new AtomicInteger();
+        ProviderAdapter adapter = new ChatPipelineTest.StubAdapter() {
+            @Override
+            public Flow.Publisher<ProviderStreamChunk> streamChat(ProviderCallContext context) {
+                if (context.request().modelId().endsWith("p1a")) {
+                    throw new IllegalStateException("publisher setup failed");
+                }
+                return subscriber -> subscriber.onSubscribe(new Flow.Subscription() {
+                    @Override public void request(long n) {
+                        subscriber.onNext(ProviderStreamChunk.content("fallback"));
+                        subscriber.onNext(ProviderStreamChunk.finish(ProviderChatResponse.FINISH_STOP));
+                        subscriber.onComplete();
+                    }
+                    @Override public void cancel() { }
+                });
+            }
+        };
+        ConfigSnapshotPort snapshots = () -> new ConfigSnapshotPort.ActiveSnapshot(7, List.of(
+                new AliasView("alias-1", "assistant", "助理", true, List.of(
+                        candidate("p1a", 1), candidate("p2a", 2)))));
+        InMemoryTraceStore traceStore = new InMemoryTraceStore();
+        ChatPipelineTest.RecordingCapacity capacity = new ChatPipelineTest.RecordingCapacity();
+        ChatPipeline pipeline = new ChatPipeline(snapshots, () -> Optional.empty(), fixedRouting(),
+                capacity, null,
+                (channelId, index) -> new CredentialSecretPort.ResolvedCredential(
+                        UUID.randomUUID().toString(), () -> "sk-test".toCharArray()),
+                null, type -> Optional.of(adapter), traceStore, ApplicationQuotaPort.unlimited(),
+                () -> new ReliabilityBudgets(0, 0, 0, 1), 30_000, health);
+        pipeline.chatStream(context(request(true), "publisher-setup-failure"), new ChatPipeline.StreamListener() {
+            @Override public void onCommit() { }
+            @Override public void onChunk(UnifiedChatChunk chunk) { }
+            @Override public void onError(com.lightai.client.error.UnifiedError error) { errors.incrementAndGet(); }
+            @Override public void onComplete() { completed.incrementAndGet(); }
+        });
+
+        assertThat(completed).hasValue(1);
+        assertThat(errors).hasValue(0);
+        assertThat(capacity.released).containsExactly("r-1");
+        assertThat(capacity.settled).containsExactly("r-2");
+        assertThat(traceStore.statusOf("publisher-setup-failure")).isEqualTo("SUCCEEDED");
+        assertThat(traceStore.attempts("publisher-setup-failure")).hasSize(2);
+        assertThat(traceStore.attempts("publisher-setup-failure").get(0).status()).isEqualTo("FAILED");
+        assertThat(traceStore.attempts("publisher-setup-failure").get(1).status()).isEqualTo("SUCCEEDED");
+    }
+
+    @Test
     void duplicateStreamTerminalCallbacksAreIgnoredPerAttempt() {
         ChatPipelineTest.RecordingCapacity capacity = new ChatPipelineTest.RecordingCapacity();
         AtomicInteger completed = new AtomicInteger();
