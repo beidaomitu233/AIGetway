@@ -494,6 +494,50 @@ class ChatPipelineRecoveryTest {
         assertThat(traceStore.committed("stream-cancel")).isTrue();
     }
 
+    @Test
+    void streamTimeoutBeforeCommitFinalizesFailedAttempt() {
+        CancellationSignal signal = new CancellationSignal("stream-timeout");
+        ChatPipelineTest.RecordingCapacity capacity = new ChatPipelineTest.RecordingCapacity();
+        ProviderAdapter adapter = new ChatPipelineTest.StubAdapter() {
+            @Override
+            public Flow.Publisher<ProviderStreamChunk> streamChat(ProviderCallContext context) {
+                return subscriber -> subscriber.onSubscribe(new Flow.Subscription() {
+                    @Override public void request(long n) {
+                        signal.timeout("deadline");
+                        // 超时信号先于迟到上游结果生效，后续回调必须被丢弃。
+                        subscriber.onNext(ProviderStreamChunk.content("late"));
+                        subscriber.onComplete();
+                    }
+                    @Override public void cancel() { }
+                });
+            }
+        };
+        InMemoryTraceStore traceStore = new InMemoryTraceStore();
+        ChatPipeline pipeline = new ChatPipeline(snapshot(), () -> Optional.empty(), fixedRouting(),
+                capacity, null,
+                (channelId, index) -> new CredentialSecretPort.ResolvedCredential(
+                        UUID.randomUUID().toString(), () -> "sk-test".toCharArray()),
+                null, type -> Optional.of(adapter), traceStore, ApplicationQuotaPort.unlimited(),
+                () -> new ReliabilityBudgets(0, 0, 0), 30_000, health);
+        AtomicInteger errors = new AtomicInteger();
+        pipeline.chatStream(new ChatPipeline.ChatContext(
+                new AccessTokenPort.Principal("app-1", List.of()),
+                withTraceId(request(true), "stream-timeout"), signal), new ChatPipeline.StreamListener() {
+            @Override public void onCommit() { }
+            @Override public void onChunk(UnifiedChatChunk chunk) { }
+            @Override public void onError(com.lightai.client.error.UnifiedError error) { errors.incrementAndGet(); }
+            @Override public void onComplete() { }
+        });
+
+        assertThat(errors).hasValue(0);
+        assertThat(capacity.released).containsExactly("r-1");
+        assertThat(capacity.settled).isEmpty();
+        assertThat(traceStore.statusOf("stream-timeout")).isEqualTo("FAILED");
+        assertThat(traceStore.attempts("stream-timeout")).singleElement()
+                .extracting(InMemoryTraceStore.AttemptView::status).isEqualTo("FAILED");
+        assertThat(traceStore.attempts("stream-timeout")).singleElement()
+                .extracting(InMemoryTraceStore.AttemptView::errorCode).isEqualTo(ErrorCode.TOTAL_TIMEOUT.name());
+    }
     // ---------------------------------------------------------------- 夹具
 
     private CredentialSecretPort credentialsRecording(List<String> resolvedKeys) {
