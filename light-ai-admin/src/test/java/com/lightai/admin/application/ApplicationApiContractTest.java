@@ -228,6 +228,9 @@ class ApplicationApiContractTest {
                             .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"denied\"}"))
                     .andExpect(status().isForbidden());
         }
+        mvc.perform(asOwner(put(base() + "/models")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"virtual_model_ids\":[],\"constraints\":[],\"application_version\":1,\"reason\":\"legacy\"}"))
+                .andExpect(status().isMethodNotAllowed());
         mvc.perform(asOwner(get(base() + "/keys"))).andExpect(jsonPath("$.data").isEmpty());
     }
 

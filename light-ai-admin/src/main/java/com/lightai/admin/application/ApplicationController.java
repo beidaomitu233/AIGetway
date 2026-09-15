@@ -7,7 +7,6 @@ import com.lightai.client.application.ApplicationCreateCommand;
 import com.lightai.client.application.ApplicationImpactCommand;
 import com.lightai.client.application.ApplicationImpactView;
 import com.lightai.client.application.ApplicationModelOptionView;
-import com.lightai.client.application.ApplicationModelsUpdateCommand;
 import com.lightai.client.application.ApplicationMappingsReplaceCommand;
 import com.lightai.client.application.ApplicationMappingsValidateCommand;
 import com.lightai.client.application.ApplicationMappingsBulkCreateCommand;
@@ -111,15 +110,6 @@ public final class ApplicationController {
                 body, ApplicationQuotaUpdateCommand.class);
         return json(ManagementResponses.ok(
                 service.updateQuota(context(request), parseId(id), command)));
-    }
-
-    @PutMapping("/admin/applications/{id}/models")
-    public ResponseEntity<String> updateModels(@PathVariable String id, @RequestBody(required = false) String body,
-                                               HttpServletRequest request) {
-        ApplicationModelsUpdateCommand command = CommandBodies.parse(
-                body, ApplicationModelsUpdateCommand.class);
-        return json(ManagementResponses.ok(
-                service.updateModels(context(request), parseId(id), command)));
     }
 
     @GetMapping("/admin/applications/{id}/quota/adjustments")

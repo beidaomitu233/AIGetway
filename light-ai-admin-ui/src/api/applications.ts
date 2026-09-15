@@ -40,13 +40,6 @@ export interface ApplicationModelPermission {
   version: number
 }
 
-/** 应用对某个虚拟模型的请求参数上限；null 表示不施加该维度限制。 */
-export interface ApplicationModelConstraintPayload {
-  virtual_model_id: string
-  max_output_tokens: number | null
-  allow_stream: boolean | null
-}
-
 export interface ApplicationListItem {
   id: string
   code: string
@@ -308,18 +301,6 @@ export function bulkCreateApplicationMappings(
 ): Promise<ApplicationMappingPayload[]> {
   return request({ path: '/applications/' + id + '/mappings:bulk-create', method: 'POST', body: payload })
 }
-export function updateApplicationModels(
-  id: string,
-  payload: {
-    virtual_model_ids: string[]
-    constraints: ApplicationModelConstraintPayload[]
-    application_version: string
-    reason: string
-  },
-): Promise<ManagementOperationResult<ApplicationDetail>> {
-  return request({ path: `/applications/${id}/models`, method: 'PUT', body: payload })
-}
-
 export function fetchApplicationQuotaAdjustments(
   id: string,
   signal?: AbortSignal,
