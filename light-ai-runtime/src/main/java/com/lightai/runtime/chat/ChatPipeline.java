@@ -72,6 +72,7 @@ public class ChatPipeline {
     private final TraceStore traceStore;
     private final ReliabilityBudgets.Port reliabilityPort;
     private final CredentialHealthPort credentialHealthPort;
+    private final com.lightai.runtime.ports.RiskControlPort riskControlPort;
     private final long totalTimeoutMs;
 
     /** 限流窗口与共享容量存储的固定 60s 对齐窗口一致，用于 429 retry_after 计算。 */
@@ -133,6 +134,19 @@ public class ChatPipeline {
                         TraceStore traceStore, ApplicationQuotaPort applicationQuotaPort,
                         ReliabilityBudgets.Port reliabilityPort, long totalTimeoutMs,
                         CredentialHealthPort credentialHealthPort) {
+        this(snapshotPort, runtimeConfigPort, routingPort, capacityPort, circuitStateStore, credentialPort,
+                queueService, adapterRegistry, traceStore, applicationQuotaPort, reliabilityPort, totalTimeoutMs,
+                credentialHealthPort, com.lightai.runtime.ports.RiskControlPort.allowAll());
+    }
+
+    public ChatPipeline(ConfigSnapshotPort snapshotPort, AccessTokenPort.RuntimeConfigPort runtimeConfigPort,
+                        RoutingPort routingPort, CapacityPort capacityPort,
+                        CircuitStateStore circuitStateStore, CredentialSecretPort credentialPort,
+                        QueueService queueService, AdapterRegistryPort adapterRegistry,
+                        TraceStore traceStore, ApplicationQuotaPort applicationQuotaPort,
+                        ReliabilityBudgets.Port reliabilityPort, long totalTimeoutMs,
+                        CredentialHealthPort credentialHealthPort,
+                        com.lightai.runtime.ports.RiskControlPort riskControlPort) {
         this.snapshotPort = snapshotPort;
         this.runtimeConfigPort = runtimeConfigPort;
         this.routingPort = routingPort;
@@ -148,6 +162,8 @@ public class ChatPipeline {
         this.totalTimeoutMs = totalTimeoutMs;
         this.credentialHealthPort = credentialHealthPort == null
                 ? CredentialHealthPort.noop() : credentialHealthPort;
+        this.riskControlPort = riskControlPort == null
+                ? com.lightai.runtime.ports.RiskControlPort.allowAll() : riskControlPort;
     }
 
     /** 一次调用的上下文：身份校验后由入口层构造。 */
@@ -173,15 +189,17 @@ public class ChatPipeline {
     public UnifiedChatResponse chat(ChatContext context) {
         long started = System.currentTimeMillis();
         ParsedRequest parsed = parse(context);
-        List<CandidateView> candidates = route(parsed);
         String requestId = requestId(parsed.request());
+        riskControlPort.check(context.principal(), requestId, parsed.request(),
+                estimatedInput(requestChars(parsed.request())), estimatedRiskAmount(parsed, parsed.aliasView().enabledCandidates()));
+        List<CandidateView> candidates = route(parsed);
         ApplicationQuotaPort.Reservation applicationReservation =
                 reserveApplicationQuota(context.principal(), requestId, parsed, candidates);
         CancellationSignal signal = context.cancellation() != null
                 ? context.cancellation() : new CancellationSignal("trace-pending");
         TraceStore.TraceHandle handle;
         try {
-            handle = traceStore.create(requestId, parsed.alias(), context.principal().application());
+            handle = traceStore.create(requestId, parsed.alias(), context.principal().application(), parsed.request().stream());
         } catch (RuntimeException | Error failure) {
             applicationQuotaPort.release(applicationReservation, "TRACE_CREATE_FAILED");
             throw failure;
@@ -196,6 +214,7 @@ public class ChatPipeline {
         int failovers = 0;
         int samePriorityFallbacks = 0;
         int fallbacks = 0;
+        String nextAttemptType = "INITIAL";
         String lastError = ErrorCode.ALL_CANDIDATES_FAILED.name();
 
         while (true) {
@@ -217,7 +236,7 @@ public class ChatPipeline {
                 reservation = reserveCapacity(parsed, candidate, credential, estimatedInput,
                         traceId(handle), signal, started);
                 circuitAttempt = acquireCircuit(parsed, candidate, credential);
-                attemptId = traceStore.startAttempt(traceId(handle), attemptIdentity(candidate, credential));
+                attemptId = traceStore.startAttempt(traceId(handle), attemptIdentity(candidate, credential), nextAttemptType);
                 ProviderAdapter adapter = requireAdapter(candidate);
                 ProviderChatRequest adapterRequest = toAdapterRequest(candidate, parsed.request(),
                         estimatedInput, parsed.applicationMaxOutputTokens());
@@ -286,10 +305,12 @@ public class ChatPipeline {
                         retries, failovers, samePriorityFallbacks, fallbacks);
                 switch (action) {
                     case RETRY -> {
+                        nextAttemptType = "RETRY";
                         retries++;
                         awaitBackoff(started, retries);
                     }
                     case CREDENTIAL_FAILOVER -> {
+                        nextAttemptType = "CREDENTIAL_FAILOVER";
                         failovers++;
                         credentialIndex++;
                         if ("PROVIDER_RATE_LIMITED".equals(e.code().name())) {
@@ -297,6 +318,7 @@ public class ChatPipeline {
                         }
                     }
                     case FALLBACK -> {
+                        nextAttemptType = "FALLBACK";
                         if (candidateIndex + 1 >= candidates.size()) {
                             throw fail(handle, ErrorCode.ALL_CANDIDATES_FAILED, lastError);
                         }
@@ -328,15 +350,17 @@ public class ChatPipeline {
     public void chatStream(ChatContext context, StreamListener listener) {
         long started = System.currentTimeMillis();
         ParsedRequest parsed = parse(context);
-        List<CandidateView> candidates = route(parsed);
         String requestId = requestId(parsed.request());
+        riskControlPort.check(context.principal(), requestId, parsed.request(),
+                estimatedInput(requestChars(parsed.request())), estimatedRiskAmount(parsed, parsed.aliasView().enabledCandidates()));
+        List<CandidateView> candidates = route(parsed);
         ApplicationQuotaPort.Reservation applicationReservation =
                 reserveApplicationQuota(context.principal(), requestId, parsed, candidates);
         CancellationSignal signal = context.cancellation() != null
                 ? context.cancellation() : new CancellationSignal("trace-pending");
         TraceStore.TraceHandle handle;
         try {
-            handle = traceStore.create(requestId, parsed.alias(), context.principal().application());
+            handle = traceStore.create(requestId, parsed.alias(), context.principal().application(), parsed.request().stream());
         } catch (RuntimeException | Error failure) {
             applicationQuotaPort.release(applicationReservation, "TRACE_CREATE_FAILED");
             throw failure;
@@ -344,22 +368,69 @@ public class ChatPipeline {
         signal.bind(handle.traceId());
 
         try {
-            ReliabilityBudgets budgets = reliabilityPort.budgets();
-        AtomicSequencer sequence = new AtomicSequencer();
-        int credentialIndex = 0;
-        int candidateIndex = 0;
-        int retries = 0;
-        int failovers = 0;
-        int samePriorityFallbacks = 0;
-        int fallbacks = 0;
-
-        while (true) {
+            // 保持入口在首个 Attempt 前取消时的同步契约；恢复过程中的取消由 StreamSession 收敛。
             if (signal.cancelled()) {
                 throw failFinal(handle, signal, false, ErrorCode.CLIENT_CANCELLED);
             }
+            new StreamSession(started, parsed, candidates, applicationReservation, signal,
+                    handle, listener, reliabilityPort.budgets()).start();
+        } catch (RuntimeException | Error failure) {
+            applicationQuotaPort.release(applicationReservation, "REQUEST_FAILED");
+            throw failure;
+        }
+    }
+
+    /**
+     * 流式尝试协调器。ProviderAdapter 的订阅通常在异步线程回调，首块提交前的错误
+     * 不能通过抛异常回到 chatStream 的调用栈，必须在回调线程继续恢复并复用同一 Trace。
+     */
+    private final class StreamSession {
+        private final long started;
+        private final ParsedRequest parsed;
+        private final List<CandidateView> candidates;
+        private final ApplicationQuotaPort.Reservation applicationReservation;
+        private final CancellationSignal signal;
+        private final TraceStore.TraceHandle handle;
+        private final StreamListener listener;
+        private final ReliabilityBudgets budgets;
+        private final AtomicSequencer sequence = new AtomicSequencer();
+        private final AtomicBoolean errorTerminal = new AtomicBoolean(false);
+        private int credentialIndex;
+        private int candidateIndex;
+        private int retries;
+        private int failovers;
+        private int samePriorityFallbacks;
+        private int fallbacks;
+        private String nextAttemptType = "INITIAL";
+
+        private StreamSession(long started, ParsedRequest parsed, List<CandidateView> candidates,
+                             ApplicationQuotaPort.Reservation applicationReservation,
+                             CancellationSignal signal, TraceStore.TraceHandle handle,
+                             StreamListener listener, ReliabilityBudgets budgets) {
+            this.started = started;
+            this.parsed = parsed;
+            this.candidates = candidates;
+            this.applicationReservation = applicationReservation;
+            this.signal = signal;
+            this.handle = handle;
+            this.listener = listener;
+            this.budgets = budgets;
+        }
+
+        private void start() {
+            startAttempt();
+        }
+
+        private void startAttempt() {
+            if (errorTerminal.get()) {
+                return;
+            }
+            if (signal.cancelled()) {
+                finishError(error(ErrorCode.CLIENT_CANCELLED), ErrorCode.CLIENT_CANCELLED.name());
+                return;
+            }
             if (exceededTimeout(started)) {
-                failFinal(handle, signal, false, ErrorCode.TOTAL_TIMEOUT);
-                applicationQuotaPort.release(applicationReservation, "TOTAL_TIMEOUT");
+                finishError(error(ErrorCode.TOTAL_TIMEOUT), ErrorCode.TOTAL_TIMEOUT.name());
                 return;
             }
             CandidateView candidate = candidates.get(Math.min(candidateIndex, candidates.size() - 1));
@@ -367,104 +438,131 @@ public class ChatPipeline {
             CircuitAttempt circuitAttempt = null;
             String attemptId = null;
             CredentialSecretPort.ResolvedCredential credential = null;
+            ProviderAdapter adapter = null;
             try {
                 credential = credentialPort.resolve(candidate.channelId(), credentialIndex);
                 long estimatedInput = estimatedInput(requestChars(parsed.request()));
                 reservation = reserveCapacity(parsed, candidate, credential, estimatedInput,
                         traceId(handle), signal, started);
                 circuitAttempt = acquireCircuit(parsed, candidate, credential);
-                attemptId = traceStore.startAttempt(traceId(handle), attemptIdentity(candidate, credential));
-                ProviderAdapter adapter = requireAdapter(candidate);
+                attemptId = traceStore.startAttempt(traceId(handle), attemptIdentity(candidate, credential),
+                        nextAttemptType);
+                adapter = requireAdapter(candidate);
                 ProviderChatRequest adapterRequest = toAdapterRequest(candidate, parsed.request(),
                         estimatedInput, parsed.applicationMaxOutputTokens());
                 ProviderCallContext callContext = callContext(candidate, adapterRequest, credential, started);
-
-                // include_usage 默认 false（4.7.1.4）；Trace 仍记录用量与成本
                 boolean includeUsage = parsed.request().streamOptions() != null
                         && parsed.request().streamOptions().includeUsage();
+                final CredentialSecretPort.ResolvedCredential attemptCredential = credential;
+                final CapacityPort.Reservation attemptReservation = reservation;
+                final CircuitAttempt attemptCircuit = circuitAttempt;
+                final String attempt = attemptId;
                 StreamAccumulator accumulator = new StreamAccumulator(handle, parsed.alias(), candidate,
                         adapterRequest, includeUsage, listener, sequence, signal, reservation, attemptId,
                         estimatedInput, estimatedOutput(candidate), circuitAttempt,
-                        applicationReservation, parsed.aliasView().aliasId());
-                adapter.streamChat(callContext).subscribe(accumulator.subscriber(adapter));
-                return;
+                        applicationReservation, parsed.aliasView().aliasId(),
+                        error -> handleFailure(candidate, attemptCredential, attemptReservation,
+                                attemptCircuit, attempt, error),
+                        () -> errorTerminal.set(true));
+                try {
+                    adapter.streamChat(callContext).subscribe(accumulator.subscriber(adapter));
+                } catch (RuntimeException e) {
+                    // Publisher 建立或 subscribe 阶段的同步异常也必须收敛当前 Attempt，
+                    // 不能让 Trace 留在 RUNNING；仅将 Provider 调用边界的异常映射为统一错误。
+                    handleFailure(candidate, credential, reservation, circuitAttempt, attemptId,
+                            asLightAi(e, adapter));
+                }
             } catch (LightAiException e) {
-                if (attemptId != null && !traceStore.committed(traceId(handle))) {
-                    traceStore.finishAttempt(traceId(handle), attemptId, "FAILED", e.code().name(),
-                            0, 0, "ESTIMATED", java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
-                            java.math.BigDecimal.ZERO, null, true);
-                }
-                if (reservation != null) {
-                    capacityPort.release(reservation.reservationId());
-                }
-                abandonCircuit(circuitAttempt);
-                reportCredentialFailure(credential, e.code().name());
-                // 准入容量拒绝（非 Key 作用域）不进入恢复预算，流内以统一错误事件关闭
-                if (attemptId == null && immediateCapacityRejection(e)) {
-                    traceStore.finalizeTrace(traceId(handle), "FAILED");
-                    applicationQuotaPort.release(applicationReservation, e.code().name());
-                    listener.onError(e.toError());
-                    return;
-                }
-                if (traceStore.committed(traceId(handle))) {
-                    throw e;
-                }
-                RecoveryAction action = decide(e.code().name(), budgets,
-                        retries, failovers, samePriorityFallbacks, fallbacks);
-                switch (action) {
-                    case RETRY -> {
-                        retries++;
-                        awaitBackoff(started, retries);
-                    }
-                    case CREDENTIAL_FAILOVER -> {
-                        failovers++;
-                        credentialIndex++;
-                        if ("PROVIDER_RATE_LIMITED".equals(e.code().name())) {
-                            awaitBackoff(started, failovers);
-                        }
-                    }
-                    case FALLBACK -> {
-                        if (candidateIndex + 1 >= candidates.size()) {
-                            LightAiException finalFailure =
-                                    failFinal(handle, signal, false, ErrorCode.ALL_CANDIDATES_FAILED);
-                            applicationQuotaPort.release(applicationReservation, "ALL_CANDIDATES_FAILED");
-                            listener.onError(finalFailure.toError());
-                            return;
-                        }
-                        if (samePriority(candidateIndex, candidates)) {
-                            if (samePriorityFallbacks >= budgets.maxPriorityFallbacks()) {
-                                LightAiException finalFailure =
-                                        failFinal(handle, signal, false, mapFinal(e.code().name()));
-                                applicationQuotaPort.release(applicationReservation, e.code().name());
-                                listener.onError(finalFailure.toError());
-                                return;
-                            }
-                            samePriorityFallbacks++;
-                        } else {
-                            if (fallbacks >= budgets.maxFallbacks()) {
-                                LightAiException finalFailure =
-                                        failFinal(handle, signal, false, mapFinal(e.code().name()));
-                                applicationQuotaPort.release(applicationReservation, e.code().name());
-                                listener.onError(finalFailure.toError());
-                                return;
-                            }
-                            fallbacks++;
-                        }
-                        candidateIndex++;
-                    }
-                    case FAIL -> {
-                        LightAiException finalFailure =
-                                failFinal(handle, signal, false, mapFinal(e.code().name()));
-                        applicationQuotaPort.release(applicationReservation, e.code().name());
-                        listener.onError(finalFailure.toError());
-                        return;
-                    }
-                }
+                handleFailure(candidate, credential, reservation, circuitAttempt, attemptId, e);
             }
         }
-        } catch (RuntimeException | Error failure) {
-            applicationQuotaPort.release(applicationReservation, "REQUEST_FAILED");
-            throw failure;
+
+        private void handleFailure(CandidateView candidate,
+                                   CredentialSecretPort.ResolvedCredential credential,
+                                   CapacityPort.Reservation reservation,
+                                   CircuitAttempt circuitAttempt,
+                                   String attemptId,
+                                   LightAiException failure) {
+            if (errorTerminal.get() || traceStore.committed(traceId(handle))) {
+                return;
+            }
+            if (attemptId != null) {
+                traceStore.finishAttempt(traceId(handle), attemptId, "FAILED", failure.code().name(),
+                        0, 0, "ESTIMATED", java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
+                        java.math.BigDecimal.ZERO, null, true);
+            }
+            if (reservation != null) {
+                capacityPort.release(reservation.reservationId());
+            }
+            abandonCircuit(circuitAttempt);
+            reportCredentialFailure(credential, failure.code().name());
+            if (attemptId == null && immediateCapacityRejection(failure)) {
+                finishError(failure, failure.code().name());
+                return;
+            }
+            RecoveryAction action = decide(failure.code().name(), budgets,
+                    retries, failovers, samePriorityFallbacks, fallbacks);
+            switch (action) {
+                case RETRY -> {
+                    nextAttemptType = "RETRY";
+                    retries++;
+                    awaitBackoff(started, retries);
+                    startAttempt();
+                }
+                case CREDENTIAL_FAILOVER -> {
+                    nextAttemptType = "CREDENTIAL_FAILOVER";
+                    failovers++;
+                    credentialIndex++;
+                    if ("PROVIDER_RATE_LIMITED".equals(failure.code().name())) {
+                        awaitBackoff(started, failovers);
+                    }
+                    startAttempt();
+                }
+                case FALLBACK -> {
+                    nextAttemptType = "FALLBACK";
+                    if (candidateIndex + 1 >= candidates.size()) {
+                        finishError(error(ErrorCode.ALL_CANDIDATES_FAILED),
+                                ErrorCode.ALL_CANDIDATES_FAILED.name());
+                        return;
+                    }
+                    if (samePriority(candidateIndex, candidates)) {
+                        if (samePriorityFallbacks >= budgets.maxPriorityFallbacks()) {
+                            finishError(error(mapFinal(failure.code().name())), failure.code().name());
+                            return;
+                        }
+                        samePriorityFallbacks++;
+                    } else {
+                        if (fallbacks >= budgets.maxFallbacks()) {
+                            finishError(error(mapFinal(failure.code().name())), failure.code().name());
+                            return;
+                        }
+                        fallbacks++;
+                    }
+                    candidateIndex++;
+                    startAttempt();
+                }
+                case FAIL -> finishError(error(mapFinal(failure.code().name())), failure.code().name());
+            }
+        }
+
+        private LightAiException error(ErrorCode code) {
+            return new LightAiException(code,
+                    code == ErrorCode.CLIENT_CANCELLED ? "客户端已取消" : "所有候选尝试均失败",
+                    null, traceId(handle), null, null, null);
+        }
+
+        private void finishError(LightAiException failure, String releaseReason) {
+            if (!errorTerminal.compareAndSet(false, true)) {
+                return;
+            }
+            String status = switch (failure.code()) {
+                case CLIENT_CANCELLED -> "CANCELLED";
+                case STREAM_INTERRUPTED -> "STREAM_INTERRUPTED";
+                default -> "FAILED";
+            };
+            traceStore.finalizeTrace(traceId(handle), status);
+            applicationQuotaPort.release(applicationReservation, releaseReason);
+            listener.onError(failure.toError());
         }
     }
 
@@ -488,6 +586,8 @@ public class ChatPipeline {
         private final CircuitAttempt circuitAttempt;
         private final ApplicationQuotaPort.Reservation applicationReservation;
         private final String virtualModelId;
+        private final java.util.function.Consumer<LightAiException> preCommitFailure;
+        private final Runnable markErrorTerminal;
         private Long capturedInputTokens;
         private Long capturedOutputTokens;
 
@@ -498,7 +598,9 @@ public class ChatPipeline {
                                    long estimatedInputTokens, long estimatedOutputTokens,
                                    CircuitAttempt circuitAttempt,
                                    ApplicationQuotaPort.Reservation applicationReservation,
-                                   String virtualModelId) {
+                                   String virtualModelId,
+                                   java.util.function.Consumer<LightAiException> preCommitFailure,
+                                   Runnable markErrorTerminal) {
             this.handle = handle;
             this.alias = alias;
             this.candidate = candidate;
@@ -514,22 +616,47 @@ public class ChatPipeline {
             this.circuitAttempt = circuitAttempt;
             this.applicationReservation = applicationReservation;
             this.virtualModelId = virtualModelId;
+            this.preCommitFailure = preCommitFailure;
+            this.markErrorTerminal = markErrorTerminal;
         }
 
         java.util.concurrent.Flow.Subscriber<ProviderStreamChunk> subscriber(ProviderAdapter adapter) {
             return new java.util.concurrent.Flow.Subscriber<>() {
                 private volatile java.util.concurrent.Flow.Subscription subscription;
                 private final AtomicBoolean cancelHandled = new AtomicBoolean(false);
+                /**
+                 * Provider 适配器必须遵守 Reactive Streams 的单终态契约，但网络客户端
+                 * 或自定义适配器可能在取消/错误竞争时迟到回调。每个 Attempt 只允许
+                 * 一个 onComplete、onError 或取消路径进入结算与终态收敛。
+                 */
+                private final AtomicBoolean attemptTerminal = new AtomicBoolean(false);
+
+                private boolean streamTerminated() {
+                    return signal.cancelled() || signal.timedOut();
+                }
 
                 @Override
                 public void onSubscribe(java.util.concurrent.Flow.Subscription subscription) {
                     this.subscription = subscription;
+                    // HTTP 客户端断开时 CancellationSignal 立即关闭上游连接并收敛 Trace，
+                    // 不依赖上游再次发送数据才能发现取消。
+                    signal.onTermination(() -> {
+                        if (cancelHandled.compareAndSet(false, true)) {
+                            subscription.cancel();
+                            handleCancelledAfterStream();
+                        } else {
+                            subscription.cancel();
+                        }
+                    });
                     subscription.request(Long.MAX_VALUE);
                 }
 
                 @Override
-                public void onNext(ProviderStreamChunk chunk) {
-                    if (signal.cancelled() && cancelHandled.compareAndSet(false, true)) {
+                public synchronized void onNext(ProviderStreamChunk chunk) {
+                    if (attemptTerminal.get()) {
+                        return;
+                    }
+                    if (streamTerminated() && cancelHandled.compareAndSet(false, true)) {
                         // 客户端取消：向上游取消订阅，并按提交状态收敛唯一终态与释放
                         if (subscription != null) {
                             subscription.cancel();
@@ -537,7 +664,7 @@ public class ChatPipeline {
                         handleCancelledAfterStream();
                         return;
                     }
-                    if (signal.cancelled()) {
+                    if (streamTerminated()) {
                         return;
                     }
                     if (chunk.type() == ProviderStreamChunk.Type.CONTENT
@@ -559,7 +686,14 @@ public class ChatPipeline {
                 }
 
                 @Override
-                public void onError(Throwable throwable) {
+                public synchronized void onError(Throwable throwable) {
+                    if (streamTerminated()) {
+                        handleCancelledAfterStream();
+                        return;
+                    }
+                    if (!attemptTerminal.compareAndSet(false, true)) {
+                        return;
+                    }
                     if (traceStore.committed(traceId(handle))) {
                         // 提交后失败：STREAM_INTERRUPTED，错误事件后关闭，无 finish 无 DONE
                         LightAiException error = asLightAi(throwable, adapter);
@@ -570,19 +704,26 @@ public class ChatPipeline {
                         signal.releaseOnce(() -> capacityPort.release(reservation.reservationId()));
                         applicationQuotaPort.release(applicationReservation, "STREAM_INTERRUPTED");
                         traceStore.finalizeTrace(traceId(handle), "STREAM_INTERRUPTED");
+                        markErrorTerminal.run();
                         listener.onError(UnifiedError.builder(ErrorCode.STREAM_INTERRUPTED, "流式输出中断")
                                 .traceId(traceId(handle)).build());
                         return;
                     }
-                    // 提交前失败：抛回管线恢复循环
+                    // 适配器在异步线程回调，不能抛回已返回的 chatStream 调用栈；
+                    // 由同一 StreamSession 释放本次 Attempt 并继续恢复或最终化。
                     LightAiException error = asLightAi(throwable, adapter);
-                    completeCircuit(circuitAttempt, false,
-                            error.code() == ErrorCode.PROVIDER_RATE_LIMITED);
-                    throw error;
+                    preCommitFailure.accept(error);
                 }
 
                 @Override
-                public void onComplete() {
+                public synchronized void onComplete() {
+                    if (streamTerminated()) {
+                        handleCancelledAfterStream();
+                        return;
+                    }
+                    if (!attemptTerminal.compareAndSet(false, true)) {
+                        return;
+                    }
                     boolean committed = traceStore.committed(traceId(handle));
                     if (!committed) {
                         // 无内容正常结束：提交并只发送 role 块与 finish 块
@@ -619,28 +760,28 @@ public class ChatPipeline {
                 }
 
                 /** 取消后的终态收敛：先终态成功才释放，重复释放由幂等端口阻止。 */
-                private void handleCancelledAfterStream() {
+                private synchronized void handleCancelledAfterStream() {
+                    if (!attemptTerminal.compareAndSet(false, true)) {
+                        return;
+                    }
                     boolean committed = traceStore.committed(traceId(handle));
+                    ErrorCode terminalError = signal.terminalError(committed);
+                    String attemptStatus = committed || terminalError == ErrorCode.TOTAL_TIMEOUT
+                            ? "FAILED" : "CANCELLED";
+                    String traceStatus = committed ? "STREAM_INTERRUPTED"
+                            : terminalError == ErrorCode.TOTAL_TIMEOUT ? "FAILED" : "CANCELLED";
                     try {
-                        if (committed) {
-                            traceStore.finishAttempt(traceId(handle), attemptId, "FAILED",
-                                    ErrorCode.STREAM_INTERRUPTED.name(), 0, 0, "ESTIMATED",
-                                    java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
-                                    java.math.BigDecimal.ZERO, null, true);
-                            traceStore.finalizeTrace(traceId(handle), "STREAM_INTERRUPTED");
-                        } else {
-                            traceStore.finishAttempt(traceId(handle), attemptId, "CANCELLED",
-                                    ErrorCode.CLIENT_CANCELLED.name(), 0, 0, "ESTIMATED",
-                                    java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
-                                    java.math.BigDecimal.ZERO, null, true);
-                            traceStore.finalizeTrace(traceId(handle), "CANCELLED");
-                        }
+                        traceStore.finishAttempt(traceId(handle), attemptId, attemptStatus,
+                                terminalError.name(), 0, 0, "ESTIMATED",
+                                java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
+                                java.math.BigDecimal.ZERO, null, true);
+                        traceStore.finalizeTrace(traceId(handle), traceStatus);
+                        markErrorTerminal.run();
                     } catch (RuntimeException alreadyTerminal) {
                         return; // 终态已由其他路径收敛，保持唯一终态
                     }
                     signal.releaseOnce(() -> capacityPort.release(reservation.reservationId()));
-                    applicationQuotaPort.release(applicationReservation,
-                            committed ? "STREAM_INTERRUPTED" : "CLIENT_CANCELLED");
+                    applicationQuotaPort.release(applicationReservation, terminalError.name());
                     completeCircuit(circuitAttempt, false, false);
                 }
 
@@ -715,6 +856,18 @@ public class ChatPipeline {
     private String requestId(UnifiedChatRequest request) {
         return request.traceId() == null || request.traceId().isBlank()
                 ? UUID.randomUUID().toString() : request.traceId();
+    }
+
+    private BigDecimal estimatedRiskAmount(ParsedRequest parsed, List<CandidateView> candidates) {
+        long input = estimatedInput(requestChars(parsed.request()));
+        BigDecimal max = BigDecimal.ZERO;
+        for (CandidateView candidate : candidates) {
+            long output = resolveMaxTokens(candidate, parsed.request(), input,
+                    parsed.applicationMaxOutputTokens());
+            BigDecimal amount = UsageSettlement.settle(priceSnapshot(candidate), null, null, input, output).cost().amount();
+            if (amount.compareTo(max) > 0) max = amount;
+        }
+        return max;
     }
 
     private ApplicationQuotaPort.Reservation reserveApplicationQuota(
@@ -860,18 +1013,20 @@ public class ChatPipeline {
                     .orElseThrow(() -> new LightAiException(ErrorCode.FIELD_VALIDATION_FAILED,
                             "model 缺省且未配置默认 Alias", "model"));
         }
-        String resolvedAlias = alias;
-        if (context.principal() != null && !context.principal().aliasAllowed(resolvedAlias)) {
+        String requestedAlias = alias;
+        String resolvedAlias = context.principal() == null ? requestedAlias
+                : context.principal().resolveAlias(requestedAlias);
+        if (context.principal() != null && !context.principal().aliasAllowed(requestedAlias)) {
             throw new LightAiException(ErrorCode.ACCESS_DENIED, "应用未授权访问该模型");
         }
-        ConfigSnapshotPort.ActiveSnapshot snapshot = snapshotPort.active();
+        ConfigSnapshotPort.ActiveSnapshot snapshot = snapshotPort.active(context.principal());
         AliasView aliasView = snapshot.alias(resolvedAlias)
                 .orElseThrow(() -> ConfigSnapshotPort.aliasNotFound(resolvedAlias));
         if (!aliasView.enabled()) {
             throw ConfigSnapshotPort.aliasDisabled(resolvedAlias);
         }
         ApplicationModelConstraint constraint = enforceApplicationModelConstraint(
-                context.principal(), resolvedAlias, context.request());
+                context.principal(), requestedAlias, context.request());
         return new ParsedRequest(resolvedAlias, context.request(), snapshot, aliasView,
                 constraint == null ? null : constraint.maxOutputTokens());
     }

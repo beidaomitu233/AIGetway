@@ -58,6 +58,29 @@ public final class SseLineParser {
         return Optional.empty();
     }
 
+    /**
+     * 读取 SSE 事件并在协议终止帧 [DONE] 后立即返回。
+     * 上游可能保持连接用于复用，不能等待 EOF 才结束一次业务调用。
+     */
+    public static java.util.List<String> readUntilDone(InputStream stream) throws IOException {
+        java.util.List<String> events = new java.util.ArrayList<>();
+        SseLineParser parser = new SseLineParser();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                Optional<String> event = parser.feed(line);
+                if (event.isPresent()) {
+                    events.add(event.get());
+                    if ("[DONE]".equals(event.get())) {
+                        return events;
+                    }
+                }
+            }
+        }
+        parser.flush().ifPresent(events::add);
+        return events;
+    }
+
     /** 从流读取全部 data 事件负载直至流关闭（测试与缓冲消费用）。 */
     public static java.util.List<String> readAllEvents(InputStream stream) throws IOException {
         java.util.List<String> events = new java.util.ArrayList<>();

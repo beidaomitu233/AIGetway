@@ -177,7 +177,7 @@ public final class JdbcApplicationQuotaPort extends AbstractJdbcRepository
             dialect.bindUuid(statement, 4, applicationKeyId);
             statement.setLong(5, estimatedTokens);
             statement.setBigDecimal(6, reservedAmount);
-            statement.setString(7, quota.currency());
+            statement.setString(7, reservationCurrency(quota, amountEstimates));
             statement.setObject(8, now.plusSeconds(RESERVATION_LEASE_SECONDS));
             statement.executeUpdate();
         }
@@ -337,6 +337,19 @@ public final class JdbcApplicationQuotaPort extends AbstractJdbcRepository
                         dialect.readOffsetDateTime(resultSet, "updated_at"));
             }
         }
+    }
+
+    private String reservationCurrency(ApplicationQuotaRecord quota, List<AmountEstimate> estimates) {
+        if (quota.currency() != null && !quota.currency().isBlank()) return quota.currency();
+        if (estimates != null) {
+            for (AmountEstimate estimate : estimates) {
+                if (estimate != null && estimate.currency() != null && !estimate.currency().isBlank()) {
+                    return estimate.currency();
+                }
+            }
+        }
+        // 预算关闭且无价格估算时，保留非空历史快照字段；金额仍为零。
+        return "USD";
     }
 
     private BigDecimal amountForPolicy(ApplicationQuotaRecord quota,

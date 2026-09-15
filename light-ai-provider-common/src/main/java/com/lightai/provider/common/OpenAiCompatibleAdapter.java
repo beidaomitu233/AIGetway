@@ -13,7 +13,11 @@ import com.lightai.spi.provider.ProviderErrorClassification;
 import com.lightai.spi.provider.ProviderFailure;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Flow;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * OpenAI 兼容线协议（OPENAI/DEEPSEEK 共用）：/chat/completions 同步与流式。
@@ -26,6 +30,8 @@ public class OpenAiCompatibleAdapter implements com.lightai.spi.provider.Provide
     protected final String defaultBaseUrl;
     protected final AdapterCapabilities capabilities;
     protected final ObjectMapper mapper = new ObjectMapper();
+    /** 当前流式执行用于注册可被 cancel() 关闭的上游响应体。ThreadLocal 保证并发请求互不影响。 */
+    private final ThreadLocal<Consumer<java.io.InputStream>> streamOpenedCallback = new ThreadLocal<>();
 
     public OpenAiCompatibleAdapter(String providerType, String defaultBaseUrl, AdapterCapabilities capabilities) {
         this.providerType = providerType;
@@ -70,35 +76,78 @@ public class OpenAiCompatibleAdapter implements com.lightai.spi.provider.Provide
 
     @Override
     public Flow.Publisher<ProviderStreamChunk> streamChat(ProviderCallContext context) {
-        return subscriber -> subscriber.onSubscribe(new Flow.Subscription() {
-            volatile boolean done;
-            volatile boolean cancelled;
+        return subscriber -> {
+            class CancellableSubscription implements Flow.Subscription {
+                volatile boolean done;
+                volatile boolean cancelled;
+                volatile Future<?> worker;
+                final AtomicReference<java.io.InputStream> activeStream = new AtomicReference<>();
 
-            @Override
-            public void request(long n) {
-                if (done || n <= 0) {
-                    return;
-                }
-                done = true;
-                try {
-                    streamOnce(context, subscriber);
-                    if (!cancelled) {
-                        subscriber.onComplete();
+                @Override
+                public void request(long n) {
+                    if (done || n <= 0) {
+                        return;
                     }
-                } catch (AdapterHttp.TransportException e) {
-                    subscriber.onError(e);
-                } catch (Exception e) {
-                    subscriber.onError(new AdapterHttp.TransportException(
-                            ProviderFailure.badResponse(e.getClass().getSimpleName()), e));
+                    done = true;
+                    worker = CompletableFuture.runAsync(() -> {
+                        if (cancelled) {
+                            return;
+                        }
+                        try {
+                            streamOnceWithCancellation(context, subscriber, activeStream::set);
+                            if (!cancelled) {
+                                subscriber.onComplete();
+                            }
+                        } catch (AdapterHttp.TransportException e) {
+                            if (!cancelled) {
+                                subscriber.onError(e);
+                            }
+                        } catch (Exception e) {
+                            if (!cancelled) {
+                                subscriber.onError(new AdapterHttp.TransportException(
+                                        ProviderFailure.badResponse(e.getClass().getSimpleName()), e));
+                            }
+                        } finally {
+                            closeActiveStream();
+                        }
+                    });
+                }
+
+                @Override
+                public void cancel() {
+                    cancelled = true;
+                    done = true;
+                    closeActiveStream();
+                    Future<?> current = worker;
+                    if (current != null) {
+                        current.cancel(true);
+                    }
+                }
+
+                private void closeActiveStream() {
+                    java.io.InputStream stream = activeStream.getAndSet(null);
+                    if (stream != null) {
+                        try {
+                            stream.close();
+                        } catch (java.io.IOException ignored) {
+                            // 取消路径以终态收敛为准，关闭失败不再向下游报告二次错误。
+                        }
+                    }
                 }
             }
+            subscriber.onSubscribe(new CancellableSubscription());
+        };
+    }
 
-            @Override
-            public void cancel() {
-                cancelled = true;
-                done = true;
-            }
-        });
+    private void streamOnceWithCancellation(ProviderCallContext context,
+                                            Flow.Subscriber<? super ProviderStreamChunk> subscriber,
+                                            Consumer<java.io.InputStream> onOpened) {
+        streamOpenedCallback.set(onOpened);
+        try {
+            streamOnce(context, subscriber);
+        } finally {
+            streamOpenedCallback.remove();
+        }
     }
 
     protected void streamOnce(ProviderCallContext context, Flow.Subscriber<? super ProviderStreamChunk> subscriber) {
@@ -107,8 +156,12 @@ public class OpenAiCompatibleAdapter implements com.lightai.spi.provider.Provide
         java.io.InputStream stream = AdapterHttp
                 .postStream(context.config(), chatPath(), body, context.deadlineAt(),
                         authorization(context)).body();
+        Consumer<java.io.InputStream> onOpened = streamOpenedCallback.get();
+        if (onOpened != null) {
+            onOpened.accept(stream);
+        }
         try {
-            for (String event : SseLineParser.readAllEvents(stream)) {
+            for (String event : SseLineParser.readUntilDone(stream)) {
                 if (event.equals("[DONE]")) {
                     break;
                 }
@@ -117,6 +170,12 @@ public class OpenAiCompatibleAdapter implements com.lightai.spi.provider.Provide
         } catch (java.io.IOException e) {
             throw new AdapterHttp.TransportException(
                     ProviderFailure.badResponse("stream read failed: " + e.getClass().getSimpleName()), e);
+        } finally {
+            try {
+                stream.close();
+            } catch (java.io.IOException ignored) {
+                // 关闭由 finally 和 cancel 双重兜底，幂等忽略关闭异常。
+            }
         }
     }
 

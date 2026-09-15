@@ -2,6 +2,8 @@ package com.lightai.runtime.chat;
 
 import com.lightai.client.error.ErrorCode;
 import com.lightai.client.error.LightAiException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 终止信号（BE-029）：首个终止信号生效（CAS 一次），迟到结果不覆盖；
@@ -14,6 +16,7 @@ public final class CancellationSignal {
     private volatile boolean timedOut;
     private volatile String reason;
     private volatile boolean releaseDone;
+    private final List<Runnable> terminationListeners = new ArrayList<>();
 
     public CancellationSignal(String traceId) {
         this.traceId = traceId;
@@ -42,22 +45,63 @@ public final class CancellationSignal {
 
     /** 客户端取消：CAS 一次生效；返回是否本次调用方触发了首次终止。 */
     public boolean cancel(String reason) {
-        if (!cancelled && !timedOut) {
+        List<Runnable> listeners;
+        synchronized (this) {
+            if (cancelled || timedOut) {
+                return false;
+            }
             cancelled = true;
             this.reason = reason;
-            return true;
+            listeners = new ArrayList<>(terminationListeners);
+            terminationListeners.clear();
         }
-        return false;
+        notifyListeners(listeners);
+        return true;
     }
 
     /** 总超时终止：仅当尚未取消时生效。 */
     public boolean timeout(String reason) {
-        if (!cancelled && !timedOut) {
+        List<Runnable> listeners;
+        synchronized (this) {
+            if (cancelled || timedOut) {
+                return false;
+            }
             timedOut = true;
             this.reason = reason;
-            return true;
+            listeners = new ArrayList<>(terminationListeners);
+            terminationListeners.clear();
         }
-        return false;
+        notifyListeners(listeners);
+        return true;
+    }
+
+    /** 注册上游订阅取消回调；若信号已终止则立即执行，避免竞态下继续占用上游连接。 */
+    public void onTermination(Runnable listener) {
+        if (listener == null) {
+            return;
+        }
+        boolean runNow;
+        synchronized (this) {
+            runNow = cancelled || timedOut;
+            if (!runNow) {
+                terminationListeners.add(listener);
+            }
+        }
+        if (runNow) {
+            notifyListener(listener);
+        }
+    }
+
+    private static void notifyListeners(List<Runnable> listeners) {
+        listeners.forEach(CancellationSignal::notifyListener);
+    }
+
+    private static void notifyListener(Runnable listener) {
+        try {
+            listener.run();
+        } catch (RuntimeException ignored) {
+            // 取消通知不能覆盖请求的唯一终态收敛。
+        }
     }
 
     /** 已提交后终止 → STREAM_INTERRUPTED；未提交 → 取消/超时终态。 */

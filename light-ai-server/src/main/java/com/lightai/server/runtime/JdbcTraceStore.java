@@ -56,6 +56,12 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
 
     @Override
     public TraceHandle create(String clientTraceIdOrNull, String model, String application) {
+        return create(clientTraceIdOrNull, model, application, false);
+    }
+
+    @Override
+    public TraceHandle create(String clientTraceIdOrNull, String model, String application,
+                              boolean requestedStream) {
         if (clientTraceIdOrNull != null && !clientTraceIdOrNull.isBlank()) {
             try (Connection conn = dataSource.getConnection()) {
                 String sql = "SELECT 1 FROM " + qualify(conn, "trace") + " WHERE trace_id = ?";
@@ -121,7 +127,7 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
                 d.bindUuid(ps, 7, aliasId);
                 ps.setString(8, model);
                 ps.setLong(9, snapshotNo);
-                ps.setBoolean(10, false);
+                ps.setBoolean(10, requestedStream);
                 ps.setBoolean(11, false);
                 ps.setString(12, "RUNNING");
                 ps.setObject(13, now);
@@ -150,6 +156,11 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
 
     @Override
     public String startAttempt(String traceId, AttemptIdentity identity) {
+        return startAttempt(traceId, identity, null);
+    }
+
+    @Override
+    public String startAttempt(String traceId, AttemptIdentity identity, String requestedAttemptType) {
         UUID attemptUuid = UUID.randomUUID();
         int sequence = 1;
 
@@ -178,7 +189,8 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
                     ? identity.providerType() : "UNKNOWN";
             String mId = (identity.upstreamModelName() != null && !identity.upstreamModelName().isBlank())
                     ? identity.upstreamModelName() : "UNKNOWN";
-            String attemptType = sequence == 1 ? "INITIAL" : "RETRY";
+            String attemptType = requestedAttemptType == null || requestedAttemptType.isBlank()
+                    ? (sequence == 1 ? "INITIAL" : "RETRY") : requestedAttemptType;
             OffsetDateTime now = OffsetDateTime.now(clock);
             BigDecimal inputPrice = identity.inputPrice() == null ? BigDecimal.ZERO : identity.inputPrice();
             BigDecimal outputPrice = identity.outputPrice() == null ? BigDecimal.ZERO : identity.outputPrice();
@@ -387,6 +399,9 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
 
             // 统计全部 attempt 的 tokens 与 cost
             int attemptCount = 0;
+            int retryCount = 0;
+            int credentialFailoverCount = 0;
+            int fallbackCount = 0;
             long inTokens = 0;
             long outTokens = 0;
             long totTokens = 0;
@@ -403,7 +418,7 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
             String finalUpstreamModelName = null;
 
             String attemptsSql = "SELECT id, channel_id, upstream_model_id, channel_credential_id, "
-                    + "channel_name_snapshot, upstream_model_name_snapshot, status, "
+                    + "channel_name_snapshot, upstream_model_name_snapshot, attempt_type, status, "
                     + "input_tokens, output_tokens, total_tokens, total_cost, usage_source, currency "
                     + "FROM " + qualify(conn, "attempt")
                     + " WHERE trace_id = ? ORDER BY " + d.quoteColumn("sequence") + " ASC";
@@ -419,6 +434,14 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
                         finalChannelCredentialId = d.readUuid(rs, "channel_credential_id");
                         finalChannelName = rs.getString("channel_name_snapshot");
                         finalUpstreamModelName = rs.getString("upstream_model_name_snapshot");
+                        String attemptType = rs.getString("attempt_type");
+                        if ("RETRY".equals(attemptType)) {
+                            retryCount++;
+                        } else if ("CREDENTIAL_FAILOVER".equals(attemptType)) {
+                            credentialFailoverCount++;
+                        } else if ("FALLBACK".equals(attemptType)) {
+                            fallbackCount++;
+                        }
                         long aIn = rs.getLong("input_tokens");
                         long aOut = rs.getLong("output_tokens");
                         long aTot = rs.getLong("total_tokens");
@@ -452,6 +475,7 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
 
             String updateTraceSql = "UPDATE " + qualify(conn, "trace") + " SET "
                     + "status = ?, ended_at = ?, total_ms = ?, attempt_count = ?, "
+                    + "retry_count = ?, credential_failover_count = ?, fallback_count = ?, "
                     + "input_tokens = ?, output_tokens = ?, total_tokens = ?, "
                     + "response_input_tokens = ?, response_output_tokens = ?, response_total_tokens = ?, "
                     + "total_cost = ?, currency = ?, usage_source = ?, "
@@ -465,22 +489,25 @@ public class JdbcTraceStore extends AbstractJdbcRepository implements TraceStore
                 ps.setObject(2, now);
                 ps.setLong(3, totalMs);
                 ps.setInt(4, attemptCount);
-                ps.setLong(5, inTokens);
-                ps.setLong(6, outTokens);
-                ps.setLong(7, totTokens);
-                ps.setLong(8, respInTokens);
-                ps.setLong(9, respOutTokens);
-                ps.setLong(10, respTotTokens);
-                ps.setBigDecimal(11, totalCost);
-                ps.setString(12, traceCurrency);
-                ps.setString(13, usageSource != null ? usageSource : "ACTUAL");
-                d.bindUuid(ps, 14, finalAttemptId);
-                d.bindUuid(ps, 15, finalChannelId);
-                d.bindUuid(ps, 16, finalUpstreamModelId);
-                d.bindUuid(ps, 17, finalChannelCredentialId);
-                ps.setString(18, finalChannelName);
-                ps.setString(19, finalUpstreamModelName);
-                ps.setString(20, traceId);
+                ps.setInt(5, retryCount);
+                ps.setInt(6, credentialFailoverCount);
+                ps.setInt(7, fallbackCount);
+                ps.setLong(8, inTokens);
+                ps.setLong(9, outTokens);
+                ps.setLong(10, totTokens);
+                ps.setLong(11, respInTokens);
+                ps.setLong(12, respOutTokens);
+                ps.setLong(13, respTotTokens);
+                ps.setBigDecimal(14, totalCost);
+                ps.setString(15, traceCurrency);
+                ps.setString(16, usageSource != null ? usageSource : "ACTUAL");
+                d.bindUuid(ps, 17, finalAttemptId);
+                d.bindUuid(ps, 18, finalChannelId);
+                d.bindUuid(ps, 19, finalUpstreamModelId);
+                d.bindUuid(ps, 20, finalChannelCredentialId);
+                ps.setString(21, finalChannelName);
+                ps.setString(22, finalUpstreamModelName);
+                ps.setString(23, traceId);
                 ps.executeUpdate();
             }
         } catch (SQLException e) {

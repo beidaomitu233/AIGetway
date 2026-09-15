@@ -170,6 +170,52 @@ public class JdbcTraceStoreTest {
     }
 
     @Test
+    void persistsRequestedStreamFlag() throws Exception {
+        TraceStore.TraceHandle handle = traceStore.create("trace-stream-flag", "gpt-4o", "test-app", true);
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "SELECT requested_stream FROM trace WHERE trace_id=?")) {
+            statement.setString(1, handle.traceId());
+            try (var resultSet = statement.executeQuery()) {
+                assertTrue(resultSet.next());
+                assertTrue(resultSet.getBoolean(1));
+            }
+        }
+    }
+
+    @Test
+    void aggregatesRecoveryAttemptTypesIntoTraceCounters() throws Exception {
+        TraceStore.TraceHandle handle = traceStore.create("trace-recovery-counter", "gpt-4o", "test-app", true);
+        String traceId = handle.traceId();
+        TraceStore.AttemptIdentity identity = new TraceStore.AttemptIdentity(
+                null, null, null, null, "OPENAI", "gpt-4o", "sk-****", null, null, 1000, "USD");
+        String[] types = {"INITIAL", "RETRY", "CREDENTIAL_FAILOVER", "FALLBACK"};
+        for (int i = 0; i < types.length; i++) {
+            String attemptId = traceStore.startAttempt(traceId, identity, types[i]);
+            String status = i == types.length - 1 ? "SUCCEEDED" : "FAILED";
+            traceStore.finishAttempt(traceId, attemptId, status, status.equals("FAILED") ? "PROVIDER_SERVER_ERROR" : null,
+                    i == types.length - 1 ? 6 : 0, i == types.length - 1 ? 2 : 0,
+                    i == types.length - 1 ? "ACTUAL" : "ESTIMATED", "0", "USD", false);
+        }
+        traceStore.finalizeTrace(traceId, "SUCCEEDED");
+
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "SELECT requested_stream, attempt_count, retry_count, credential_failover_count, fallback_count "
+                             + "FROM trace WHERE trace_id=?")) {
+            statement.setString(1, traceId);
+            try (var resultSet = statement.executeQuery()) {
+                assertTrue(resultSet.next());
+                assertTrue(resultSet.getBoolean("requested_stream"));
+                assertEquals(4, resultSet.getInt("attempt_count"));
+                assertEquals(1, resultSet.getInt("retry_count"));
+                assertEquals(1, resultSet.getInt("credential_failover_count"));
+                assertEquals(1, resultSet.getInt("fallback_count"));
+            }
+        }
+    }
+
+    @Test
     void testAttemptTimelineAndFinalize() {
         TraceStore.TraceHandle handle = traceStore.create("trace-timeline-1", "gpt-4o", "test-app");
         String traceId = handle.traceId();

@@ -271,6 +271,78 @@ export function updateApplicationQuota(
   return request({ path: `/applications/${id}/quota`, method: 'PUT', body: payload })
 }
 
+export interface ApplicationMappingTarget {
+  id: string
+  channel_id: string
+  upstream_model_id: string | null
+  upstream_model_name: string
+  priority: number
+  weight: number
+  status: 'ACTIVE' | 'DISABLED'
+  policy_json: string | null
+}
+
+export interface ApplicationMapping {
+  id: string
+  public_model_name: string
+  status: 'ACTIVE' | 'DISABLED'
+  version: number
+  targets: ApplicationMappingTarget[]
+}
+
+export interface ApplicationMappingsView {
+  application_id: string
+  revision: number
+  application_version: number
+  updated_at: string | null
+  mappings: ApplicationMapping[]
+}
+
+export interface ApplicationMappingTargetPayload {
+  id?: string | null
+  channel_id: string
+  upstream_model_id: string | null
+  upstream_model_name: string
+  priority: number
+  weight: number
+  status: 'ACTIVE' | 'DISABLED'
+  policy_json: string | null
+}
+
+export interface ApplicationMappingPayload {
+  id?: string | null
+  public_model_name: string
+  status: 'ACTIVE' | 'DISABLED'
+  targets: ApplicationMappingTargetPayload[]
+}
+
+export function fetchApplicationMappings(
+  id: string,
+  signal?: AbortSignal,
+): Promise<ApplicationMappingsView> {
+  return request({ path: '/applications/' + id + '/mappings', signal })
+}
+
+export function validateApplicationMappings(
+  id: string,
+  payload: { application_version: number; mappings: ApplicationMappingPayload[] },
+): Promise<{ valid: boolean; issues: string[]; application_version: number }> {
+  return request({ path: '/applications/' + id + '/mappings:validate', method: 'POST', body: payload })
+}
+
+export function replaceApplicationMappings(
+  id: string,
+  payload: { application_version: number; mappings: ApplicationMappingPayload[]; reason: string },
+): Promise<ManagementOperationResult<ApplicationMappingsView>> {
+  return request({ path: '/applications/' + id + '/mappings', method: 'PUT', body: payload })
+}
+
+export function bulkCreateApplicationMappings(
+  id: string,
+  payload: { channel_ids: string[]; query?: string; limit?: number },
+): Promise<ApplicationMappingPayload[]> {
+  return request({ path: '/applications/' + id + '/mappings:bulk-create', method: 'POST', body: payload })
+}
 export function updateApplicationModels(
   id: string,
   payload: {
