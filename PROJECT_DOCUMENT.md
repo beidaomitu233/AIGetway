@@ -311,7 +311,8 @@ P5-C 当前交付记录（2026-09-15）：
 - SSE 解析在收到 [DONE] 后立即结束并关闭上游响应体；Trace Attempt 明确记录 INITIAL、RETRY、CREDENTIAL_FAILOVER、FALLBACK，JDBC 按类型聚合恢复计数。
 - 修复异步 Provider 在首块提交前失败时无法恢复的问题：StreamSession 在同一 Trace 内释放失败 Attempt 并继续重试、换 Key 或 fallback；首块提交后仍固定流终态。
 - 为每个流式 Attempt 增加终态幂等门控并串行化 Provider 回调，迟到或重复的 `onComplete`、`onError` 和取消通知不会重复结算或改写 Trace。
-- 目标回归测试共 41 项通过；隔离 H2 + Redis + 双渠道协议替身复验最终渠道切换成功，Attempt 4 条、恢复计数 1/1/1、实际 Token 6/2/8，Usage 与调用记录一致。
+- 流式 Publisher 建立或订阅阶段的运行时异常统一进入 Attempt 清理和 fallback，避免容量与 Trace 遗留。
+- 目标回归测试共 42 项通过；隔离 H2 + Redis + 双渠道协议替身复验最终渠道切换成功，Attempt 4 条、恢复计数 1/1/1、实际 Token 6/2/8，Usage 与调用记录一致。
 - 真实供应商、生产共享状态和浏览器页面仍需授权环境复验，本包状态为“待复验”。
 
 ## 8. 验收标准

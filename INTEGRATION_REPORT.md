@@ -110,6 +110,7 @@ BUILD SUCCESS；以当前源码启动隔离服务并完成上述 SSE 链路复�
 | P5-C-02 | 重试、换 Key、fallback 均使用默认序号推导 Attempt 类型，Trace 的恢复计数保持 0，调用观测无法对账。 | `TraceStore` 增加带类型的兼容契约；ChatPipeline 在同步/流式恢复前写入 `RETRY`、`CREDENTIAL_FAILOVER`、`FALLBACK`；JDBC 最终化按 Attempt 类型聚合三类计数。 | H2 回归及端到端 Trace 均得到 `attempt_count=4`、`retry_count=1`、`credential_failover_count=1`、`fallback_count=1`。 | 已验证 |
 | P5-C-03 | Provider 异步流在首个业务块提交前失败时，原实现把异常抛到异步回调线程，恢复循环无法接管，Trace 保持 RUNNING。 | 新增 StreamSession 持有同一 Trace 的候选、凭证和恢复预算；首块前错误通过回调释放当前 Attempt 并继续重试、换 Key 或 fallback，提交后仍固定终态。 | 异步回调回归通过；真实 HTTP + H2 + Redis 复验最终切换健康渠道，Trace/Usage 恢复计数与 Attempt 类型一致。 | 已验证 |
 | P5-C-04 | Provider 在完成或失败后重复/迟到回调时，原实现可能重复结算、重复通知，或由旧 Attempt 的迟到 `onComplete` 改写恢复中的 Trace。 | StreamAccumulator 为每个 Attempt 增加终态 CAS，并串行化 `onNext`、`onError`、`onComplete` 与取消回调；首个终态之后的回调直接丢弃。 | `duplicateStreamTerminalCallbacksAreIgnoredPerAttempt` 与 `lateCompletionAfterPreCommitFailureCannotCommitOldAttempt` 回归通过：重复终态回调未产生第二次结算或通知，失败 Attempt 的迟到完成也未改写 fallback Trace。 | 已验证 |
+| P5-C-05 | Provider 在建立流式 Publisher 或 `subscribe` 阶段直接抛出运行时异常时，原实现未进入恢复，容量和 Attempt 可能遗留为 RUNNING。 | StreamSession 捕获适配器流式订阅阶段的运行时异常，转换为统一 Provider 错误并复用失败 Attempt 清理与 fallback 决策。 | `streamPublisherSetupFailureUsesFallbackAndClosesAttempt` 回归通过：首候选 Publisher 建立失败后第二候选成功，Trace 两个 Attempt 分别为 FAILED/SUCCEEDED，最终仅一次成功终态。 | 已验证 |
 
 ## 实际链路证据
 
@@ -129,7 +130,7 @@ BUILD SUCCESS；以当前源码启动隔离服务并完成上述 SSE 链路复�
 
 ```text
 mvn -B -pl light-ai-provider-common,light-ai-server -am -Dtest=OpenAiCompatibleAdapterTest,JdbcTraceStoreTest,V1ControllerStreamTest,ChatPipelineTest,ChatPipelineRecoveryTest -Dsurefire.failIfNoSpecifiedTests=false test
-BUILD SUCCESS；OpenAiCompatibleAdapterTest 6/6、JdbcTraceStoreTest 6/6、V1ControllerStreamTest 1/1、ChatPipelineTest 18/18、ChatPipelineRecoveryTest 10/10
+BUILD SUCCESS；OpenAiCompatibleAdapterTest 6/6、JdbcTraceStoreTest 6/6、V1ControllerStreamTest 1/1、ChatPipelineTest 18/18、ChatPipelineRecoveryTest 11/11
 
 mvn -B -pl light-ai-server -am -DskipTests package
 BUILD SUCCESS；Spring Boot fat jar repackage succeeded
@@ -141,6 +142,7 @@ BUILD SUCCESS；Spring Boot fat jar repackage succeeded
 - 修复结果：ChatPipeline 新增 StreamSession，首块前错误通过同一 Trace 的回调释放 Attempt 并继续 RETRY、CREDENTIAL_FAILOVER 或 FALLBACK；提交后仍固定 STREAM_INTERRUPTED 终态。
 - 异步回归测试通过：ChatPipelineRecoveryTest 新增异步 onError 场景，首个候选失败后第二候选成功，同一 Trace 只产生一次最终回调。
 - 终态幂等回归通过：每个 Attempt 的重复 `onComplete`、迟到 `onError`、失败后迟到 `onComplete` 和取消竞争均由一次性门控收敛，容量结算与监听器终态通知不重复。
+- 流式订阅建立异常回归通过：适配器在 `streamChat` 阶段抛出运行时异常时，失败 Attempt 已释放并按既有预算切换候选。
 - 最新真实 HTTP + H2 + Redis 复验（端口 18085，Redis 命名空间 p5c-failover-rerun4）：request/trace 38898ec2-37de-41a3-b6cf-79f4f474e393 在 659ms 内 SUCCEEDED，最终渠道 DEEPSEEK，Attempt 类型 INITIAL、RETRY、CREDENTIAL_FAILOVER、FALLBACK，计数 4/1/1/1，实际 Token 6/2/8；Usage summary 与调用记录一致，客户端收到唯一 [DONE] 后结束。
 - 该修复仍需真实供应商、生产共享状态和浏览器页面复验，任务状态保持“待复验”。
 
