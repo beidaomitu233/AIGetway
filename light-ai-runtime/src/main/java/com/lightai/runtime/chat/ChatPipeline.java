@@ -438,6 +438,7 @@ public class ChatPipeline {
             CircuitAttempt circuitAttempt = null;
             String attemptId = null;
             CredentialSecretPort.ResolvedCredential credential = null;
+            ProviderAdapter adapter = null;
             try {
                 credential = credentialPort.resolve(candidate.channelId(), credentialIndex);
                 long estimatedInput = estimatedInput(requestChars(parsed.request()));
@@ -446,7 +447,7 @@ public class ChatPipeline {
                 circuitAttempt = acquireCircuit(parsed, candidate, credential);
                 attemptId = traceStore.startAttempt(traceId(handle), attemptIdentity(candidate, credential),
                         nextAttemptType);
-                ProviderAdapter adapter = requireAdapter(candidate);
+                adapter = requireAdapter(candidate);
                 ProviderChatRequest adapterRequest = toAdapterRequest(candidate, parsed.request(),
                         estimatedInput, parsed.applicationMaxOutputTokens());
                 ProviderCallContext callContext = callContext(candidate, adapterRequest, credential, started);
@@ -463,7 +464,14 @@ public class ChatPipeline {
                         error -> handleFailure(candidate, attemptCredential, attemptReservation,
                                 attemptCircuit, attempt, error),
                         () -> errorTerminal.set(true));
-                adapter.streamChat(callContext).subscribe(accumulator.subscriber(adapter));
+                try {
+                    adapter.streamChat(callContext).subscribe(accumulator.subscriber(adapter));
+                } catch (RuntimeException e) {
+                    // Publisher 建立或 subscribe 阶段的同步异常也必须收敛当前 Attempt，
+                    // 不能让 Trace 留在 RUNNING；仅将 Provider 调用边界的异常映射为统一错误。
+                    handleFailure(candidate, credential, reservation, circuitAttempt, attemptId,
+                            asLightAi(e, adapter));
+                }
             } catch (LightAiException e) {
                 handleFailure(candidate, credential, reservation, circuitAttempt, attemptId, e);
             }
