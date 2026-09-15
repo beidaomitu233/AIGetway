@@ -4,7 +4,7 @@
 - 基线：`origin/dev`，并合入已完成的 P1-P5-B 集成基线
 - 负责人：代码审查与修复模型/root
 - 日期：2026-09-15
-- 结论：进行中（旧访问凭证、运行时权限读取和应用管理读取已完成迁移，旧模型写路径、发布装配与观测查询依赖待迁移）
+- 结论：进行中（应用创建契约已迁移，详情旧模型写入口、发布装配与观测查询依赖仍待迁移）
 
 ## 本批已完成
 
@@ -19,12 +19,13 @@
 | P4-BE-001 | P1 | 运行时应用密钥鉴权仍通过 `JdbcApplicationRepository.listModelPermissions` 连接旧 `virtual_model`，Standalone 默认模型仍读取 `runtime_config` | 鉴权按应用映射读取公开模型并按密钥范围过滤，约束只读 `application_model_permission` 元数据；单一应用映射可作为默认模型，Standalone 默认配置端口不再访问旧表。应用密钥回归 4/4、默认模型回归 1/1、全仓编译通过；隔离 H2/Redis/本地桩完成应用→映射→渠道→上游→调用/Trace 实链路 | 已验证 |
 | P4-BE-006-A | P1 | 应用密钥模型范围和非可信身份候选集合仍从旧模型权限表判断，映射配置无法在旧目录下线后继续工作 | 密钥范围和候选目录优先读取 ACTIVE 应用映射，未回填存量应用保留一次性旧授权兼容；旧目录表删除后的 `ApplicationKeyServiceTest`、`ApplicationServiceTest` 与应用 API 回归 31/31 通过 | 已验证 |
 | P4-BE-006-B | P1 | 应用详情和 `/models` 子资源通过 `virtual_model` 目录回查模型名称，目录表下线会使管理端详情失败 | 新增映射模型权限视图查询，详情、模型子资源和候选目录优先从应用映射读取；H2 删除 `route_candidate`、`virtual_model` 后管理服务回归通过 | 已验证 |
+| P4-BE-006-C | P1 | 应用创建仍展示旧模型候选并提交 `virtual_model_ids`，后端创建事务继续写入旧 `application_model_permission` | 创建表单移除旧模型候选请求和选择器，创建请求删除旧字段；后端对非空旧字段返回 `FIELD_VALIDATION_FAILED/DEPRECATED`，创建不再写旧权限表；前端创建/身份切换回归通过，后端应用/密钥/API 契约 32/32 通过 | 已验证 |
 
 ## 剩余问题
 
 | 编号 | 级别 | 位置与依据 | 影响 | 状态 |
 | --- | --- | --- | --- | --- |
-| P4-BE-006-C | P1 | `ApplicationService.create/updateModels` 仍可写入 `application_model_permission`，旧模型授权更新接口和草稿/发布装配仍有历史依赖 | 已领取；下一步同步前端创建/映射契约，收口旧写入口并保留历史查询、审计、调用与成本快照；当前不宣称旧写路径已移除 | 领取中 |
+| P4-BE-006-D | P1 | `ApplicationService.updateModels`、发布装配和观测查询仍依赖旧模型权限写入或历史目录装配 | P4-BE-006-C 已完成创建契约收口；本包继续迁移详情旧写入口、发布/观测依赖，保留历史审计、调用和成本快照 | 领取中 |
 
 ## 验证
 
@@ -36,7 +37,7 @@
 - `mvn -pl light-ai-admin -am -Dtest=ApplicationKeyServiceTest,LightAiAdminAutoConfigurationTest,ApplicationRuntimeSnapshotTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，10/10。
 - `mvn -pl light-ai-admin -am -Dtest=LightAiAdminAutoConfigurationTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，6/6。
 - `mvn -pl light-ai-admin -am -Dtest=ChannelModelCatalogServiceTest,ApplicationMappingServiceTest,ApplicationRuntimeSnapshotTest,ApplicationKeyServiceTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，7/7。
-- `mvn -pl light-ai-admin -am -Dtest=ApplicationKeyServiceTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，4/4。`mvn -pl light-ai-runtime -am -Dtest=AccessTokenPortTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，1/1。`mvn -pl light-ai-server -am -Dtest=V1ChatRequestParsingTest,V1ErrorContractTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，7/7。`mvn -pl light-ai-admin -am -Dtest=ApplicationServiceTest,ApplicationKeyServiceTest,ApplicationApiContractTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，31/31。`mvn -DskipTests compile`：通过，全仓 14 模块。
+- `mvn -pl light-ai-admin -am -Dtest=ApplicationKeyServiceTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，4/4。`mvn -pl light-ai-runtime -am -Dtest=AccessTokenPortTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，1/1。`mvn -pl light-ai-server -am -Dtest=V1ChatRequestParsingTest,V1ErrorContractTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，7/7。`mvn -pl light-ai-admin -am -Dtest=ApplicationServiceTest,ApplicationKeyServiceTest,ApplicationApiContractTest -Dsurefire.failIfNoSpecifiedTests=false test`：通过，32/32。`npm run typecheck`：通过；创建应用与创建表单身份切换回归通过。`mvn -DskipTests compile`：通过，全仓 14 模块。
 - 实链路使用隔离 H2、Redis `127.0.0.1:6379` 命名空间和本地 OpenAI 协议桩（端口 19090），通过 `http://127.0.0.1:18081` 验证；未执行真实供应商调用、PostgreSQL/MySQL 实例上的全新库迁移和剩余旧管理服务删除后的回归。
 
 ## Commit / 远程状态
@@ -60,8 +61,9 @@
 - `94dbbcd` `test(fullstack): P4-BE-006 cover model options after legacy drop`
 - `4458015` `fix(fullstack): P4-BE-006-B read application models from mappings`
 - `7d97f5b` `test(fullstack): P4-BE-006-B cover detail model reads`
+- `c43d7de` `fix(fullstack): P4-BE-006-C move model setup to application detail`
 - 文档提交后推送到 `origin/fix/fullstack-integration-P4-root`；未直接合并 `dev`，等待后续运行链路迁移和独立评审。
 
 ## 合并建议
 
-完成 P4-BE-006-C 的旧模型授权写路径、发布协调和观测查询迁移，并通过 PostgreSQL/MySQL/全新库回归后，再提交 P4 顶层完成复验。
+完成 P4-BE-006-D 的旧模型授权写路径、发布协调和观测查询迁移，并通过 PostgreSQL/MySQL/全新库回归后，再提交 P4 顶层完成复验。

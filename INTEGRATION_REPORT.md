@@ -124,3 +124,18 @@ P4-BE-001 已验证。运行时鉴权从应用映射读取公开模型并按密�
 ## 结论
 
 P4-BE-006-A/B 已验证。管理端密钥范围、候选目录、模型子资源和详情读取已优先使用应用映射；P4-BE-006-C 的旧模型授权写入、发布装配和观测历史依赖仍待迁移。真实 PostgreSQL/MySQL、真实浏览器页面和真实供应商未在本次复验执行。
+# P4-BE-006-C 应用创建契约复验
+
+- 分支：`fix/fullstack-integration-P4-root`
+- 验证环境：前端 Vitest + Maven H2 内存数据库；未使用真实供应商或生产数据库。
+
+## 复验步骤与结果
+
+1. 新建应用页面不再请求 `/admin/applications/model-options`，不再展示旧虚拟模型选择器；创建请求不包含 `virtual_model_ids`。
+2. 身份切换触发表单重置，名称、负责人和金额输入均清空或更新为当前身份，避免 Ant Design 输入组件保留旧值。
+3. 后端创建命令带非空 `virtualModelIds` 时返回 `FIELD_VALIDATION_FAILED`，字段码为 `DEPRECATED`；正常创建不再插入 `application_model_permission`，模型映射由应用详情入口配置。
+4. `npm run typecheck` 通过；创建应用和创建表单边界回归通过；`mvn -pl light-ai-admin -am -Dtest=ApplicationServiceTest,ApplicationKeyServiceTest,ApplicationApiContractTest -Dsurefire.failIfNoSpecifiedTests=false test` 通过，32/32。
+
+## 结论
+
+P4-BE-006-C 已验证。应用创建与模型映射入口已分离，创建流程不再依赖旧模型候选或写入旧模型授权表；P4-BE-006-D 仍需迁移应用详情旧授权更新写入口、发布装配和观测历史依赖。真实 PostgreSQL/MySQL、真实浏览器和真实供应商未在本次复验执行。
