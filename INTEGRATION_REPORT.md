@@ -127,6 +127,12 @@ BUILD SUCCESS；以当前源码启动隔离服务并完成上述 SSE 链路复�
 - 应用密钥调用 `/v1/models` 返回 `p5c-chat`；同步 `/v1/chat/completions` 返回 `LIGHT_AI_SYNC_OK` 和实际 4/5/9 Token。
 - 流式调用返回角色块、内容块、finish 和唯一 `[DONE]`，客户端读取到终止帧耗时 188ms；Trace `83294358-449e-4c5b-8320-d58cc6364e39` 为 `SUCCEEDED`、`requested_stream=true`、`response_committed=true`、`usage_source=ACTUAL`、6/2/8 Token；`/admin/usage/summary?requested_stream=true` 返回 `request_count=1`、`stream_count=1`、`attempt_count=1`。
 
+## 管理端验证补充（2026-09-15）
+
+- 修复凭证表单关闭时 Ant Design Input 的卸载竞态：名称、应用标识、IP 白名单和有效期字段改用原生输入控件，避免组件卸载后异步回调访问空节点；同时清理 FE-049 测试中的临时调试输出。
+- 管理端串行回归通过：`npx vitest run --maxWorkers=1 --testTimeout=15000`，34 个测试文件、263 个测试全部通过，凭证 Token 弹窗流程无未处理异常。
+- `npm run typecheck` 和 `npm run build` 通过。改动文件定向 ESLint 无错误；全仓 lint 仍有 3 个既有错误（`ApplicationDetailPage.vue` 的两条 `no-console` 和一条 `vue/no-ref-as-operand`），其余为既有风格警告。
+- 浏览器真实 HTTP 页面、真实供应商、生产数据库、跨实例共享容量仍未复验，P5-C 状态保持“待复验”。
 ## 测试与构建
 
 ```text
