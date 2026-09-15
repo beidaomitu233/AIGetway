@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { Button, Checkbox, Input, Select } from 'ant-design-vue'
+import { Button, Checkbox, Select } from 'ant-design-vue'
 import PageState from '@/components/PageState.vue'
 import VersionConflictBanner from '@/components/VersionConflictBanner.vue'
 import { useFormSubmit } from '@/composables/useFormSubmit'
@@ -195,11 +195,12 @@ const dialogTitle = computed(() => (props.accessId === null ? '创建访问凭�
               class="lai-form-label"
               for="ac-name"
             >名称</label>
-            <Input
+            <input
               id="ac-name"
-              v-model:value="form.name"
-              :maxlength="64"
-            />
+              v-model="form.name"
+              class="lai-input"
+              maxlength="64"
+            >
             <p
               v-if="fieldError('name')"
               class="lai-form-message-error"
@@ -213,11 +214,12 @@ const dialogTitle = computed(() => (props.accessId === null ? '创建访问凭�
               class="lai-form-label"
               for="ac-app"
             >应用标识</label>
-            <Input
+            <input
               id="ac-app"
-              v-model:value="form.application"
-              :maxlength="64"
-            />
+              v-model="form.application"
+              class="lai-input"
+              maxlength="64"
+            >
             <p
               v-if="fieldError('application')"
               class="lai-form-message-error"
@@ -241,12 +243,12 @@ const dialogTitle = computed(() => (props.accessId === null ? '创建访问凭�
           <div class="lai-form-field">
             <span class="lai-form-label">IP 白名单（空数组不限制；最多 100 项）</span>
             <div class="lai-kv-row">
-              <Input
-                v-model:value="form.newIp"
-                class="lai-filter-input"
+              <input
+                v-model="form.newIp"
+                class="lai-input lai-filter-input"
                 placeholder="IPv4、IPv6 或 CIDR"
                 @keydown.enter.prevent="addIp"
-              />
+              >
               <Button @click="addIp">
                 添加
               </Button>
@@ -278,11 +280,12 @@ const dialogTitle = computed(() => (props.accessId === null ? '创建访问凭�
               class="lai-form-label"
               for="ac-exp"
             >有效期至（留空长期有效）</label>
-            <Input
+            <input
               id="ac-exp"
-              v-model:value="form.expires_at"
+              v-model="form.expires_at"
+              class="lai-input"
               type="datetime-local"
-            />
+            >
             <p
               v-if="fieldError('expires_at')"
               class="lai-form-message-error"
