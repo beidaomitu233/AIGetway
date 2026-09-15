@@ -353,16 +353,15 @@ describe('FE-P20 页面边界（同契约夹具，非真实联调）', () => {
     expect(last.url).toContain('department=%E5%AE%A2%E6%88%B7%E6%88%90%E5%8A%9F%E9%83%A8')
     expect(last.url).toContain('budget_status=EXHAUSTED')
   })
-  it('授权候选加载失败只影响模型选择，不阻断创建表单', async () => {
+  it('创建表单不读取旧模型候选接口', async () => {
     const stub = installJsonFetchStub(({ url }) => {
       if (url.pathname === '/admin/applications/model-options') return errorEnvelope(503, 'CONFIG_DATA_UNAVAILABLE', '活动配置快照当前无法读取')
       return dataEnvelope(application)
     })
     const { wrapper } = await page('/ui/applications/new')
-    expect(stub.calls.some(call => call.url.endsWith('/admin/applications/model-options'))).toBe(true)
+    expect(stub.calls.some(call => call.url.endsWith('/admin/applications/model-options'))).toBe(false)
     expect(wrapper.find('input[name="name"]').exists()).toBe(true)
     expect(wrapper.get('input[name="name"]').element).toHaveProperty('disabled', false)
-    expect(wrapper.text()).toContain('活动配置快照当前无法读取')
     expect(wrapper.text()).not.toContain('当前没有可授权的虚拟模型')
   })
   it('创建表单切换身份清除上一身份输入', async () => {
@@ -373,6 +372,6 @@ describe('FE-P20 页面边界（同契约夹具，非真实联调）', () => {
     await flushPromises()
     expect(wrapper.get('input[name="name"]').element).toHaveProperty('value', '')
     expect(wrapper.get('input[name="owner_id"]').element).toHaveProperty('value', 'next-user')
-    expect(wrapper.get('input[name="amount_limit"]').element).toHaveProperty('value', '')
+    await vi.waitFor(() => expect(wrapper.get('input[name="amount_limit"]').element).toHaveProperty('value', ''))
   })})
 

@@ -91,7 +91,7 @@ class ApplicationKeyServiceTest {
                 "service-desk", "服务台助手", "IT", "owner-1", "张三", "PROD", null,
                 "ACTIVE", null, null, "CNY", 100, 50_000L,
                 "MONTH", null, null,
-                List.of(allowedModelId.toString(), otherModelId.toString()))).id());
+                List.of())).id());
         seedApplicationMappings();
         service = new ApplicationKeyService(dataSource, applications, keys, tokenService,
                 audits, transactions, clock, "STANDALONE_SERVER");

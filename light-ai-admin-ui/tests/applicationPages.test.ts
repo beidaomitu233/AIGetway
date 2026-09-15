@@ -50,14 +50,8 @@ describe('Application pages（V2 应用中心）', () => {
     expect(wrapper.text()).toContain('成功率 87.5%')
   })
 
-  it('创建应用提交基本信息、初始额度与模型授权', async () => {
+  it('创建应用提交基本信息与初始额度，模型映射在详情配置', async () => {
     stub = installJsonFetchStub(({ url, method }) => {
-      // 授权候选取自 /admin/applications/model-options（活动快照），不是配置视图 /admin/virtual-models
-      if (method === 'GET' && url.pathname === '/admin/applications/model-options') {
-        return dataEnvelope({
-          items: [{ virtual_model_id: 'alias-1', code: 'chat-default', max_output_tokens: 4096, allow_stream: true, snapshot_no: '7' }],
-        })
-      }
       if (method === 'POST' && url.pathname.endsWith('/admin/applications')) {
         return dataEnvelope({ id: application.id, version: 1, entity: application, draft_changed: false, draft_revision: null, request_id: 'req-1' })
       }
@@ -72,7 +66,7 @@ describe('Application pages（V2 应用中心）', () => {
     const { wrapper, router } = await mountPage('/ui/applications/new')
     await wrapper.find('input[name="name"]').setValue('智能客服生产环境')
     await wrapper.find('input[name="code"]').setValue('customer-service-prod')
-    await wrapper.find('input[type="checkbox"][value="alias-1"]').setValue(true)
+
     for (const name of ['token_limited', 'amount_limited', 'rpm_limited', 'tpm_limited']) await wrapper.get('input[name="' + name + '"]').setValue(true)
     for (const [name, value] of Object.entries({ token_limit: '1000000', amount_limit: '1000', currency: 'CNY', rpm: '60', tpm: '100000' })) await wrapper.get('input[name="' + name + '"]').setValue(value)
     expect(wrapper.find('[data-test="save-application"]').attributes('disabled')).toBeUndefined()
@@ -82,8 +76,9 @@ describe('Application pages（V2 应用中心）', () => {
     const createCall = stub.calls.find((call) => call.method === 'POST' && call.url.endsWith('/admin/applications'))
     expect(createCall?.body).toMatchObject({
       code: 'customer-service-prod', owner_id: 'user-admin', token_limit: 1_000_000,
-      amount_limit: '1000', rpm: 60, tpm: 100_000, virtual_model_ids: ['alias-1'],
+      amount_limit: '1000', rpm: 60, tpm: 100_000,
     })
+    expect(createCall?.body).not.toHaveProperty('virtual_model_ids')
     await vi.waitFor(() => {
       expect(router.currentRoute.value.path).toBe(`/ui/applications/${application.id}`)
     }, { timeout: 3_000 })

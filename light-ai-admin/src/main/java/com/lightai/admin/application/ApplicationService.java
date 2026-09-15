@@ -477,7 +477,6 @@ public final class ApplicationService {
                 if (repository.existsByCode(connection, value.code())) {
                     throw duplicateCode();
                 }
-                validateModels(connection, value.virtualModelIds());
                 ApplicationRecord record = new ApplicationRecord(
                         id, value.code(), value.name(), value.department(), value.ownerId(),
                         value.ownerName(), value.environment(), value.description(), value.status(),
@@ -488,9 +487,6 @@ public final class ApplicationService {
                         UUID.randomUUID(), id, value.tokenLimit(), value.amountLimit(), value.currency(),
                         value.rpm(), value.tpm(), value.periodType(), value.periodStart(), value.periodEnd(),
                         0L, 0L, BigDecimal.ZERO, BigDecimal.ZERO, 1L, null, null));
-                for (UUID modelId : value.virtualModelIds()) {
-                    repository.insertModelPermission(connection, id, modelId, "{}");
-                }
                 auditService.recordSuccess(connection, AuditRecord.succeeded(
                         UUID.randomUUID(), context.requestId(), operatorId(context), "CREATE",
                         "APPLICATION", id.toString(), List.of(
@@ -503,8 +499,7 @@ public final class ApplicationService {
                                         decimalText(value.amountLimit())),
                                 FieldChange.changed("rpm", null, value.rpm()),
                                 FieldChange.changed("tpm", null, value.tpm()),
-                                FieldChange.changed("virtual_model_ids", null,
-                                        value.virtualModelIds().stream().map(UUID::toString).toList())),
+                                FieldChange.changed("model_mapping", null, "CONFIGURE_IN_APPLICATION_DETAIL")),
                         sourceMode, context.sourceIpMasked()));
             });
             ApplicationDetail entity = detail(context, id);
@@ -1501,12 +1496,14 @@ public final class ApplicationService {
                 || !command.periodStart().isBefore(command.periodEnd()))) {
             issues.add(new FieldIssue("period_end", "INVALID", "自定义周期必须提供有效起止时间"));
         }
-        List<UUID> modelIds = uuidList(command.virtualModelIds(), issues);
+        if (command.virtualModelIds() != null && !command.virtualModelIds().isEmpty()) {
+            issues.add(new FieldIssue("virtual_model_ids", "DEPRECATED", "模型映射请在应用详情中配置"));
+        }
         if (!issues.isEmpty()) throw new LightAiException(
                 ErrorCode.FIELD_VALIDATION_FAILED, "应用配置不合法", issues);
         return new ValidatedCreate(code, name, department, ownerId, ownerName, environment,
                 description, status, tokenLimit, amount, currency, rpm, tpm, period,
-                command.periodStart(), command.periodEnd(), modelIds);
+                command.periodStart(), command.periodEnd());
     }
 
     private ValidatedUpdate validateUpdate(ApplicationUpdateCommand command) {
@@ -1685,7 +1682,7 @@ public final class ApplicationService {
             String code, String name, String department, String ownerId, String ownerName,
             String environment, String description, String status, Long tokenLimit,
             BigDecimal amountLimit, String currency, Integer rpm, Long tpm, String periodType,
-            OffsetDateTime periodStart, OffsetDateTime periodEnd, List<UUID> virtualModelIds) {
+            OffsetDateTime periodStart, OffsetDateTime periodEnd) {
     }
 
     private record ValidatedUpdate(

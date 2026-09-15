@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
-import { Button, Card, Checkbox, CheckboxGroup, Input, Select } from 'ant-design-vue'
+import { Button, Card, Checkbox, Input, Select } from 'ant-design-vue'
 import { onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { Permission } from '@/app/permissions'
 import { ApiError, isAbortError } from '@/api/errors'
@@ -14,11 +14,9 @@ import { useBootstrapStore } from '@/stores/bootstrap'
 import {
   createApplication,
   fetchApplication,
-  fetchApplicationModelOptionsForCreate,
   updateApplication,
   type ApplicationEnvironment,
   type ApplicationDetail,
-  type ApplicationModelOption,
 } from '@/api/applications'
 
 const route = useRoute()
@@ -33,9 +31,6 @@ const editable = ref(true)
 let controller: AbortController | null = null
 let loadSequence = 0
 const loadError = ref<unknown>(null)
-/** FE-202/205：创建前授权候选取自 /applications/model-options，不能用配置视图 /virtual-models 替代。 */
-const modelOptions = ref<ApplicationModelOption[]>([])
-const modelsLoadError = ref<unknown>(null)
 const version = ref<string | null>(null)
 const latest = ref<ApplicationDetail | null>(null)
 const latestLoading = ref(false)
@@ -65,7 +60,6 @@ const form = reactive({
   period_type: 'MONTH' as 'LIFECYCLE' | 'DAY' | 'MONTH' | 'CUSTOM',
   period_start: '',
   period_end: '',
-  virtual_model_ids: [] as string[],
 })
 
 function setTokenLimit(value: number | string | null): void { form.token_limit = value == null || value === '' ? null : Number(value) }
@@ -101,7 +95,6 @@ const formInvalid = computed(() => Boolean(
     || (form.rpm_limited && !positiveInteger(form.rpm))
     || (form.tpm_limited && !positiveInteger(form.tpm))
     || customPeriodInvalid.value
-    || form.virtual_model_ids.some(id => !modelOptions.value.some(option => option.virtual_model_id === id))
   ))
 ))
 const unlimited = computed(() => !isEdit.value && (!form.token_limited || !form.amount_limited || !form.rpm_limited || !form.tpm_limited))
@@ -167,7 +160,6 @@ async function onSubmit(): Promise<void> {
       period_type: form.period_type,
       period_start: form.period_type === 'CUSTOM' ? asOffsetDateTime(form.period_start) : null,
       period_end: form.period_type === 'CUSTOM' ? asOffsetDateTime(form.period_end) : null,
-      virtual_model_ids: form.virtual_model_ids,
     })
     savedId = result.id
   })
@@ -205,7 +197,6 @@ async function load(): Promise<void> {
   const signal = controller.signal
   loading.value = true
   loadError.value = null
-  modelsLoadError.value = null
   latest.value = null
   latestLoading.value = false
   latestError.value = null
@@ -219,20 +210,9 @@ async function load(): Promise<void> {
       editable.value = ['ACTIVE', 'DISABLED'].includes(detail.status)
       version.value = detail.version
     } else {
-      modelOptions.value = []
-      Object.assign(form, { code: '', name: '', department: '', owner_id: store.userId, owner_name: store.displayName, environment: 'PROD', description: '', status: 'ACTIVE', token_limited: false, token_limit: null, amount_limited: false, amount_limit: '', currency: '', rpm_limited: false, rpm: null, tpm_limited: false, tpm: null, period_type: 'MONTH', period_start: '', period_end: '', virtual_model_ids: [] })
+      Object.assign(form, { code: '', name: '', department: '', owner_id: store.userId, owner_name: store.displayName, environment: 'PROD', description: '', status: 'ACTIVE', token_limited: false, token_limit: null, amount_limited: false, amount_limit: '', currency: '', rpm_limited: false, rpm: null, tpm_limited: false, tpm: null, period_type: 'MONTH', period_start: '', period_end: '' })
       editable.value = true
       version.value = null
-      // 候选属于局部数据：加载失败只影响模型选择，不阻断基本信息与额度的录入。
-      const options = await fetchApplicationModelOptionsForCreate(signal).catch(error => {
-        if (!isAbortError(error)) modelsLoadError.value = error
-        return null
-      })
-      if (sequence !== loadSequence) return
-      if (options) {
-        modelOptions.value = options
-        modelsLoadError.value = null
-      }
     }
     markClean()
   } catch (error) {
@@ -249,7 +229,7 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
   <section class="lai-page application-form-page">
     <PageHeader
       :title="isEdit ? '编辑应用' : '新建应用'"
-      description="一个应用对应一个企业系统接入点，独立管理凭证、模型权限、额度和速率。"
+      description="一个应用对应一个企业系统接入点，独立管理凭证、模型映射、额度和速率。"
     />
 
     <PageState
@@ -448,6 +428,7 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
                 >
                 <Checkbox v-model:checked="form.amount_limited" @change="onInput">限制</Checkbox>
                 <Input
+                  :key="`${store.userId}:${form.amount_limited ? 'limited' : 'unlimited'}`"
                   :value="form.amount_limit"
                   name="amount_limit"
                   inputmode="decimal"
@@ -560,45 +541,7 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
           </div>
         </Card>
 
-        <Card
-          v-if="!isEdit"
-          :bordered="false"
-          class="lai-card form-section"
-        >
-          <h2 class="lai-card-title">
-            可用虚拟模型
-          </h2>
-          <p class="section-help">
-            应用只能调用已授权模型；候选来自活动配置快照中已发布且存在可用路由候选的虚拟模型，模型后续可在应用详情中单独管理。
-          </p>
-          <PageState
-            v-if="modelsLoadError"
-            status="error"
-            :error="modelsLoadError"
-            message="活动配置快照当前无法读取，请稍后重试。"
-            @retry="load"
-          />
-          <CheckboxGroup
-            v-else-if="modelOptions.length"
-            v-model:value="form.virtual_model_ids"
-            class="model-options"
-          >
-            <Checkbox
-              v-for="option in modelOptions"
-              :key="option.virtual_model_id"
-              :value="option.virtual_model_id"
-              class="model-option"
-            >
-              <span><strong>{{ option.code }}</strong><small>{{ option.max_output_tokens === null ? '未声明输出上限' : `候选上限 ${option.max_output_tokens}` }} · {{ option.allow_stream === null ? '流式能力未知' : option.allow_stream ? '支持流式' : '不支持流式' }}</small></span>
-            </Checkbox>
-          </CheckboxGroup>
-          <p
-            v-else
-            class="empty-inline"
-          >
-            当前没有可授权的虚拟模型：活动快照中缺少已发布且存在可用路由候选的模型，可先创建应用，发布模型后再授权。
-          </p>
-        </Card>
+
       </fieldset>
       <p
         v-if="unlimited"
@@ -708,10 +651,6 @@ onScopeDispose(() => { ++loadSequence; controller?.abort() })
 .limit-control label, .amount-control label { white-space: nowrap; color: #475467; font-size: 13px; }
 .currency { text-transform: uppercase; }
 .custom-period { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
-.model-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.model-option { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid #e6eaf0; border-radius: 6px; background: #fff; }
-.model-option span { display: flex; flex-direction: column; gap: 3px; }
-.model-option small, .empty-inline { color: #667085; }
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 0 28px; }
-@media (max-width: 800px) { .form-grid, .model-options, .custom-period { grid-template-columns: 1fr; } .wide-field, .custom-period { grid-column: auto; } }
+@media (max-width: 800px) { .form-grid, .custom-period { grid-template-columns: 1fr; } .wide-field, .custom-period { grid-column: auto; } }
 </style>

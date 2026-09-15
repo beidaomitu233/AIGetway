@@ -118,6 +118,16 @@ class ApplicationServiceTest {
     }
 
     @Test
+    void rejectsLegacyModelIdsOnCreateUntilMappingIsConfigured() {
+        assertThatThrownBy(() -> service.create(admin(), new ApplicationCreateCommand(
+                "legacy-model-app", "旧模型授权应用", null, "owner-1", "张三", "PROD", null,
+                "ACTIVE", null, null, "CNY", null, null,
+                "MONTH", null, null, List.of(UUID.randomUUID().toString()))))
+                .isInstanceOf(LightAiException.class)
+                .extracting(error -> ((LightAiException) error).code())
+                .isEqualTo(ErrorCode.FIELD_VALIDATION_FAILED);
+    }
+    @Test
     void createsApplicationWithoutQuotaOrCurrency() {
         var created = service.create(admin(), new ApplicationCreateCommand(
                 "minimal-app", "最小应用", null, "owner-1", "张三", "PROD", null,
@@ -448,7 +458,9 @@ class ApplicationServiceTest {
         var exhausted = service.create(admin(), new ApplicationCreateCommand(
                 "exhausted-app", "耗尽应用", "供应链", "owner-1", "张三", "PROD", null,
                 "ACTIVE", 1_000L, "100", "CNY", null, null,
-                "LIFECYCLE", null, null, List.of(modelId.toString())));
+                "LIFECYCLE", null, null, List.of()));
+        service.updateModels(admin(), UUID.fromString(exhausted.id()), new ApplicationModelsUpdateCommand(
+                List.of(modelId.toString()), List.of(), exhausted.version(), "测试映射"));
         service.create(admin(), new ApplicationCreateCommand(
                 "normal-app", "正常应用", "供应链", "owner-1", "张三", "PROD", null,
                 "ACTIVE", 1_000_000L, "1000", "CNY", null, null,
@@ -477,7 +489,7 @@ class ApplicationServiceTest {
             assertThat(item.budgetStatus()).isEqualTo("EXHAUSTED");
             assertThat(item.tokenLimit()).isEqualTo("1000");
             assertThat(item.tokensUsed()).isEqualTo("1000");
-            assertThat(item.version()).isEqualTo("1");
+            assertThat(item.version()).isEqualTo("2");
             assertThat(item.modelCount()).isEqualTo(1L);
             assertThat(item.requests24h()).isEqualTo("0");
             assertThat(item.successRate24h()).isNull();
